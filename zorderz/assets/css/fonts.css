@@ -1,0 +1,61 @@
+/* ================================================================
+   SELF-HOSTED INTER FONT — v2.15.0
+   ================================================================
+   Replaces the render-blocking Google Fonts external stylesheet.
+   Only latin subset, normal style, weights 400-900 (matching the
+   previous Google Fonts request). woff2-only — all target browsers
+   (iOS 12+, Chrome 50+, Firefox 60+) support it.
+
+   font-display: swap ensures text is visible immediately using a
+   system font, then swaps to Inter once it downloads. This was
+   already set in the Google Fonts URL (&display=swap) but is now
+   explicitly declared.
+   ================================================================ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('../fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('../fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url('../fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('../fonts/inter-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url('../fonts/inter-latin-800-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 900;
+  src: url('../fonts/inter-latin-900-normal.woff2') format('woff2');
+}

@@ -1,0 +1,557 @@
+/**
+ * Zorderz Leads — Dashboard Styles
+ * 
+ * MODULE: Zorderz Leads
+ * FILE: dashboard.css
+ * 
+ * ARCHITECTURE CONTEXT:
+ * This stylesheet supports `class-zl-dashboard.php` and `dashboard.js`. 
+ * It styles the main admin interface where the 8-step AJAX pipeline is triggered,
+ * progress is monitored (via the log console and progress bar), and generated 
+ * leads are displayed in expandable batch rows.
+ * 
+ * BUSINESS CONTEXT:
+ * the business's internal tool for generating leads. Styles accommodate specific 
+ * data points like AI Summaries (from Gemini-3.1-Pro), Lead Scores (High/Med/Low), 
+ * and CRM sync statuses (Nutshell/FreshBooks).
+ * 
+ * ITERATION NOTES:
+ * - v1.2.0: Added specific styles for new filter controls (city/zip, spend, demographic).
+ * - v1.2.1: UI remains largely the same, but the underlying AJAX flow was split to fix 502s.
+ */
+
+/* ── Layout ────────────────────────────────────────────────────────── */
+/* Main wrapper for the dashboard page to ensure it doesn't stretch infinitely on wide screens */
+.zl-dashboard-wrap {
+    max-width: 1400px;
+}
+
+.zl-dashboard-wrap h1 {
+    margin-bottom: 5px;
+}
+
+/* ── Generation Panel ──────────────────────────────────────────────── */
+/* The main control box where users configure and launch the lead generation pipeline */
+.zl-gen-panel {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 20px 0;
+}
+
+.zl-gen-panel h2 {
+    margin-top: 0;
+    margin-bottom: 14px;
+    font-size: 18px;
+}
+
+/* Flexbox layout for the form controls to ensure responsive stacking */
+.zl-gen-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.zl-gen-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.zl-gen-controls label {
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.zl-gen-controls select {
+    min-width: 180px;
+    padding: 4px 8px;
+}
+
+/* Used for the main prompt/query input box */
+.zl-wide-input {
+    flex: 1;
+    min-width: 300px;
+    max-width: 500px;
+    padding: 4px 10px;
+}
+
+.zl-gen-buttons {
+    margin-top: 4px;
+}
+
+/* Helper text for the v1.2.0 filters (e.g., "Since 2000") */
+.zl-filter-hint {
+    color: #888;
+    font-size: 12px;
+    font-style: italic;
+    margin-left: 8px;
+}
+
+/* Test mode button - runs a limited batch without CRM sync */
+#zl-btn-test {
+    margin-left: 0;
+}
+
+/* Full generation button - runs the complete 8-step pipeline */
+#zl-btn-full {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+}
+
+/* Disable states during active AJAX generation to prevent concurrent runs */
+#zl-btn-test:disabled,
+#zl-btn-full:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.zl-gen-controls select:disabled,
+.zl-gen-controls input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ── Progress ──────────────────────────────────────────────────────── */
+/* Container for the real-time progress tracking of the 8-step pipeline */
+#zl-progress {
+    margin-top: 20px;
+}
+
+.zl-progress-bar-wrap {
+    background: #e5e7eb;
+    border-radius: 6px;
+    height: 28px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+/* Animated progress bar updated via dashboard.js during AJAX steps */
+.zl-progress-bar {
+    background: linear-gradient(135deg, #2271b1 0%, #135e96 100%);
+    height: 100%;
+    width: 0%;
+    border-radius: 6px;
+    transition: width 0.4s ease;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 28px;
+    text-align: center;
+    min-width: 40px;
+}
+
+/* Terminal-like log console for detailed step-by-step feedback (e.g., "Step 4: AI Enrichment...") */
+#zl-progress-log {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 14px 18px;
+    border-radius: 6px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.zl-log-line {
+    margin: 0;
+    padding: 1px 0;
+}
+
+/* ── Batches Panel ─────────────────────────────────────────────────── */
+/* Displays historical generation batches fetched from the custom DB tables */
+.zl-batches-panel {
+    margin-top: 24px;
+}
+
+.zl-batches-panel h2 {
+    font-size: 18px;
+    margin-bottom: 12px;
+}
+
+.zl-batches-table {
+    border-collapse: collapse;
+}
+
+.zl-batches-table th {
+    background: #f6f7f7;
+    font-weight: 600;
+    padding: 10px 12px;
+    text-align: left;
+}
+
+.zl-batches-table td {
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.zl-batch-row {
+    cursor: default;
+}
+
+.zl-batch-row:hover {
+    background: #f9fafb;
+}
+
+/* Toggle button column for expanding a batch to see individual leads */
+.zl-toggle-cell {
+    width: 32px;
+    text-align: center;
+}
+
+.zl-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    color: #555;
+    padding: 4px 8px;
+}
+
+.zl-toggle-btn:hover {
+    color: #2271b1;
+}
+
+/* Visual indicator for batches run in Test Mode (no CRM sync) */
+.zl-badge-test {
+    display: inline-block;
+    background: #fef3cd;
+    color: #856404;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── Status badges ─────────────────────────────────────────────────── */
+/* Batch status indicators */
+.zl-status {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.zl-status-complete {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.zl-status-generating {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.zl-status-failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* ── Lead cards ────────────────────────────────────────────────────── */
+/* Expanded row container for displaying the leads within a specific batch */
+.zl-leads-row td {
+    padding: 0 !important;
+    background: #f9fafb;
+}
+
+.zl-leads-container {
+    padding: 16px 20px;
+}
+
+/* Displays the Gemini-3.1-Pro generated summary for the batch/lead */
+.zl-ai-summary {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* Individual lead card styling */
+.zl-lead-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    transition: box-shadow 0.2s;
+}
+
+.zl-lead-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.zl-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.zl-card-name {
+    flex: 1;
+    font-size: 15px;
+}
+
+.zl-card-name strong {
+    font-size: 15px;
+}
+
+.zl-card-org {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.zl-card-actions {
+    display: flex;
+    gap: 4px;
+}
+
+/* Location data (crucial for routing to the owning territory) */
+.zl-card-location {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 8px;
+}
+
+.zl-card-contact {
+    font-size: 13px;
+    color: #374151;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.zl-card-contact a {
+    text-decoration: none;
+}
+
+.zl-card-section {
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 4px;
+    color: #374151;
+}
+
+.zl-card-label {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* AI-generated notes or CRM notes */
+.zl-card-notes {
+    background: #fffbeb;
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-top: 6px;
+    font-style: italic;
+}
+
+/* ── Score badges ──────────────────────────────────────────────────── */
+/* Visual representation of the AI-calculated lead score (0-100) */
+.zl-score {
+    display: inline-block;
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+    text-align: center;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+}
+
+/* High score (typically 80+) */
+.zl-score-high {
+    background: #059669;
+}
+
+/* Medium score (typically 50-79) */
+.zl-score-med {
+    background: #d97706;
+}
+
+/* Low score (typically <50) */
+.zl-score-low {
+    background: #9ca3af;
+}
+
+/* ── Contact status ────────────────────────────────────────────────── */
+/* Indicates whether the lead was successfully pushed to Nutshell CRM */
+.zl-contact-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.zl-contacted {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.zl-skipped {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.zl-pending {
+    background: #e5e7eb;
+    color: #6b7280;
+}
+
+/* Manual action buttons per lead (e.g., Force Sync to CRM) */
+.zl-lead-actions {
+    white-space: nowrap;
+}
+
+.zl-lead-actions .button {
+    margin-bottom: 2px;
+}
+
+.zl-lead-actions small {
+    color: #888;
+    display: block;
+    margin-top: 4px;
+}
+
+/* ── Empty state ───────────────────────────────────────────────────── */
+/* Displayed when a batch has no leads (e.g., all filtered out) */
+.zl-empty-state {
+    color: #9ca3af;
+    font-style: italic;
+    padding: 20px 0;
+    text-align: center;
+}
+
+/* ── Loading ───────────────────────────────────────────────────────── */
+/* Displayed while fetching leads via AJAX when expanding a batch row */
+.zl-leads-loading {
+    color: #9ca3af;
+    font-style: italic;
+    padding: 12px 0;
+}
+
+/* ── New v1.2 Filter Controls ─────────────────────────────────────── */
+/* Added in v1.2.0: Styles for the new FreshBooks spend and demographic filters */
+.zl-gen-row input[type="number"] {
+    padding: 4px 8px;
+}
+
+/* FreshBooks historical spend range inputs */
+#zl-spend-min,
+#zl-spend-max {
+    width: 100px;
+    display: inline-block;
+}
+
+.zl-gen-row span {
+    white-space: nowrap;
+}
+
+/* Target demographic dropdown (e.g., Homeowners, Property Managers) */
+#zl-demographic {
+    min-width: 160px;
+}
+
+/* Location targeting (e.g., "92101", "City Name") */
+#zl-city-zip {
+    flex: 1;
+    min-width: 300px;
+    max-width: 500px;
+    padding: 4px 10px;
+}
+
+/* ── Nutshell Sync Enhancements ────────────────────────────────────── */
+
+.zl-sync-panel {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 8px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.zl-ns-status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.zl-ns-open { background: #dbeafe; color: #1e40af; }
+.zl-ns-won { background: #d1fae5; color: #065f46; }
+.zl-ns-lost { background: #fee2e2; color: #991b1b; }
+.zl-ns-cancelled { background: #f3f4f6; color: #6b7280; }
+
+.zl-sp-notes, .zl-purchase-history, .zl-custom-fields {
+    margin-top: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.zl-sp-notes {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.zl-collapsible-toggle {
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.02);
+}
+
+.zl-collapsible-toggle:hover {
+    background: rgba(0,0,0,0.05);
+}
+
+.zl-collapsible-content {
+    padding: 12px;
+    font-size: 13px;
+    border-top: 1px solid rgba(0,0,0,0.05);
+}
+
+.zl-collapsible-content ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.zl-collapsible-content li {
+    margin-bottom: 4px;
+}
+
+.zl-nutshell-link {
+    background: #f3f4f6 !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+.zl-nutshell-link:hover {
+    background: #e5e7eb !important;
+}

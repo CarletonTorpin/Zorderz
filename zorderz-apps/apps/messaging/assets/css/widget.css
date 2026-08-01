@@ -1,0 +1,1638 @@
+/* ==============================================================
+   TS Internal Messaging — inline widget styles
+   v1.0.21
+   All classes prefixed zim-w-*.
+   All colours use Zorderz design tokens (--sys-*, --ref-*)
+   with hardcoded fallbacks (Gotcha #10).
+   Mobile-first: sidebar collapses behind a sheet < 720px.
+   ============================================================== */
+
+/* ──────────────────────────────────────────────────────────────
+   0. Root + reset scope
+   ────────────────────────────────────────────────────────────── */
+/* Force-hide elements with [hidden]. Many CSS frameworks and theme resets
+   override the browser default; we need this to survive any context. */
+.zim-w [hidden],
+.zim-w-overlay[hidden],
+.zim-w-composer[hidden],
+.zim-w-search-bar[hidden],
+.zim-w-mention-pop[hidden] {
+	display: none !important;
+}
+
+/* Font — matches Zorderz theme. In embed mode the theme's wp_head
+   doesn't load, so the font import must be here. Safe to duplicate. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* v1.0.18 — SVG icon base. All emoji icons replaced with inline Lucide SVGs
+   for consistent rendering across platforms. Emoji rendering varies wildly
+   between iOS, Android, Windows, and macOS — SVGs ensure uniform sizing,
+   weight, and alignment with the design system. */
+.zim-w-ico {
+	display: inline-block;
+	vertical-align: middle;
+	flex-shrink: 0;
+}
+/* Ensure SVGs inherit color and don't get clipped */
+.zim-w-ico svg, .zim-w svg.zim-w-ico {
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.zim-w {
+	display: flex;
+	flex-direction: row;
+	width: 100%;
+	max-height: 640px;
+	min-height: 420px;
+	font-family: 'Inter', system-ui, -apple-system, sans-serif;
+	font-size: 16px;
+	line-height: 1.5;
+	background: var(--sys-bg, #FFFFFF);
+	color: var(--sys-text, #0F172A);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-lg, 16px);
+	overflow: hidden;
+	position: relative;
+	box-sizing: border-box;
+}
+.zim-w *, .zim-w *::before, .zim-w *::after { box-sizing: border-box; }
+
+.zim-w--fullpage {
+	max-height: none;
+	min-height: 100vh;
+	border-radius: 0;
+	border: none;
+}
+
+.zim-w button,
+.zim-w input,
+.zim-w textarea,
+.zim-w select {
+	font: inherit;
+	color: inherit;
+	-webkit-tap-highlight-color: transparent;
+}
+.zim-w button {
+	cursor: pointer;
+	border: none;
+	background: none;
+	padding: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   1. Sidebar
+   ────────────────────────────────────────────────────────────── */
+.zim-w-sidebar {
+	display: flex;
+	flex-direction: column;
+	width: 260px;
+	flex: 0 0 260px;
+	background: var(--sys-surface, #F8FAFC);
+	border-right: 1px solid var(--sys-border, #E2E8F0);
+	overflow: hidden;
+}
+/* Sidebar header — title row with icon buttons.
+   v1.0.12 — bumped padding and icon sizes for better touch targets. */
+.zim-w-sidebar-hdr {
+	display: flex;
+	align-items: center;
+	gap: var(--ref-space-2, 8px);
+	padding: 14px 14px 12px;
+	border-bottom: 1px solid var(--sys-border, #E2E8F0);
+	flex-shrink: 0;
+}
+.zim-w-logo {
+	flex: 1;
+	font-weight: var(--sys-font-wt-sb, 600);
+	font-size: 18px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+/* Header icon buttons — bigger (44px per Apple HIG tap target minimum) */
+.zim-w-icon-btn {
+	width: 40px; height: 40px;
+	min-height: 40px;
+	border-radius: var(--ref-radius-md, 8px);
+	color: var(--sys-text-sec, #475569);
+	font-size: 20px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: background .12s ease, color .12s ease;
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+}
+.zim-w-icon-btn:hover,
+.zim-w-icon-btn:focus-visible {
+	background: var(--sys-surface, var(--sys-brand-light, rgba(59,130,246,0.10)));
+	color: var(--sys-brand, #3B82F6);
+	outline: none;
+}
+.zim-w-icon-btn--sm {
+	width: 32px; height: 32px; min-height: 32px;
+	font-size: 17px;
+}
+
+/* Section groups — subtle zones for Channels vs DMs.
+   v1.0.12 — faint surface tint behind each section and cleaner dividers. */
+.zim-w-section {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	padding: 8px 0 6px;
+}
+.zim-w-section + .zim-w-section {
+	border-top: 1px solid var(--sys-border, rgba(148, 163, 184, 0.18));
+	margin-top: 4px;
+}
+.zim-w-section-hdr {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 16px 6px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--sys-text-ter, #64748B);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+.zim-w-section-hdr button {
+	min-width: 24px; min-height: 24px;
+	font-size: 16px;
+	color: var(--sys-text-ter, #64748B);
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+	border-radius: 4px;
+}
+.zim-w-section-hdr button:hover { color: var(--sys-brand, #3B82F6); }
+
+/* Conversation list rows — taller, bigger type, clearer active state */
+.zim-w-list {
+	list-style: none;
+	margin: 0;
+	padding: 0 0 var(--ref-space-2, 8px);
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
+}
+.zim-w-list li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 11px 16px;
+	cursor: pointer;
+	color: var(--sys-text, #0F172A);
+	border-left: 3px solid transparent;
+	font-size: 15px;
+	line-height: 1.3;
+	transition: background .1s ease;
+	min-height: 44px;
+}
+.zim-w-list li:hover {
+	background: var(--sys-surface, rgba(148, 163, 184, 0.08));
+}
+.zim-w-list li.zim-w-active {
+	background: var(--sys-brand-light, rgba(59,130,246,0.14));
+	border-left-color: var(--sys-brand, #3B82F6);
+	color: var(--sys-brand, #3B82F6);
+	font-weight: 600;
+}
+/* Subtle alternation for long lists — helps scan without being busy.
+   v1.0.13 — uses a hard rgba fallback instead of var(--sys-surface-raised)
+   because in the light theme the raised token is the same as the base
+   (#FFFFFF), so there's no visible alternation. The rgba sits on top of
+   whatever surface token resolves to and reliably provides ~3% contrast
+   across all four themes (light, dark, system, sunlight). */
+.zim-w-list li:nth-child(even):not(.zim-w-active):not(:hover) {
+	background: rgba(148, 163, 184, 0.07);
+}
+[data-theme="sunlight"] .zim-w-list li:nth-child(even):not(.zim-w-active):not(:hover) {
+	/* Sunlight is high-contrast pure-black; bump the alternation up */
+	background: rgba(255, 255, 255, 0.06);
+}
+.zim-w-list li .zim-w-label {
+	flex: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.zim-w-list li .zim-w-badge {
+	background: var(--sys-brand, #3B82F6);
+	color: #fff;
+	font-size: 11px;
+	font-weight: var(--sys-font-wt-sb, 600);
+	padding: 2px 7px;
+	border-radius: 999px;
+	min-width: 20px;
+	text-align: center;
+}
+/* v1.0.23: "Notes to Self" DM — subtle italic label to distinguish from
+   real DM conversations. The 📝 prefix is added in JS. */
+.zim-w-self-dm .zim-w-label {
+	font-style: italic;
+	opacity: 0.85;
+}
+.zim-w-list li .zim-w-lock {
+	color: var(--sys-text-ter, #64748B);
+	font-size: 11px;
+	display: inline-flex;
+	align-items: center;
+}
+.zim-w-list--picker {
+	max-height: 60vh;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   2. Main pane
+   ────────────────────────────────────────────────────────────── */
+.zim-w-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0; /* critical for flex children to respect overflow */
+	background: var(--sys-bg, #FFFFFF);
+	overflow: hidden; /* composer must not escape the flex container */
+}
+.zim-w-main-hdr {
+	display: flex;
+	align-items: center;
+	gap: var(--ref-space-2, 8px);
+	padding: var(--ref-space-3, 12px);
+	border-bottom: 1px solid var(--sys-border, #E2E8F0);
+	min-height: 56px;
+}
+.zim-w-main-title {
+	flex: 1;
+	margin: 0;
+	font-size: var(--ref-font-md, 16px);
+	font-weight: var(--sys-font-wt-sb, 600);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.zim-w-main-actions {
+	display: flex;
+	gap: var(--ref-space-1, 4px);
+}
+.zim-w-search-bar {
+	padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+	border-bottom: 1px solid var(--sys-border, #E2E8F0);
+	background: var(--sys-surface, #F8FAFC);
+}
+.zim-w-search-bar input {
+	width: 100%;
+	padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-md, 8px);
+	font-size: var(--ref-font-sm, 14px);
+	background: var(--sys-bg, #FFFFFF);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   3. Message list — iMessage-style sent/received bubbles
+   ────────────────────────────────────────────────────────────── */
+.zim-w-messages {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 12px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-height: 0;
+}
+.zim-w-empty {
+	margin: auto;
+	color: var(--sys-text-ter, #64748B);
+	text-align: center;
+	max-width: 28ch;
+	font-size: var(--ref-font-sm, 14px);
+}
+
+/* In-conversation loading state — proper spinner, not giant centered text.
+   Used when switching to a conversation while history is being fetched. */
+.zim-w-loading {
+	margin: auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	color: var(--sys-text-ter, #64748B);
+}
+.zim-w-loading__spinner {
+	width: 28px;
+	height: 28px;
+	border: 3px solid rgba(148,163,184,0.2);
+	border-top-color: var(--sys-brand, #3B82F6);
+	border-radius: 50%;
+	animation: zim-w-loading-spin 0.9s linear infinite;
+}
+.zim-w-loading__label {
+	font-size: 13px;
+	font-weight: 500;
+}
+@keyframes zim-w-loading-spin {
+	from { transform: rotate(0deg); }
+	to   { transform: rotate(360deg); }
+}
+
+/* v1.0.18 — scroll-back loading indicator (at top of message list while
+   fetching older messages). Compact spinner so it doesn't push content. */
+.zim-w-scroll-loader {
+	align-self: center;
+	padding: 8px 0;
+}
+.zim-w-scroll-loader .zim-w-loading__spinner {
+	width: 20px;
+	height: 20px;
+	border-width: 2px;
+}
+/* End-of-history marker — shown when there are no more older messages. */
+.zim-w-end-of-history {
+	align-self: center;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--sys-text-ter, #64748B);
+	text-align: center;
+	padding: 10px 0 6px;
+	letter-spacing: 0.02em;
+	user-select: none;
+	opacity: 0.7;
+}
+
+/* ── Message row ── */
+.zim-w-msg {
+	display: flex;
+	flex-direction: column;
+	max-width: 80%;
+	padding: 0;
+}
+/* Received (theirs) — left */
+.zim-w-msg--theirs {
+	align-self: flex-start;
+	align-items: flex-start;
+	/* Row with wrap: avatar stays in the first row with bubble;
+	   meta wraps to the second row, indented past the avatar. */
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: 4px 8px;
+}
+/* Sent (mine) — right */
+.zim-w-msg--mine {
+	align-self: flex-end;
+	align-items: flex-end;
+}
+/* Meta wraps below the bubble for theirs, indented past avatar */
+.zim-w-msg--theirs .zim-w-msg-meta {
+	flex-basis: 100%;
+	padding-left: 38px; /* avatar width (30px) + gap (8px) */
+}
+.zim-w-msg--mine .zim-w-msg-meta {
+	justify-content: flex-end;
+}
+
+/* ── Avatar (received only) ── */
+/* v1.0.21: Increased from 30px/11px to 36px/13px for readability.
+   CT/GT initials were nearly illegible at 11px, especially in dark mode
+   and on mobile. 36px also improves touch-target compliance (WCAG 2.5.8). */
+.zim-w-msg-avatar {
+	width: 36px; height: 36px; flex-shrink: 0;
+	border-radius: 50%;
+	background: var(--sys-surface-raised, rgba(255,255,255,0.08));
+	color: var(--sys-text, #0F172A);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 13px;
+	font-weight: 700;
+	margin-top: 4px;
+}
+
+/* ── Bubble ── */
+.zim-w-msg-bubble {
+	padding: 8px 14px;
+	border-radius: 18px;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+	max-width: 100%;
+}
+/* Received bubble */
+.zim-w-msg--theirs .zim-w-msg-bubble {
+	background: var(--sys-surface, #F1F5F9);
+	color: var(--sys-text, #0F172A);
+	border-bottom-left-radius: 4px;
+}
+/* Sent bubble — brand background with inverse-text color.
+   Using --sys-text-inv (not hardcoded white) so sunlight mode's
+   black-bubble-with-white-text renders correctly, and every other
+   theme keeps its brand-on-white look. */
+.zim-w-msg--mine .zim-w-msg-bubble {
+	background: var(--sys-brand, #3B82F6);
+	color: var(--sys-text-inv, #FFFFFF);
+	border-bottom-right-radius: 4px;
+}
+.zim-w-msg--mine .zim-w-msg-bubble a {
+	color: var(--sys-text-inv, #FFFFFF);
+	text-decoration: underline;
+	opacity: 0.92;
+}
+.zim-w-msg--theirs .zim-w-msg-bubble a { color: var(--sys-brand, #3B82F6); }
+/* Mentions in sent bubbles — slightly-transparent inverse text on brand */
+.zim-w-msg--mine .zim-w-mention {
+	background: rgba(255,255,255,0.2);
+	color: var(--sys-text-inv, #FFFFFF);
+}
+
+/* Time-gap separator — iMessage-style "session" divider. Shown between
+   messages more than 30 minutes apart to give visual rhythm without
+   timestamping every bubble. */
+.zim-w-time-sep {
+	align-self: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--sys-text-ter, #64748B);
+	text-align: center;
+	padding: 12px 0 6px;
+	letter-spacing: 0.02em;
+	text-transform: none;
+	user-select: none;
+}
+
+/* ── Author name (received only, above bubble text) ──
+   v1.0.21: Promoted from --sys-text-sec to --sys-text for WCAG AAA
+   compliance. Sender identity is critical information — not secondary
+   chrome. Old: 12px/600/text-sec (~4.3:1 dark). New: 13px/700/text
+   (~12:1 dark). The message body at 17px/400 still dominates visually. */
+.zim-w-msg-name {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--sys-text, #0F172A);
+	margin-bottom: 2px;
+}
+/* v1.0.20: Channel mode — all messages left-aligned (Slack-style) with name + avatar.
+   Your own messages get a subtly different background so you can still tell them apart. */
+.zim-w-msg--channel-mine .zim-w-msg-bubble {
+	background: var(--sys-brand-faint, rgba(59,130,246,0.12));
+	color: var(--sys-text, #0F172A);
+	border-bottom-left-radius: 4px;
+	border-bottom-right-radius: 18px;
+}
+.zim-w-msg--channel-mine .zim-w-msg-bubble a {
+	color: var(--sys-brand, #3B82F6);
+	text-decoration: underline;
+}
+.zim-w-msg--channel-mine .zim-w-msg-name {
+	color: var(--sys-brand, #3B82F6);
+}
+.zim-w-msg--channel-mine .zim-w-mention {
+	background: rgba(59,130,246,0.15);
+	color: var(--sys-brand, #3B82F6);
+}
+
+/* ── Message text ── */
+.zim-w-msg-text {
+	font-size: var(--ref-font-sm, 15px);
+	line-height: 1.45;
+}
+.zim-w-msg-text code {
+	background: rgba(0,0,0,0.08);
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-family: var(--ref-font-mono, ui-monospace, monospace);
+	font-size: 0.9em;
+}
+.zim-w-msg-text pre {
+	background: rgba(0,0,0,0.08);
+	padding: 8px;
+	border-radius: 6px;
+	overflow-x: auto;
+	font-size: 0.9em;
+}
+.zim-w-msg-deleted {
+	font-style: italic;
+	opacity: 0.6;
+}
+
+/* ── v1.0.24: Rich HTML in messages ──────────────────────────────
+   TSA v1.18.1 Brain Bot now sends HTML in DM/channel posts:
+   <a>, <strong>, <em>, <br>, <ul>, <ol>, <li>, <p> tags.
+   Previously all messages were plain text. These rules style the
+   HTML elements inside message bubbles for all four theme modes.
+   ──────────────────────────────────────────────────────────────── */
+
+/* ── Links (high priority — vault docs + FreshBooks links) ── */
+.zim-w-msg-text a {
+	color: var(--sys-brand, #6366F1);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	text-decoration-thickness: 1px;
+	word-break: break-word;
+	overflow-wrap: break-word;
+	transition: color 0.12s ease, opacity 0.12s ease;
+}
+.zim-w-msg-text a:hover,
+.zim-w-msg-text a:focus-visible {
+	color: var(--sys-brand-hover, #4F46E5);
+	text-decoration-thickness: 2px;
+}
+.zim-w-msg-text a:active {
+	opacity: 0.8;
+}
+
+/* Sent bubble links — inverse text on brand background (override generic) */
+.zim-w-msg--mine .zim-w-msg-text a {
+	color: var(--sys-text-inv, #FFFFFF);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	opacity: 0.92;
+}
+.zim-w-msg--mine .zim-w-msg-text a:hover,
+.zim-w-msg--mine .zim-w-msg-text a:focus-visible {
+	opacity: 1;
+	text-decoration-thickness: 2px;
+}
+
+/* Channel own-message links — brand color on faint brand background */
+.zim-w-msg--channel-mine .zim-w-msg-text a {
+	color: var(--sys-brand, #6366F1);
+}
+
+/* ── Dark mode: no link override needed ──
+   --sys-brand is already var(--ref-brand-400) in dark mode, which is
+   a lighter shade suitable for dark backgrounds. --sys-brand-hover is
+   var(--ref-brand-300), even lighter for hover. The base .zim-w-msg-text a
+   rules with var(--sys-brand) work correctly in all modes except sunlight. */
+
+/* ── Sunlight mode — WCAG AAA contrast on white bg.
+   --sys-brand is #000000 in sunlight, which would make links
+   indistinguishable from body text. #4338CA (Indigo-700)
+   gives ≥7:1 contrast on white and visual distinction. ── */
+[data-theme="sunlight"] .zim-w-msg-text a {
+	color: #4338CA;
+	text-decoration-color: #4338CA;
+}
+[data-theme="sunlight"] .zim-w-msg-text a:hover,
+[data-theme="sunlight"] .zim-w-msg-text a:focus-visible {
+	color: #3730A3;
+}
+
+/* ── Lists (AI-generated bullet/numbered content from Brain Bot) ── */
+.zim-w-msg-text ul,
+.zim-w-msg-text ol {
+	margin: 4px 0;
+	padding-left: 20px;
+}
+.zim-w-msg-text ul { list-style-type: disc; }
+.zim-w-msg-text ol { list-style-type: decimal; }
+.zim-w-msg-text li {
+	margin-bottom: 2px;
+	line-height: 1.4;
+}
+/* Nested lists (Brain Bot sometimes nests) */
+.zim-w-msg-text li > ul,
+.zim-w-msg-text li > ol {
+	margin: 2px 0;
+}
+
+/* ── Bold / italic — inherit message text color ── */
+.zim-w-msg-text strong {
+	font-weight: 700;
+	color: inherit;
+}
+.zim-w-msg-text em {
+	font-style: italic;
+	color: inherit;
+}
+
+/* ── Paragraphs — compact spacing for chat context ── */
+.zim-w-msg-text p {
+	margin: 0;
+}
+.zim-w-msg-text p + p {
+	margin-top: 6px;
+}
+
+/* ── Line breaks — no extra spacing needed, but ensure
+   <br> doesn't collapse in flex contexts ── */
+.zim-w-msg-text br {
+	display: block;
+	content: '';
+	margin-top: 2px;
+}
+
+.zim-w-mention {
+	background: var(--sys-brand-light, rgba(59,130,246,0.15));
+	color: var(--sys-brand, #3B82F6);
+	padding: 1px 4px;
+	border-radius: 4px;
+	font-weight: 600;
+}
+
+/* ── Timestamp + actions (below bubble, subtle) ──
+   v1.0.21: Bumped from 11px to 13px per user feedback ("should be bigger").
+   Changed from --sys-text-ter to --sys-text-sec for dark mode contrast.
+   Touch devices always show (no hover-to-reveal on phones). Desktop uses
+   subtle reveal on hover. */
+.zim-w-msg-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--sys-text-sec, #64748B);
+	padding: 2px 4px;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+/* Show on hover or focus-within */
+.zim-w-msg:hover .zim-w-msg-meta,
+.zim-w-msg:focus-within .zim-w-msg-meta {
+	opacity: 0.85;
+}
+/* On mobile/touch, always show timestamps (no hover-to-reveal) */
+@media (hover: none) {
+	.zim-w-msg-meta { opacity: 0.75; }
+}
+.zim-w-msg-actions { margin-left: auto; }
+.zim-w-msg-actions button {
+	font-size: 12px;
+	color: var(--sys-text-sec, #64748B);
+	padding: 4px 8px;
+	border-radius: 4px;
+	opacity: 0.7;
+}
+.zim-w-msg-actions button:hover {
+	color: var(--sys-brand, #3B82F6);
+	background: var(--sys-surface, #F8FAFC);
+	opacity: 1;
+}
+
+/* Attachment blocks */
+/* Attachment display in message bubbles */
+.zim-w-atts { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.zim-w-att-image { overflow: hidden; border-radius: 12px; }
+.zim-w-att-image img {
+	max-width: 320px;
+	max-height: 240px;
+	border-radius: 12px;
+	display: block;
+	cursor: pointer;
+	transition: opacity 0.15s ease;
+	object-fit: cover;
+}
+.zim-w-att-image img:hover { opacity: 0.9; }
+/* On narrow viewports, let images fill the bubble width */
+@media (max-width: 720px) {
+	.zim-w-att-image img { max-width: 100%; }
+}
+.zim-w-att-file {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: rgba(148,163,184,0.10);
+	border: 1px solid var(--sys-border, rgba(148,163,184,0.18));
+	border-radius: 10px;
+	font-size: 13px;
+	max-width: 280px;
+	text-decoration: none;
+	color: inherit;
+}
+.zim-w-att-file:hover {
+	background: rgba(148,163,184,0.18);
+	border-color: var(--sys-border-strong, var(--sys-border, rgba(148,163,184,0.3)));
+}
+.zim-w-att-icon { font-size: 16px; display: inline-flex; align-items: center; color: var(--sys-text-sec, #475569); }
+.zim-w-att-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zim-w-att-size { color: var(--sys-text-ter, #64748B); font-size: 11px; }
+
+/* Preview chips — same approach, use surface-raised + border tokens */
+.zim-w-preview-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 4px;
+	padding: 6px 10px;
+	background: var(--sys-surface-raised, rgba(0,0,0,0.06));
+	border: 1px solid var(--sys-border, transparent);
+	border-radius: 10px;
+	font-size: 13px;
+	cursor: pointer;
+	max-width: 280px;
+	text-decoration: none;
+	color: inherit;
+}
+.zim-w-preview-chip:hover {
+	background: var(--sys-surface, rgba(0,0,0,0.1));
+	border-color: var(--sys-border-strong, var(--sys-border, currentColor));
+}
+.zim-w-preview-chip .zim-w-preview-number { font-weight: 600; color: var(--sys-brand, #3B82F6); }
+.zim-w-preview-chip.is-loading { opacity: .6; }
+.zim-w-preview-chip .zim-w-preview-meta { font-size: 11px; color: var(--sys-text-sec, #475569); }
+/* v1.0.20: Vault doc chips — amber accent to distinguish from blue FreshBooks chips */
+.zim-w-vault-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+  padding: 8px 12px;
+  background: var(--sys-surface-raised, rgba(0,0,0,0.06));
+  border: 1px solid var(--sys-border, transparent);
+  border-left: 3px solid var(--sys-warning, #D97706);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 340px;
+  text-decoration: none;
+  color: inherit;
+}
+.zim-w-vault-chip:hover {
+  background: var(--sys-surface, rgba(0,0,0,0.1));
+  border-color: var(--sys-border-strong, var(--sys-border, currentColor));
+  border-left-color: var(--sys-warning, #D97706);
+}
+.zim-w-vault-chip .zim-w-preview-number {
+  font-weight: 600;
+  color: var(--sys-warning, #D97706);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zim-w-vault-chip .zim-w-preview-meta {
+  font-size: 11px;
+  color: var(--sys-text-sec, #475569);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.zim-w-vault-chip.is-loading { opacity: .6; }
+/* v1.0.21: Info icon — secondary action opens the metadata panel without
+   overriding the chip's direct-link behavior (1-click-to-document). */
+.zim-w-vault-info {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px; height: 22px;
+	border-radius: 50%;
+	font-size: 13px;
+	font-style: normal;
+	color: var(--sys-text-ter, #64748B);
+	background: var(--sys-surface-subtle, rgba(0,0,0,0.04));
+	cursor: pointer;
+	flex-shrink: 0;
+	margin-left: auto;
+	transition: background var(--ref-dur-fast, 150ms) var(--ref-ease);
+}
+.zim-w-vault-info:hover {
+	background: var(--sys-surface, rgba(0,0,0,0.08));
+	color: var(--sys-text, #0F172A);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   4. Composer
+   ────────────────────────────────────────────────────────────── */
+.zim-w-composer {
+	border-top: 1px solid var(--sys-border, #E2E8F0);
+	padding: 8px 12px;
+	position: relative;
+	background: var(--sys-bg, #FFFFFF);
+	flex-shrink: 0; /* NEVER shrink — always pinned at bottom */
+}
+
+/* v1.0.24 — Read-only composer placeholder (shared kiosk `zdz_general`).
+   Rendered in place of the real composer; the textarea/send/attach controls
+   are never emitted into the DOM for this role. Uses the same footer chrome
+   (border-top, padding, background) so the read pane keeps a consistent frame,
+   with a muted lock-icon notice instead of an input. */
+.zim-w-composer--readonly {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 44px;
+	cursor: default;
+	user-select: none;
+}
+.zim-w-readonly-msg {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	line-height: 1.35;
+	color: var(--sys-text-sec, #64748B);
+	text-align: center;
+	padding: 2px 4px;
+}
+.zim-w-readonly-msg .zim-w-ico {
+	flex: 0 0 auto;
+	opacity: 0.8;
+}
+.zim-w-composer-row {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--ref-space-2, 8px);
+}
+.zim-w-composer textarea {
+	flex: 1;
+	min-height: 48px;
+	max-height: 180px;
+	padding: 12px 14px;
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-md, 10px);
+	background: var(--sys-bg, #FFFFFF);
+	resize: none;
+	font-size: 16px;
+	line-height: 1.5;
+	font-family: inherit;
+	color: var(--sys-text, #0F172A);
+}
+.zim-w-composer textarea:focus { border-color: var(--sys-brand, #3B82F6); outline: none; }
+.zim-w-send-btn {
+	width: 44px; height: 44px;
+	border-radius: 50%;
+	background: var(--sys-brand, #3B82F6);
+	color: #fff;
+	font-size: 18px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+.zim-w-send-btn svg { stroke: #fff; }
+.zim-w-send-btn:disabled { opacity: .4; cursor: not-allowed; }
+.zim-w-send-btn:not(:disabled):hover { background: var(--sys-brand-hover, #2563EB); }
+
+/* Attachment chips below the composer — shown while files are staged
+   for sending. v1.0.14 adds upload-in-progress state with spinner +
+   thumbnail preview for images. */
+.zim-w-attach-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 4px 0 0;
+}
+.zim-w-attach-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	background: var(--sys-surface, #F8FAFC);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: 10px;
+	font-size: 12px;
+	max-width: 240px;
+	overflow: hidden;
+}
+.zim-w-attach-chip--uploading {
+	opacity: 0.75;
+}
+.zim-w-attach-chip__thumb {
+	width: 32px;
+	height: 32px;
+	object-fit: cover;
+	border-radius: 4px;
+	flex-shrink: 0;
+}
+.zim-w-attach-chip__label {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.zim-w-attach-chip__spinner {
+	display: inline-block;
+	width: 12px;
+	height: 12px;
+	border: 2px solid rgba(148,163,184,0.3);
+	border-top-color: var(--sys-brand, #3B82F6);
+	border-radius: 50%;
+	animation: zim-w-loading-spin 0.8s linear infinite;
+	flex-shrink: 0;
+}
+.zim-w-attach-chip button {
+	color: var(--sys-text-ter, #64748B);
+	font-size: 16px;
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+	padding: 0 2px;
+	line-height: 1;
+	flex-shrink: 0;
+}
+.zim-w-attach-chip button:hover {
+	color: var(--sys-text, #0F172A);
+}
+
+/* ── Image lightbox (v1.0.14) ──
+   Full-screen overlay for viewing image attachments at full resolution.
+   Shown when a user taps an image in a chat message. */
+.zim-lightbox {
+	position: fixed;
+	inset: 0;
+	z-index: 99999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.zim-lightbox__backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.85);
+	cursor: pointer;
+}
+.zim-lightbox__content {
+	position: relative;
+	z-index: 1;
+	max-width: 90vw;
+	max-height: 90vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.zim-lightbox__content img {
+	max-width: 100%;
+	max-height: 90vh;
+	border-radius: 8px;
+	box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+	object-fit: contain;
+}
+.zim-lightbox__close {
+	position: absolute;
+	top: 16px;
+	right: 16px;
+	z-index: 2;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: rgba(255,255,255,0.15);
+	color: #fff;
+	font-size: 20px;
+	border: 0;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	backdrop-filter: blur(8px);
+}
+.zim-lightbox__close:hover {
+	background: rgba(255,255,255,0.3);
+}
+
+.zim-w-mention-pop {
+	position: absolute;
+	bottom: 100%;
+	left: var(--ref-space-2, 8px);
+	right: var(--ref-space-2, 8px);
+	max-width: 280px;
+	background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-md, 8px);
+	box-shadow: var(--sys-shadow-md, 0 4px 12px rgba(0,0,0,0.08));
+	padding: 4px;
+	max-height: 240px;
+	overflow-y: auto;
+	z-index: 10;
+}
+.zim-w-mention-pop-item {
+	padding: 8px 10px;
+	border-radius: var(--ref-radius-sm, 6px);
+	cursor: pointer;
+	font-size: var(--ref-font-sm, 14px);
+}
+.zim-w-mention-pop-item:hover,
+.zim-w-mention-pop-item.is-active {
+	background: var(--sys-brand-light, rgba(59,130,246,0.12));
+	color: var(--sys-brand, #3B82F6);
+}
+.zim-w-mention-pop-item .zim-w-mention-login {
+	font-size: 12px;
+	color: var(--sys-text-ter, #64748B);
+	margin-left: 6px;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   5. Overlays (settings, new channel, new DM, preview)
+   ────────────────────────────────────────────────────────────── */
+.zim-w-overlay {
+	position: absolute;
+	inset: 0;
+	background: rgba(15, 23, 42, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 20;
+}
+.zim-w-overlay-card {
+	background: var(--sys-bg, #FFFFFF);
+	border-radius: var(--ref-radius-lg, 12px);
+	box-shadow: var(--sys-shadow-xl, 0 12px 32px rgba(0,0,0,0.18));
+	max-width: 420px;
+	width: 90%;
+	max-height: 90%;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+.zim-w-overlay-card--side {
+	margin-left: auto;
+	margin-right: 0;
+	max-width: 420px;
+	width: 100%;
+	height: 100%;
+	max-height: 100%;
+	border-radius: 0;
+}
+.zim-w-overlay-hdr {
+	display: flex;
+	align-items: center;
+	gap: var(--ref-space-2, 8px);
+	padding: var(--ref-space-3, 12px);
+	border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+.zim-w-overlay-hdr h4 {
+	flex: 1;
+	margin: 0;
+	font-size: var(--ref-font-md, 16px);
+}
+.zim-w-overlay-body {
+	padding: var(--ref-space-3, 12px);
+	display: flex;
+	flex-direction: column;
+	gap: var(--ref-space-3, 12px);
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
+}
+/* v1.0.21: Vault preview panel — structured metadata grid and styled CTA.
+   Replaces browser-default <dl> styling with a two-column label/value
+   layout consistent with the theme's design language. */
+.zim-w-overlay-body dl {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 6px 14px;
+	margin: 8px 0 12px;
+	font-size: 14px;
+	line-height: 1.5;
+}
+.zim-w-overlay-body dt {
+	color: var(--sys-text-ter, #64748B);
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	padding-top: 3px;
+}
+.zim-w-overlay-body dd {
+	color: var(--sys-text, #0F172A);
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.5;
+}
+.zim-w-overlay-body > p > a,
+.zim-w-overlay-body > a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 10px 18px;
+	background: var(--sys-brand, #2C5F8A);
+	color: var(--sys-text-brand, #FFFFFF);
+	border-radius: var(--ref-radius-sm, 8px);
+	font-weight: 600;
+	font-size: 14px;
+	text-decoration: none;
+	transition: background var(--ref-dur-fast, 150ms) var(--ref-ease);
+}
+.zim-w-overlay-body > p > a:hover,
+.zim-w-overlay-body > a:hover {
+	background: var(--sys-brand-hover, #1E3A5F);
+	text-decoration: none;
+}
+.zim-w-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: var(--ref-font-sm, 14px);
+}
+.zim-w-field span {
+	color: var(--sys-text-sec, #475569);
+	font-weight: var(--sys-font-wt-md, 500);
+}
+.zim-w-field input[type="text"],
+.zim-w-field input[type="time"] {
+	padding: 8px 10px;
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-md, 8px);
+	font-size: var(--ref-font-base, 15px);
+	/* v1.1.3 — force a legible light treatment on these inputs. On the dark app
+	   surface these inherited color:inherit (light text) while the native
+	   <input type="time"> spinner/AM-PM chrome still assumed a light field, so the
+	   digits and the ▲▼ controls rendered near-invisible (light-on-light). Pinning
+	   an explicit white field + dark text + color-scheme:light makes both the field
+	   value AND the browser's native time-picker popup render dark-on-white. */
+	background: #FFFFFF;
+	color: #0F172A;
+	color-scheme: light;
+}
+/* The spin buttons + clear/AM-PM fields inside the native time input. Keep them
+   on the same light scheme so the whole control is readable on the dark card. */
+.zim-w-field input[type="time"]::-webkit-datetime-edit,
+.zim-w-field input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+.zim-w-field input[type="time"]::-webkit-datetime-edit-hour-field,
+.zim-w-field input[type="time"]::-webkit-datetime-edit-minute-field,
+.zim-w-field input[type="time"]::-webkit-datetime-edit-ampm-field,
+.zim-w-field input[type="time"]::-webkit-datetime-edit-text {
+	color: #0F172A;
+}
+.zim-w-field input[type="time"]::-webkit-calendar-picker-indicator {
+	filter: none;
+	opacity: 0.75;
+	cursor: pointer;
+}
+.zim-w-field input[type="time"]:focus {
+	outline: 2px solid var(--sys-brand, #3B82F6);
+	outline-offset: 1px;
+	border-color: var(--sys-brand, #3B82F6);
+}
+/* Highlighted (selected) sub-field inside the time control — ensure the
+   selection keeps readable contrast rather than white-on-pale-blue. */
+.zim-w-field input[type="time"]::-webkit-datetime-edit-hour-field:focus,
+.zim-w-field input[type="time"]::-webkit-datetime-edit-minute-field:focus,
+.zim-w-field input[type="time"]::-webkit-datetime-edit-ampm-field:focus {
+	background: var(--sys-brand, #3B82F6);
+	color: #FFFFFF;
+	border-radius: 3px;
+}
+.zim-w-field--row {
+	flex-direction: row;
+	align-items: center;
+	gap: var(--ref-space-2, 8px);
+}
+.zim-w-help {
+	font-size: var(--ref-font-xs, 12px);
+	color: var(--sys-text-ter, #64748B);
+	margin: 0;
+}
+.zim-w-primary-btn {
+	background: var(--sys-brand, #3B82F6);
+	color: #fff;
+	padding: 10px 16px;
+	border-radius: var(--ref-radius-md, 8px);
+	font-weight: var(--sys-font-wt-md, 500);
+	font-size: var(--ref-font-base, 15px);
+	align-self: flex-start;
+}
+.zim-w-primary-btn:hover { background: var(--sys-brand-hover, #2563EB); }
+
+/* ──────────────────────────────────────────────────────────────
+   6. Mobile (< 720px): iMessage-style list/convo toggle
+   Applies to the standalone dashboard tile, NOT to embed mode
+   (embed mode handles its own narrow-viewport rules below).
+   Same reasoning as embed mode: instant snap instead of slide.
+   ────────────────────────────────────────────────────────────── */
+.zim-w-mobile-only { display: none; }
+@media (max-width: 720px) {
+	.zim-w:not(.zim-w--embed) {
+		flex-direction: column;
+		position: relative;
+	}
+	.zim-w:not(.zim-w--embed) .zim-w-sidebar {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		max-width: none;
+		z-index: 2;
+		border-right: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.zim-w:not(.zim-w--embed) .zim-w-main {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+	}
+	/* Default = list view. Main is hidden until a conversation is picked. */
+	.zim-w:not(.zim-w--embed) .zim-w-main,
+	.zim-w:not(.zim-w--embed).zim-w--view-list .zim-w-main { display: none; }
+	.zim-w:not(.zim-w--embed) .zim-w-sidebar,
+	.zim-w:not(.zim-w--embed).zim-w--view-list .zim-w-sidebar { display: flex; }
+	/* Convo view = hide list entirely, show main. */
+	.zim-w:not(.zim-w--embed).zim-w--view-convo .zim-w-sidebar { display: none; }
+	.zim-w:not(.zim-w--embed).zim-w--view-convo .zim-w-main { display: flex; }
+
+	.zim-w-mobile-only { display: inline-flex; }
+	.zim-w-msg-actions button { padding: 6px 10px; }
+	.zim-w-att-image img { max-width: 100%; }
+}
+
+/* Full-page mode uses all viewport height. */
+.zim-w--fullpage .zim-w-messages { max-height: none; }
+
+/* ── Inline (dashboard tile) ──
+   v1.0.18 — increased max-height from 560px to 680px (desktop) and
+   480px to 560px (mobile) to reduce excessive vertical scrolling within
+   the widget window. The widget should show enough conversation history
+   that users don't feel claustrophobic. */
+.zim-w--inline {
+	max-height: 680px;
+	min-height: 420px;
+	height: 680px;
+}
+@media (max-width: 720px) {
+	.zim-w--inline {
+		max-height: 560px;
+		height: 560px;
+		min-height: 360px;
+	}
+	.zim-w--inline .zim-w-main-title {
+		font-size: 14px;
+		max-width: 50vw;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   v1.0.22 M3: Desktop widget — larger and more spacious
+   NOTE: Use max-height (not fixed height) to avoid creating massive
+   whitespace gaps when this widget sits in a flex/grid alongside
+   smaller widgets like Game or Stock.
+   ══════════════════════════════════════════════════════════════ */
+@media (min-width: 820px) {
+	.zim-w--inline {
+		max-height: 800px;
+		height: auto;
+		min-height: 500px;
+	}
+
+	/* Wider sidebar for desktop — easier to read conversation list */
+	.zim-w--inline .zim-w-sidebar {
+		width: 300px;
+		flex: 0 0 300px;
+	}
+
+	/* Desktop font bumps for dashboard tile */
+	.zim-w--inline .zim-w-msg-bubble { font-size: 18px; }
+	.zim-w--inline .zim-w-msg-name { font-size: 15px; }
+	.zim-w--inline .zim-w-msg-meta { font-size: 14px; }
+	.zim-w--inline .zim-w-list li .zim-w-label { font-size: 18px; }
+	.zim-w--inline .zim-w-section-hdr { font-size: 15px; }
+	.zim-w--inline .zim-w-compose-input,
+	.zim-w--inline .zim-w-compose-input textarea {
+		font-size: 18px !important;
+	}
+	.zim-w--inline .zim-w-logo {
+		font-size: 20px;
+	}
+}
+
+/* Wider desktop: even more space */
+@media (min-width: 1280px) {
+	.zim-w--inline {
+		max-height: 900px;
+	}
+}
+
+/* ──────────────────────────────────────────────────────────────
+   7. Embed mode — iMessage-style master-detail navigation
+   ─────────────────────────────────────────────────────────────
+   Research-backed patterns applied:
+   - **Narrow (<720px)**: single-column. Show LIST or CONVERSATION, not both.
+     Tapping a conversation slides the list out, conversation slides in.
+     Back button returns to the list. No permanent sidebar, no overlays.
+   - **Wide (≥720px)**: split-view. List stays on the left (280px fixed),
+     conversation takes the remainder. This is the classic iPad Mail /
+     Messages desktop layout — always two panes, so you never "lose" the
+     list.
+   - **State model**: adds .zim-w--view-list or .zim-w--view-convo
+     classes to root, JS toggles which is visible at narrow width.
+     CSS only kicks in when the root has one of these classes, so
+     default renders show the list (the safe first-view state).
+   ────────────────────────────────────────────────────────────── */
+.zim-w--embed {
+	border: 0;
+	border-radius: 0;
+	max-height: none;
+	min-height: 100vh;
+	height: 100vh;
+	background: var(--sys-bg, transparent);
+	overflow: hidden;
+	font-size: 16px;
+	width: 100%;
+}
+/* Font bumps for readability in embed mode.
+   v1.0.12 — larger bubble text and compose input for easier reading. */
+.zim-w--embed .zim-w-msg-text { font-size: 17px; line-height: 1.5; }
+.zim-w--embed .zim-w-msg-name { font-size: 14px; }
+.zim-w--embed .zim-w-msg-meta { font-size: 12px; }
+.zim-w--embed .zim-w-input textarea,
+.zim-w--embed .zim-w-input .zim-w-input-inner { font-size: 17px; }
+/* Sidebar text a little larger too — list rows should feel scannable */
+.zim-w--embed .zim-w-list li { font-size: 16px; padding: 12px 16px; min-height: 48px; }
+.zim-w--embed .zim-w-section-hdr { font-size: 13px; padding: 10px 16px 6px; }
+.zim-w--embed .zim-w-logo { font-size: 19px; }
+/* Wider message bubbles — up to 85% at narrow widths, 70% at wide */
+.zim-w--embed .zim-w-msg { max-width: 85%; }
+@media (min-width: 900px) {
+	.zim-w--embed .zim-w-msg { max-width: 70%; }
+}
+
+/* ── Sidebar: proper split-view panel, not a slide-out overlay.
+   v1.0.12 — sidebar widened to 320px (matches iMessage on macOS) and
+   messages area max-width removed so the conversation fills the remaining
+   width like a real desktop chat app. ── */
+.zim-w--embed .zim-w-sidebar {
+	position: relative;
+	transform: none;
+	box-shadow: none;
+	width: 320px;
+	flex-shrink: 0;
+	border-right: 1px solid var(--sys-border, rgba(0,0,0,0.08));
+	background: var(--sys-bg, inherit);
+	z-index: auto;
+	transition: none;
+}
+.zim-w--embed .zim-w-main {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+/* Messages area fills the main pane — no inherited max-widths cutting it
+   short on wide displays. Bubbles themselves still respect their 80% cap. */
+.zim-w--embed .zim-w-messages {
+	max-width: none;
+	width: 100%;
+	padding: 16px 20px;
+}
+
+/* ── Narrow viewport: single-column, state-driven visibility ──
+   No sliding animations — instant snap between list and conversation.
+   Reason: sliding depends on transform state that can get stuck if a
+   re-render interrupts the animation mid-flight, leaving the widget
+   in a broken "half-slid" state that requires a reload. Display toggles
+   are stateless and survive any interruption. This matches how iMessage
+   on iOS actually works — the transition is perceptually instant. */
+@media (max-width: 720px) {
+	.zim-w--embed .zim-w-sidebar {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		max-width: none;
+		border-right: 0;
+		z-index: 2;
+		transform: none;
+		transition: none;
+		display: flex;
+		flex-direction: column;
+	}
+	.zim-w--embed .zim-w-main {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		transform: none;
+		transition: none;
+		display: flex;
+		flex-direction: column;
+	}
+	/* List view (default): hide main pane entirely */
+	.zim-w--embed .zim-w-main,
+	.zim-w--embed.zim-w--view-list .zim-w-main {
+		display: none;
+	}
+	.zim-w--embed .zim-w-sidebar,
+	.zim-w--embed.zim-w--view-list .zim-w-sidebar {
+		display: flex;
+	}
+	/* Conversation view: hide sidebar entirely, show main */
+	.zim-w--embed.zim-w--view-convo .zim-w-sidebar {
+		display: none;
+	}
+	.zim-w--embed.zim-w--view-convo .zim-w-main {
+		display: flex;
+	}
+}
+
+/* ── Header tweaks: back button visible in embed at narrow width ── */
+.zim-w--embed .zim-w-main-hdr {
+	padding: 10px 12px;
+	min-height: 48px;
+	border-bottom: 1px solid var(--sys-border, rgba(0,0,0,0.08));
+	background: var(--sys-surface-blur, var(--sys-bg, inherit));
+	backdrop-filter: saturate(1.1) blur(6px);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+/* Hide the hamburger in embed — we don't need a slide-out menu when the
+   sidebar IS the list view. */
+.zim-w--embed .zim-w-mobile-only { display: none; }
+
+/* Back button visibility: shown at narrow viewport in EITHER embed mode
+   or the standalone dashboard tile, but only when in convo view.
+   v1.0.18 — removed emoji pseudo-element, uses inline Lucide SVG chevron
+   instead. Made more prominent with larger tap target for iPad. */
+.zim-w-back-btn {
+	display: none;
+	background: transparent;
+	border: 0;
+	color: var(--sys-brand, #3B82F6);
+	font-size: 15px;
+	font-weight: 600;
+	padding: 6px 10px 6px 4px;
+	cursor: pointer;
+	line-height: 1;
+	align-items: center;
+	gap: 2px;
+	min-height: 44px;
+	white-space: nowrap;
+	border-radius: var(--ref-radius-md, 8px);
+	transition: background 0.12s ease;
+}
+.zim-w-back-btn:hover,
+.zim-w-back-btn:focus-visible {
+	background: var(--sys-brand-light, rgba(59,130,246,0.10));
+	outline: none;
+}
+.zim-w-back-btn .zim-w-ico {
+	flex-shrink: 0;
+}
+@media (max-width: 720px) {
+	.zim-w.zim-w--view-convo .zim-w-back-btn { display: inline-flex; align-items: center; }
+}
+
+/* Messages + composer */
+.zim-w--embed .zim-w-messages { max-height: none; flex: 1; padding: 12px 14px; }
+.zim-w--embed .zim-w-composer { flex-shrink: 0; }
+
+/* v1.0.18 — iPad keyboard recovery.
+   On iOS/iPadOS, the software keyboard can dismiss and refuse to reopen
+   when a textarea inside an iframe loses focus. These properties ensure:
+   1. The textarea stays focusable after scroll events.
+   2. Touch-action on the composer prevents iOS gesture conflicts.
+   3. The composer area itself is a large tap target for refocus. */
+.zim-w-composer {
+	-webkit-overflow-scrolling: touch;
+	touch-action: manipulation;
+}
+.zim-w-composer textarea {
+	-webkit-appearance: none;
+	-webkit-user-select: text;
+	user-select: text;
+	touch-action: manipulation;
+}
+
+/* v1.0.21: Pull-to-refresh indicator.
+   Consistent with TSA v1.13.7 pattern. Sits above the messages area
+   and animates in as the user pulls down. */
+.zim-w-pull-indicator {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 0;
+	overflow: hidden;
+	font-size: var(--ref-font-sm, 15px);
+	color: var(--sys-text-ter, #94A3B8);
+	background: var(--sys-bg-alt, #F1F5F9);
+	transition: opacity 0.15s ease;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   v1.0.22 M1: FONT SIZE BUMP — larger, more readable text throughout
+   Builds on v1.0.21 bump, further increases name/meta sizes.
+   ══════════════════════════════════════════════════════════════ */
+.zim-w { font-size: 17px; }
+.zim-w-main-title { font-size: var(--ref-font-lg, 20px); }
+.zim-w-msg-bubble { font-size: 17px; line-height: 1.45; }
+.zim-w-msg-name { font-size: 14px; }
+.zim-w-msg-meta { font-size: 13px; }
+.zim-w-msg-avatar { font-size: 13px; }
+.zim-w-time-sep { font-size: 13px; }
+.zim-w-end-of-history { font-size: 13px; }
+.zim-w-empty { font-size: 16px; }
+.zim-w-loading__label { font-size: 15px; }
+.zim-w-list li .zim-w-label { font-size: 17px; }
+.zim-w-section-hdr { font-size: 14px; }
+.zim-w-compose-input, .zim-w-compose-input textarea {
+	font-size: 17px !important;
+}
+.zim-w-search-bar input { font-size: 17px; }
+
+/* ══════════════════════════════════════════════════════════════
+   v1.0.21: SELECT MODE — checkboxes + bulk delete bar
+   ══════════════════════════════════════════════════════════════ */
+.zim-w-select-btn {
+	padding: 4px 12px;
+	border-radius: var(--ref-radius-md, 6px);
+	border: 1px solid var(--sys-border, #334155);
+	background: transparent;
+	color: var(--sys-text-sec, #94A3B8);
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: all 0.15s;
+	-webkit-tap-highlight-color: transparent;
+}
+.zim-w-select-btn:active { opacity: 0.7; }
+.zim-w--select-mode .zim-w-select-btn {
+	background: var(--sys-brand, #3B82F6);
+	color: #fff;
+	border-color: var(--sys-brand, #3B82F6);
+}
+
+/* In select mode, messages get a tap target highlight */
+.zim-w--select-mode .zim-w-msg {
+	cursor: pointer;
+	border-radius: 10px;
+	transition: background 0.15s;
+}
+.zim-w--select-mode .zim-w-msg:active {
+	background: rgba(59, 130, 246, 0.08);
+}
+.zim-w-msg--selected {
+	background: rgba(59, 130, 246, 0.12) !important;
+	border-radius: 10px;
+}
+.zim-w-msg--selected .zim-w-msg-bubble {
+	box-shadow: 0 0 0 2px var(--sys-brand, #3B82F6);
+}
+
+/* Hide individual delete/edit actions in select mode */
+.zim-w--select-mode .zim-w-msg-actions { display: none; }
+
+/* Floating bulk-delete bar at bottom of message area */
+.zim-w-bulk-bar {
+	position: absolute;
+	bottom: 60px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: #DC2626;
+	color: #fff;
+	padding: 10px 24px;
+	border-radius: 999px;
+	font-size: 15px;
+	font-weight: 600;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	box-shadow: 0 4px 16px rgba(220, 38, 38, 0.35);
+	z-index: 20;
+	white-space: nowrap;
+	-webkit-tap-highlight-color: transparent;
+	transition: transform 0.15s;
+	animation: zim-bulk-bar-in 0.2s ease;
+}
+.zim-w-bulk-bar:active { transform: translateX(-50%) scale(0.95); }
+.zim-w-bulk-bar svg { flex-shrink: 0; }
+@keyframes zim-bulk-bar-in {
+	from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+	to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   v1.0.21: SWIPE-TO-DELETE (touch devices)
+   ══════════════════════════════════════════════════════════════ */
+.zim-w-msg {
+	overflow: visible;
+}
+.zim-w-swipe-zone {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 0;
+	background: #DC2626;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	font-size: 14px;
+	font-weight: 600;
+	border-radius: 10px;
+	overflow: hidden;
+	white-space: nowrap;
+	pointer-events: none;
+	transition: background 0.1s;
+	z-index: -1;
+}
+.zim-w-swipe-zone.zim-w-swipe-ready {
+	background: #B91C1C;
+}
+.zim-w-swipe-zone svg { flex-shrink: 0; }

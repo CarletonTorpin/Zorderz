@@ -1,0 +1,3308 @@
+/**
+ * Zorderz Leads — Inline Dashboard Widget CSS
+ * Module: Zorderz Leads
+ *
+ * Scoped to .zl-w to prevent bleed into other widgets or theme.
+ * Uses Zorderz theme tokens (--sys-*, --ref-*) for automatic
+ * Light/Dark/System/Sunlight mode adaptation.
+ *
+ * Token reference:
+ *   --sys-*  = Semantic (change per theme mode)
+ *   --ref-*  = Reference (constant across modes)
+ *   Fallback values ensure graceful degradation if theme tokens are absent.
+ *
+ * v1.4.0 — the app compatibility (ts_admin + ts_operator roles).
+ *           Added dashboard header, 4-stat grid with icons, contacted stat,
+ *           role-aware data-attribute, enhanced Sunlight Mode overrides.
+ * v1.5.0 — Full-parity dashboard widget: generation panel with filters,
+ *           progress log, batch history with expand/collapse, lead cards,
+ *           score/status badges, collapsible sections, modal, responsive.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   1. Container
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-4, 16px);
+  font-family: var(--sys-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif);
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text, #0F172A);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.zl-w *,
+.zl-w *::before,
+.zl-w *::after {
+  box-sizing: border-box;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   1b. TOKEN COMPATIBILITY SHIM  (v2.1.0)
+   ───────────────────────────────────────────────────────────────────
+   Earlier revisions of this widget referenced a family of Material-style
+   token names (--sys-on-surface, --sys-color-primary, --sys-color-success,
+   --sys-color-*-container, --sys-color-outline, --sys-color-on-surface*,
+   --sys-font-family, --sys-brand-active) that DO NOT EXIST in the
+   Zorderz theme. Each silently fell back to a hardcoded literal —
+   most damagingly --sys-on-surface → #1d2327 (near-black), which made the
+   "Generate Leads" / "All Leads" panel titles invisible on the dark
+   surface (the reported dark-mode contrast bug).
+
+   Rather than rewrite ~24 scattered declarations, we define those missing
+   names HERE, scoped to .zl-w, in terms of the REAL theme tokens. Because
+   the real tokens are themselves redefined per theme mode by the theme,
+   these aliases adapt automatically across Light / Dark / System / Sunlight.
+   When the theme later ships its own equivalents, the real tokens still win
+   inside their own cascade; these only fill the gaps.
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w {
+  /* Text-on-surface → real text tokens (THE invisible-header fix) */
+  --sys-on-surface: var(--sys-text, #0F172A);
+  --sys-color-on-surface: var(--sys-text, #0F172A);
+  --sys-color-on-surface-variant: var(--sys-text-sec, #475569);
+
+  /* Brand / primary → real brand tokens */
+  --sys-color-primary: var(--sys-brand, #2C5F8A);
+  --sys-brand-active: var(--sys-brand-hover, #17304D);
+
+  /* Success → keep a dedicated green that reads in every mode.
+     (Theme has no semantic success token; this green passes AA on both
+     the light and dark surfaces.) */
+  --sys-color-success: #10B981;
+
+  /* Tinted "container" backgrounds → subtle surface + brand wash.
+     --sys-surface-subtle is theme-aware (light in light mode, a faint
+     white wash in dark), so notice boxes stay legible either way. */
+  --sys-color-surface-container: var(--sys-surface-subtle, rgba(0,0,0,.03));
+  --sys-color-primary-container: var(--sys-surface-subtle, rgba(0,0,0,.03));
+  --sys-color-secondary-container: var(--sys-surface-subtle, rgba(0,0,0,.03));
+  --sys-color-on-primary-container: var(--sys-text, #0F172A);
+  --sys-color-on-secondary-container: var(--sys-text, #0F172A);
+
+  /* Outline / divider → real border token */
+  --sys-color-outline: var(--sys-border, #E2E8F0);
+
+  /* Error/danger → a red that reads in light and dark. */
+  --sys-color-error: #EF4444;
+
+  /* Font stack alias */
+  --sys-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   2. Header
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--ref-space-2, 8px);
+  border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+
+.zl-w-title {
+  font-size: var(--ref-font-md, 15px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.zl-w-version {
+  font-size: var(--ref-font-xxs, 10px);
+  color: var(--sys-text-ter, #64748B);
+  background: var(--sys-bg-alt, #F1F5F9);
+  padding: 2px 6px;
+  border-radius: var(--ref-radius-xs, 4px);
+  font-weight: var(--sys-font-wt-md, 500);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   3. Stats Row
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--ref-space-3, 12px);
+}
+
+.zl-w-stat {
+  text-align: center;
+  padding: var(--ref-space-3, 12px) var(--ref-space-2, 8px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border-radius: var(--ref-radius-md, 12px);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  transition: box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-stat:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.zl-w-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 6px auto;
+  color: var(--sys-brand, #2C5F8A);
+  opacity: 0.7;
+}
+
+.zl-w-stat-val {
+  display: block;
+  font-size: var(--ref-font-xl, 20px);
+  font-weight: var(--sys-font-wt-b, 700);
+  color: var(--sys-text, #0F172A);
+  line-height: 1.2;
+}
+
+.zl-w-stat-label {
+  display: block;
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-sec, #475569);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   4. Generation Panel
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-gen-panel {
+  background: var(--sys-bg, #FFFFFF);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-md, 12px);
+  padding: var(--ref-space-4, 16px);
+}
+
+.zl-w-section-title {
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+  margin: 0 0 var(--ref-space-3, 12px) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* -- Filter rows -- */
+.zl-w-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-3, 12px);
+}
+
+.zl-w-filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-1, 4px);
+}
+
+.zl-w-filter-row label {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.zl-w-filter-row input,
+.zl-w-filter-row select,
+.zl-w-filter-row textarea {
+  width: 100%;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-family: inherit;
+  color: var(--sys-text, #0F172A);
+  background: var(--sys-bg, #FFFFFF);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  min-height: 38px;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.zl-w-filter-row select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: var(--ref-space-5, 32px);
+}
+
+.zl-w-filter-row input:focus,
+.zl-w-filter-row select:focus,
+.zl-w-filter-row textarea:focus {
+  outline: none;
+  border-color: var(--sys-brand, #2C5F8A);
+  box-shadow: 0 0 0 3px rgba(44, 95, 138, 0.15);
+}
+
+/* Spend range pair — two inputs side by side */
+.zl-w-filter-row-pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-1, 4px);
+}
+
+.zl-w-filter-row-pair label {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.zl-w-spend-inputs {
+  display: flex;
+  gap: var(--ref-space-2, 8px);
+  align-items: center;
+}
+
+.zl-w-spend-inputs input {
+  flex: 1;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-family: inherit;
+  color: var(--sys-text, #0F172A);
+  background: var(--sys-bg, #FFFFFF);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  min-height: 38px;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-spend-inputs input:focus {
+  outline: none;
+  border-color: var(--sys-brand, #2C5F8A);
+  box-shadow: 0 0 0 3px rgba(44, 95, 138, 0.15);
+}
+
+.zl-w-spend-inputs span {
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-ter, #64748B);
+  flex-shrink: 0;
+}
+
+/* Disabled state for permission-locked filters */
+.zl-w-filter-row input:disabled,
+.zl-w-filter-row select:disabled,
+.zl-w-filter-row textarea:disabled,
+.zl-w-spend-inputs input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+.zl-w-filter-hint {
+  font-size: var(--ref-font-xxs, 10px);
+  color: var(--sys-text-ter, #64748B);
+  font-style: italic;
+  margin-top: var(--ref-space-1, 4px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   5. Action Buttons
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-actions {
+  display: flex;
+  gap: var(--ref-space-3, 12px);
+}
+
+.zl-w-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  border-radius: var(--ref-radius-md, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              transform var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 44px;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  text-decoration: none;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* Pass clicks through child elements (SVGs, spans) to button */
+.zl-w-btn * {
+  pointer-events: none;
+}
+
+.zl-w-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.zl-w-btn:focus-visible {
+  outline: 2px solid var(--sys-brand, #2C5F8A);
+  outline-offset: 2px;
+}
+
+.zl-w-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.zl-w-btn svg {
+  flex-shrink: 0;
+}
+
+/* Primary — brand color bg, white text */
+.zl-w-btn-primary {
+  background: var(--sys-brand, #2C5F8A);
+  color: var(--sys-text-brand, #FFFFFF);
+}
+
+.zl-w-btn-primary:hover:not(:disabled) {
+  background: var(--sys-brand-hover, #1E3A5F);
+  box-shadow: 0 2px 8px rgba(44, 95, 138, 0.35);
+}
+
+.zl-w-btn-primary:active:not(:disabled) {
+  background: var(--sys-brand-active, #17304D);
+}
+
+/* Secondary — alt bg, default text, border */
+.zl-w-btn-secondary {
+  background: var(--sys-bg-alt, #F1F5F9);
+  color: var(--sys-text, #0F172A);
+  border: 1px solid var(--sys-border, #E2E8F0);
+}
+
+.zl-w-btn-secondary:hover:not(:disabled) {
+  background: var(--sys-border, #E2E8F0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.zl-w-btn-secondary:active:not(:disabled) {
+  background: var(--sys-border-strong, #CBD5E1);
+}
+
+/* Outline — transparent bg, brand border, brand text */
+.zl-w-btn-outline {
+  background: transparent;
+  color: var(--sys-brand, #2C5F8A);
+  border: 1px solid var(--sys-brand, #2C5F8A);
+}
+
+.zl-w-btn-outline:hover:not(:disabled) {
+  background: rgba(44, 95, 138, 0.08);
+  box-shadow: 0 2px 8px rgba(44, 95, 138, 0.15);
+}
+
+.zl-w-btn-outline:active:not(:disabled) {
+  background: rgba(44, 95, 138, 0.14);
+}
+
+.zl-w-btn-sm {
+  flex: none;
+  padding: var(--ref-space-1, 4px) var(--ref-space-2, 8px);
+  font-size: var(--ref-font-xxs, 10px);
+  min-height: 28px;
+  border-radius: var(--ref-radius-xs, 4px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   6. Progress Panel
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-progress {
+  padding: var(--ref-space-3, 12px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border-radius: var(--ref-radius-md, 12px);
+  border: 1px solid var(--sys-border, #E2E8F0);
+}
+
+.zl-w-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--ref-space-2, 8px);
+}
+
+.zl-w-progress-label {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.zl-w-progress-pct {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-b, 700);
+  color: var(--sys-brand, #2C5F8A);
+}
+
+.zl-w-progress-bar {
+  height: 6px;
+  background: var(--sys-border, #E2E8F0);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: var(--ref-space-2, 8px);
+}
+
+.zl-w-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--sys-brand, #2C5F8A);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.zl-w-progress-msg {
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-sec, #475569);
+  margin: 0;
+}
+
+/* Progress log — terminal-like feel */
+.zl-w-progress-log {
+  background: #1E1E2E;
+  color: #CDD6F4;
+  font-family: 'SF Mono', 'Consolas', 'Menlo', 'Monaco', 'Liberation Mono', monospace;
+  font-size: var(--ref-font-xxs, 10px);
+  line-height: 1.6;
+  padding: var(--ref-space-3, 12px) var(--ref-space-3, 12px);
+  border-radius: var(--ref-radius-sm, 8px);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: var(--ref-space-2, 8px);
+  scrollbar-width: thin;
+  scrollbar-color: #45475A #1E1E2E;
+}
+
+.zl-w-progress-log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.zl-w-progress-log::-webkit-scrollbar-track {
+  background: #1E1E2E;
+  border-radius: 3px;
+}
+
+.zl-w-progress-log::-webkit-scrollbar-thumb {
+  background: #45475A;
+  border-radius: 3px;
+}
+
+.zl-w-progress-log::-webkit-scrollbar-thumb:hover {
+  background: #585B70;
+}
+
+.zl-w-log-line {
+  margin: 0;
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.zl-w-log-line-error {
+  color: #F38BA8;
+}
+
+.zl-w-log-line-success {
+  color: #A6E3A1;
+}
+
+.zl-w-log-line-warn {
+  color: #F9E2AF;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   7. Batch History
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-batches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-2, 8px);
+}
+
+.zl-w-batches .zl-w-section-title {
+  margin-bottom: var(--ref-space-1, 4px);
+}
+
+.zl-w-batches-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Individual batch row */
+.zl-w-batch-row {
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  overflow: hidden;
+  margin-bottom: var(--ref-space-2, 8px);
+  background: var(--sys-bg, #FFFFFF);
+  transition: box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-batch-row:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* Batch row header — clickable expand/collapse */
+.zl-w-batch-row-header {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  min-height: 44px;
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-batch-row-header:hover {
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+/* Toggle arrow */
+.zl-w-batch-toggle {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sys-text-ter, #64748B);
+  transition: transform var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  font-size: 10px;
+}
+
+.zl-w-batch-row.is-expanded .zl-w-batch-toggle {
+  transform: rotate(90deg);
+}
+
+/* Batch tag / title */
+.zl-w-batch-tag {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-text, #0F172A);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status badges */
+.zl-w-batch-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--ref-radius-full, 9999px);
+  font-size: var(--ref-font-xxs, 10px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.zl-w-status-complete {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.zl-w-status-generating {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.zl-w-status-failed {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+/* Lead count in batch header */
+.zl-w-batch-count {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Batch date */
+.zl-w-batch-date {
+  font-size: var(--ref-font-xxs, 10px);
+  color: var(--sys-text-ter, #64748B);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Test badge */
+.zl-w-badge-test {
+  display: inline-block;
+  background: #FEF3CD;
+  color: #856404;
+  font-size: var(--ref-font-xxs, 10px);
+  font-weight: var(--sys-font-wt-b, 700);
+  padding: 1px 5px;
+  border-radius: var(--ref-radius-xs, 4px);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+/* Filter info below batch tag */
+.zl-w-batch-filters {
+  font-size: var(--ref-font-xxs, 10px);
+  color: var(--sys-text-ter, #64748B);
+  padding: 0 var(--ref-space-3, 12px) var(--ref-space-2, 8px) calc(var(--ref-space-3, 12px) + 26px);
+  margin-top: calc(-1 * var(--ref-space-2, 8px));
+}
+
+/* Batch actions row */
+.zl-w-batch-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  border-top: 1px solid var(--sys-border, #E2E8F0);
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+.zl-w-batch-actions .zl-w-btn {
+  flex: none;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-xs, 11px);
+  min-height: 34px;
+  border-radius: var(--ref-radius-sm, 8px);
+}
+
+/* Expanded leads container */
+.zl-w-leads-container {
+  padding: var(--ref-space-3, 12px);
+  border-top: 1px solid var(--sys-border, #E2E8F0);
+  background: var(--sys-bg-alt, #F1F5F9);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-3, 12px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   8. Lead Cards
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-lead-card {
+  background: var(--sys-bg, #FFFFFF);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  transition: box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-lead-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Card header: score badge, name, status, actions */
+.zl-w-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+  margin-bottom: var(--ref-space-2, 8px);
+  flex-wrap: wrap;
+}
+
+.zl-w-card-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text, #0F172A);
+}
+
+.zl-w-card-name strong {
+  font-weight: var(--sys-font-wt-sb, 600);
+  font-size: var(--ref-font-md, 15px);
+}
+
+.zl-w-card-org {
+  display: block;
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-sec, #475569);
+  margin-top: 1px;
+}
+
+.zl-w-card-actions {
+  display: flex;
+  gap: var(--ref-space-1, 4px);
+  flex-shrink: 0;
+}
+
+.zl-w-card-actions .zl-w-btn {
+  flex: none;
+  padding: var(--ref-space-1, 4px) var(--ref-space-2, 8px);
+  font-size: var(--ref-font-xxs, 10px);
+  min-height: 28px;
+  border-radius: var(--ref-radius-xs, 4px);
+}
+
+/* ── Score badge ── */
+.zl-w-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ref-radius-full, 9999px);
+  font-weight: var(--sys-font-wt-b, 700);
+  font-size: var(--ref-font-xs, 11px);
+  color: #FFFFFF;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.zl-w-score-high {
+  background: #059669;
+}
+
+.zl-w-score-med {
+  background: #D97706;
+}
+
+.zl-w-score-low {
+  background: #9CA3AF;
+}
+
+/* ── Contact status badges ── */
+.zl-w-contact-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--ref-radius-full, 9999px);
+  font-size: var(--ref-font-xxs, 10px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.zl-w-contacted {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.zl-w-skipped {
+  background: #E5E7EB;
+  color: #6B7280;
+}
+
+.zl-w-pending {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* ── Nutshell status badges ── */
+.zl-w-ns-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--ref-radius-full, 9999px);
+  font-size: var(--ref-font-xxs, 10px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.zl-w-ns-open {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.zl-w-ns-won {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.zl-w-ns-lost {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.zl-w-ns-cancelled {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+/* ── Card body sections ── */
+.zl-w-card-section {
+  font-size: var(--ref-font-sm, 13px);
+  line-height: 1.5;
+  margin-bottom: var(--ref-space-1, 4px);
+  color: var(--sys-text-sec, #475569);
+}
+
+.zl-w-card-label {
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+}
+
+.zl-w-card-location {
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+  margin-bottom: var(--ref-space-2, 8px);
+}
+
+.zl-w-card-contact {
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text, #0F172A);
+  margin-bottom: var(--ref-space-2, 8px);
+  padding-bottom: var(--ref-space-2, 8px);
+  border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+
+.zl-w-card-contact a {
+  color: var(--sys-brand, #2C5F8A);
+  text-decoration: none;
+  transition: color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-card-contact a:hover {
+  color: var(--sys-brand-hover, #1E3A5F);
+  text-decoration: underline;
+}
+
+/* ── Collapsible sections ── */
+.zl-w-collapsible-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  margin-top: var(--ref-space-2, 8px);
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-collapsible-toggle:hover {
+  background: var(--sys-border, #E2E8F0);
+}
+
+.zl-w-collapsible-toggle.is-open {
+  border-radius: var(--ref-radius-sm, 8px) var(--ref-radius-sm, 8px) 0 0;
+}
+
+.zl-w-collapsible-toggle .zl-w-toggle-arrow {
+  transition: transform var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  font-size: 10px;
+  color: var(--sys-text-ter, #64748B);
+}
+
+.zl-w-collapsible-toggle.is-open .zl-w-toggle-arrow {
+  transform: rotate(180deg);
+}
+
+.zl-w-collapsible-content {
+  padding: var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  line-height: 1.5;
+  color: var(--sys-text-sec, #475569);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-top: none;
+  border-radius: 0 0 var(--ref-radius-sm, 8px) var(--ref-radius-sm, 8px);
+  background: var(--sys-bg, #FFFFFF);
+}
+
+.zl-w-collapsible-content ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.zl-w-collapsible-content li {
+  margin-bottom: var(--ref-space-1, 4px);
+}
+
+/* ── AI Summary ── */
+.zl-w-ai-summary {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: var(--ref-radius-sm, 8px);
+  padding: var(--ref-space-3, 12px);
+  margin-top: var(--ref-space-2, 8px);
+  font-size: var(--ref-font-sm, 13px);
+  line-height: 1.5;
+  color: var(--sys-text, #0F172A);
+}
+
+.zl-w-ai-summary strong {
+  font-weight: var(--sys-font-wt-sb, 600);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   9. Custom Modal
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  padding: var(--ref-space-4, 16px);
+  animation: tslFadeIn 150ms ease forwards;
+}
+
+@keyframes tslFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.zl-w-modal {
+  background: var(--sys-bg, #FFFFFF);
+  border-radius: var(--ref-radius-lg, 16px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px var(--sys-border, #E2E8F0);
+  max-width: 420px;
+  width: 100%;
+  padding: var(--ref-space-5, 24px);
+  animation: tslSlideUp 200ms ease forwards;
+}
+
+@keyframes tslSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.zl-w-modal-title {
+  font-size: var(--ref-font-lg, 17px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+  margin: 0 0 var(--ref-space-2, 8px) 0;
+}
+
+.zl-w-modal-message {
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-sec, #475569);
+  line-height: 1.5;
+  margin: 0 0 var(--ref-space-4, 16px) 0;
+}
+
+.zl-w-modal-input {
+  width: 100%;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-family: inherit;
+  color: var(--sys-text, #0F172A);
+  background: var(--sys-bg, #FFFFFF);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  margin-bottom: var(--ref-space-4, 16px);
+  min-height: 38px;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zl-w-modal-input:focus {
+  outline: none;
+  border-color: var(--sys-brand, #2C5F8A);
+  box-shadow: 0 0 0 3px rgba(44, 95, 138, 0.15);
+}
+
+.zl-w-modal-actions {
+  display: flex;
+  gap: var(--ref-space-2, 8px);
+  justify-content: flex-end;
+}
+
+.zl-w-modal-actions .zl-w-btn {
+  flex: none;
+  min-height: 38px;
+  padding: var(--ref-space-2, 8px) var(--ref-space-4, 16px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   10. Empty State
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-empty {
+  text-align: center;
+  padding: var(--ref-space-5, 24px) var(--ref-space-4, 16px);
+  color: var(--sys-text-ter, #64748B);
+  font-size: var(--ref-font-sm, 13px);
+  line-height: 1.5;
+}
+
+.zl-w-empty svg {
+  display: block;
+  margin: 0 auto var(--ref-space-3, 12px) auto;
+  opacity: 0.4;
+  color: var(--sys-text-ter, #64748B);
+}
+
+.zl-w-empty p {
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   11. Loading State
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-loading {
+  text-align: center;
+  padding: var(--ref-space-4, 16px);
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-ter, #64748B);
+}
+
+.zl-w-loading::after {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: var(--ref-space-2, 8px);
+  border: 2px solid var(--sys-border, #E2E8F0);
+  border-top-color: var(--sys-brand, #2C5F8A);
+  border-radius: 50%;
+  animation: tslSpin 600ms linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes tslSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   12. Full Dashboard Link
+   ═══════════════════════════════════════════════════════════════════ */
+.zl-w-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-brand, #2C5F8A);
+  text-decoration: none;
+  border-top: 1px solid var(--sys-border, #E2E8F0);
+  margin-top: var(--ref-space-1, 4px);
+  border-radius: 0 0 var(--ref-radius-md, 12px) var(--ref-radius-md, 12px);
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.zl-w-link:hover {
+  color: var(--sys-brand-hover, #1E3A5F);
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+.zl-w-link * {
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   13. Responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* -- Narrow widgets: 360px -- */
+@media (max-width: 360px) {
+  .zl-w-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .zl-w-actions {
+    flex-direction: column;
+  }
+
+  .zl-w-actions .zl-w-btn {
+    flex: none;
+    width: 100%;
+  }
+
+  .zl-w-batch-row-header {
+    flex-wrap: wrap;
+  }
+
+  .zl-w-batch-tag {
+    flex-basis: calc(100% - 30px);
+  }
+
+  .zl-w-spend-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .zl-w-spend-inputs span {
+    text-align: center;
+  }
+}
+
+/* -- Small screens: 480px -- */
+@media (max-width: 480px) {
+  .zl-w-batch-row-header {
+    padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+    gap: var(--ref-space-1, 4px);
+    flex-wrap: wrap;
+  }
+
+  .zl-w-batch-tag {
+    order: 1;
+    flex-basis: calc(100% - 30px);
+  }
+
+  .zl-w-batch-toggle {
+    order: 0;
+  }
+
+  .zl-w-batch-status {
+    order: 2;
+  }
+
+  .zl-w-batch-count {
+    order: 3;
+  }
+
+  .zl-w-batch-date {
+    order: 4;
+  }
+
+  .zl-w-badge-test {
+    order: 2;
+  }
+
+  .zl-w-card-header {
+    flex-wrap: wrap;
+  }
+
+  .zl-w-card-name {
+    flex-basis: calc(100% - 44px);
+    order: 1;
+  }
+
+  .zl-w-score {
+    order: 0;
+  }
+
+  .zl-w-card-actions {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-top: var(--ref-space-1, 4px);
+  }
+
+  .zl-w-contact-status,
+  .zl-w-ns-status {
+    order: 2;
+  }
+
+  .zl-w-modal {
+    max-width: 100%;
+    border-radius: var(--ref-radius-md, 12px);
+    padding: var(--ref-space-4, 16px);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   14. Sunlight Mode Overrides
+   WCAG AAA 21:1 contrast for outdoor field use
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* -- Header -- */
+[data-theme="sunlight"] .zl-w-header {
+  border-bottom: 2px solid #000;
+}
+
+/* -- Stats -- */
+[data-theme="sunlight"] .zl-w-stat {
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-stat-icon {
+  color: #000;
+  opacity: 1;
+}
+
+[data-theme="sunlight"] .zl-w-stat-val,
+[data-theme="sunlight"] .zl-w-stat-label {
+  color: #000;
+}
+
+/* -- Generation panel -- */
+[data-theme="sunlight"] .zl-w-gen-panel {
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-section-title {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-filter-row label,
+[data-theme="sunlight"] .zl-w-filter-row-pair label {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-filter-row input,
+[data-theme="sunlight"] .zl-w-filter-row select,
+[data-theme="sunlight"] .zl-w-filter-row textarea,
+[data-theme="sunlight"] .zl-w-spend-inputs input {
+  border: 2px solid #000;
+  color: #000;
+}
+
+/* -- Buttons -- */
+[data-theme="sunlight"] .zl-w-btn-primary {
+  background: #000;
+  color: #fff;
+}
+
+[data-theme="sunlight"] .zl-w-btn-primary:hover:not(:disabled) {
+  background: #222;
+}
+
+[data-theme="sunlight"] .zl-w-btn-secondary {
+  border: 2px solid #000;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-btn-outline {
+  border: 2px solid #000;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-btn-outline:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* -- Progress -- */
+[data-theme="sunlight"] .zl-w-progress {
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-progress-fill {
+  background: #000;
+}
+
+[data-theme="sunlight"] .zl-w-progress-label,
+[data-theme="sunlight"] .zl-w-progress-pct {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-progress-msg {
+  color: #000;
+}
+
+/* -- Batch history -- */
+[data-theme="sunlight"] .zl-w-batch-row {
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-batch-tag,
+[data-theme="sunlight"] .zl-w-batch-count,
+[data-theme="sunlight"] .zl-w-batch-date {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-batch-toggle {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-status-complete {
+  background: #D1FAE5;
+  color: #000;
+  border: 1px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-status-generating {
+  background: #DBEAFE;
+  color: #000;
+  border: 1px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-status-failed {
+  background: #FEE2E2;
+  color: #000;
+  border: 1px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-badge-test {
+  color: #000;
+  border: 1px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-batch-actions {
+  border-top: 2px solid #000;
+}
+
+/* -- Lead cards -- */
+[data-theme="sunlight"] .zl-w-lead-card {
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-card-name,
+[data-theme="sunlight"] .zl-w-card-name strong {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-card-org,
+[data-theme="sunlight"] .zl-w-card-section,
+[data-theme="sunlight"] .zl-w-card-location {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-card-label {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-card-contact {
+  border-bottom: 2px solid #000;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-card-contact a {
+  color: #000;
+  text-decoration: underline;
+}
+
+/* -- Score badges high contrast -- */
+[data-theme="sunlight"] .zl-w-score-high {
+  background: #000;
+  color: #fff;
+}
+
+[data-theme="sunlight"] .zl-w-score-med {
+  background: #000;
+  color: #fff;
+}
+
+[data-theme="sunlight"] .zl-w-score-low {
+  background: #555;
+  color: #fff;
+}
+
+/* -- Contact + Nutshell badges -- */
+[data-theme="sunlight"] .zl-w-contacted,
+[data-theme="sunlight"] .zl-w-skipped,
+[data-theme="sunlight"] .zl-w-pending {
+  color: #000;
+  border: 1px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-ns-open,
+[data-theme="sunlight"] .zl-w-ns-won,
+[data-theme="sunlight"] .zl-w-ns-lost,
+[data-theme="sunlight"] .zl-w-ns-cancelled {
+  color: #000;
+  border: 1px solid #000;
+}
+
+/* -- Collapsible sections -- */
+[data-theme="sunlight"] .zl-w-collapsible-toggle {
+  border: 2px solid #000;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-collapsible-content {
+  border: 2px solid #000;
+  border-top: none;
+  color: #000;
+}
+
+/* -- AI Summary -- */
+[data-theme="sunlight"] .zl-w-ai-summary {
+  border: 2px solid #000;
+  color: #000;
+}
+
+/* -- Modal -- */
+[data-theme="sunlight"] .zl-w-modal {
+  border: 2px solid #000;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 2px #000;
+}
+
+[data-theme="sunlight"] .zl-w-modal-title {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-modal-message {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-modal-input {
+  border: 2px solid #000;
+  color: #000;
+}
+
+/* -- Empty / loading -- */
+[data-theme="sunlight"] .zl-w-empty {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-empty svg {
+  opacity: 1;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-loading {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zl-w-loading::after {
+  border-color: #000;
+  border-top-color: transparent;
+}
+
+/* -- Dashboard link -- */
+[data-theme="sunlight"] .zl-w-link {
+  color: #000;
+  font-weight: 700;
+  border-top: 2px solid #000;
+}
+
+/* ================================================================
+ * v1.7.0 — SALES VIEW
+ * Styles for the read-only salesperson interface.
+ * Applied when data-role="sales" on #zl-widget-wrap.
+ * ================================================================ */
+
+/* Hide generation controls for salespeople */
+.zl-w[data-role="sales"] .zl-w-gen-panel {
+    display: none !important;
+}
+.zl-w[data-role="sales"] #zl-admin-link {
+    display: none !important;
+}
+
+/* Sales view section title */
+.zl-w[data-role="sales"] .zl-w-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--sys-color-on-surface, #1d2327);
+}
+
+/* ================================================================
+ * v1.7.0 — ACTIONABLE LEAD CARDS
+ * Prominent email/call action buttons for salespeople.
+ * ================================================================ */
+
+.zl-w-contact-actions {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0 4px;
+    flex-wrap: wrap;
+}
+
+.zl-w-contact-actions a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    line-height: 1.2;
+}
+
+.zl-w-contact-actions a:hover {
+    opacity: 0.88;
+    transform: translateY(-1px);
+}
+
+.zl-w-contact-actions a:active {
+    transform: translateY(0);
+}
+
+.zl-w-action-email {
+    background: var(--sys-color-primary, #2271b1);
+    color: #fff !important;
+}
+
+.zl-w-action-call {
+    background: var(--sys-color-success, #00a32a);
+    color: #fff !important;
+}
+
+.zl-w-action-icon {
+    font-size: 15px;
+    line-height: 1;
+}
+
+/* ================================================================
+ * v1.7.0 — CONTEXT SECTIONS
+ * "Why We're Contacting" and "How We Can Help" sections on lead cards.
+ * ================================================================ */
+
+.zl-w-context-section {
+    margin: 6px 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.zl-w-context-section strong {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+}
+
+.zl-w-context-why {
+    background: var(--sys-color-primary-container, #e8f0fe);
+    color: var(--sys-color-on-primary-container, #1a3e72);
+    border-left: 3px solid var(--sys-color-primary, #2271b1);
+}
+
+.zl-w-context-how {
+    background: var(--sys-color-secondary-container, #e6f4ea);
+    color: var(--sys-color-on-secondary-container, #1e4620);
+    border-left: 3px solid var(--sys-color-success, #00a32a);
+}
+
+/* Product link in context */
+.zl-w-context-section a {
+    color: inherit;
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.zl-w-context-section a:hover {
+    opacity: 0.8;
+}
+
+/* ================================================================
+ * v1.7.0 — BACKGROUND GENERATION POLL STATUS
+ * ================================================================ */
+
+.zl-w-bg-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--sys-color-surface-container, #f0f0f1);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--sys-color-on-surface-variant, #646970);
+}
+
+.zl-w-bg-status .zl-w-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--sys-color-outline, #c3c4c7);
+    border-top-color: var(--sys-color-primary, #2271b1);
+    border-radius: 50%;
+    animation: zl-spin 0.8s linear infinite;
+}
+
+@keyframes zl-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ================================================================
+ * v1.7.0 — SUNLIGHT MODE OVERRIDES
+ * WCAG AAA overrides for the new v1.7.0 components.
+ * ================================================================ */
+
+@media (prefers-contrast: more) {
+    .zl-w-action-email {
+        background: #0a4b78;
+        color: #ffffff !important;
+    }
+    .zl-w-action-call {
+        background: #006818;
+        color: #ffffff !important;
+    }
+    .zl-w-context-why {
+        background: #d4e4f7;
+        color: #0d2240;
+        border-left-color: #0a4b78;
+    }
+    .zl-w-context-how {
+        background: #cce8d0;
+        color: #0d2d11;
+        border-left-color: #006818;
+    }
+}
+
+body.sunlight-active .zl-w-action-email,
+.sunlight-mode .zl-w-action-email {
+    background: #0a4b78;
+    color: #ffffff !important;
+}
+
+body.sunlight-active .zl-w-action-call,
+.sunlight-mode .zl-w-action-call {
+    background: #006818;
+    color: #ffffff !important;
+}
+
+body.sunlight-active .zl-w-context-why,
+.sunlight-mode .zl-w-context-why {
+    background: #d4e4f7;
+    color: #0d2240;
+    border-left-color: #0a4b78;
+}
+
+body.sunlight-active .zl-w-context-how,
+.sunlight-mode .zl-w-context-how {
+    background: #cce8d0;
+    color: #0d2d11;
+    border-left-color: #006818;
+}
+
+/* =============================================================
+   v1.8.0 — Stall banner (speed release)
+   =============================================================
+   Shown by widget.js pollBatchProgress when the backend indicates
+   no heartbeat in ≥120s (ZL_Progress::STALL_THRESHOLD_S). Keeps
+   polling under the hood — the banner just informs the user the
+   batch is running slower than expected, not failed.
+   ============================================================= */
+
+.zl-stall-banner {
+    background: #fef3c7;
+    color: #78350f;
+    border: 1px solid #fcd34d;
+    border-left: 4px solid #d97706;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    font-size: 13px;
+    line-height: 1.4;
+}
+.zl-stall-banner .zl-stall-msg {
+    font-weight: 600;
+    display: block;
+}
+.zl-stall-banner .zl-stall-warnings {
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: #92400e;
+    font-style: italic;
+    opacity: 0.85;
+}
+
+/* Sunlight theme */
+.sunlight-mode .zl-stall-banner {
+    background: #fffbeb;
+    border-color: #fde68a;
+    border-left-color: #f59e0b;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: ACCORDION PANELS
+   ══════════════════════════════════════════════════════════ */
+
+.zl-w-panel {
+    border: 1px solid var(--ref-gray-200, #e5e7eb);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    background: var(--sys-surface, #fff);
+}
+.zl-w-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.zl-w-panel-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--sys-on-surface, #1d2327);
+}
+.zl-w-panel-toggle {
+    font-size: 12px;
+    color: var(--ref-gray-400, #9ca3af);
+    transition: transform 0.2s ease;
+}
+.zl-w-panel.collapsed .zl-w-panel-toggle {
+    transform: rotate(-90deg);
+}
+.zl-w-panel.collapsed .zl-w-panel-body {
+    display: none;
+}
+.zl-w-panel-body {
+    padding: 0 14px 14px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: GENERATION SUMMARY (progressive disclosure)
+   ══════════════════════════════════════════════════════════ */
+
+.zl-w-gen-summary {
+    padding: 8px 12px;
+    background: var(--ref-gray-50, #f9fafb);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--ref-gray-600, #4b5563);
+    margin-bottom: 10px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: PIPELINE STRIP
+   ══════════════════════════════════════════════════════════ */
+
+.zl-pip-steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 6px 0;
+    font-size: 11px;
+}
+.zl-pip-step {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+    color: var(--ref-gray-400, #9ca3af);
+}
+.zl-pip-step.done {
+    color: var(--sys-brand, #10B981);
+}
+.zl-pip-step.warn {
+    color: var(--ref-amber-500, #f59e0b);
+}
+.zl-pip-step.skipped {
+    color: var(--ref-red-500, #ef4444);
+}
+.zl-pip-step-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.zl-pip-connector {
+    flex: 1;
+    min-width: 12px;
+    height: 2px;
+    background: var(--ref-gray-200, #e5e7eb);
+    margin: 0 2px;
+}
+.zl-pip-connector.done {
+    background: var(--sys-brand, #10B981);
+}
+.zl-pip-connector.warn {
+    background: var(--ref-amber-500, #f59e0b);
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: LEAD CARDS (within expanded batch)
+   ══════════════════════════════════════════════════════════ */
+
+.zl-lead-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.zl-lead-card {
+    border: 1px solid var(--ref-gray-200, #e5e7eb);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--sys-surface, #fff);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.zl-lead-card:active {
+    background: var(--ref-gray-50, #f9fafb);
+}
+.zl-lead-identity {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.zl-lead-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+}
+.zl-lead-score.high { background: #10B981; }
+.zl-lead-score.mid  { background: #f59e0b; }
+.zl-lead-score.low  { background: #ef4444; }
+
+.zl-lead-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--sys-on-surface, #1d2327);
+}
+.zl-lead-meta {
+    font-size: 12px;
+    color: var(--ref-gray-500, #6b7280);
+    margin-left: auto;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: NOTES PANEL (expandable, modeled after surveys)
+   ══════════════════════════════════════════════════════════ */
+
+.zl-notes-hint {
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--ref-gray-500, #6b7280);
+    cursor: pointer;
+}
+.zl-notes-hint:hover { text-decoration: underline; }
+
+.zl-notes-panel {
+    display: none;
+    padding: 10px 0 6px;
+    border-top: 1px solid var(--sys-border, #E2E8F0);
+    margin-top: 6px;
+}
+.zl-notes-panel.open { display: block; }
+
+.zl-notes-meta {
+    font-size: 12px;
+    color: var(--ref-gray-500, #6b7280);
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--ref-gray-100, #f3f4f6);
+    margin-bottom: 6px;
+}
+.zl-notes-body {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--sys-on-surface, #1d2327);
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: LEAD ACTIONS (inline buttons)
+   ══════════════════════════════════════════════════════════ */
+
+.zl-lead-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 8px;
+}
+.zl-lead-actions button {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--ref-gray-200, #e5e7eb);
+    background: var(--sys-surface, #fff);
+    color: var(--sys-on-surface, #1d2327);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.zl-lead-actions button:active {
+    background: var(--ref-gray-100, #f3f4f6);
+}
+.zl-lead-actions .zl-act-contacted {
+    border-color: #10B981;
+    color: #10B981;
+}
+.zl-lead-actions .zl-act-skip {
+    border-color: var(--ref-gray-300, #d1d5db);
+    color: var(--ref-gray-500, #6b7280);
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: FORWARD FORM (inline, modeled after surveys)
+   ══════════════════════════════════════════════════════════ */
+
+.zl-fwd-bar {
+    display: flex;
+    gap: 6px;
+    padding-top: 8px;
+}
+.zl-fwd-btn {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--ref-gray-200, #e5e7eb);
+    background: var(--sys-surface, #fff);
+    color: var(--sys-brand, #2C5F8A);
+    cursor: pointer;
+}
+.zl-fwd-form {
+    padding: 10px 0 0;
+}
+.zl-fwd-form-header {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+.zl-fwd-form select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--ref-gray-200, #e5e7eb);
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+.zl-fwd-task-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ref-gray-600, #4b5563);
+    margin-bottom: 8px;
+}
+.zl-fwd-preview {
+    font-size: 12px;
+    color: var(--ref-gray-500, #6b7280);
+    padding: 6px 8px;
+    background: var(--ref-gray-50, #f9fafb);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    max-height: 60px;
+    overflow-y: auto;
+}
+.zl-fwd-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+.zl-fwd-actions button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--ref-gray-200, #e5e7eb);
+}
+.zl-fwd-send {
+    background: var(--sys-brand, #2C5F8A);
+    color: #fff;
+    border-color: var(--sys-brand, #2C5F8A) !important;
+}
+.zl-fwd-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.zl-fwd-history {
+    padding-top: 6px;
+}
+.zl-fwd-history-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.zl-fwd-history-item {
+    font-size: 12px;
+    padding: 4px 0;
+    color: var(--ref-gray-600, #4b5563);
+    border-bottom: 1px solid var(--ref-gray-100, #f3f4f6);
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: BATCH ROW (expand/collapse)
+   ══════════════════════════════════════════════════════════ */
+
+.zl-batch-row {
+    border: 1px solid var(--ref-gray-200, #e5e7eb);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+.zl-batch-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    cursor: pointer;
+    gap: 8px;
+    -webkit-tap-highlight-color: transparent;
+}
+.zl-batch-header:active {
+    background: var(--ref-gray-50, #f9fafb);
+}
+.zl-batch-info {
+    flex: 1;
+    min-width: 0;
+}
+.zl-batch-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--sys-on-surface, #1d2327);
+}
+.zl-batch-subtitle {
+    font-size: 12px;
+    color: var(--ref-gray-500, #6b7280);
+    margin-top: 2px;
+}
+.zl-batch-count {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ref-gray-500, #6b7280);
+    white-space: nowrap;
+}
+.zl-batch-toggle {
+    font-size: 12px;
+    color: var(--ref-gray-400, #9ca3af);
+}
+.zl-batch-detail {
+    display: none;
+    padding: 0 12px 12px;
+}
+.zl-batch-row.expanded .zl-batch-detail {
+    display: block;
+}
+.zl-batch-row.expanded .zl-batch-toggle {
+    transform: rotate(180deg);
+}
+.zl-detail-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-bottom: 8px;
+}
+.zl-detail-chip {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--ref-gray-100, #f3f4f6);
+    color: var(--ref-gray-700, #374151);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.zl-batch-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.zl-batch-status.complete { background: #d1fae5; color: #065f46; }
+.zl-batch-status.running  { background: #dbeafe; color: #1e40af; }
+.zl-batch-status.failed   { background: #fee2e2; color: #991b1b; }
+.zl-batch-status.test     { background: #fef3c7; color: #92400e; }
+
+/* AI Summary (collapsed by default) */
+.zl-ai-toggle {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: var(--ref-gray-500, #6b7280);
+    cursor: pointer;
+}
+.zl-ai-toggle-arrow {
+    display: inline-block;
+    transition: transform 0.2s;
+}
+.zl-ai-toggle.open .zl-ai-toggle-arrow {
+    transform: rotate(90deg);
+}
+.zl-ai-summary {
+    display: none;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ref-gray-600, #4b5563);
+    padding: 6px 0;
+}
+.zl-ai-summary.open { display: block; }
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: DARK MODE OVERRIDES
+   ══════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .zl-w-panel,
+[data-theme="dark"] .zl-batch-row,
+[data-theme="dark"] .zl-lead-card {
+    border-color: var(--ref-gray-700, #374151);
+    background: var(--sys-surface, #1f2937);
+}
+[data-theme="dark"] .zl-notes-panel {
+    border-top-color: var(--ref-gray-700, #374151);
+}
+[data-theme="dark"] .zl-batch-header:active,
+[data-theme="dark"] .zl-lead-card:active {
+    background: var(--ref-gray-800, #1f2937);
+}
+[data-theme="dark"] .zl-detail-chip {
+    background: var(--ref-gray-700, #374151);
+    color: var(--ref-gray-300, #d1d5db);
+}
+[data-theme="dark"] .zl-fwd-preview,
+[data-theme="dark"] .zl-w-gen-summary {
+    background: var(--ref-gray-800, #111827);
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: RUNNING BATCH INDICATOR
+   ══════════════════════════════════════════════════════════ */
+
+.zl-batch-status.running,
+.zl-batch-status.generating {
+    animation: zl-pulse 1.5s ease-in-out infinite;
+}
+@keyframes zl-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+.zl-batch-row.is-running {
+    border-color: var(--sys-brand, #2563EB);
+    border-width: 2px;
+}
+.zl-batch-row.is-running .zl-batch-header {
+    background: color-mix(in srgb, var(--sys-brand, #2563EB) 5%, transparent);
+}
+.zl-batch-running-hint {
+    font-size: 11px;
+    color: var(--sys-brand, #2563EB);
+    padding: 4px 12px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.zl-batch-running-hint::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--sys-brand, #2563EB);
+    animation: zl-pulse 1.5s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: REDESIGNED LEAD CARDS
+   ══════════════════════════════════════════════════════════ */
+
+/* Header: Score + Name + Location + Status */
+.zl-lc-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding-bottom: 8px;
+}
+.zl-lc-score {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    color: #fff; flex-shrink: 0;
+    cursor: default;
+}
+/* v2.6.0: darkened one step so the white numeral clears AA (was 2.5:1) */
+.zl-lc-score.high { background: #047857; }
+.zl-lc-score.mid  { background: #B45309; }
+.zl-lc-score.low  { background: #B91C1C; }
+
+.zl-lc-identity { flex: 1; min-width: 0; }
+.zl-lc-name {
+    font-weight: 600; font-size: 15px;
+    color: var(--sys-on-surface, #1d2327);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.zl-lc-location {
+    font-size: 12px; color: var(--sys-text-sec, #475569);
+    margin-top: 1px;
+}
+
+.zl-lc-status {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 10px; border-radius: 12px;
+    white-space: nowrap; flex-shrink: 0;
+    text-transform: uppercase; letter-spacing: 0.3px;
+}
+/* v2.6.0: tint PAIRS from theme v2.31.0 — bg+fg together, AA in all 4 modes */
+.zl-lc-status { border: 1.5px solid var(--sys-tint-border, transparent); }
+.zl-lc-status.pending    { background: var(--sys-tint-warning-bg, #fef3c7); color: var(--sys-tint-warning-fg, #92400e); }
+.zl-lc-status.contacted  { background: var(--sys-tint-success-bg, #d1fae5); color: var(--sys-tint-success-fg, #065f46); }
+.zl-lc-status.skipped    { background: var(--sys-tint-neutral-bg, #f3f4f6); color: var(--sys-tint-neutral-fg, #475569); }
+
+/* Why section (purchase summary + date) */
+.zl-lc-why {
+    font-size: 13px; color: var(--sys-text, #1d2327);
+    padding: 6px 10px; margin-bottom: 8px;
+    background: var(--sys-surface-raised, #F8FAFC); /* v2.6.0 contrast fix */
+    border-radius: 6px; line-height: 1.4;
+}
+.zl-lc-why-label {
+    font-weight: 600; color: var(--sys-text-sec, #475569);
+}
+.zl-lc-date {
+    color: var(--sys-text-ter, #64748B); font-size: 12px;
+}
+
+/* Action row */
+.zl-lc-actions {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding-bottom: 6px;
+}
+.zl-lc-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 13px; padding: 6px 12px;
+    border-radius: 8px; border: 1px solid var(--ref-gray-200, #e5e7eb);
+    background: var(--sys-surface, #fff);
+    color: var(--sys-on-surface, #1d2327);
+    cursor: pointer; text-decoration: none;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+}
+.zl-lc-btn:active { opacity: 0.7; }
+.zl-lc-email {
+    background: #1D4ED8; color: #fff; border-color: #1D4ED8; /* v2.6.0: was #2563EB (3.7:1) */
+}
+.zl-lc-phone {
+    background: #047857; color: #fff; border-color: #047857; /* v2.6.0: was #059669 (3.0:1) */
+}
+.zl-lc-contacted {
+    background: #10B981; color: #fff; border-color: #10B981;
+}
+.zl-lc-skip {
+    background: transparent; color: var(--ref-gray-500, #6b7280);
+    border-color: var(--ref-gray-300, #d1d5db);
+}
+
+/* Skipped card — dimmed, collapsed, with visible undo */
+.zl-w-lead-card.zl-skipped {
+    opacity: 0.55;
+    pointer-events: auto;
+}
+.zl-w-lead-card.zl-skipped .zl-lc-why,
+.zl-w-lead-card.zl-skipped .zl-lc-purchase,
+.zl-w-lead-card.zl-skipped .zl-lc-sp-notes,
+.zl-w-lead-card.zl-skipped .zl-notes-hint,
+.zl-w-lead-card.zl-skipped .zl-notes-panel,
+.zl-w-lead-card.zl-skipped .zl-fwd-bar,
+.zl-w-lead-card.zl-skipped .zl-fwd-form,
+.zl-w-lead-card.zl-skipped .zl-fwd-history,
+.zl-w-lead-card.zl-skipped .zl-pip-steps {
+    display: none !important;
+}
+.zl-w-lead-card.zl-skipped .zl-lc-actions {
+    display: flex !important;
+}
+.zl-lc-unskip, .zl-btn-unskip-live {
+    border-color: var(--sys-brand, #2C5F8A) !important;
+    color: var(--sys-brand, #2C5F8A) !important;
+    background: transparent !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+}
+[data-theme="dark"] .zl-lc-unskip,
+[data-theme="dark"] .zl-btn-unskip-live {
+    color: #60A5FA !important;
+    border-color: #60A5FA !important;
+}
+
+/* Contacted card */
+.zl-w-lead-card.zl-contacted {
+    border-left: 3px solid #10B981;
+}
+
+/* Purchase History (collapsible, pretty) */
+.zl-lc-purchase, .zl-lc-sp-notes {
+    border-top: 1px solid var(--sys-border, #E2E8F0);
+    margin-top: 4px; padding-top: 4px;
+}
+.zl-lc-purchase > summary, .zl-lc-sp-notes > summary {
+    font-size: 12px; font-weight: 600;
+    color: var(--sys-text-sec, #475569);
+    cursor: pointer; padding: 4px 0;
+    list-style: none;
+}
+.zl-lc-purchase > summary::before { content: '▸ '; }
+.zl-lc-purchase[open] > summary::before { content: '▾ '; }
+.zl-lc-sp-notes > summary::before { content: '▸ '; }
+.zl-lc-sp-notes[open] > summary::before { content: '▾ '; }
+
+.zl-lc-purchase-list {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 6px 0;
+}
+.zl-lc-purchase-item {
+    padding: 6px 8px;
+    background: var(--sys-surface-raised, #F8FAFC); /* v2.6.0: was --ref-gray-50 literal — invisible text in dark/system (1.05:1) */
+    border-radius: 6px;
+}
+.zl-lc-pi-name {
+    font-size: 13px; font-weight: 500;
+    color: var(--sys-text, #1d2327);
+}
+.zl-lc-pi-qty {
+    font-size: 11px; color: var(--sys-text-ter, #64748B);
+    font-weight: 400;
+}
+.zl-lc-pi-desc {
+    font-size: 12px; color: var(--sys-text-sec, #475569);
+    margin-top: 2px; line-height: 1.3;
+}
+.zl-lc-pi-meta {
+    display: flex; gap: 12px; margin-top: 3px;
+    font-size: 11px; color: var(--sys-text-ter, #64748B);
+}
+.zl-lc-sp-body {
+    font-size: 12px; line-height: 1.5;
+    color: var(--sys-text-sec, #475569);
+    padding: 6px 0;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: MOBILE LAYOUT FIXES
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+    .zl-w-lead-card { padding: 10px; }
+    .zl-lc-header { gap: 8px; }
+    .zl-lc-score { width: 32px; height: 32px; font-size: 12px; }
+    .zl-lc-name { font-size: 14px; }
+    .zl-lc-actions { gap: 4px; }
+    .zl-lc-btn { font-size: 12px; padding: 5px 10px; }
+
+    /* Fix overflow — ensure cards stay within viewport */
+    .zl-w-lead-card,
+    .zl-w-batch-row,
+    .zl-batch-detail,
+    .zl-lead-list {
+        max-width: 100%;
+        overflow-x: hidden;
+        box-sizing: border-box;
+    }
+    .zl-w-contact-actions,
+    .zl-w-card-actions {
+        flex-wrap: wrap;
+    }
+    .zl-w-panel-body {
+        padding: 0 10px 10px;
+    }
+    /* Pipeline strip — smaller on mobile */
+    .zl-pip-steps { font-size: 10px; }
+    .zl-pip-step-dot { width: 6px; height: 6px; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: DARK MODE — Lead Card Overrides
+   ══════════════════════════════════════════════════════════ */
+
+/* v2.6.0: explicit-dark now matches system-dark via tokens (was gray-800 literal) */
+[data-theme="dark"] .zl-lc-why,
+[data-theme="dark"] .zl-lc-purchase-item {
+    background: var(--sys-surface-raised, #334155);
+}
+[data-theme="dark"] .zl-lc-btn {
+    background: var(--ref-gray-700, #374151);
+    border-color: var(--ref-gray-600, #4b5563);
+    color: var(--ref-gray-200, #e5e7eb);
+}
+[data-theme="dark"] .zl-lc-email {
+    background: #1D4ED8; color: #fff; border-color: #1D4ED8;
+}
+[data-theme="dark"] .zl-lc-phone {
+    background: #047857; color: #fff; border-color: #047857;
+}
+/* v2.6.0: handled by --sys-tint-* pairs (identical in dark and system-dark) */
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: SURVEYS-ALIGNED REFINEMENTS
+   Patterns adopted from ts-satisfaction-surveys v2.9.3
+   ══════════════════════════════════════════════════════════ */
+
+/* Slide-down animation for expandable sections */
+@keyframes zl-slide-down {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.zl-lc-purchase[open] .zl-lc-purchase-list,
+.zl-lc-sp-notes[open] .zl-lc-sp-body,
+.zl-notes-panel.open,
+.zl-fwd-form { animation: zl-slide-down 0.25s ease; }
+
+/* Touch target minimum (surveys pattern) */
+.zl-lc-btn {
+    min-height: 44px;
+    touch-action: manipulation;
+}
+
+/* Notes hint — dashed border + brand tint (surveys v2.9.0 pattern) */
+.zl-notes-hint {
+    display: flex; align-items: center; gap: 4px;
+    margin-top: 6px; padding: 5px 8px;
+    font-size: 12px; font-weight: 500;
+    color: var(--sys-text-sec, #475569);
+    background: color-mix(in srgb, var(--sys-brand, #2C5F8A) 6%, transparent);
+    border: 1px dashed var(--sys-border, #E2E8F0);
+    border-radius: var(--ref-radius-sm, 8px);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+}
+.zl-notes-hint:hover {
+    background: color-mix(in srgb, var(--sys-brand, #2C5F8A) 12%, transparent);
+    color: var(--sys-text, #0F172A);
+}
+
+/* Batch row — subtle brand tint on hover (surveys pattern) */
+.zl-batch-header:hover,
+.zl-w-batch-row .zl-batch-header:hover {
+    background: color-mix(in srgb, var(--sys-brand, #2C5F8A) 4%, transparent);
+}
+
+/* Lead card — subtle hover/active (surveys pattern) */
+.zl-w-lead-card {
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.zl-w-lead-card:hover {
+    border-color: color-mix(in srgb, var(--sys-brand, #2C5F8A) 30%, var(--sys-border, #E2E8F0));
+}
+
+/* Score tooltip (surveys-style compact info) */
+.zl-lc-score::after {
+    content: '/100';
+    font-size: 8px;
+    font-weight: 400;
+    opacity: 0.7;
+    display: block;
+    margin-top: -2px;
+    line-height: 1;
+}
+
+/* Contacted button — subtle success tint on hover */
+.zl-lc-contacted:hover {
+    background: color-mix(in srgb, #10B981 85%, #000);
+}
+
+/* Skip button — subtle hover */
+.zl-lc-skip:hover {
+    background: color-mix(in srgb, var(--ref-gray-500, #6b7280) 8%, transparent);
+}
+
+/* Forward button — brand border (surveys pattern) */
+.zl-fwd-btn:hover {
+    background: color-mix(in srgb, var(--sys-brand, #2C5F8A) 8%, transparent);
+    color: var(--sys-text, #0F172A);
+    border-color: var(--sys-brand, #2C5F8A);
+}
+
+/* Pipeline strip — match surveys sizing exactly */
+.zl-pip-steps {
+    font-size: 13px;
+    font-weight: 600;
+}
+.zl-pip-step-dot {
+    width: 7px; height: 7px;
+    border: 1.5px solid var(--sys-border, #CBD5E1);
+    background: transparent;
+}
+.zl-pip-step.done .zl-pip-step-dot { background: #10B981; border-color: #10B981; }
+.zl-pip-connector {
+    height: 1.5px;
+    min-width: 8px;
+    max-width: 30px;
+}
+
+/* Stats row — match surveys grid pattern */
+.zl-w-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--ref-space-3, 12px);
+}
+.zl-w-stat {
+    text-align: center;
+    padding: var(--ref-space-3, 12px) var(--ref-space-2, 8px);
+    background: var(--sys-bg-alt, #F1F5F9);
+    border-radius: var(--ref-radius-md, 12px);
+    border: 1px solid var(--sys-border, #E2E8F0);
+}
+.zl-w-stat-val {
+    font-size: var(--ref-font-xl, 24px);
+    font-weight: var(--sys-font-wt-b, 700);
+    color: var(--sys-text, #0F172A);
+    display: block;
+    line-height: 1.2;
+}
+.zl-w-stat-label {
+    font-size: var(--ref-font-xs, 13px);
+    color: var(--sys-text-sec, #475569);
+    display: block;
+    margin-top: 2px;
+}
+
+/* Panel headers — match surveys section titles */
+.zl-w-panel-header {
+    padding: var(--ref-space-3, 12px) var(--ref-space-4, 14px);
+}
+.zl-w-panel-title {
+    font-size: var(--ref-font-sm, 15px);
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: CRITICAL DARK MODE READABILITY FIXES
+   ══════════════════════════════════════════════════════════ */
+
+/* Force light text on dark backgrounds for card names */
+[data-theme="dark"] .zl-lc-name,
+[data-theme="dark"] .zl-w-card-name,
+[data-theme="dark"] .zl-lc-score-label {
+    color: var(--sys-text, #E2E8F0) !important;
+}
+[data-theme="dark"] .zl-lc-location,
+[data-theme="dark"] .zl-lc-date,
+[data-theme="dark"] .zl-lc-why,
+[data-theme="dark"] .zl-lc-why-label {
+    color: var(--sys-text-sec, #94A3B8) !important;
+}
+/* v2.6.0: removed !important dark-only .zl-lc-why override — token base rules
+   now resolve correctly in every mode, and the !important variant caused
+   explicit-dark to diverge from system-dark. */
+
+/* Pipeline strip text in dark mode */
+[data-theme="dark"] .zl-pip-step,
+[data-theme="dark"] .zl-pip-step.todo {
+    color: var(--sys-text-ter, #94A3B8);
+}
+[data-theme="dark"] .zl-pip-step.done {
+    color: #34D399;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: SCORE LABEL (meaningful text below badge)
+   ══════════════════════════════════════════════════════════ */
+
+.zl-lc-score-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.zl-lc-score-label {
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--sys-text-ter, #64748B);
+    text-align: center;
+    max-width: 60px;
+    line-height: 1.2;
+}
+/* Remove the ::after "/100" since we now have the label */
+.zl-lc-score::after { display: none !important; }
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: SKIPPED CARD — dimmed but usable, with undo
+   ══════════════════════════════════════════════════════════ */
+
+/* (skipped card styles consolidated above — see line ~2256) */
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: ELIMINATE NESTED SCROLLING ON MOBILE
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+    /* Remove all internal scroll containers — let the page scroll naturally */
+    .zl-w-batches-list,
+    .zl-batch-detail,
+    .zl-lead-list,
+    .zl-w-panel-body {
+        max-height: none !important;
+        overflow: visible !important;
+        -webkit-overflow-scrolling: auto !important;
+    }
+
+    /* Pipeline strip — wrap on mobile instead of overflowing */
+    .zl-pip-steps {
+        flex-wrap: wrap;
+        gap: 2px;
+    }
+    .zl-pip-connector {
+        min-width: 6px;
+        max-width: 16px;
+    }
+
+    /* Score wrap tighter on mobile */
+    .zl-lc-score-wrap { gap: 1px; }
+    .zl-lc-score-label { font-size: 8px; max-width: 50px; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.0: PWA VIEWPORT & STICKY HEADER FIXES
+   Prevents widget content from scrolling behind the
+   theme's sticky app dock / compact app bar.
+   ══════════════════════════════════════════════════════════ */
+
+/* The Zorderz SPA has a sticky compact app bar (~52px)
+   that overlays content on scroll. Widget sections need
+   scroll-margin-top so they don't land behind it when the
+   user scrolls or when the widget auto-scrolls to a section. */
+.zl-w,
+.zl-w-panel,
+.zl-w-stats,
+.zl-batch-row {
+    scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 60px);
+}
+
+/* Prevent the widget from creating its OWN scroll container.
+   The widget should flow naturally in the dashboard's scroll,
+   not create a nested scrollable area. This eliminates the
+   "4 levels of scrolling" problem on mobile. */
+.zl-w {
+    overflow: visible !important;
+    max-height: none !important;
+    contain: layout style;
+}
+
+/* On mobile, the widget portal (.dash-widget-body or similar
+   theme container) may have overflow:auto which clips the widget.
+   Override this for our specific widget. */
+@media (max-width: 768px) {
+    /* Remove ALL internal overflow/scroll on mobile */
+    .zl-w,
+    .zl-w > *,
+    .zl-w-panel,
+    .zl-w-panel-body,
+    .zl-w-batches-list,
+    .zl-batch-detail,
+    .zl-lead-list {
+        overflow: visible !important;
+        max-height: none !important;
+        -webkit-overflow-scrolling: auto !important;
+    }
+
+    /* The widget's outer container (theme-provided) should not
+       clip our content. Using :has() to target the parent that
+       contains our widget without modifying theme CSS. */
+    :has(> .zl-w) {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+
+    /* Stats grid — 2 columns on narrow phones instead of 4 */
+    .zl-w-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+}
+
+/* iOS PWA standalone mode: account for the dynamic toolbar
+   and notch/Dynamic Island safe area */
+@supports (padding-top: env(safe-area-inset-top)) {
+    .zl-w {
+        /* Ensure content never hides behind the iOS status bar
+           when the SPA is in standalone/PWA mode */
+        scroll-padding-top: env(safe-area-inset-top, 0px);
+    }
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.1: FIX A — HIGHLIGHT OVERFLOW ON MOBILE
+   Bridge.loadApp() applies an outline+outlineOffset to the
+   widget container when navigating via the app dock. Outlines
+   paint outside the border-box and ignore overflow clipping,
+   so the green ring bleeds past the container on mobile.
+   This defensive rule overrides any outline-based highlight
+   with an inset box-shadow that respects overflow boundaries.
+   ══════════════════════════════════════════════════════════ */
+
+.dash-widget-container[data-app-id] .zl-w {
+    /* Ensure plugin root never inherits outline from parent */
+    outline: none !important;
+    outline-offset: 0 !important;
+}
+.zl-w.zl-highlight,
+.dash-widget-container.zl-highlight {
+    outline: none !important;
+    outline-offset: 0 !important;
+    box-shadow: inset 0 0 0 2px #22C55E, 0 0 12px rgba(34, 197, 94, 0.2);
+    border-radius: 12px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.0.1: FIX B — ACTION BUTTONS INACCESSIBLE ON MOBILE
+   On narrow phones (<600px) the lead interaction buttons
+   (email, call, contacted, skip, forward, pipeline) can
+   extend past the right edge of the viewport. Root causes:
+   - Flex containers without wrapping
+   - Buttons with white-space:nowrap and no width constraint
+   - Header row (score + name + status) not wrapping
+   Fix: wrap all action containers, constrain button widths,
+   and let the header flow into two lines when needed.
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 599px) {
+
+    /* ── Lead card action rows ── */
+    .zl-lc-actions,
+    .zl-lead-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .zl-lc-actions > .zl-lc-btn,
+    .zl-lc-actions > a,
+    .zl-lc-actions > button,
+    .zl-lead-actions > button {
+        min-width: 0;
+        flex: 1 1 auto;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        justify-content: center;
+    }
+
+    /* ── Forward bar + forward form actions ── */
+    .zl-fwd-bar,
+    .zl-fwd-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .zl-fwd-bar > button,
+    .zl-fwd-actions > button {
+        min-width: 0;
+        flex: 1 1 auto;
+        max-width: 100%;
+    }
+
+    /* ── Lead card header: let status badge wrap below
+         when score + name + badge exceed container width ── */
+    .zl-lc-header {
+        flex-wrap: wrap;
+    }
+    .zl-lc-status {
+        /* When wrapped, align to the start of the next line */
+        flex: 0 0 auto;
+        max-width: 100%;
+    }
+    .zl-lc-identity {
+        /* Let name column shrink and truncate */
+        min-width: 0;
+        flex: 1 1 0%;
+    }
+
+    /* ── Pipeline strip — already handled at 480px but
+         reinforce at 599px for wider phones ── */
+    .zl-pip-steps {
+        flex-wrap: wrap;
+        gap: 2px;
+    }
+
+    /* ── Ensure all card internals stay within bounds ── */
+    .zl-w-lead-card,
+    .zl-lead-card {
+        max-width: 100%;
+        overflow-x: hidden;
+        overflow-y: visible;
+    }
+    .zl-notes-panel,
+    .zl-fwd-form,
+    .zl-fwd-preview {
+        max-width: 100%;
+        overflow-x: hidden;
+        word-break: break-word;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ███  v2.1.0 — CRM-GRADE WIDGET PASS  ███
+   Mobile review (May 2026) Prompt 4 / 5 / 7 + open-to-top + polish.
+   Everything below is scoped to .zl-w. Consumes real theme tokens only
+   (the compatibility shim near the top maps the legacy Material names).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────
+   v2.1.0 — A. RIGHT-EDGE OVERFLOW / BUTTON CLIPPING
+   The action rows ("3 Test Leads | Full Batch | ↻" and the batch action
+   row "Send to CRM | × | COMPLETE") ran past the right viewport edge on
+   narrow phones. Make every action row a true wrap container and forbid
+   any child from forcing horizontal overflow.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Generation action row */
+.zl-w-actions {
+    display: flex;
+    flex-wrap: wrap;            /* allow buttons to wrap to a new line */
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;         /* nothing escapes the widget horizontally */
+}
+.zl-w-actions > * {
+    min-width: 0;               /* let flex items shrink below content size */
+}
+/* The two primary buttons share a row and grow; the small refresh/reset
+   button keeps its own intrinsic size and wraps below if there's no room. */
+.zl-w-actions .zl-w-btn-primary,
+.zl-w-actions .zl-w-btn-secondary {
+    flex: 1 1 140px;            /* grow, but wrap when < ~140px available */
+}
+.zl-w-actions .zl-w-btn-sm,
+.zl-w-actions .zl-w-btn-icon {
+    flex: 0 0 auto;
+}
+
+/* Batch action row (Send to CRM / × / COMPLETE / status) */
+.zl-batch-actions,
+.zl-w-batch-actions,
+.zl-lead-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+.zl-batch-actions > *,
+.zl-w-batch-actions > *,
+.zl-lead-actions > * {
+    min-width: 0;
+}
+
+/* Any grid inside the widget: forbid 1fr-overflow on Safari/high-DPI by
+   using minmax(0,1fr). Mirrors the theme's dock/KPI fix. */
+.zl-w-stats,
+.zl-w-filter-row-pair,
+.zl-w-spend-inputs {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Universal guard: no descendant may exceed the widget width. Text that's
+   too long truncates/ellipsizes or wraps — it never clips silently. */
+.zl-w-card,
+.zl-batch-row,
+.zl-lead-card,
+.zl-w-panel,
+.zl-w-panel-body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   v2.1.0 — B. ACCORDION / DISCLOSURE UPGRADE
+   The batch/lead expander was a tiny faint glyph that "doesn't go very
+   far." Make each row an obvious, full-width, ≥48px accordion control
+   with a clear rotating chevron and a visible hover/active affordance.
+   (HTML in widget.js gains role/aria-expanded; these styles dress it.)
+   ─────────────────────────────────────────────────────────────────────── */
+
+.zl-batch-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;                 /* WCAG / mobile touch target */
+    padding: 12px 14px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    border-radius: 10px;
+    background: var(--sys-surface-subtle, rgba(0,0,0,.03));
+    border: 1px solid var(--sys-border, #E2E8F0);
+    transition: background var(--ref-dur-fast,150ms) var(--ref-ease,ease),
+                border-color var(--ref-dur-fast,150ms) var(--ref-ease,ease);
+}
+.zl-batch-header:hover {
+    background: var(--sys-surface-raised, rgba(0,0,0,.05));
+    border-color: var(--sys-border-strong, #CBD5E1);
+}
+.zl-batch-header:active {
+    transform: scale(0.997);
+}
+.zl-batch-header:focus-visible {
+    outline: 2px solid var(--sys-brand, #10B981);
+    outline-offset: 2px;
+}
+
+/* The chevron: clear, sized, animated. Replaces the faint glyph. */
+.zl-expand-arrow {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--sys-text-sec, #475569);
+    transition: transform var(--ref-dur,200ms) var(--ref-ease,ease),
+                color var(--ref-dur-fast,150ms) var(--ref-ease,ease);
+    will-change: transform;
+}
+.zl-batch-header:hover .zl-expand-arrow {
+    color: var(--sys-text, #0F172A);
+}
+/* Rotation is driven by the expanded state (JS toggles .is-open). We keep
+   the legacy inline rotate(90deg) working too, but prefer the class. */
+.zl-batch-header.is-open .zl-expand-arrow {
+    transform: rotate(90deg);
+}
+
+/* The batch label/title fills the row and truncates gracefully. */
+.zl-batch-title,
+.zl-batch-header > .zl-batch-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: var(--sys-font-wt-sb, 600);
+    font-size: 14px;
+    color: var(--sys-text, #0F172A);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* A small "tap to expand" hint chip on the right, hidden once open. */
+.zl-batch-hint {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--sys-text-sec, #475569);
+    opacity: 0.85;
+}
+.zl-batch-header.is-open .zl-batch-hint { display: none; }
+
+/* Smooth expand/collapse of the body. We animate max-height + opacity so
+   sibling rows don't jump. JS sets display first, then we transition. */
+.zl-batch-leads {
+    overflow: hidden;
+}
+.zl-batch-leads.zl-animating {
+    transition: max-height var(--ref-dur,220ms) var(--ref-ease,ease),
+                opacity var(--ref-dur,220ms) var(--ref-ease,ease);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   v2.1.0 — C. BIGGER, FRIENDLIER UI (morning-coffee one-handed use)
+   Larger touch targets, more breathing room, clearer hierarchy.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* All primary action buttons: comfortable height + readable label. */
+.zl-w-btn {
+    min-height: 48px;
+    font-size: 15px;
+    border-radius: 10px;
+}
+.zl-w-btn-sm {
+    min-height: 44px;
+    font-size: 14px;
+}
+
+/* Contact action buttons on the lead card (Email / Call) — make them the
+   hero of the card: big, tappable, unmistakable. */
+.zl-w-contact-actions {
+    gap: 10px;
+    margin: 12px 0 8px;
+}
+.zl-w-contact-actions a {
+    flex: 1 1 130px;
+    min-width: 0;
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 10px;
+}
+
+/* Secondary lead actions (Contacted / Skip) sit on their own row, full
+   width, slightly smaller than the hero email/call pair. */
+.zl-w-lead-secondary,
+.zl-lead-secondary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+.zl-w-lead-secondary > *,
+.zl-lead-secondary-actions > * {
+    flex: 1 1 120px;
+    min-width: 0;
+    min-height: 44px;
+}
+
+/* Section labels in the Generate panel — slightly larger & heavier so they
+   read clearly in dark mode (they use --sys-text-sec = AA-passing, but the
+   extra weight removes the "faint" feel from the review). */
+.zl-w-filter-row label,
+.zl-w-filter-row-pair label {
+    font-size: 12px;
+    font-weight: var(--sys-font-wt-sb, 600);
+    color: var(--sys-text-sec, #475569);
+    letter-spacing: 0.4px;
+}
+
+/* Inputs/selects: taller, easier to tap, clear focus ring. */
+.zl-w-filter-row input,
+.zl-w-filter-row select,
+.zl-w-filter-row textarea,
+.zl-w-spend-inputs input {
+    min-height: 46px;
+    font-size: 15px;
+    border-radius: 10px;
+}
+
+/* Score label: bump off the failing --sys-text-ter onto AA-passing
+   --sys-text-sec so the plain-English score reads in dark mode. */
+.zl-lc-score-label {
+    color: var(--sys-text-sec, #475569);
+    font-size: 10px;
+}
+[data-theme="dark"] .zl-lc-score-label {
+    color: var(--sys-text-sec, #94A3B8) !important;
+}
+
+/* Lead card: a touch more padding and a clearer surface separation. */
+.zl-lead-card,
+.zl-w-card {
+    padding: 14px;
+    border-radius: 12px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   v2.1.0 — D. NEW STAT TILES
+   Replaces Batches/Leads/In CRM/Contacted with action-oriented metrics.
+   The lead-driver tile ("Ready to Email") gets a subtle brand emphasis so
+   the eye lands on the thing you can act on right now.
+   ─────────────────────────────────────────────────────────────────────── */
+
+.zl-w-stat {
+    padding: 14px 10px;
+    border-radius: 12px;
+}
+.zl-w-stat-val {
+    font-size: 24px;          /* bigger number, easier to read at a glance */
+}
+.zl-w-stat-label {
+    font-size: 11px;
+    color: var(--sys-text-sec, #475569);
+    letter-spacing: 0.3px;
+}
+/* Emphasis tile: the primary call-to-action metric. */
+.zl-w-stat.zl-w-stat-primary {
+    background: color-mix(in srgb, var(--sys-brand, #10B981) 12%, var(--sys-bg-alt, #F1F5F9));
+    border-color: color-mix(in srgb, var(--sys-brand, #10B981) 35%, var(--sys-border, #E2E8F0));
+}
+.zl-w-stat.zl-w-stat-primary .zl-w-stat-val {
+    color: var(--sys-brand, #10B981);
+}
+.zl-w-stat.zl-w-stat-primary .zl-w-stat-icon {
+    color: var(--sys-brand, #10B981);
+    opacity: 1;
+}
+/* Graceful fallback for engines without color-mix(): a flat tint. */
+@supports not (background: color-mix(in srgb, red, blue)) {
+    .zl-w-stat.zl-w-stat-primary {
+        background: var(--sys-surface-subtle, rgba(16,185,129,.10));
+        border-color: var(--sys-brand, #10B981);
+    }
+}
+
+/* Make the stat tile a button when it filters the list below. */
+.zl-w-stat.zl-w-stat-clickable {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.zl-w-stat.zl-w-stat-clickable:active { transform: scale(0.98); }
+.zl-w-stat.zl-w-stat-clickable:focus-visible {
+    outline: 2px solid var(--sys-brand, #10B981);
+    outline-offset: 2px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   v2.1.0 — E. NO-LAYOUT-SHIFT SUBMIT  (Prompt 7)
+   Local fallback for the theme's forthcoming .ts-btn-busy / .ts-inline-status
+   hooks so submits don't reflow BEFORE the theme ships them. Scoped to .zl-w
+   and written so the theme's own definitions (unscoped) take precedence when
+   present. Animate opacity only — never size/position.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Busy button: hold the box size, show a spinner, block input. */
+.zl-w .ts-btn-busy,
+.zl-w-btn.is-busy {
+    position: relative;
+    pointer-events: none;
+    color: transparent !important;     /* hide label without resizing */
+}
+.zl-w .ts-btn-busy::after,
+.zl-w-btn.is-busy::after {
+    content: "";
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 18px; height: 18px;
+    margin: -9px 0 0 -9px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    color: #fff;                       /* spinner visible on filled buttons */
+    animation: zl-spin 0.7s linear infinite;
+    opacity: 1;
+}
+/* On outline/secondary buttons the spinner should use the brand color. */
+.zl-w .zl-w-btn-outline.is-busy::after,
+.zl-w .zl-w-btn-secondary.is-busy::after {
+    color: var(--sys-brand, #10B981);
+}
+
+/* Pre-reserved inline status slot: occupies space even when empty, so
+   revealing a message pushes NOTHING. Fades in via opacity only. */
+.zl-w .ts-inline-status,
+.zl-w .zl-inline-status {
+    display: block;
+    min-height: 20px;                  /* reserved height when empty */
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--sys-text-sec, #475569);
+    background: var(--sys-surface, #fff);
+    opacity: 0;
+    transition: opacity var(--ref-dur,200ms) var(--ref-ease,ease);
+}
+.zl-w .ts-inline-status.is-visible,
+.zl-w .zl-inline-status.is-visible {
+    opacity: 1;
+}
+
+/* Visually-hidden live region for screen readers. */
+.zl-w .zl-sr-live {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0);
+    white-space: nowrap; border: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   v2.1.0 — F. PANEL TITLE HARDENING (belt-and-suspenders for the headers)
+   The shim already fixes --sys-on-surface, but force the panel + section
+   titles to --sys-text explicitly so they can never regress to a faint
+   value, in any theme mode.
+   ─────────────────────────────────────────────────────────────────────── */
+.zl-w-panel-title,
+.zl-w-section-title,
+.zl-w[data-role="sales"] .zl-w-section-title,
+#zl-batch-section-title {
+    color: var(--sys-text, #0F172A);
+}
+.zl-w-panel-icon svg,
+.zl-w-panel-icon {
+    color: var(--sys-brand, #10B981);
+}
+
+/* Reduced-motion: honor the user's OS preference. */
+@media (prefers-reduced-motion: reduce) {
+    .zl-w .zl-expand-arrow,
+    .zl-w .zl-batch-leads.zl-animating,
+    .zl-w .ts-inline-status,
+    .zl-w .zl-w-stat.zl-w-stat-clickable {
+        transition: none !important;
+    }
+    .zl-w .ts-btn-busy::after,
+    .zl-w-btn.is-busy::after {
+        animation-duration: 1.2s;   /* slow, not off, so "busy" still reads */
+    }
+}
+
+/* ══════════════════════════════════════════════════════════
+   v2.5.1 — NO NESTED SCROLL AT ANY WIDTH (theme v2.25.0 alignment)
+   a user (desktop): "the leads widget can scroll within its own
+   widget — it should NOT. The widget should be expandable as needed…
+   I should be able to expand 'All Leads' and it grows the widget
+   downward." The plugin ALREADY removed nested scrolling — but only
+   under @media (max-width:480px) and (max-width:768px). On desktop
+   (the dashboard a user is using) the internal scroll caps were
+   still live, so the widget trapped a scrollbar.
+
+   This block lifts those caps at EVERY width: the lead lists, batch
+   details, panel bodies and "All Leads" content grow to their natural
+   height and the dashboard PAGE scrolls as one document. The widget
+   itself never becomes its own scroll container. Source-last so it
+   wins over the earlier capped rules without editing them. The only
+   retained inner scroller is the transient build/progress console
+   (.zl-w-progress-log), which is a terminal-style readout, not
+   dashboard content — and even it is given more room.
+   ══════════════════════════════════════════════════════════ */
+/* NOTE: .zl-batch-leads is intentionally EXCLUDED — its open/close is a
+   JS-driven max-height animation (overflow:hidden, not a scrollbar; the JS
+   clears max-height once fully open), so it neither traps a scrollbar nor
+   needs overriding. Forcing it here would only kill the animation. */
+.zl-w-panel,
+.zl-w-panel-body,
+.zl-w-batches-list,
+.zl-w-batch-detail,
+.zl-batch-detail,
+.zl-w-lead-list,
+.zl-lead-list,
+.zl-w-collapsible-content,
+.zl-w-sp-notes,
+.zl-lc-sp-notes {
+  max-height: none !important;
+  overflow: visible !important;
+  -webkit-overflow-scrolling: auto !important;
+}
+/* The widget root must never clip/scroll its own content — it flows in
+   the dashboard's single scroll context. */
+.zl-w {
+  overflow: visible !important;
+  max-height: none !important;
+}
+/* The theme-provided widget portal around our widget must not clip us
+   either (the theme also sets overflow:clip now, which is fine —
+   :has() keeps any future capped ancestor from trapping a scrollbar). */
+:has(> .zl-w) {
+  max-height: none !important;
+}
+/* Keep the build console scrollable (it's a live log, not content) but
+   give it generous height so it isn't a tiny scroll-trap. */
+.zl-w-progress-log {
+  max-height: 360px;
+}
+
+/* v2.6.0: filter-field hints (roster is Nutshell-linked reps by design) */
+.zl-w-field-hint {
+  margin: 4px 0 0;
+  font-size: var(--ref-font-xs, 12px);
+  color: var(--sys-text-ter, #64748B);
+  line-height: 1.35;
+}
+.zl-w-field-hint-warn { color: var(--sys-tint-warning-fg, #92400E); }

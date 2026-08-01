@@ -1,0 +1,347 @@
+/* Zorderz Prep v2.1.1 — Widget CSS
+   v2.1.0: Removed redundant in-body header (dashboard bar already labels it).
+           Higher-contrast text + larger fonts on notes/dims/meta. Custom
+           dark-mode-visible chevron on the roll <select>. Animated loading
+           skeleton. Confidence badge removed.
+   Uses theme's --sys-* / --ref-* CSS variables for full light/dark/sunlight/system support. */
+
+.zprep-w { font-family: inherit; color: var(--sys-text); }
+
+/* v2.1.0 — lead/description line (replaces the removed header sub-title). */
+.zprep-w-lead { font-size: 15px; color: var(--sys-text-sec); margin: 0 0 var(--ref-space-3); line-height: 1.45; }
+
+.zprep-w-panel { padding: var(--ref-space-2) 0 var(--ref-space-4); }
+
+.zprep-w-search-row { display: flex; gap: var(--ref-space-2); margin-top: var(--ref-space-2); }
+.zprep-w-input { flex: 1; padding: 12px 14px; border: 1.5px solid var(--sys-border); border-radius: var(--ref-radius-sm); font-size: 16px; background: var(--sys-surface); color: var(--sys-text); }
+.zprep-w-input:focus { outline: none; border-color: #D4881C; box-shadow: 0 0 0 3px rgba(212,136,28,0.25); }
+
+.zprep-w-label { font-size: 15px; font-weight: var(--sys-font-wt-sb); display: block; color: var(--sys-text); }
+/* v2.1.0 — hints raised from --sys-text-ter (lowest contrast) to -sec, +1px. */
+.zprep-w-hint { font-size: 14px; color: var(--sys-text-sec); margin-top: 6px; line-height: 1.4; }
+
+/* v2.1.1 — Staged progress loader (replaces the static "skeleton head" line
+   that read as frozen). Live spinner per stage → check on completion, plus a
+   determinate fill bar. Token-themed for light/dark/sunlight/system. */
+.zprep-w-loader { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 14px; }
+.zprep-w-loader-bar { height: 6px; border-radius: 99px; background: var(--sys-surface-raised); overflow: hidden; }
+.zprep-w-loader-bar > i { display: block; height: 100%; width: 0; border-radius: 99px;
+  background: linear-gradient(90deg, #D4881C, #e0a23f);
+  transition: width 1.4s cubic-bezier(0.33, 0, 0.2, 1); }
+.zprep-w-stages { display: flex; flex-direction: column; gap: 9px; }
+.zprep-w-stage { display: flex; align-items: center; gap: 10px; font-size: 14.5px;
+  color: var(--sys-text-ter); transition: color 0.8s ease; }
+.zprep-w-stage.is-active { color: var(--sys-text); font-weight: var(--sys-font-wt-sb); }
+.zprep-w-stage.is-done { color: var(--sys-text-sec); }
+.zprep-w-stage-ic { width: 18px; height: 18px; flex-shrink: 0; display: grid; place-items: center; }
+.zprep-w-stage-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sys-border); }
+.zprep-w-stage-spin { width: 16px; height: 16px; border: 2px solid rgba(212,136,28,0.3);
+  border-top-color: #D4881C; border-radius: 50%; animation: zprep-spin 1.5s linear infinite; }
+.zprep-w-stage-check { width: 18px; height: 18px; color: #D4881C; animation: zprep-stage-pop 0.45s ease both; }
+@keyframes zprep-stage-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+
+/* Respect reduced-motion: drop the spin/pop, keep the (instant) bar + checks. */
+@media (prefers-reduced-motion: reduce) {
+  .zprep-w-stage-spin { animation: none; border-top-color: rgba(212,136,28,0.6); }
+  .zprep-w-stage-check { animation: none; }
+  .zprep-w-loader-bar > i { transition: none; }
+}
+
+/* Buttons — v2.0.3: larger tap targets + bigger text */
+.zprep-w-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 20px; border: none; border-radius: var(--ref-radius-sm); font-size: 16px; font-weight: var(--sys-font-wt-sb); cursor: pointer; transition: background 0.15s, opacity 0.15s; }
+.zprep-w-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.zprep-w-btn-primary { background: #F5A623; color: #1A1A1A; } /* v2.2.2: white-on-amber was 2.9:1; dark ink on amber = 9.9:1 */
+.zprep-w-btn-primary:hover:not(:disabled) { background: #D4881C; color: #1A1A1A; }
+.zprep-w-btn-secondary { background: var(--sys-surface-raised); color: var(--sys-text); border: 1px solid var(--sys-border); }
+.zprep-w-btn-ghost { background: transparent; color: var(--sys-text-sec); text-decoration: underline; padding: 10px 4px; font-size: 15px; }
+.zprep-w-btn-full { width: 100%; margin-top: var(--ref-space-2); }
+
+/* Status / Error */
+.zprep-w-status { display: flex; align-items: center; gap: var(--ref-space-2); padding: 12px 14px; background: rgba(212,136,28,0.12); border-radius: var(--ref-radius-sm); font-size: 15px; margin-top: 10px; }
+.zprep-w-status-inline { margin-top: 0; }
+.zprep-w-spin { width: 18px; height: 18px; border: 2px solid rgba(212,136,28,0.3); border-top-color: #D4881C; border-radius: 50%; animation: zprep-spin 0.6s linear infinite; flex-shrink: 0; }
+@keyframes zprep-spin { to { transform: rotate(360deg); } }
+.zprep-w-error { padding: 12px 14px; background: rgba(239,68,68,0.12); color: var(--sys-error, #EF4444); border-radius: var(--ref-radius-sm); font-size: 14px; white-space: pre-wrap; margin-top: var(--ref-space-2); }
+
+/* Customer card */
+.zprep-w-customer-card { padding: var(--ref-space-3) var(--ref-space-4); background: var(--sys-surface-raised); border-radius: var(--ref-radius-md); border: 1px solid var(--sys-border); margin-bottom: var(--ref-space-3); }
+.zprep-w-customer-name { font-size: var(--ref-font-md); font-weight: var(--sys-font-wt-b); }
+.zprep-w-customer-meta { font-size: 14px; color: var(--sys-text-sec); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.zprep-w-sep { opacity: 0.4; }
+.zprep-w-customer-addr { font-size: 14px; margin-top: 4px; color: var(--sys-text-sec); }
+
+/* Section heads — v2.0.3: bigger */
+.zprep-w-section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.zprep-w-section-head h3 { font-size: 17px; font-weight: var(--sys-font-wt-b); margin: 0; }
+.zprep-w-h3 { font-size: 17px; font-weight: var(--sys-font-wt-b); margin: var(--ref-space-4) 0 var(--ref-space-2); padding-bottom: 4px; border-bottom: 2px solid var(--sys-border); }
+
+/* Measurements — v2.1.0: bigger fonts + higher contrast */
+.zprep-w-m-grid { display: flex; flex-direction: column; gap: 8px; }
+.zprep-w-m-row { padding: var(--ref-space-3) 12px; border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm); background: var(--sys-surface); }
+.zprep-w-m-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 17px; }
+.zprep-w-m-qty { font-weight: var(--sys-font-wt-b); font-size: 19px; color: #D4881C; }
+.zprep-w-m-label { font-weight: var(--sys-font-wt-b); font-size: 17px; color: var(--sys-text); }
+.zprep-w-m-dims { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 16px; font-weight: var(--sys-font-wt-sb); background: var(--sys-surface-subtle); color: var(--sys-text); padding: 3px 8px; border-radius: var(--ref-radius-xs); }
+.zprep-w-m-color { font-size: 12px; font-weight: var(--sys-font-wt-b); text-transform: uppercase; padding: 3px 10px; border-radius: var(--ref-radius-xs); letter-spacing: 0.04em; }
+.zprep-w-m-color-black { background: #1a1a1a; color: #fff; }
+.zprep-w-m-color-white { background: #f0efe8; color: #222; border: 1px solid var(--sys-border); }
+/* Notes raised from --sys-text-ter (lowest) to -sec, +1px so the field
+   nicknames (e.g. "the big corner unit") are easily readable in
+   dark mode. */
+.zprep-w-m-notes { font-size: 14px; color: var(--sys-text-sec); margin-top: 6px; line-height: 1.4; }
+.zprep-w-flag-sm { font-size: 11px; font-weight: var(--sys-font-wt-b); background: rgba(245,158,11,0.15); color: var(--sys-warning); padding: 2px 8px; border-radius: 3px; }
+
+/* (v2.1.0: confidence badge removed — .zprep-w-badge* styles deleted.) */
+
+.zprep-w-lo-toggle { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 15px; padding: 12px; background: var(--sys-surface-raised); border-radius: var(--ref-radius-sm); margin: 10px 0; cursor: pointer; }
+.zprep-w-lo-toggle small { display: block; width: 100%; color: var(--sys-text-sec); font-size: 12px; }
+
+/* Summary grid — v2.0.3: bigger numbers */
+.zprep-w-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: var(--ref-space-3); }
+.zprep-w-summary-grid > div { text-align: center; padding: 12px; background: var(--sys-surface-raised); border-radius: var(--ref-radius-sm); }
+.zprep-w-summary-grid strong { display: block; font-size: 32px; font-weight: var(--sys-font-wt-b); color: #D4881C; }
+.zprep-w-summary-grid span { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sys-text-ter); }
+
+.zprep-w-warnings { margin: var(--ref-space-2) 0; }
+.zprep-w-warn { font-size: 13px; padding: 8px 12px; background: rgba(245,158,11,0.12); color: var(--sys-warning); border-radius: var(--ref-radius-xs); margin-bottom: 4px; }
+
+/* Page cards — v2.0.3: bigger text */
+.zprep-w-pages { display: flex; flex-direction: column; gap: var(--ref-space-3); }
+.zprep-w-page-card { border: 2px solid var(--sys-border); border-radius: var(--ref-radius-md); overflow: hidden; }
+.zprep-w-page-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: var(--sys-bg-alt); font-size: 16px; }
+.zprep-w-page-meta { padding: 8px 14px; font-size: 15px; color: var(--sys-text-sec); border-bottom: 1px solid var(--sys-border); }
+.zprep-w-page-deliverables { padding: var(--ref-space-2) 14px; font-size: 15px; color: var(--sys-text); }
+.zprep-w-page-del { padding: 3px 0; }
+
+.zprep-w-diagram { cursor: pointer; }
+.zprep-w-diagram svg { display: block; width: 100%; height: auto; }
+/* v2.1.8 — sheet-card edit button + interactive layout editor */
+.zprep-w-page-cardactions { padding: 8px 12px 0; }
+.zprep-w-editbtn { font: 600 13px Inter, system-ui, sans-serif; padding: 7px 12px; border-radius: var(--ref-radius-sm); border: 1px solid var(--sys-border); background: var(--sys-surface-raised); color: var(--sys-text); cursor: pointer; }
+.zprep-w-editbtn:hover { border-color: #D4881C; color: #D4881C; }
+.zprep-ed { display: flex; flex-direction: column; gap: 12px; }
+.zprep-ed-head strong { font-size: 16px; color: var(--sys-text); }
+.zprep-ed-hint { font-size: 12.5px; color: var(--sys-text-ter); margin-top: 4px; line-height: 1.4; }
+.zprep-ed-canvas { background: var(--sys-surface-raised); border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm); padding: 8px; max-height: 60vh; overflow: auto; }
+.zprep-ed-canvas svg { -webkit-user-select: none; user-select: none; }
+.zprep-ed-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zprep-ed-actions .zprep-w-btn { padding: 9px 14px; font-size: 14px; }
+.zprep-ed-spacer { flex: 1 1 auto; }
+.zprep-ed-warn { min-height: 18px; font-size: 13px; font-weight: 600; color: var(--sys-warning, #e0a23f); }
+.zprep-ed-piece text { -webkit-user-select: none; user-select: none; pointer-events: none; }
+/* v2.1.8 — debug mode toggle + packing report panel */
+.zprep-w-debug-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sys-text-sec); margin: 10px 0; cursor: pointer; }
+.zprep-w-debug-toggle input { width: 16px; height: 16px; }
+.zprep-w-debug-panel { margin: 12px 0; border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm); overflow: hidden; background: var(--sys-surface-raised); }
+.zprep-w-debug-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font: 600 13px Inter, system-ui, sans-serif; color: var(--sys-text); background: var(--sys-surface); cursor: pointer; list-style: none; user-select: none; }
+.zprep-w-debug-head::-webkit-details-marker { display: none; }
+.zprep-w-debug-head::before { content: '▸'; color: #D4881C; font-size: 12px; transition: transform 0.15s; }
+.zprep-w-debug-panel[open] .zprep-w-debug-head::before { transform: rotate(90deg); }
+.zprep-w-debug-hint { color: var(--sys-text-ter); font-weight: 400; font-size: 12px; }
+.zprep-w-debug-inner { padding: 4px 12px 12px; }
+.zprep-w-debug-section { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 600 12.5px Inter, system-ui, sans-serif; color: var(--sys-text); margin: 12px 0 6px; padding-top: 8px; border-top: 1px solid var(--sys-border); }
+.zprep-w-debug-section:first-child { border-top: none; padding-top: 0; }
+.zprep-w-debug-rgroup { font: 700 12px Inter, system-ui, sans-serif; color: var(--sys-text-sec); margin: 8px 0 4px; }
+.zprep-w-debug-rline { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; line-height: 1.5; color: var(--sys-text); margin: 4px 0; }
+.zprep-w-debug-rtag { flex: 0 0 auto; font: 700 10px ui-monospace, Menlo, monospace; color: #D4881C; background: rgba(212,136,28,0.12); border-radius: 4px; padding: 1px 6px; letter-spacing: 0.04em; }
+.zprep-w-debug-copy { font: 600 12px Inter, system-ui, sans-serif; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--sys-border); background: var(--sys-surface-raised); color: var(--sys-text); cursor: pointer; }
+.zprep-w-debug-copy:hover { border-color: #D4881C; color: #D4881C; }
+.zprep-w-debug-body { margin: 0; padding: 10px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--sys-text); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; background: var(--sys-surface); border-radius: 6px; }
+
+/* Deliverables — v2.0.3: bigger */
+.zprep-w-deliverables { display: flex; flex-direction: column; gap: 6px; }
+.zprep-w-deliverable { display: flex; align-items: center; gap: var(--ref-space-2); padding: var(--ref-space-3) 12px; border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm); cursor: pointer; font-size: 16px; }
+.zprep-w-deliverable input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; accent-color: #D4881C; }
+.zprep-w-deliverable-sub { font-size: 13px; color: var(--sys-text-sec); }
+/* v2.1.3 — pre-made (not cut) deliverable badge styling */
+.zprep-w-flag-premade { background: rgba(99,102,241,0.15); color: #6366F1; margin-left: 8px; }
+.zprep-w-deliverable-notcut { border-style: dashed; opacity: 0.92; }
+.zprep-w-deliverable-note { font-style: italic; color: var(--sys-text-ter); margin-top: 2px; }
+
+/* Material table — v2.0.3: bigger */
+.zprep-w-cost-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.zprep-w-cost-table td { padding: 8px 12px; border: 1px solid var(--sys-border); }
+.zprep-w-cost-total { font-weight: var(--sys-font-wt-b); background: var(--sys-surface-raised); }
+
+.zprep-w-sync-result { margin-top: 10px; padding: 12px; border-radius: var(--ref-radius-sm); font-size: 14px; }
+.zprep-w-ok-text { color: var(--sys-success); }
+.zprep-w-err-text { color: var(--sys-error); }
+/* v2.2.4: "stage did not advance" heads-up — amber, uses the theme warning token
+   (its paired fg on the tinted chip below), so it reads clearly in all 4 modes. */
+.zprep-w-warn-text { color: var(--sys-warning); }
+.zprep-w-sync-warn { margin-top: 8px; padding: 8px 12px; font-size: 13px; line-height: 1.35; background: rgba(245,158,11,0.12); border-radius: var(--ref-radius-xs); }
+
+/* Modal */
+.zprep-w-modal { position: fixed; inset: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; }
+.zprep-w-modal-bg { position: absolute; inset: 0; background: var(--sys-overlay); }
+.zprep-w-modal-body { position: relative; z-index: 1; max-width: 95vw; max-height: 90vh; overflow: auto; background: var(--sys-surface); border-radius: var(--ref-radius-lg); padding: var(--ref-space-4); box-shadow: var(--sys-shadow-xl); }
+.zprep-w-modal-close { position: absolute; top: 8px; right: 12px; background: none; border: none; font-size: 28px; cursor: pointer; color: var(--sys-text-sec); z-index: 2; }
+
+.zprep-w-actions { margin-top: var(--ref-space-3); }
+
+/* Lead picker (multi-result) — v2.0.3: bigger */
+.zprep-w-select-head h3 { font-size: 17px; font-weight: var(--sys-font-wt-b); margin: 0 0 2px; }
+.zprep-w-select-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.zprep-w-select-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1.5px solid var(--sys-border); border-radius: var(--ref-radius-md); background: var(--sys-surface); transition: border-color 0.15s, background 0.15s; }
+.zprep-w-select-card:hover { border-color: #D4881C; background: var(--sys-surface-subtle); }
+.zprep-w-select-check { flex-shrink: 0; }
+.zprep-w-select-check input[type="checkbox"] { width: 22px; height: 22px; accent-color: #D4881C; }
+.zprep-w-select-info { flex: 1; cursor: pointer; min-width: 0; }
+.zprep-w-select-name { font-size: 16px; font-weight: var(--sys-font-wt-b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zprep-w-select-meta { font-size: 13px; color: var(--sys-text-sec); display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+
+/* Workspace + Roll selection bar — v2.0.3: more prominent, labels aligned */
+.zprep-w-workspace-bar { display: flex; gap: var(--ref-space-4); align-items: flex-start; padding: var(--ref-space-4); background: var(--sys-surface-raised); border-radius: var(--ref-radius-md); margin: var(--ref-space-3) 0; flex-wrap: wrap; border: 2px solid var(--sys-border); }
+.zprep-w-ws-group { display: flex; flex-direction: column; gap: 6px; }
+.zprep-w-ws-label { font-size: 12px; font-weight: var(--sys-font-wt-sb); text-transform: uppercase; letter-spacing: 0.06em; color: var(--sys-text-sec); }
+.zprep-w-toggle-row { display: flex; border: 1.5px solid var(--sys-border); border-radius: var(--ref-radius-sm); overflow: hidden; }
+.zprep-w-toggle-btn { padding: 8px 16px; font-size: 15px; font-weight: var(--sys-font-wt-sb); background: var(--sys-surface); color: var(--sys-text-sec); border: none; cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+.zprep-w-toggle-btn + .zprep-w-toggle-btn { border-left: 1.5px solid var(--sys-border); }
+.zprep-w-toggle-btn.active { background: #D4881C; color: #fff; }
+.zprep-w-toggle-btn:hover:not(.active) { background: var(--sys-surface-subtle); }
+
+/* v2.1.0 — Roll <select>: the native dropdown arrow is invisible in dark
+   mode (it inherits a dark glyph on a dark surface). We suppress it with
+   appearance:none and paint our own chevron as a background SVG. Per the
+   TSCC iOS lesson, use background-color + background-image SEPARATELY
+   (never the `background` shorthand, which iOS Safari tiles/duplicates).
+   The default chevron is the DARK one (for light/sunlight). Dark + system
+   (prefers dark) override to a LIGHT chevron so it's always visible. */
+.zprep-w-select {
+  padding: 8px 36px 8px 12px; font-size: 15px;
+  border: 1.5px solid var(--sys-border); border-radius: var(--ref-radius-sm);
+  background-color: var(--sys-surface); color: var(--sys-text); cursor: pointer;
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23222222' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px;
+}
+[data-theme="dark"] .zprep-w-select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23e8e8e8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] .zprep-w-select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23e8e8e8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+  }
+}
+
+/* Print container — no longer used for in-page print mode (v2.0.3 uses popup window) */
+.zprep-w-print-container { display: none; }
+
+/* ── v2.1.15 — Approved to Cut section ──────────────────────────────
+   Leads in the configured cut stage. Uses the same --sys-*/--ref-*
+   tokens as the rest of the widget for full light/dark/sunlight support. */
+.zprep-w-atc { margin-bottom: var(--ref-space-3); }
+.zprep-w-atc-list { display: flex; flex-direction: column; gap: var(--ref-space-2); margin-top: var(--ref-space-2); }
+
+/* A tappable job card. 56px+ tap target per the mobile accessibility standard. */
+.zprep-w-atc-card {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left;
+  min-height: 56px; padding: 12px 14px;
+  border: 1px solid var(--sys-border); border-left: 4px solid #D4881C;
+  border-radius: var(--ref-radius-sm); background: var(--sys-surface);
+  color: var(--sys-text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  font: inherit;
+}
+.zprep-w-atc-card:hover { background: var(--sys-surface-raised); }
+.zprep-w-atc-card:active { transform: scale(0.995); }
+.zprep-w-atc-card-body { flex: 1; min-width: 0; }
+.zprep-w-atc-card-name { font-size: 16px; font-weight: var(--sys-font-wt-b); color: var(--sys-text); }
+.zprep-w-atc-card-meta { font-size: 13px; color: var(--sys-text-sec); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.zprep-w-atc-sep { opacity: 0.5; }
+.zprep-w-atc-count {
+  flex-shrink: 0; font-size: 13px; font-weight: var(--sys-font-wt-b);
+  color: #D4881C; background: rgba(212,136,28,0.12);
+  padding: 4px 10px; border-radius: 99px; white-space: nowrap;
+}
+.zprep-w-atc-chev { flex-shrink: 0; color: var(--sys-text-ter); font-size: 18px; line-height: 1; }
+
+.zprep-w-atc-empty { font-size: 14px; color: var(--sys-text-sec); padding: 12px 14px; background: var(--sys-surface-subtle, var(--sys-surface-raised)); border-radius: var(--ref-radius-sm); margin-top: var(--ref-space-2); }
+
+/* "or look one up" divider between the list and the manual search box. */
+.zprep-w-atc-divider { display: flex; align-items: center; text-align: center; gap: 10px; margin: var(--ref-space-4) 0 var(--ref-space-3); color: var(--sys-text-ter); font-size: 13px; }
+.zprep-w-atc-divider::before, .zprep-w-atc-divider::after { content: ""; flex: 1; height: 1px; background: var(--sys-border); }
+@media (prefers-reduced-motion: reduce) {
+  .zprep-w-atc-card { transition: none; }
+  .zprep-w-atc-card:active { transform: none; }
+}
+
+/* v2.1.18 — role-aware health notice + one-click report button. */
+.zprep-w-atc-notice {
+  margin: 10px 0 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid var(--sys-border);
+}
+.zprep-w-atc-notice-admin {
+  border-left: 3px solid var(--sys-warning, #c98a00);
+  background: var(--sys-surface-2, rgba(201,138,0,.08));
+  color: var(--sys-text);
+}
+.zprep-w-atc-notice-user {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  background: var(--sys-surface-2, rgba(127,127,127,.08));
+  color: var(--sys-text-sec);
+}
+.zprep-w-atc-notice-user > span { flex: 1 1 200px; }
+.zprep-w-atc-report {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid var(--sys-border);
+  border-radius: 6px;
+  background: var(--sys-surface, transparent);
+  color: var(--sys-text);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.zprep-w-atc-report:hover:not(:disabled) { background: var(--sys-surface-3, rgba(127,127,127,.14)); }
+.zprep-w-atc-report:disabled { opacity: .7; cursor: default; }
+.zprep-w-atc-report-done { width: 100%; margin-top: 6px; font-size: 12px; color: var(--sys-text-sec); }
+
+/* v2.1.17 — "Show more" button under the Approved-to-Cut list. */
+.zprep-w-atc-more {
+  display: block;
+  width: 100%;
+  margin: 8px 0 2px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid var(--sys-border);
+  border-radius: 8px;
+  color: var(--sys-text-sec);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.zprep-w-atc-more:hover { background: var(--sys-surface-2, rgba(127,127,127,.08)); color: var(--sys-text); }
+.zprep-w-atc-more:active { transform: translateY(1px); }
+@media (prefers-reduced-motion: reduce) { .zprep-w-atc-more { transition: none; } .zprep-w-atc-more:active { transform: none; } }
+
+/* v2.1.16 — "adjustment notes applied" banner above the measurements editor. */
+.zprep-w-adj-hint {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--sys-border);
+  border-left: 3px solid var(--sys-accent, var(--sys-text-sec));
+  border-radius: 6px;
+  background: var(--sys-surface-2, rgba(127,127,127,.08));
+  color: var(--sys-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* v2.2.0 — FB-sourced Approved-to-Cut entries (lead promotion pending) */
+.zprep-w-atc-fbtag {
+	display: inline-block;
+	margin-top: 3px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: .02em;
+	background: rgba(59, 130, 246, .18);
+	color: var(--sys-primary, #7aa2ff);
+	border: 1px solid rgba(59, 130, 246, .35);
+}

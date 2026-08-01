@@ -1,0 +1,124 @@
+/*!
+ * Zorderz Theme — Dashboard Personalization Styles (v2.14.1)
+ *
+ * Scoped tightly to only the new elements we inject:
+ *   - .zdz-drag-handle          (added inside each .kpi-card by JS)
+ *   - .zdz-card-placeholder     (appears while dragging)
+ *   - .zdz-records-strip        (injected after .kpi-grid)
+ *
+ * Intentionally DOES NOT override .kpi-card, .kpi-grid, or any other
+ * existing theme selector. Uses --sys-* / --ref-* design tokens
+ * throughout so responsive scaling and theme variants work correctly.
+ *
+ * v2.14.1: Converted all hard-coded px values to design tokens.
+ *          --sys-surface-subtle is now defined in style.css for all 4 themes.
+ */
+
+/* ── Drag handle (only positioned inside cards that got augmented) ── */
+.kpi-card[data-zdz-card-id] { position: relative; }
+
+.zdz-drag-handle {
+	position: absolute;
+	top: var(--ref-space-1);
+	right: var(--ref-space-1);
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--sys-text-ter);
+	cursor: grab;
+	border-radius: var(--ref-radius-xs);
+	font-size: var(--ref-font-xs);
+	line-height: 1;
+	opacity: 0.35;
+	transition: opacity var(--ref-dur-fast) var(--ref-ease),
+	            background var(--ref-dur-fast) var(--ref-ease);
+	touch-action: none;
+	z-index: 2;
+}
+.kpi-card[data-zdz-card-id]:hover .zdz-drag-handle,
+.zdz-drag-handle:focus-visible {
+	opacity: 1;
+}
+.zdz-drag-handle:hover {
+	background: var(--sys-surface-subtle);
+	color: var(--sys-text);
+	opacity: 1;
+}
+.zdz-drag-handle:active { cursor: grabbing; }
+
+.kpi-card.is-dragging {
+	opacity: 0.6;
+	transform: scale(0.98);
+	transition: transform var(--ref-dur-fast) var(--ref-ease);
+	z-index: 10;
+}
+
+.zdz-card-placeholder {
+	background: var(--sys-surface-subtle);
+	border: 2px dashed var(--sys-border);
+	border-radius: var(--ref-radius-md);
+}
+
+/* ── Personal records strip ────────────────────────────────── */
+.zdz-records-strip {
+	margin: var(--ref-space-5) 0;
+	padding: var(--ref-space-4);
+	background: var(--sys-surface);
+	border: 1px solid var(--sys-border);
+	border-radius: var(--ref-radius-md);
+}
+.zdz-records-strip.is-empty { opacity: 0.6; }
+
+.zdz-records-title {
+	margin: 0 0 var(--ref-space-3);
+	font-size: var(--ref-font-xs);
+	font-weight: var(--sys-font-wt-sb);
+	letter-spacing: 0.04em;
+	color: var(--sys-text);
+	text-transform: uppercase;
+}
+
+.zdz-records-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: var(--ref-space-2);
+}
+
+.zdz-record-tile {
+	padding: var(--ref-space-3);
+	background: var(--sys-surface-subtle);
+	border: 1px solid var(--sys-border);
+	border-radius: var(--ref-radius-sm);
+	text-align: center;
+}
+
+.zdz-record-label {
+	font-size: var(--ref-font-xs);
+	color: var(--sys-text-ter);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-bottom: var(--ref-space-1);
+	line-height: 1.2;
+}
+
+.zdz-record-value {
+	font-size: var(--ref-font-base);
+	font-weight: var(--sys-font-wt-b);
+	color: var(--sys-text);
+	line-height: 1.1;
+}
+
+.zdz-record-date {
+	font-size: var(--ref-font-xs);
+	color: var(--sys-text-ter);
+	margin-top: var(--ref-space-1);
+	opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+	.zdz-records-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}

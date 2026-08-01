@@ -1,0 +1,128 @@
+# Identity Pack · profile.yml — EXAMPLE, entirely fictional.
+# Written in the canonical schema. See ../README.md for the flat alternative.
+
+pack:
+  schema: 1
+  tenant_key: example-business
+
+identity:
+  display_name: "Blue Harbor Pool Care"
+  legal_name: "Blue Harbor Pool Care LLC"
+  trading_name: "Blue Harbor Pool Care"
+  short_name: "Blue Harbor"
+  short_code: "BHP"
+  industry_descriptor: "Pool maintenance, repair & equipment installation"
+  publisher_display_name: "Blue Harbor Pool Care"
+  former_names:
+    - "Harbor Pools"          # appears on paperwork older than the 2023 rename
+
+domains:
+  app: "app.example.com"
+  marketing: "www.example.com"
+
+contact:
+  address:
+    street: "1200 Marina Way, Suite 4"
+    locality: "Springfield"
+    region: "OR"
+    postcode: "97477"
+    country: "US"
+  phones:
+    - label: "Main"
+      number: "555-0142"
+      is_canonical: true
+    - label: "Service line"
+      number: "555-0198"
+      is_canonical: false
+
+compliance:
+  registrations:
+    - kind: contractor_licence
+      authority: "State Contractors Board"
+      number: "000000"
+      label: "Licence #000000"
+      show_on_card: true
+
+hours:
+  office:
+    - days: [mon, tue, wed, thu, fri]
+      open: "08:00"
+      close: "16:30"
+  display_override: "Mon–Fri 8am–4:30pm"
+
+locale:
+  timezone: "America/Los_Angeles"
+  currency: "USD"
+  locale: "en_US"
+
+email:
+  primary_domain: "example.com"
+  staff_address_pattern: "{first}@{primary_domain}"
+
+messaging:
+  senders:
+    - purpose: alert
+      from_name: "Blue Harbor Pool Care"
+      from_address: "service@example.com"
+    - purpose: survey
+      from_name: "Blue Harbor Pool Care"
+      from_address: "service@example.com"
+    - purpose: receipt
+      inherits: survey
+    - purpose: messaging_notification
+      inherits: alert
+
+reviews:
+  destinations:
+    - provider: google_business
+      url: "https://example.com/review"
+      role: primary
+    - provider: on_site_form
+      url: "https://www.example.com/leave-a-review/"
+      role: secondary
+
+brand:
+  # A genuinely different palette from the shipped default, so applying this pack
+  # visibly changes the interface — which is the fastest way to confirm the
+  # mechanism works on your install.
+  color_seed: "#0F766E"
+  color_tokens:
+    brand_ramp:
+      "50":  "#F0FDFA"
+      "100": "#CCFBF1"
+      "200": "#99F6E4"
+      "300": "#5EEAD4"
+      "400": "#2DD4BF"
+      "500": "#0F766E"
+      "600": "#115E59"
+      "700": "#134E4A"
+      "800": "#0C3B38"
+      "900": "#082F2C"
+      "950": "#04201E"
+  pwa:
+    theme_color: "#115E59"
+    background_color: "#115E59"
+
+  # Logo artwork: two shapes, each drawn in two ink colours.
+  #
+  #   wide   — a 2:1 PNG. The lockup. Topbar, login screen, document headers.
+  #   square — a 1:1 PNG. The mark alone. Home-screen icon, favicon, avatars.
+  #
+  # `dark` / `light` name the INK, not the background. Dark ink goes on light
+  # surfaces; light ink is the white or pale version for the topbar.
+  #
+  # Left empty in this example because no artwork ships with it — the app falls
+  # back to rendering the business name as text, which is the correct behaviour
+  # for a business that has not supplied a logo yet. Fill any of these with the
+  # URL of an uploaded PNG.
+  logo:
+    wide:
+      dark: ""      # the main one, if you only supply one
+      light: ""
+    square:
+      dark: ""
+      light: ""
+    favicon: ""
+
+  taglines:
+    product_tagline: "Pool service, scheduled and settled"

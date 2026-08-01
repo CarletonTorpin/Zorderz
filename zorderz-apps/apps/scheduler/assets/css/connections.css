@@ -1,0 +1,143 @@
+/**
+ * TS Scheduler — Connected Calendars card styles (v1.6.0, Phase 0).
+ * Loaded only when the feature is enabled for a write-capable user.
+ * Follows widget.css conventions: sys-* custom properties with fallbacks,
+ * 44px+ touch targets, light/dark safe.
+ */
+
+.zsch-conncal-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.zsch-conncal-empty {
+	color: var(--sys-text-dim, #64748b);
+	font-size: 13px;
+	margin: 4px 0;
+}
+
+.zsch-conncal-acct {
+	border: 1px solid var(--sys-border, rgba(100, 116, 139, 0.25));
+	border-radius: 10px;
+	padding: 10px 12px;
+	background: var(--sys-bg-raised, rgba(148, 163, 184, 0.06));
+}
+
+.zsch-conncal-acct-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.zsch-conncal-provider {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	font-size: 12px;
+	font-weight: 700;
+	color: #fff;
+	flex: none;
+}
+
+.zsch-conncal-provider--google { background: #ea4335; }
+.zsch-conncal-provider--microsoft { background: #0078d4; }
+
+.zsch-conncal-label {
+	font-weight: 600;
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 40%;
+}
+
+.zsch-conncal-chip {
+	font-size: 11px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	flex: none;
+}
+
+.zsch-conncal-chip.is-ok {
+	background: rgba(16, 185, 129, 0.15);
+	color: #059669;
+}
+
+.zsch-conncal-chip.is-warn {
+	background: rgba(245, 158, 11, 0.18);
+	color: #b45309;
+}
+
+.zsch-conncal-actions {
+	margin-left: auto;
+	display: inline-flex;
+	gap: 6px;
+}
+
+.zsch-conncal-mini {
+	font-size: 12px;
+	padding: 6px 10px;
+	min-height: 32px;
+}
+
+.zsch-conncal-mini.is-danger {
+	color: #b91c1c;
+	border-color: rgba(185, 28, 28, 0.4);
+}
+
+.zsch-conncal-cals {
+	margin-top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.zsch-conncal-cal {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 4px;
+	min-height: 44px; /* touch target */
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.zsch-conncal-cal:hover {
+	background: var(--sys-bg-hover, rgba(148, 163, 184, 0.10));
+}
+
+.zsch-conncal-cal input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	accent-color: var(--sys-accent, #0ea5e9);
+	flex: none;
+}
+
+.zsch-conncal-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--sys-text-dim, #64748b);
+	flex: none;
+}
+
+.zsch-conncal-calname {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.zsch-conncal-ftr {
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+@media (max-width: 480px) {
+	.zsch-conncal-label { max-width: 100%; }
+	.zsch-conncal-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+}

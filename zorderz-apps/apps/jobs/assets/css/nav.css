@@ -1,0 +1,27 @@
+/**
+ * Zorderz Jobs - primary-nav integration styles.
+ *
+ * (1) Hides the legacy bug-report trigger from the main nav bar (the Jobs
+ *     rebuild removes bug reporting from the bottom/side dock; the underlying
+ *     reporter stays dormant and can be re-homed later).
+ * (2) Orders the injected "Jobs" item right after "Apps" (Apps . Jobs . Chat .
+ *     Team). Apps is the first .ni; Chat/Team are injected by the Analytics
+ *     plugin after that. `order: 1` slots Jobs between them. The .ni-jobs item
+ *     otherwise inherits all .ni styling from the theme, so it matches exactly.
+ *
+ * @package Zorderz\Jobs
+ * @since 1.2.0
+ */
+
+/* (1) Remove the bug-report icon from the nav. */
+#bug-report-trigger,
+.bnav-bug { display: none !important; }
+
+/* (2) Position Jobs immediately after Apps: Apps . Jobs . Chat . Team.
+ * The theme gives EVERY .ni order:1, so they fall in DOM order - and the
+ * Analytics plugin injects Chat/Team after us, pushing Jobs to the end. So we
+ * set explicit orders (independent of injection timing). Selectors are made
+ * more specific than the theme's `.bnav .ni { order:1 }` so they win. */
+.bnav .ni[data-view="sv-dash"] { order: 0; }                     /* Apps first */
+.bnav .ni.ni-jobs { order: 1; }                                  /* Jobs second */
+.bnav .ni:not([data-view="sv-dash"]):not(.ni-jobs) { order: 2; } /* Chat, Team, ... */

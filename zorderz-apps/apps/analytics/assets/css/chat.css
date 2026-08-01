@@ -1,0 +1,105 @@
+/* Zorderz Analytics — Chat surface. Neutral tokens; inherits theme variables. */
+
+.sub-view.zana-chat {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.zana-head {
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+	padding: 12px 16px 4px;
+}
+.zana-head h4 { margin: 0; }
+.zana-kiosk-note {
+	font-size: 12px;
+	opacity: 0.7;
+}
+
+.zana-messages {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: 12px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	-webkit-overflow-scrolling: touch;
+}
+
+.zana-empty {
+	opacity: 0.6;
+	text-align: center;
+	margin-top: 24px;
+}
+
+.zana-msg {
+	max-width: 82%;
+	padding: 10px 13px;
+	border-radius: 14px;
+	font-size: 15px;
+	line-height: 1.4;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+.zana-msg-user {
+	align-self: flex-end;
+	background: var(--sys-brand, #6366F1);
+	color: #fff;
+	border-bottom-right-radius: 4px;
+}
+.zana-msg-assistant {
+	align-self: flex-start;
+	background: var(--sys-surface-2, rgba(127, 127, 127, 0.12));
+	border-bottom-left-radius: 4px;
+}
+.zana-pending { opacity: 0.6; font-style: italic; }
+
+.zana-verdict {
+	display: inline-block;
+	margin-top: 6px;
+	padding: 1px 7px;
+	border-radius: 8px;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	background: rgba(234, 179, 8, 0.18);
+}
+.zana-verdict-refuse { background: rgba(239, 68, 68, 0.18); }
+
+.zana-form {
+	display: flex;
+	gap: 8px;
+	padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+	border-top: 1px solid var(--sys-border, rgba(127, 127, 127, 0.2));
+}
+.zana-form textarea {
+	flex: 1 1 auto;
+	resize: none;
+	min-height: 44px;
+	max-height: 140px;
+	padding: 11px 13px;
+	border-radius: 12px;
+	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3));
+	background: var(--sys-surface, transparent);
+	color: inherit;
+	font: inherit;
+	font-size: 16px; /* >=16px: prevents mobile input auto-zoom */
+}
+.zana-send {
+	flex: 0 0 auto;
+	min-width: 64px;
+	min-height: 44px;
+	border: none;
+	border-radius: 12px;
+	background: var(--sys-brand, #6366F1);
+	color: #fff;
+	font-weight: 600;
+	cursor: pointer;
+}
+.zana-send:disabled { opacity: 0.5; cursor: default; }
+
+/* The injected Chat nav item aligns with the theme's bottom-nav items. */
+.bnav .ni-chat i { pointer-events: none; }

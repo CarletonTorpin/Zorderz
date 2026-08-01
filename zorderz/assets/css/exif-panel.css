@@ -1,0 +1,231 @@
+/**
+ * TS Media EXIF — Details panel styles.
+ *
+ * Cohesive with the Zorderz design system: reuses the same --sys-* tokens
+ * the rest of the app uses (with sensible fallbacks so the panel still looks
+ * right if dropped somewhere the tokens aren't defined). Restrained on purpose
+ * — this is an embedded detail panel, not a hero. Collapsed by default; the
+ * body only renders once expanded.
+ */
+
+.zdz-exif {
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: 12px;
+	background: var(--sys-bg-alt, #F8FAFC);
+	overflow: hidden;
+	font-size: 14px;
+	color: var(--sys-text, #0F172A);
+}
+
+/* Header (always visible toggle) */
+.zdz-exif-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	gap: 10px;
+	padding: 12px 14px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: inherit;
+	font: inherit;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+}
+.zdz-exif-header-left {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--sys-text-sec, #475569);
+}
+.zdz-exif-header-label { font-weight: 600; }
+.zdz-exif-chevron {
+	display: inline-flex;
+	color: var(--sys-text-ter, #94A3B8);
+	transition: transform 180ms ease;
+}
+.zdz-exif-open .zdz-exif-chevron { transform: rotate(180deg); }
+
+/* Body */
+.zdz-exif-body {
+	padding: 0 14px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	animation: zdz-exif-fade 180ms ease;
+}
+@keyframes zdz-exif-fade { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+
+.zdz-exif-summary {
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--sys-text-sec, #475569);
+	padding: 8px 10px;
+	background: var(--sys-surface, #FFFFFF);
+	border-radius: 8px;
+}
+
+/* Location block */
+.zdz-exif-loc {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px;
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: 10px;
+	background: var(--sys-surface, #FFFFFF);
+}
+.zdz-exif-loc-line { display: flex; align-items: flex-start; gap: 8px; }
+.zdz-exif-loc-pin { color: var(--sys-brand, #0EA5E9); flex: none; margin-top: 2px; }
+.zdz-exif-loc-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zdz-exif-loc-text strong { font-weight: 600; font-size: 14px; }
+.zdz-exif-loc-coords { font-size: 12px; color: var(--sys-text-ter, #94A3B8); font-variant-numeric: tabular-nums; }
+.zdz-exif-loc-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.zdz-exif-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	background: rgba(14, 165, 233, 0.12);
+	color: #0369A1;
+}
+.zdz-exif-chip-muted {
+	background: var(--sys-bg-alt, #F1F5F9);
+	color: var(--sys-text-ter, #94A3B8);
+}
+
+.zdz-exif-maps {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	align-self: flex-start;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--sys-brand, #0EA5E9);
+	text-decoration: none;
+}
+.zdz-exif-maps:hover { text-decoration: underline; }
+.zdz-exif-maps svg { flex: none; }
+
+/* Interpreted facts (definition grid) */
+.zdz-exif-facts {
+	display: grid;
+	grid-template-columns: minmax(84px, auto) 1fr;
+	gap: 6px 14px;
+	margin: 0;
+	padding: 0;
+}
+.zdz-exif-fact-label {
+	font-size: 12px;
+	color: var(--sys-text-ter, #94A3B8);
+	font-weight: 500;
+	margin: 0;
+}
+.zdz-exif-fact-value {
+	font-size: 13px;
+	color: var(--sys-text, #0F172A);
+	margin: 0;
+	word-break: break-word;
+}
+
+/* Verbatim */
+.zdz-exif-verbatim { display: flex; flex-direction: column; gap: 8px; }
+.zdz-exif-verbatim-btn {
+	align-self: flex-start;
+	padding: 7px 12px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--sys-text-sec, #475569);
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: 8px;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.zdz-exif-verbatim-btn:hover { background: var(--sys-border, #E2E8F0); }
+
+.zdz-exif-verbatim-content { display: flex; flex-direction: column; gap: 10px; }
+.zdz-exif-vsection {
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--sys-text-ter, #94A3B8);
+	margin-top: 4px;
+}
+.zdz-exif-vtable {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+.zdz-exif-vtable td {
+	padding: 4px 8px;
+	vertical-align: top;
+	border-bottom: 1px solid var(--sys-border, #EEF2F6);
+}
+.zdz-exif-vkey {
+	color: var(--sys-text-ter, #94A3B8);
+	white-space: nowrap;
+	width: 42%;
+}
+.zdz-exif-vval {
+	color: var(--sys-text, #0F172A);
+	font-variant-numeric: tabular-nums;
+	word-break: break-word;
+}
+
+/* Status / loading / empty */
+.zdz-exif-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	color: var(--sys-text-ter, #94A3B8);
+	padding: 8px 0;
+}
+.zdz-exif-status-error { color: #DC2626; }
+.zdz-exif-spinner {
+	display: inline-block;
+	width: 14px; height: 14px;
+	border: 2px solid var(--sys-border, #E2E8F0);
+	border-top-color: var(--sys-brand, #0EA5E9);
+	border-radius: 50%;
+	animation: zdz-exif-spin 0.6s linear infinite;
+	flex: none;
+}
+@keyframes zdz-exif-spin { to { transform: rotate(360deg); } }
+
+/* ── Dark theme ── */
+[data-theme="dark"] .zdz-exif { background: var(--sys-surface, #1E293B); border-color: var(--sys-border, #334155); }
+[data-theme="dark"] .zdz-exif-summary,
+[data-theme="dark"] .zdz-exif-loc { background: var(--sys-bg-alt, #0F172A); border-color: var(--sys-border, #334155); }
+[data-theme="dark"] .zdz-exif-fact-value,
+[data-theme="dark"] .zdz-exif-vval { color: var(--sys-text, #E2E8F0); }
+[data-theme="dark"] .zdz-exif-verbatim-btn { background: var(--sys-bg-alt, #0F172A); border-color: var(--sys-border, #334155); color: var(--sys-text-sec, #CBD5E1); }
+[data-theme="dark"] .zdz-exif-chip { background: rgba(14, 165, 233, 0.2); color: #7DD3FC; }
+[data-theme="dark"] .zdz-exif-chip-muted { background: var(--sys-bg-alt, #0F172A); color: var(--sys-text-ter, #64748B); }
+
+/* ── Sunlight (high-contrast outdoor) ── */
+[data-theme="sunlight"] .zdz-exif { background: #FFF; border: 2px solid #000; }
+[data-theme="sunlight"] .zdz-exif-header-left,
+[data-theme="sunlight"] .zdz-exif-summary,
+[data-theme="sunlight"] .zdz-exif-fact-value,
+[data-theme="sunlight"] .zdz-exif-loc-text strong,
+[data-theme="sunlight"] .zdz-exif-vval { color: #000; }
+[data-theme="sunlight"] .zdz-exif-summary,
+[data-theme="sunlight"] .zdz-exif-loc { border: 1px solid #000; background: #FFF; }
+[data-theme="sunlight"] .zdz-exif-chip { background: #000; color: #FFF; }
+[data-theme="sunlight"] .zdz-exif-chip-muted { background: #FFF; color: #000; border: 1px solid #000; }
+[data-theme="sunlight"] .zdz-exif-maps,
+[data-theme="sunlight"] .zdz-exif-loc-pin { color: #000; }
+[data-theme="sunlight"] .zdz-exif-verbatim-btn { border: 2px solid #000; background: #FFF; color: #000; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+	.zdz-exif-body { animation: none; }
+	.zdz-exif-chevron, .zdz-exif-spinner { transition: none; animation: none; }
+}

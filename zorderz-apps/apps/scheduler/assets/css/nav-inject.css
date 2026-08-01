@@ -1,0 +1,4 @@
+/* TS Scheduler — bottom-nav tab. Inherits the theme's .bnav-item styling;
+ * this only adds a hook class for any scheduler-specific tweaks. */
+.zsch-nav-item { /* matches .bnav-item; intentionally minimal */ }
+.zsch-nav-item .bnav-label { white-space: nowrap; }

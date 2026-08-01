@@ -1,0 +1,643 @@
+/* TS Media — Library Styles v2.3.3
+ *
+ * Two surfaces (dashboard widget + full-screen gallery) + one shared lightbox.
+ * Uses the theme's real --sys- and --ref- tokens so it tracks light/dark/system/
+ * sunlight. Fallback values match the THEME palette (brand #2C5F8A), not the
+ * v1 placeholder purple.
+ *
+ * v2.3.3 — widget usability: (1) scope tabs are sized to their labels (not
+ * forced equal thirds) so "Organization" is never truncated, scrolling
+ * horizontally only if all three can't fit; (2) a "Load more" button
+ * (.zml-w-more) under the compact grid appends more photos in place so the
+ * widget is browsable without opening "See All" — the card grows downward with
+ * no nested scroll (honours WIDGET-OVERFLOW-CONTRACT).
+ *
+ * v2.3.2 — CRITICAL parse fix: this file's banner contained the literal
+ * sequence "*​/" inside a comment (the token pair was written "--sys-*" then
+ * "/--ref-*"), which PREMATURELY CLOSED the opening comment. Everything after
+ * it parsed as invalid CSS, so the browser discarded the ENTIRE stylesheet
+ * (0 rules applied) — the Media widget rendered with NO styling at all: plain
+ * unstyled tab/chip text, no pills, no hover/click affordances. Reworded so no
+ * "*"+"/" ever appears in a comment. (Guard when editing this file: never let
+ * that two-character sequence appear inside a comment.) No rule changed; this
+ * simply makes the v2.3.1 layout — and every prior rule — actually load.
+ *
+ * v2.3.1 — mobile bar layout fix for the 3-tab scope set (My Photos /
+ * Organization / All). The v2.0.1 widget bar was a single-row 3-column grid
+ * sized for TWO tabs; the admin "All" tab (added in v2.3.0) overflowed it, so
+ * the segmented control wrapped into a tall dark stack and Add/See-All got
+ * squeezed off-center. Now:
+ *   • WIDGET bar is TWO rows — the segmented control on its own full-width row
+ *     (equal-width tabs that never wrap; horizontal-scroll fallback à la
+ *     zdz-estimate-creator's .tsec-w-tabs), and Add + See All on a second,
+ *     right-aligned row.
+ *   • FULL-SCREEN bar reserves a top row for the pinned Select/Add corners
+ *     (top padding), so the centered scope segment sits BELOW them and can
+ *     never collide — instead of the old attempt to squeeze it between them.
+ *   • Consistent ~40–44px tap targets; dark/system/sunlight parity preserved.
+ *
+ * Key fixes vs v1:
+ *   • Scope segmented control + chips are CENTERED.
+ *   • Lightbox note input is ≥16px so iOS never auto-zooms it.
+ *   • A local no-shift "busy" pattern (.zdz-btn-busy + .zml-inline-status):
+ *     the Save button keeps its box and shows a spinner; the status slot
+ *     reserves its height so revealing text causes no reflow.
+ */
+
+/* ════════════════════════════════════════════════════════════════════════
+   SHARED PRIMITIVES (used by both surfaces + lightbox)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Scope segmented control.
+   Base: an inline pill-group whose tabs never wrap. When there are more tabs
+   than fit the width (e.g. the admin 3-tab My Photos / Organization / All), the
+   group degrades to a hidden-scrollbar horizontal SCROLL rather than wrapping
+   into a stack — the same pattern zdz-estimate-creator uses for .tsec-w-tabs.
+   Surface overrides below decide alignment (widget = full-width row; full-screen
+   = centered). */
+.zml-seg { display:inline-flex; gap:4px; padding:3px; background:var(--sys-bg-alt,#E2E8F0);
+  border-radius:10px; max-width:100%; overflow-x:auto; overflow-y:hidden;
+  -webkit-overflow-scrolling:touch; scrollbar-width:none; scroll-snap-type:x proximity; }
+.zml-seg::-webkit-scrollbar { display:none; }
+.zml-seg-btn { appearance:none; border:none; background:transparent; cursor:pointer;
+  flex:0 0 auto; scroll-snap-align:start;
+  min-height:38px; padding:8px 16px; font-size:var(--ref-font-xs,15px); font-weight:600;
+  border-radius:8px; color:var(--sys-text-sec,#475569);
+  transition:background 150ms,color 150ms; -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation; user-select:none; -webkit-user-select:none; white-space:nowrap; }
+.zml-seg-btn.zml-active { background:var(--sys-surface,#FFF); color:var(--sys-text,#0F172A);
+  box-shadow:0 1px 2px rgba(0,0,0,0.10); }
+
+/* Type chips. */
+.zml-chips, .zml-w-chips { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+.zml-chip { appearance:none; cursor:pointer; padding:6px 14px; font-size:var(--ref-font-xs,15px);
+  font-weight:500; line-height:1; border:1px solid var(--sys-border,#E2E8F0); border-radius:999px;
+  background:var(--sys-surface,#FFF); color:var(--sys-text-sec,#475569);
+  transition:background 150ms,color 150ms,border-color 150ms; -webkit-tap-highlight-color:transparent;
+  min-height:36px; }
+.zml-chip.zml-active { background:var(--sys-brand,#2C5F8A); border-color:var(--sys-brand,#2C5F8A); color:#FFF; }
+
+.zml-loading, .zml-empty { padding:32px 20px; text-align:center; font-size:var(--ref-font-xs,15px);
+  color:var(--sys-text-ter,#64748B); line-height:1.5; }
+
+/* Uniform responsive grid (shared). */
+.zml-grid { display:grid; gap:8px; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); }
+@media (min-width:520px) { .zml-grid { grid-template-columns:repeat(auto-fill, minmax(128px, 1fr)); gap:10px; } }
+
+.zml-cell { position:relative; appearance:none; border:none; padding:0; cursor:pointer;
+  aspect-ratio:1/1; border-radius:12px; overflow:hidden; background:var(--sys-bg-alt,#E2E8F0);
+  -webkit-tap-highlight-color:transparent; transition:transform 120ms, box-shadow 120ms; }
+.zml-cell:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.12); }
+.zml-cell:focus-visible { outline:3px solid var(--sys-brand,#2C5F8A); outline-offset:2px; }
+.zml-cell-img { width:100%; height:100%; object-fit:cover; display:block; }
+
+.zml-cell-badge { position:absolute; left:6px; bottom:6px; padding:2px 7px; border-radius:6px;
+  font-size:11px; font-weight:700; color:#FFF; background:rgba(15,23,42,0.66); backdrop-filter:blur(2px); }
+.zml-cell-note { position:absolute; right:6px; top:6px; font-size:14px; line-height:1;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
+.zml-cell-vis { position:absolute; left:6px; top:6px; width:20px; height:20px; display:flex;
+  align-items:center; justify-content:center; color:#FFF; border-radius:50%;
+  background:rgba(44,95,138,0.92); filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SURFACE 1 — DASHBOARD WIDGET (compact)
+   Rendered inside the theme's .dash-widget-body (which already has padding +
+   the overflow:clip contract). We grow to natural height — NO inner scroll.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.zml-w { display:flex; flex-direction:column; gap:12px;
+  font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
+  color:var(--sys-text,#0F172A); }
+
+/* v2.3.1: TWO-ROW bar. The v2.0.1 single-row 3-column grid (spacer | segment |
+   See All) was built for a TWO-tab segment; the admin third tab ("All") made
+   the centered segment overflow its column, so the pill wrapped into a tall
+   dark stack and Add/See-All got squeezed off-center. The bar is now two clean
+   rows — the segmented control on its own full-width row (equal-width tabs that
+   never wrap; they scroll horizontally if ever too many), and the actions
+   (Add + See All) right-aligned on a second row. Robust for 2 OR 3 tabs and
+   consistent with the full-screen bar's stacked idiom. */
+.zml-w-bar { display:flex; flex-direction:column; gap:10px; }
+
+/* Row 1 — segmented control. v2.3.3: tabs are sized to their LABELS (not forced
+   into equal thirds), so "Organization" is never truncated. The group centers
+   itself and, if all three tabs ever exceed the width, the base rule's
+   overflow-x scroll takes over (no wrap, no clipping). */
+.zml-w .zml-seg { display:inline-flex; max-width:100%; margin:0 auto;
+  justify-content:center; }
+.zml-w .zml-seg-btn { flex:0 0 auto; text-align:center; justify-content:center;
+  white-space:nowrap; }
+
+/* Row 2 — actions, right-aligned with comfortable spacing. */
+.zml-w-actions { display:flex; align-items:center; justify-content:flex-end; gap:12px;
+  min-height:40px; }
+
+.zml-seeall { appearance:none; border:none; background:transparent; cursor:pointer;
+  display:inline-flex; align-items:center; gap:2px; padding:6px 4px;
+  font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-brand,#2C5F8A);
+  -webkit-tap-highlight-color:transparent; min-height:40px; white-space:nowrap; }
+.zml-seeall:hover { text-decoration:underline; }
+.zml-seeall svg { flex-shrink:0; }
+
+/* In the widget, chips are centered under the bar (matches the full-screen
+   surface and the segmented control above them). */
+.zml-w-chips { justify-content:center; }
+
+.zml-w-grid { } /* holds .zml-grid.zml-grid-compact + the Load-more button */
+/* Compact strip: cap at two rows worth on phones via a tighter min so 3 fit. */
+.zml-grid-compact { grid-template-columns:repeat(3, minmax(0,1fr)); }
+@media (min-width:520px) { .zml-grid-compact { grid-template-columns:repeat(6, minmax(0,1fr)); } }
+
+/* v2.3.3: "Load more" — a full-width, subtle button under the compact grid that
+   appends the next page in place (the card grows; no nested scroll). Brand-
+   tinted, ≥44px tap target, matches the app's pill/chip idiom. */
+.zml-w-more { appearance:none; cursor:pointer; display:flex; align-items:center;
+  justify-content:center; gap:6px; width:100%; margin-top:10px; min-height:44px;
+  padding:10px 16px; border:1px solid var(--sys-border,#E2E8F0); border-radius:12px;
+  background:var(--sys-surface,#FFF); color:var(--sys-brand,#2C5F8A);
+  font:inherit; font-size:var(--ref-font-xs,15px); font-weight:600; line-height:1;
+  -webkit-tap-highlight-color:transparent; transition:background 150ms,border-color 150ms,filter 150ms; }
+.zml-w-more:hover { background:var(--sys-bg-alt,#F1F5F9); border-color:var(--sys-brand,#2C5F8A); }
+.zml-w-more:disabled { opacity:0.65; cursor:default; }
+.zml-w-more svg { flex-shrink:0; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SURFACE 2 — FULL-SCREEN GALLERY (roomy)
+   Rendered into #app-body (the full-screen viewport). Owns its own scroll.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.zml-fs { display:flex; flex-direction:column; height:100%; min-height:0;
+  font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
+  color:var(--sys-text,#0F172A); background:var(--sys-bg,#F1F5F9); }
+
+/* v2.3.1: the corner actions (Select top-left, Add top-right) are pinned
+   absolutely (rules further below), so they occupy a "row 0". Reserve vertical
+   space for that row with top padding, then stack the scope segment and chips
+   BELOW it — instead of the old approach of shrinking the segment horizontally
+   between the corners (which, with the admin 3-tab set, tucked the tabs under
+   the buttons). The segment is centered, full-width-capable, and scrolls
+   horizontally if it can't fit — it can never collide with the corner buttons
+   because it lives on its own row underneath them. */
+.zml-fs-bar { position:sticky; top:0; z-index:5; display:flex; flex-direction:column;
+  align-items:center; gap:10px; padding:60px 14px 12px; background:var(--sys-bg,#F1F5F9);
+  border-bottom:1px solid var(--sys-border,#E2E8F0); }
+/* The scope segment is centered and full-width-capable; it sits on its own row
+   BELOW the corner-pinned Select/Add (which the 60px top padding reserves), so
+   it can never collide with them at any width. It scrolls horizontally only if
+   its tabs truly can't fit. Cap the width on wide screens so it stays a tidy
+   centered control rather than stretching across a desktop. */
+.zml-fs-bar .zml-seg { max-width:100%; }
+@media (min-width:620px) {
+  .zml-fs-bar .zml-seg { max-width:min(100%, 520px); }
+}
+
+.zml-fs-scroll { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.zml-fs-grid-wrap { padding:14px; }
+.zml-sentinel { height:1px; }
+
+/* Date group sections. */
+.zml-group { margin-bottom:22px; }
+.zml-group-h { margin:0 0 10px; font-size:13px; font-weight:700; letter-spacing:0.02em;
+  text-transform:uppercase; color:var(--sys-text-sec,#475569); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SHARED LIGHTBOX (top-level layer; reused by both surfaces)
+   ════════════════════════════════════════════════════════════════════════ */
+
+body.zml-lb-open { overflow:hidden; }
+
+.zml-lb { position:fixed; inset:0; z-index:100050; display:flex; flex-direction:column;
+  background:rgba(8,10,16,0.95);
+  padding-top:env(safe-area-inset-top,0px); }
+.zml-lb-top { display:flex; align-items:center; gap:10px; padding:12px 14px; color:#fff; }
+.zml-lb-title { flex:1; min-width:0; font-size:var(--ref-font-sm,17px); font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.zml-lb-btn { appearance:none; display:inline-flex; align-items:center; justify-content:center;
+  width:44px; height:44px; border-radius:10px; border:none; cursor:pointer; color:#fff;
+  background:rgba(255,255,255,0.12); text-decoration:none; -webkit-tap-highlight-color:transparent; }
+.zml-lb-btn:hover { background:rgba(255,255,255,0.22); }
+
+/* v2.0.1: the top-left control is an explicit BACK affordance (chevron + label)
+   so the full-screen viewer never reads as a dead-end "broad browser page"
+   (the owner's note). Same close action as before (history-back / teardown);
+   only the affordance changed. Auto-width to fit the label; keeps the ≥44px
+   tap target and matches the prev/next chevron idiom. */
+.zml-lb-back { width:auto; gap:6px; padding:0 14px 0 10px; font:inherit;
+  font-size:var(--ref-font-xs,15px); font-weight:600; }
+.zml-lb-back svg { flex-shrink:0; }
+.zml-lb-back-label { line-height:1; }
+
+.zml-lb-stage { flex:1; min-height:0; display:flex; align-items:center; justify-content:center;
+  padding:8px 12px; overflow:hidden; touch-action:none; }
+.zml-lb-img { max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; display:block;
+  transform-origin:center center; will-change:transform; -webkit-user-select:none; user-select:none;
+  -webkit-user-drag:none; }
+/* v2.0.3: real in-lightbox zoom (pinch / double-tap / drag), driven by a JS
+   transform on the image. The stage clips; the image is panned via transform.
+   So the original is viewable WITHOUT navigating away from the lightbox. */
+.zml-lb.zml-zoomed .zml-lb-stage { cursor:grab; }
+.zml-lb.zml-zoomed .zml-lb-stage:active { cursor:grabbing; }
+/* Arrows hidden while zoomed in (JS also sets display:none; this is a fallback
+   so they never overlap a panned image). "Back"/Esc still exit the viewer. */
+.zml-lb.zml-zoomed .zml-lb-nav { display:none !important; }
+.zml-lb-open-in, .zml-lb-open-out { display:block; }
+
+.zml-lb-nav { position:absolute; top:50%; transform:translateY(-50%); width:48px; height:48px;
+  display:flex; align-items:center; justify-content:center; border:none; border-radius:50%;
+  background:rgba(255,255,255,0.12); color:#fff; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.zml-lb-nav:hover { background:rgba(255,255,255,0.24); }
+.zml-lb-nav:disabled { opacity:0; pointer-events:none; }
+.zml-lb-prev { left:10px; } .zml-lb-next { right:10px; }
+
+.zml-lb-meta { padding:12px 16px calc(16px + env(safe-area-inset-bottom,0px));
+  background:rgba(0,0,0,0.38); color:#E5E7EB; }
+.zml-lb-row { font-size:13px; color:#CBD5E1; margin-bottom:10px; }
+
+/* ── Location (tappable "Located") ──
+   Sits in the dark lightbox meta area. The toggle is a quiet pill; expanding it
+   reveals the place name, coordinates, a provenance chip, and the user-tap
+   "Open in Maps" link. Matches the lightbox's translucent-white-on-dark idiom. */
+.zml-lb-loc { margin-bottom:12px; }
+.zml-lb-loc-toggle { appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:8px;
+  padding:8px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.08); color:#E5E7EB; font:inherit; font-size:13px; font-weight:600;
+  min-height:40px; -webkit-tap-highlight-color:transparent; transition:background 150ms,border-color 150ms; }
+.zml-lb-loc-toggle:hover { background:rgba(255,255,255,0.14); }
+.zml-lb-loc-pin { font-size:14px; line-height:1; }
+.zml-lb-loc-label { line-height:1; }
+.zml-lb-loc-caret { flex-shrink:0; opacity:0.8; transition:transform 160ms ease; }
+.zml-lb-loc-open .zml-lb-loc-caret { transform:rotate(180deg); }
+
+.zml-lb-loc-detail { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+.zml-lb-loc-loading { display:flex; align-items:center; gap:8px; font-size:13px; color:#CBD5E1; }
+.zml-lb-loc-spin { width:14px; height:14px; border-radius:50%;
+  border:2px solid rgba(255,255,255,0.35); border-top-color:#fff;
+  animation:tsmlSpin 0.7s linear infinite; display:inline-block; }
+.zml-lb-loc-place { font-size:var(--ref-font-sm,17px); font-weight:600; color:#F1F5F9; line-height:1.35; }
+.zml-lb-loc-coords { font-size:12px; color:#94A3B8; font-variant-numeric:tabular-nums; }
+.zml-lb-loc-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
+.zml-lb-loc-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px;
+  font-size:11px; font-weight:600; color:#CBD5E1; background:rgba(255,255,255,0.10);
+  border:1px solid rgba(255,255,255,0.14); }
+.zml-lb-loc-maps { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; margin-top:4px;
+  padding:8px 12px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none;
+  color:#fff; background:var(--sys-brand,#2C5F8A); min-height:40px;
+  -webkit-tap-highlight-color:transparent; transition:filter 150ms; }
+.zml-lb-loc-maps:hover { filter:brightness(1.08); }
+.zml-lb-loc-maps svg { flex-shrink:0; }
+
+/* ── Visibility control (owner-only) ── */
+.zml-lb-vis { display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px; margin-bottom:12px; }
+.zml-lb-vis-seg { display:inline-flex; gap:4px; padding:3px; border-radius:10px;
+  background:rgba(255,255,255,0.10); }
+.zml-vis-btn { appearance:none; border:none; cursor:pointer; padding:8px 14px; border-radius:8px;
+  font-size:var(--ref-font-xs,15px); font-weight:600; line-height:1; color:#CBD5E1; background:transparent;
+  -webkit-tap-highlight-color:transparent; min-height:40px; transition:background 150ms,color 150ms; }
+.zml-vis-btn.zml-active { background:var(--sys-brand,#2C5F8A); color:#fff; }
+.zml-vis-btn:disabled { opacity:0.6; cursor:default; }
+.zml-lb-vis.zml-busy { opacity:0.85; }
+
+/* ── Note ── */
+.zml-lb-note-wrap { display:flex; flex-direction:column; gap:6px; }
+.zml-lb-note-label { font-size:11px; font-weight:700; letter-spacing:0.03em; text-transform:uppercase; color:#94A3B8; }
+/* font-size 16px is the iOS auto-zoom threshold — keep it ≥16 so focusing the
+   note never zooms the viewport (the v1 bug). --ref-font-sm is 17px. */
+.zml-lb-note { width:100%; resize:vertical; min-height:46px; max-height:160px; padding:10px 12px;
+  font:inherit; font-size:var(--ref-font-sm,17px); line-height:1.4; color:#F1F5F9;
+  background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px;
+  box-sizing:border-box; -webkit-appearance:none; }
+.zml-lb-note::placeholder { color:#94A3B8; }
+.zml-lb-note:focus { outline:none; border-color:var(--sys-brand,#2C5F8A); background:rgba(255,255,255,0.12); }
+.zml-lb-note-ro { margin:0; font-size:var(--ref-font-sm,17px); line-height:1.45; color:#E5E7EB; white-space:pre-wrap; }
+
+.zml-lb-note-actions { display:flex; align-items:center; justify-content:flex-end; gap:12px;
+  min-height:40px; /* reserve space so showing status causes no shift */ }
+
+/* No-shift inline status slot (local copy of the theme's contract intent).
+   Always occupies its line height; text fades in via opacity. */
+.zml-inline-status { font-size:13px; color:#86EFAC; min-height:1em; opacity:1;
+  transition:opacity 150ms; }
+
+/* No-shift busy button (local .zdz-btn-busy; the theme may also define one). */
+.zml-lb-save { position:relative; appearance:none; border:none; cursor:pointer;
+  padding:10px 18px; border-radius:8px; font-size:var(--ref-font-xs,15px); font-weight:600; color:#fff;
+  background:var(--sys-brand,#2C5F8A); -webkit-tap-highlight-color:transparent; min-height:44px;
+  min-width:108px; /* fixed-ish box so busy spinner doesn't resize it */
+  display:inline-flex; align-items:center; justify-content:center; transition:filter 150ms,opacity 150ms; }
+.zml-lb-save:hover:not(:disabled):not(.zdz-btn-busy) { filter:brightness(1.08); }
+.zml-lb-save:disabled { opacity:0.5; cursor:not-allowed; }
+.zml-lb-save.zdz-btn-busy { color:transparent; pointer-events:none; opacity:1; }
+.zml-lb-save.zdz-btn-busy::after { content:""; position:absolute; width:18px; height:18px;
+  border:2px solid rgba(255,255,255,0.45); border-top-color:#fff; border-radius:50%;
+  animation:tsmlSpin 0.7s linear infinite; }
+@keyframes tsmlSpin { to { transform:rotate(360deg); } }
+
+/* ════════════════════════════════════════════════════════════════════════
+   ADD PHOTOS — buttons on both surfaces
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Shared "Add Photos" affordance (full-screen bar + widget). Brand-filled pill,
+   matches the chip/See-All idiom and the ≥36–44px tap targets used elsewhere. */
+.zml-add { appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  padding:8px 16px; border:none; border-radius:999px; font:inherit; font-size:var(--ref-font-xs,15px);
+  font-weight:600; line-height:1; color:#fff; background:var(--sys-brand,#2C5F8A);
+  -webkit-tap-highlight-color:transparent; min-height:40px; white-space:nowrap;
+  transition:filter 150ms; }
+.zml-add:hover { filter:brightness(1.08); }
+.zml-add svg { flex-shrink:0; }
+/* Full-screen bar is a centered column; pin Add to the top-right of the bar so
+   it doesn't push the centered scope/chip stack around. */
+.zml-fs-bar { position:relative; }
+.zml-fs-bar .zml-add { position:absolute; top:12px; right:14px; }
+/* v2.3.1: on phones the pinned top-right Add collapses to a compact "+" so the
+   top action row (Select · Add) stays uncrowded; the full label returns at
+   ≥620px where the bar has room. Matches the widget's compact Add. */
+@media (max-width:619px) {
+  .zml-fs-bar .zml-add span { display:none; }
+  .zml-fs-bar .zml-add { padding:8px 12px; gap:0; }
+}
+
+/* Widget: the compact "Add" pill that sits on the actions row beside "See All".
+   (Layout for .zml-w-actions is defined with the two-row bar above.) */
+.zml-add-sm { padding:8px 14px; min-height:40px; font-size:13px; }
+
+/* On very narrow widgets, drop the Add label to just the + to avoid crowding.
+   The two-row bar means this is rarely needed now, but it keeps the actions row
+   tidy on the smallest phones. */
+@media (max-width:360px) {
+  .zml-add-sm span { display:none; }
+  .zml-add-sm { padding:8px 10px; }
+}
+
+[data-theme="sunlight"] .zml-add { background:#000; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   BULK UPLOAD SHEET (top-level layer; shared by both surfaces)
+   Mirrors the lightbox's fixed, high-z-index, safe-area-aware pattern, but is a
+   light "sheet" (the lightbox is intentionally dark). Uses --sys-* tokens.
+   ════════════════════════════════════════════════════════════════════════ */
+
+body.zml-no-scroll { overflow:hidden; }
+
+.zml-up { position:fixed; inset:0; z-index:100060; display:flex; align-items:flex-end;
+  justify-content:center; }
+@media (min-width:560px) { .zml-up { align-items:center; } }
+
+.zml-up-backdrop { position:absolute; inset:0; background:rgba(8,10,16,0.55); }
+
+.zml-up-sheet { position:relative; z-index:1; display:flex; flex-direction:column;
+  width:100%; max-width:560px; max-height:92vh; background:var(--sys-surface,#FFF);
+  color:var(--sys-text,#0F172A);
+  font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
+  border-radius:18px 18px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,0.28);
+  padding-bottom:env(safe-area-inset-bottom,0px); }
+@media (min-width:560px) { .zml-up-sheet { border-radius:16px; max-height:86vh;
+  box-shadow:0 12px 48px rgba(0,0,0,0.32); } }
+
+.zml-up-head { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px;
+  padding:12px 12px 10px; border-bottom:1px solid var(--sys-border,#E2E8F0); }
+.zml-up-title { grid-column:2; font-size:var(--ref-font-sm,17px); font-weight:700; text-align:center; }
+.zml-up-back { grid-column:1; justify-self:start; appearance:none; border:none; background:transparent;
+  cursor:pointer; display:inline-flex; align-items:center; gap:4px; padding:8px 8px 8px 6px;
+  font:inherit; font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-text-sec,#475569);
+  -webkit-tap-highlight-color:transparent; min-height:40px; }
+.zml-up-back:hover { color:var(--sys-text,#0F172A); }
+.zml-up-back svg { flex-shrink:0; }
+.zml-up-back:disabled { opacity:0.5; cursor:default; }
+.zml-up-go { grid-column:3; justify-self:end; appearance:none; border:none; cursor:pointer;
+  padding:9px 18px; border-radius:8px; font:inherit; font-size:var(--ref-font-xs,15px); font-weight:600;
+  color:#fff; background:var(--sys-brand,#2C5F8A); min-height:40px; -webkit-tap-highlight-color:transparent;
+  transition:filter 150ms,opacity 150ms; }
+.zml-up-go:hover:not(:disabled) { filter:brightness(1.08); }
+.zml-up-go:disabled { opacity:0.45; cursor:not-allowed; }
+
+.zml-up-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+
+.zml-up-note-label { font-size:11px; font-weight:700; letter-spacing:0.03em; text-transform:uppercase;
+  color:var(--sys-text-sec,#475569); }
+.zml-up-note-opt { font-weight:600; text-transform:none; letter-spacing:0; color:var(--sys-text-ter,#64748B); }
+/* ≥16px so iOS never auto-zooms the field on focus (same rule as the lightbox note). */
+.zml-up-note { width:100%; resize:vertical; min-height:46px; max-height:160px; padding:10px 12px;
+  font:inherit; font-size:var(--ref-font-sm,17px); line-height:1.4; color:var(--sys-text,#0F172A);
+  background:var(--sys-bg,#F1F5F9); border:1px solid var(--sys-border,#E2E8F0); border-radius:10px;
+  box-sizing:border-box; -webkit-appearance:none; }
+.zml-up-note:focus { outline:none; border-color:var(--sys-brand,#2C5F8A); background:var(--sys-surface,#FFF); }
+.zml-up-note:disabled { opacity:0.7; }
+.zml-up-note-hint { margin:0; font-size:12px; line-height:1.4; color:var(--sys-text-ter,#64748B); }
+
+.zml-up-pickrow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:2px; }
+.zml-up-pick { appearance:none; cursor:pointer; padding:9px 16px; border-radius:10px;
+  border:1px dashed var(--sys-border,#CBD5E1); background:var(--sys-bg,#F1F5F9); font:inherit;
+  font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-brand,#2C5F8A);
+  min-height:42px; -webkit-tap-highlight-color:transparent; transition:background 150ms,border-color 150ms; }
+.zml-up-pick:hover { background:var(--sys-bg-alt,#E2E8F0); border-color:var(--sys-brand,#2C5F8A); }
+.zml-up-count { font-size:13px; color:var(--sys-text-sec,#475569); }
+.zml-up-input { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
+  clip:rect(0,0,0,0); border:0; }
+
+.zml-up-empty { padding:20px 8px; text-align:center; font-size:13px; line-height:1.5;
+  color:var(--sys-text-ter,#64748B); }
+
+.zml-up-list { display:flex; flex-direction:column; gap:6px; }
+.zml-up-row { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:10px;
+  padding:8px 10px; border-radius:10px; background:var(--sys-bg,#F1F5F9);
+  border:1px solid var(--sys-border,#E2E8F0); }
+.zml-up-row.is-done  { border-color:rgba(34,197,94,0.4); }
+.zml-up-row.is-error { border-color:rgba(239,68,68,0.5); }
+.zml-up-name { min-width:0; font-size:13px; font-weight:500; color:var(--sys-text,#0F172A);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.zml-up-status { font-size:12px; color:var(--sys-text-sec,#475569); font-variant-numeric:tabular-nums;
+  white-space:nowrap; }
+.zml-up-row.is-error .zml-up-status { color:#DC2626; }
+.zml-up-row.is-done  .zml-up-status { color:#16A34A; font-weight:600; }
+.zml-up-x { appearance:none; border:none; cursor:pointer; width:28px; height:28px; border-radius:8px;
+  background:transparent; color:var(--sys-text-ter,#64748B); font-size:20px; line-height:1;
+  display:inline-flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; }
+.zml-up-x:hover { background:var(--sys-bg-alt,#E2E8F0); color:var(--sys-text,#0F172A); }
+/* Thin per-row progress bar (shown while uploading / done). Occupies the third
+   column slot in place of the remove button. */
+.zml-up-bar { width:64px; height:6px; border-radius:999px; background:var(--sys-bg-alt,#E2E8F0);
+  overflow:hidden; }
+.zml-up-bar-fill { display:block; height:100%; width:0; background:var(--sys-brand,#2C5F8A);
+  transition:width 180ms ease; }
+.zml-up-row.is-done .zml-up-bar-fill { background:#16A34A; }
+
+.zml-up-foot { padding:0 16px 14px; }
+.zml-up-foot:empty { padding:0; }
+.zml-up-ok   { font-size:13px; font-weight:600; color:#16A34A; }
+.zml-up-skip { font-size:13px; color:var(--sys-text-sec,#475569); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   THEME-MODE OVERRIDES
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Dark — app chrome (the lightbox is dark in every theme). */
+[data-theme="dark"] .zml-fs,
+[data-theme="dark"] .zml-fs-bar { background:var(--sys-bg,#020617); }
+[data-theme="dark"] .zml-seg { background:var(--sys-bg-alt,#0F172A); }
+[data-theme="dark"] .zml-seg-btn.zml-active { background:var(--sys-surface,#1E293B); }
+[data-theme="dark"] .zml-chip { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); }
+[data-theme="dark"] .zml-w-more { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); }
+[data-theme="dark"] .zml-w-more:hover { background:var(--sys-bg-alt,#0F172A); }
+[data-theme="dark"] .zml-cell { background:var(--sys-surface,#1E293B); }
+
+@media (prefers-color-scheme:dark) {
+  [data-theme="system"] .zml-fs,
+  [data-theme="system"] .zml-fs-bar { background:var(--sys-bg,#020617); }
+  [data-theme="system"] .zml-seg { background:var(--sys-bg-alt,#0F172A); }
+  [data-theme="system"] .zml-seg-btn.zml-active { background:var(--sys-surface,#1E293B); }
+  [data-theme="system"] .zml-chip { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); }
+  [data-theme="system"] .zml-w-more { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); }
+  [data-theme="system"] .zml-w-more:hover { background:var(--sys-bg-alt,#0F172A); }
+  [data-theme="system"] .zml-cell { background:var(--sys-surface,#1E293B); }
+}
+
+/* Upload sheet — dark fallbacks (it uses --sys-* tokens, so it mostly tracks
+   automatically; these set the hard-coded fallbacks for dark explicitly so the
+   sheet is correct even before the theme's tokens apply). */
+[data-theme="dark"] .zml-up-sheet { background:var(--sys-surface,#1E293B); color:var(--sys-text,#F1F5F9); }
+[data-theme="dark"] .zml-up-note,
+[data-theme="dark"] .zml-up-pick,
+[data-theme="dark"] .zml-up-row { background:var(--sys-bg,#0F172A); border-color:var(--sys-border,#334155); }
+[data-theme="dark"] .zml-up-note { color:var(--sys-text,#F1F5F9); }
+[data-theme="dark"] .zml-up-bar { background:var(--sys-bg-alt,#334155); }
+@media (prefers-color-scheme:dark) {
+  [data-theme="system"] .zml-up-sheet { background:var(--sys-surface,#1E293B); color:var(--sys-text,#F1F5F9); }
+  [data-theme="system"] .zml-up-note,
+  [data-theme="system"] .zml-up-pick,
+  [data-theme="system"] .zml-up-row { background:var(--sys-bg,#0F172A); border-color:var(--sys-border,#334155); }
+  [data-theme="system"] .zml-up-note { color:var(--sys-text,#F1F5F9); }
+  [data-theme="system"] .zml-up-bar { background:var(--sys-bg-alt,#334155); }
+}
+
+/* Sunlight (high-contrast outdoor). */
+[data-theme="sunlight"] .zml-up-go,
+[data-theme="sunlight"] .zml-up-bar-fill { background:#000; }
+[data-theme="sunlight"] .zml-up-pick { color:#000; border-color:#000; }
+[data-theme="sunlight"] .zml-chip.zml-active { background:#000; border-color:#000; }
+[data-theme="sunlight"] .zml-seg-btn.zml-active { background:#fff; border:2px solid #000; box-shadow:none; }
+[data-theme="sunlight"] .zml-cell { border:2px solid #000; }
+[data-theme="sunlight"] .zml-cell-badge { background:#000; }
+[data-theme="sunlight"] .zml-cell-vis { background:#000; }
+[data-theme="sunlight"] .zml-seeall { color:#000; text-decoration:underline; }
+[data-theme="sunlight"] .zml-w-more { background:#fff; color:#000; border:2px solid #000; }
+[data-theme="sunlight"] .zml-lb-save { background:#000; }
+[data-theme="sunlight"] .zml-vis-btn.zml-active { background:#000; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v2.2.0 — SELECTION MODE + DELETE (granular or bulk, double-confirmed)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* "Select" toggle in the gallery bar (mirrors the Add button, neutral). */
+.zml-select-toggle { appearance:none; cursor:pointer; padding:8px 14px; min-height:40px;
+  font-size:var(--ref-font-xs,15px); font-weight:600; line-height:1; border-radius:10px;
+  border:1px solid var(--sys-border,#E2E8F0); background:var(--sys-surface,#FFF);
+  color:var(--sys-text-sec,#475569); -webkit-tap-highlight-color:transparent;
+  transition:background 150ms,color 150ms,border-color 150ms; }
+.zml-select-toggle:hover { color:var(--sys-text,#0F172A); }
+.zml-select-toggle.zml-active { background:var(--sys-brand,#2C5F8A);
+  border-color:var(--sys-brand,#2C5F8A); color:#FFF; }
+.zml-fs-bar .zml-select-toggle { position:absolute; top:12px; left:14px; }
+@media (max-width:480px) { .zml-fs-bar .zml-select-toggle { padding:8px 10px; } }
+
+/* Check badge on each cell — hidden until selection mode. */
+.zml-cell-check { position:absolute; right:6px; bottom:6px; width:22px; height:22px;
+  display:none; align-items:center; justify-content:center; border-radius:50%;
+  background:rgba(255,255,255,0.92); color:transparent;
+  border:2px solid rgba(15,23,42,0.35); box-shadow:0 1px 3px rgba(0,0,0,0.35); }
+.zml-selecting .zml-cell:not(.zml-nodel) .zml-cell-check { display:flex; }
+.zml-cell.zml-checked .zml-cell-check { background:var(--sys-brand,#2C5F8A);
+  border-color:var(--sys-brand,#2C5F8A); color:#FFF; }
+.zml-cell.zml-checked { outline:3px solid var(--sys-brand,#2C5F8A); outline-offset:-3px; }
+.zml-cell.zml-checked .zml-cell-img { opacity:0.82; }
+/* In selection mode, photos you may NOT delete dim and stop responding. */
+.zml-selecting .zml-cell.zml-nodel { opacity:0.35; cursor:default; }
+.zml-selecting .zml-cell.zml-nodel:hover { transform:none; box-shadow:none; }
+.zml-selecting .zml-cell { transition:opacity 150ms; }
+
+/* Bottom action bar (count · Cancel · Delete). Sticky inside the gallery so
+   the transformed .app-viewport can't displace it (position:fixed would). */
+.zml-fs { position:relative; }
+.zml-selbar { position:absolute; left:0; right:0; bottom:0; z-index:6;
+  display:flex; align-items:center; gap:10px;
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));
+  background:var(--sys-surface,#FFF); border-top:1px solid var(--sys-border,#E2E8F0);
+  box-shadow:0 -4px 16px rgba(0,0,0,0.10); }
+.zml-selbar-count { flex:1; font-size:var(--ref-font-xs,15px); font-weight:600;
+  color:var(--sys-text-sec,#475569); }
+.zml-selbar-cancel { appearance:none; cursor:pointer; padding:9px 16px; min-height:40px;
+  border-radius:10px; border:1px solid var(--sys-border,#E2E8F0);
+  background:var(--sys-surface,#FFF); color:var(--sys-text,#0F172A);
+  font-size:var(--ref-font-xs,15px); font-weight:600; -webkit-tap-highlight-color:transparent; }
+.zml-selbar-del { position:relative; appearance:none; cursor:pointer; padding:9px 18px; min-height:40px;
+  border-radius:10px; border:none; background:var(--sys-danger,#DC2626); color:#FFF;
+  font-size:var(--ref-font-xs,15px); font-weight:700; -webkit-tap-highlight-color:transparent;
+  transition:filter 150ms,opacity 150ms; }
+.zml-selbar-del:hover:not(:disabled) { filter:brightness(1.08); }
+.zml-selbar-del:disabled { opacity:0.45; cursor:not-allowed; }
+/* While selecting, keep the last grid row reachable above the bar. */
+.zml-selecting .zml-fs-grid-wrap { padding-bottom:84px; }
+
+/* ── Confirm sheet (the TWO-step delete confirmation; above the lightbox) ── */
+.zml-cf { position:fixed; inset:0; z-index:100070; display:flex;
+  align-items:center; justify-content:center; padding:20px;
+  font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif); }
+.zml-cf-backdrop { position:absolute; inset:0; background:rgba(8,10,16,0.62); }
+.zml-cf-card { position:relative; z-index:1; width:100%; max-width:380px;
+  background:var(--sys-surface,#FFF); color:var(--sys-text,#0F172A);
+  border-radius:16px; padding:20px 20px 16px; box-shadow:0 18px 50px rgba(0,0,0,0.35); }
+.zml-cf-step { font-size:12px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
+  color:var(--sys-text-ter,#64748B); margin-bottom:6px; }
+.zml-cf-title { margin:0 0 8px; font-size:var(--ref-font-md,19px); font-weight:700; line-height:1.25; }
+.zml-cf-body { margin:0 0 18px; font-size:var(--ref-font-xs,15px); line-height:1.5;
+  color:var(--sys-text-sec,#475569); }
+.zml-cf-actions { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+.zml-cf-cancel { appearance:none; cursor:pointer; padding:10px 16px; min-height:44px;
+  border-radius:10px; border:1px solid var(--sys-border,#E2E8F0);
+  background:var(--sys-surface,#FFF); color:var(--sys-text,#0F172A);
+  font-size:var(--ref-font-xs,15px); font-weight:600; -webkit-tap-highlight-color:transparent; }
+.zml-cf-cancel:hover { background:var(--sys-bg-alt,#E2E8F0); }
+.zml-cf-confirm { appearance:none; cursor:pointer; padding:10px 16px; min-height:44px;
+  border-radius:10px; border:1px solid var(--sys-danger,#DC2626);
+  background:var(--sys-surface,#FFF); color:var(--sys-danger,#DC2626);
+  font-size:var(--ref-font-xs,15px); font-weight:700; -webkit-tap-highlight-color:transparent;
+  transition:background 150ms,color 150ms,filter 150ms; }
+.zml-cf-confirm:hover { background:rgba(220,38,38,0.08); }
+/* Step 2: the destructive button goes solid — visually unmistakable. */
+.zml-cf-confirm.zml-cf-final { background:var(--sys-danger,#DC2626); color:#FFF; }
+.zml-cf-confirm.zml-cf-final:hover { filter:brightness(1.08); }
+
+/* ── Lightbox danger zone ── */
+.zml-lb-danger { margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.14);
+  display:flex; justify-content:flex-end; }
+.zml-lb-del { position:relative; appearance:none; cursor:pointer; display:inline-flex;
+  align-items:center; gap:7px; padding:9px 14px; min-height:40px; border-radius:10px;
+  border:1px solid rgba(248,113,113,0.55); background:transparent; color:#FCA5A5;
+  font-size:var(--ref-font-xs,15px); font-weight:600; -webkit-tap-highlight-color:transparent;
+  transition:background 150ms,color 150ms; }
+.zml-lb-del:hover:not(:disabled) { background:rgba(220,38,38,0.18); color:#FECACA; }
+.zml-lb-del:disabled { opacity:0.6; cursor:not-allowed; }
+.zml-lb-del.zdz-btn-busy { color:transparent; pointer-events:none; }
+.zml-lb-del.zdz-btn-busy::after { content:""; position:absolute; left:50%; top:50%;
+  width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%;
+  border:2px solid rgba(255,255,255,0.35); border-top-color:#FFF;
+  animation:zml-spin 700ms linear infinite; }
+@keyframes zml-spin { to { transform:rotate(360deg); } }
+
+/* ── Toast (top-level result pill) ── */
+.zml-toast { position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom,0px));
+  transform:translate(-50%, 16px); z-index:100090; max-width:min(92vw, 420px);
+  padding:11px 18px; border-radius:999px; font-size:var(--ref-font-xs,15px); font-weight:600;
+  font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
+  background:rgba(15,23,42,0.92); color:#F8FAFC; box-shadow:0 8px 24px rgba(0,0,0,0.30);
+  opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
+.zml-toast.zml-toast-show { opacity:1; transform:translate(-50%, 0); }
+.zml-toast.zml-toast-err { background:rgba(153,27,27,0.95); }
+
+/* Dark-theme polish for the new surfaces. */
+[data-theme="dark"] .zml-select-toggle,
+[data-theme="dark"] .zml-selbar-cancel,
+[data-theme="dark"] .zml-cf-cancel { background:var(--sys-surface,#0F172A); }
+[data-theme="dark"] .zml-selbar,
+[data-theme="dark"] .zml-cf-card { background:var(--sys-surface,#0F172A); }

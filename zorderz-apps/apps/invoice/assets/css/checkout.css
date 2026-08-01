@@ -1,0 +1,7 @@
+body{font-family:system-ui;background:#f6f7f9;margin:0;padding:40px}
+.zic-pay{max-width:520px;margin:0 auto;background:#fff;padding:28px;border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.06)}
+.zic-thanks{text-align:center}
+button{background:#059669;color:#fff;border:0;border-radius:6px;padding:12px 18px;font-size:16px;cursor:pointer;margin-top:14px}
+[data-theme="sunlight"] body{background:#fff}
+[data-theme="sunlight"] .zic-pay{border:2px solid #000}
+[data-theme="sunlight"] button{background:#000;color:#fff}

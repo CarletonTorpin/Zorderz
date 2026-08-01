@@ -1,0 +1,18 @@
+# Identity Pack — example
+#
+# A fictional business, included so you can see the shape of a pack and try the
+# preview/apply/revert flow on a throwaway install before writing your own.
+#
+# Nothing here is real. Every phone number is in the 555 reserved range and every
+# domain is under example.com. Applying this to a live site is harmless but
+# pointless — copy the folder, change the values, and put yours in
+# wp-content/zorderz-identity/ where a theme update cannot overwrite it.
+
+schema: 1
+slug: example-business
+label: "Blue Harbor Pool Care (example)"
+description: >
+  A small pool maintenance and repair company. Chosen because it is a different
+  trade from the one this platform grew up in — the point of the exercise is that
+  the platform should not be able to tell.
+confidential: false
