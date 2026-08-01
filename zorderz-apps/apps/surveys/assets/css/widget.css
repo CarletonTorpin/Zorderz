@@ -1,0 +1,54 @@
+/*
+ * Zorderz Surveys — dashboard widget styles.
+ * Built on the theme's --sys-* design tokens with hard fallbacks so the widget is
+ * legible even before the theme's variables load.
+ */
+.zsv-w { display: flex; flex-direction: column; gap: 12px; }
+
+.zsv-w-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.zsv-stat {
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	padding: 10px 6px; border-radius: 10px;
+	background: var(--sys-surface-raised, #f4f6f9);
+	color: var(--sys-on-surface, #1a1a1a);
+}
+.zsv-stat-val { font-size: 20px; font-weight: 700; line-height: 1.1; }
+.zsv-stat-label { font-size: 11px; opacity: 0.7; margin-top: 2px; text-align: center; }
+
+.zsv-w-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.zsv-btn {
+	appearance: none; border: 0; cursor: pointer; border-radius: 8px;
+	padding: 10px 14px; font-size: 14px; font-weight: 600; min-height: 44px;
+}
+.zsv-btn-primary { background: var(--sys-primary, #2C5F8A); color: var(--sys-on-primary, #fff); }
+.zsv-btn-secondary { background: var(--sys-surface-variant, #e7ebf0); color: var(--sys-on-surface, #1a1a1a); }
+.zsv-btn[disabled] { opacity: 0.6; cursor: default; }
+
+.zsv-w-list { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; }
+.zsv-row {
+	padding: 10px 12px; border-radius: 8px;
+	background: var(--sys-surface-raised, #f4f6f9);
+}
+.zsv-row-main { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.zsv-row-name { font-weight: 600; font-size: 14px; }
+.zsv-row-meta { font-size: 12px; opacity: 0.7; margin-top: 2px; }
+
+.zsv-chip {
+	font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+	background: var(--sys-surface-variant, #e7ebf0); color: var(--sys-on-surface, #1a1a1a);
+	text-transform: capitalize; white-space: nowrap;
+}
+.zsv-chip-satisfied { background: #d7f5e3; color: #0b6b3a; }
+.zsv-chip-needs_attention { background: #fdf0cf; color: #7a5b00; }
+.zsv-chip-follow_up { background: #ffe6cc; color: #8a4b00; }
+.zsv-chip-left_vm { background: #fde0e0; color: #8a1f1f; }
+.zsv-chip-excluded { background: #e7e7e7; color: #555; }
+
+.zsv-empty { padding: 16px; text-align: center; font-size: 13px; opacity: 0.7; }
+.zsv-loading { opacity: 0.5; }
+
+.zsv-link { font-size: 13px; text-decoration: none; color: var(--sys-primary, #2C5F8A); align-self: flex-start; }
+
+@media (max-width: 480px) {
+	.zsv-w-stats { grid-template-columns: repeat(2, 1fr); }
+}

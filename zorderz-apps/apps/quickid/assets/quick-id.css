@@ -1,0 +1,144 @@
+/* Zorderz Quick-ID — overlay + card face.
+   Card canvas: 4:7 portrait (2" x 3.5"). 1em = 1/17.5 of card height.
+   Typeface: bundled Source Sans 3 (OFL, see fonts/LICENSE-OFL.txt) with a
+   system fallback so the card renders consistently on every device.
+
+   The card is a brand surface. Its colours DERIVE from the theme's brand ramp
+   (--ref-brand-*, emitted by ZDZ_Business_Profile), so re-skinning the business
+   re-skins the card; the hex fallbacks below are the platform's neutral default
+   palette, never a specific business's colours. */
+
+@font-face{
+  font-family:"Source Sans 3";font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/source-sans-3-latin-400-normal.woff2') format('woff2');
+}
+@font-face{
+  font-family:"Source Sans 3";font-style:normal;font-weight:700;font-display:swap;
+  src:url('fonts/source-sans-3-latin-700-normal.woff2') format('woff2');
+}
+@font-face{
+  font-family:"Source Sans 3";font-style:normal;font-weight:900;font-display:swap;
+  src:url('fonts/source-sans-3-latin-900-normal.woff2') format('woff2');
+}
+@font-face{
+  font-family:"Source Sans 3";font-style:italic;font-weight:600;font-display:swap;
+  src:url('fonts/source-sans-3-latin-600-italic.woff2') format('woff2');
+}
+@font-face{
+  font-family:"Source Sans 3";font-style:italic;font-weight:700;font-display:swap;
+  src:url('fonts/source-sans-3-latin-700-italic.woff2') format('woff2');
+}
+
+:root{
+  /* Card ink + accents, derived from the brand ramp with neutral fallbacks. */
+  --zqid-navy:var(--ref-brand-700,#162D4A);
+  --zqid-ink:#000000;
+  --zqid-gray:#606262;
+  --zqid-accent:var(--ref-brand-500,#2C5F8A);
+  /* Decorative wave bands, lightest → darkest, from the brand ramp. */
+  --zqid-s1:var(--ref-brand-300,#7AB3FF);
+  --zqid-s2:var(--ref-brand-400,#4796F7);
+  --zqid-s3:var(--ref-brand-500,#2C5F8A);
+  --zqid-s4:var(--ref-brand-600,#1E3A5F);
+  --zqid-s5:var(--ref-brand-700,#162D4A);
+  --zqid-backdrop:#0f172a;
+}
+
+html.zqid-lock,
+html.zqid-lock body{overflow:hidden!important;overscroll-behavior:none}
+
+/* ---------- full-screen overlay ---------- */
+.zqid-overlay{
+  position:fixed;inset:0;z-index:99999;
+  background:var(--zqid-backdrop);
+  display:flex;align-items:center;justify-content:center;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  touch-action:none;
+  will-change:transform;
+  font-family:"Source Sans 3","PT Sans","Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+}
+.zqid-overlay.zqid-anim{transition:transform .28s cubic-bezier(.2,.8,.25,1)}
+.zqid-overlay.zqid-closed{transform:translateX(-102%)}
+.zqid-overlay[aria-hidden="true"]{pointer-events:none}
+.zqid-overlay[aria-hidden="false"]{pointer-events:auto}
+
+/* ---------- the card ---------- */
+.zqid-card{
+  position:relative;
+  background:#fff;
+  border-radius:.28em;
+  box-shadow:0 .12em .9em rgba(0,0,0,.55);
+  overflow:hidden;
+  text-align:center;
+  color:var(--zqid-navy);
+  -webkit-user-select:none;user-select:none;
+  line-height:1;
+}
+
+/* the business logo (wide lockup), from the Business Profile */
+.zqid-logo{position:absolute;left:6%;top:6.5%;width:88%;height:auto;display:block}
+/* text-wordmark fallback when no logo artwork is on file */
+.zqid-logo-text{
+  left:6%;width:88%;top:6.5%;
+  font-size:1.4em;font-weight:900;letter-spacing:.02em;
+  color:var(--zqid-navy);text-align:center;line-height:1.05;
+  text-transform:uppercase;
+}
+.zqid-formerly{
+  position:absolute;left:45.4%;width:45.6%;top:24.4%;
+  transform:translateY(-50%);
+  font-size:.31em;font-weight:700;font-style:italic;
+  color:var(--zqid-ink);text-align:center;white-space:nowrap;line-height:1;
+}
+
+/* personal block — offsets measured from the print card */
+.zqid-abs{position:absolute;left:0;width:100%;transform:translateY(-50%);white-space:nowrap;line-height:1}
+.zqid-name{top:35%;font-size:1.22em;font-weight:700;letter-spacing:.005em}
+.zqid-title{top:41%;font-size:.68em;font-weight:600;font-style:italic}
+.zqid-main{top:51.6%;font-size:.66em;font-weight:700}
+.zqid-cell{top:56.2%;font-size:.66em;font-weight:700}
+.zqid-email{top:60.9%;font-size:.60em;font-weight:700}
+.zqid-license{top:66.3%;font-size:.58em;font-weight:400}
+
+/* graceful compaction when optional lines are absent (keeps the card
+   balanced for people without a title and/or cell on file) */
+.zqid-no-title .zqid-name{top:36.5%}
+.zqid-no-cell .zqid-main{top:52.8%}
+.zqid-no-cell .zqid-email{top:57.6%}
+.zqid-no-cell .zqid-license{top:63.8%}
+.zqid-no-title.zqid-no-cell .zqid-name{top:37%}
+.zqid-no-title.zqid-no-cell .zqid-main{top:51%}
+.zqid-no-title.zqid-no-cell .zqid-email{top:56%}
+.zqid-no-title.zqid-no-cell .zqid-license{top:62.3%}
+
+/* tappable contact lines keep the print look (no browser blue/underline) */
+.zqid-abs a{color:inherit;text-decoration:none;-webkit-tap-highlight-color:rgba(0,0,0,.12)}
+
+.zqid-wave{position:absolute;bottom:0;left:0;width:100%;height:36.9%;display:block}
+
+/* ---------- chrome ---------- */
+.zqid-close{
+  position:absolute;
+  top:max(10px, env(safe-area-inset-top));
+  right:max(10px, env(safe-area-inset-right));
+  width:44px;height:44px;border:0;border-radius:50%;
+  background:rgba(255,255,255,.14);color:#fff;
+  font-size:22px;line-height:44px;text-align:center;
+  cursor:pointer;padding:0;
+}
+.zqid-hint{
+  position:absolute;
+  bottom:max(10px, env(safe-area-inset-bottom));
+  left:0;right:0;text-align:center;
+  color:rgba(255,255,255,.55);font-size:13px;
+  pointer-events:none;
+}
+.zqid-overlay[aria-hidden="false"] .zqid-hint{animation:zqidFade 6s forwards}
+@keyframes zqidFade{0%,70%{opacity:1}100%{opacity:0}}
+
+/* The card face is a fixed brand asset: identical in light/dark/system/sunlight
+   modes on purpose — only the backdrop is themed. */

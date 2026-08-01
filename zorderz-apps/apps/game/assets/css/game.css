@@ -1,0 +1,305 @@
+/**
+ * Zorderz Game — Widget Styles
+ *
+ * Minimal CSS for the game wrapper, tabs and scores table. The playfield is
+ * self-rendered on a canvas by assets/js/game.js. Colours read the theme's
+ * --sys-* design tokens with safe fallbacks so the tile also looks right on a
+ * bare theme.
+ *
+ * Scale-to-fit: on wide / landscape screens the engine letterbox-scales the
+ * canvas wrap up to the height budget the theme publishes as --zdz-game-max-h
+ * (set on .dash-widget-container[data-app-id="game"]). This file only declares
+ * the documented :root{ --zdz-game-max-h: 0px } baseline ("no extra budget");
+ * the theme owns the real budgets and the JS clamps by width so phones never
+ * over-scale.
+ *
+ * CSS containment isolates the game subtree from ancestor style recalcs
+ * (notably Sunlight mode's broad attribute selectors) on every rAF frame.
+ */
+
+/* ── Root wrapper ── */
+.zg-wrap {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	max-width: 340px;
+	margin: 0 auto;
+	font-family: var(--sys-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+/* Desktop — significant scale-up */
+@media (min-width: 768px) {
+	.zg-wrap { max-width: 560px; }
+}
+/* Large desktop — even bigger */
+@media (min-width: 1280px) {
+	.zg-wrap { max-width: 680px; }
+}
+/* On wide / landscape, let the wrap use the full width its container allows so
+   the scale-to-fit transform has horizontal room to grow into (the scaled game
+   is clamped to this width in JS, never overflowing the `overflow: clip` widget
+   body). The CANVAS keeps its own max-width cap below, so the backing buffer —
+   and the per-frame budget — are unchanged; only the layout box widens. */
+@media (min-width: 900px) {
+	.zg-wrap { max-width: 100%; }
+}
+@media (orientation: landscape) and (min-height: 380px) and (max-width: 899.98px) {
+	.zg-wrap { max-width: 100%; }
+}
+
+/* ── Tabs ── */
+.zg-tabs {
+	display: flex;
+	gap: 0;
+	margin-bottom: 6px;
+	border: 1px solid var(--sys-border, rgba(0,0,0,0.12));
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.zg-tab {
+	padding: 5px 16px;
+	font-size: 12px;
+	font-weight: 400;
+	border: none;
+	background: transparent;
+	color: var(--sys-text-sec, #888);
+	cursor: pointer;
+	transition: background .15s, color .15s;
+}
+
+.zg-tab + .zg-tab {
+	border-left: 1px solid var(--sys-border, rgba(0,0,0,0.12));
+}
+
+.zg-tab--active {
+	background: var(--sys-surface, rgba(0,0,0,0.04));
+	color: var(--sys-text, #222);
+	font-weight: 500;
+}
+
+/* ── HUD bar (outside canvas, above playfield) ── */
+.zg-hud {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 4px 8px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--sys-text-sec, #888);
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	max-width: 480px;
+	margin: 0 auto;
+}
+
+.zg-hud span {
+	padding: 2px 8px;
+	border-radius: 4px;
+	background: var(--sys-surface, rgba(0,0,0,0.04));
+}
+
+/* ── Canvas wrapper ── */
+/* contain: layout style paint — the game's internal layout/painting cannot
+   affect or be affected by ancestor style changes, so theme selectors don't
+   trigger style recalcs inside the game subtree on every frame. isolation
+   creates a local stacking context so compositing stays local. transform-origin
+   + transition support the JS scale-to-fit (scaling the wrap, not the canvas
+   backing buffer, keeps per-frame pixel work unchanged and keeps the pause
+   banner aligned; getBoundingClientRect reports the post-transform box so input
+   mapping needs no changes). */
+.zg-canvas-wrap {
+	position: relative;
+	border-radius: 12px;
+	overflow: hidden;
+	border: 1px solid var(--sys-border, rgba(0,0,0,0.12));
+	line-height: 0;
+	contain: layout style paint;
+	isolation: isolate;
+	transform-origin: top center;
+	transition: transform .18s ease;
+	max-width: 480px;
+	margin: 0 auto;
+}
+
+.zg-canvas-wrap canvas {
+	display: block;
+	touch-action: none;
+	cursor: none;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 340 / 290;
+	max-width: 340px;
+	border-radius: 12px;
+}
+
+/* Desktop — scale canvas, HUD and wrapper */
+@media (min-width: 768px) {
+	.zg-canvas-wrap canvas { max-width: 560px; }
+	.zg-canvas-wrap { max-width: 560px; }
+	.zg-hud { max-width: 560px; font-size: 14px; }
+}
+@media (min-width: 1280px) {
+	.zg-canvas-wrap canvas { max-width: 680px; }
+	.zg-canvas-wrap { max-width: 680px; }
+}
+
+/* ── Scale-to-fit baseline ──
+   The engine reads --zdz-game-max-h (the height, in px or vh, the game may
+   occupy) and letterbox-scales the wrap to fill it. The theme sets the real
+   budgets on the game's widget container; here we only declare the "no extra
+   budget" baseline so an unsupporting theme simply renders the game at native
+   size (still fully playable) rather than picking up a stray value. */
+:root {
+	--zdz-game-max-h: 0px;
+}
+
+/* Honour reduced-motion: the fit still applies, just without the animation. */
+@media (prefers-reduced-motion: reduce) {
+	.zg-canvas-wrap { transition: none; }
+}
+
+/* ── Pause banner ── */
+.zg-pause-banner {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background: rgba(0,0,0,0.55);
+	color: #fff;
+	padding: 5px 16px;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 500;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity .2s;
+}
+
+.zg-pause-banner.zg--show {
+	opacity: 1;
+}
+
+/* ── Scores table ── */
+.zg-panel--scores {
+	width: 100%;
+	padding: 6px 0;
+}
+
+.zg-scores-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+
+.zg-scores-table th {
+	text-align: left;
+	padding: 6px 6px;
+	font-weight: 500;
+	font-size: 10px;
+	border-bottom: 1px solid var(--sys-border, rgba(0,0,0,0.15));
+	color: var(--sys-text-sec, #888);
+}
+
+.zg-scores-table td {
+	padding: 5px 6px;
+	border-bottom: 1px solid var(--sys-border, rgba(0,0,0,0.08));
+	color: var(--sys-text, #222);
+}
+
+.zg-scores-table tr:last-child td {
+	border-bottom: none;
+}
+
+.zg-scores-table tr.zg-self-row {
+	background: rgba(139, 92, 246, 0.10);
+}
+
+.zg-rank { font-weight: 500; color: #888; }
+.zg-rank--1 { color: #BA7517; }
+.zg-rank--2 { color: #888780; }
+.zg-rank--3 { color: #993C1D; }
+
+.zg-date { font-size: 10px; color: #999; }
+
+/* ── Dark mode support ── */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-tab { color: #999; }
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-tab--active { background: rgba(255,255,255,0.06); color: #ddd; }
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-tabs { border-color: rgba(255,255,255,0.1); }
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-canvas-wrap { border-color: rgba(255,255,255,0.1); }
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-hud span { background: rgba(255,255,255,0.06); color: #bbb; }
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-scores-table td { color: #ddd; }
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-scores-table th { color: #999; }
+	:root:not([data-theme="light"]):not([data-theme="sunlight"]) .zg-scores-table tr.zg-self-row { background: rgba(139, 92, 246, 0.18); }
+}
+/* Explicit dark theme */
+[data-theme="dark"] .zg-tab { color: #999; }
+[data-theme="dark"] .zg-tab--active { background: rgba(255,255,255,0.06); color: #ddd; }
+[data-theme="dark"] .zg-tabs { border-color: rgba(255,255,255,0.1); }
+[data-theme="dark"] .zg-canvas-wrap { border-color: rgba(255,255,255,0.1); }
+[data-theme="dark"] .zg-hud span { background: rgba(255,255,255,0.06); color: #bbb; }
+[data-theme="dark"] .zg-scores-table td { color: #ddd; }
+[data-theme="dark"] .zg-scores-table tr.zg-self-row { background: rgba(139, 92, 246, 0.18); }
+
+/* ── Light mode — larger, darker score text ── */
+[data-theme="light"] .zg-hud {
+	font-size: 14px;
+	font-weight: 600;
+	color: #444;
+}
+[data-theme="light"] .zg-hud span {
+	background: rgba(0,0,0,0.06);
+	color: #333;
+}
+[data-theme="light"] .zg-canvas-wrap {
+	border-color: rgba(0,0,0,0.15);
+}
+
+/* ── Sunlight / Game Boy DMG mode ── */
+[data-theme="sunlight"] .zg-wrap {
+	font-family: monospace; /* Authentic retro feel */
+}
+[data-theme="sunlight"] .zg-hud {
+	font-size: 15px;
+	font-weight: 700;
+	color: #000;
+	font-family: monospace;
+	letter-spacing: 1px;
+}
+[data-theme="sunlight"] .zg-hud span {
+	background: #fff;
+	color: #000;
+	border: 2px solid #000;
+}
+[data-theme="sunlight"] .zg-canvas-wrap {
+	border: 3px solid #000;
+	border-radius: 4px;
+}
+[data-theme="sunlight"] .zg-tabs {
+	border: 2px solid #000;
+}
+[data-theme="sunlight"] .zg-tab {
+	font-family: monospace;
+	font-weight: 600;
+	color: #555;
+}
+[data-theme="sunlight"] .zg-tab + .zg-tab {
+	border-left: 2px solid #000;
+}
+[data-theme="sunlight"] .zg-tab--active {
+	background: #000;
+	color: #fff;
+}
+[data-theme="sunlight"] .zg-scores-table {
+	font-family: monospace;
+}
+[data-theme="sunlight"] .zg-scores-table td {
+	color: #000;
+	border-bottom-color: #000;
+}
+[data-theme="sunlight"] .zg-scores-table th {
+	color: #555;
+	border-bottom: 2px solid #000;
+}

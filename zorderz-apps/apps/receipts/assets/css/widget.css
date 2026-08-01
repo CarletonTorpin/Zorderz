@@ -1,0 +1,3157 @@
+/**
+ * Zorderz Receipts — Inline Dashboard Widget CSS
+ *
+ * v3.6.2: adds the upload-first primary uploader, the secondary captured-photo
+   "library" block + divider, and the "these are the photos I want" confirm.
+ *
+ * Scoped to .zrcpt-w (and zrcpt-w- prefix) to prevent CSS bleed into
+ * the Zorderz SPA host environment.
+ *
+ * Uses Zorderz theme tokens (--sys-*, --ref-*) for automatic
+ * Light / Dark / System / Sunlight mode adaptation.  Every token
+ * has a hard-coded fallback so the widget renders correctly even
+ * when loaded outside the Zorderz theme shell.
+ *
+ * Mobile-first: 44 px minimum touch targets, responsive layouts.
+ * No jQuery or WP Admin class dependencies.
+ *
+ * @since  1.0.0
+ * @updated 1.1.0  — Complete rewrite covering all dashboard functionality.
+ */
+
+
+/* =========================================================================
+ * 0. KEYFRAMES
+ * ========================================================================= */
+
+@keyframes zrcpt-w-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes zrcpt-w-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes zrcpt-w-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+
+/* =========================================================================
+ * 1. MAIN CONTAINER
+ * ========================================================================= */
+
+.zrcpt-w {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-4, 16px);
+  font-family: inherit;
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text, #0F172A);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.zrcpt-w *,
+.zrcpt-w *::before,
+.zrcpt-w *::after {
+  box-sizing: border-box;
+}
+
+
+/* =========================================================================
+ * 2. TAB BAR
+ * ========================================================================= */
+
+.zrcpt-w-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--sys-border, #E2E8F0);
+  margin-bottom: var(--ref-space-1, 4px);
+}
+
+.zrcpt-w-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-space-2, 8px);
+  min-height: 44px;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.zrcpt-w-tab:hover {
+  color: var(--sys-text, #0F172A);
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+.zrcpt-w-tab:focus-visible {
+  outline: 2px solid var(--sys-brand, #1E4D6E);
+  outline-offset: -2px;
+  border-radius: var(--ref-radius-sm, 8px) var(--ref-radius-sm, 8px) 0 0;
+}
+
+.zrcpt-w-tab-active,
+.zrcpt-w-tab-active:hover {
+  color: var(--sys-brand, #1E4D6E);
+  border-bottom-color: var(--sys-brand, #1E4D6E);
+  background: transparent;
+}
+
+
+/* =========================================================================
+ * 3. PANELS & SECTIONS
+ * ========================================================================= */
+
+.zrcpt-w-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-4, 16px);
+  animation: zrcpt-w-fade-in 200ms ease;
+}
+
+.zrcpt-w-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-3, 12px);
+}
+
+
+/* =========================================================================
+ * 4. STATS ROW  (3-column grid)
+ * ========================================================================= */
+
+.zrcpt-w-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--ref-space-3, 12px);
+}
+
+.zrcpt-w-stat {
+  text-align: center;
+  padding: var(--ref-space-3, 12px) var(--ref-space-2, 8px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border-radius: var(--ref-radius-md, 12px);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zrcpt-w-stat-val {
+  display: block;
+  font-size: var(--ref-font-xl, 20px);
+  font-weight: var(--sys-font-wt-b, 700);
+  color: var(--sys-text, #0F172A);
+  line-height: 1.2;
+}
+
+.zrcpt-w-stat-label {
+  display: block;
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-sec, #475569);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+
+/* =========================================================================
+ * 5. BUTTONS
+ * ========================================================================= */
+
+/* -- 5a. Base Button ---------------------------------------------------- */
+
+.zrcpt-w-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  min-height: 44px;
+  border-radius: var(--ref-radius-md, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  font-family: inherit;
+  line-height: 1.2;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              transform var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              opacity var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+/* Pass clicks through child elements (SVGs, spans) to button */
+.zrcpt-w-btn > * {
+  pointer-events: none;
+}
+
+.zrcpt-w-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.zrcpt-w-btn:focus-visible {
+  outline: 2px solid var(--sys-brand, #1E4D6E);
+  outline-offset: 2px;
+}
+
+.zrcpt-w-btn svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+/* -- 5b. Primary Button ------------------------------------------------- */
+
+.zrcpt-w-btn-primary {
+  background: var(--sys-brand, #1E4D6E);
+  color: var(--sys-text-brand, #FFFFFF);
+}
+
+.zrcpt-w-btn-primary:hover:not(:disabled) {
+  background: var(--sys-brand-hover, #163D58);
+  box-shadow: 0 2px 8px rgba(30, 77, 110, 0.35);
+}
+
+/* -- 5c. Secondary Button ----------------------------------------------- */
+
+.zrcpt-w-btn-secondary {
+  background: var(--sys-bg-alt, #F1F5F9);
+  color: var(--sys-text, #0F172A);
+  border: 1px solid var(--sys-border, #E2E8F0);
+}
+
+.zrcpt-w-btn-secondary:hover:not(:disabled) {
+  background: var(--sys-border, #E2E8F0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* -- 5d. Full-Width Variant --------------------------------------------- */
+
+.zrcpt-w-btn-full {
+  width: 100%;
+  flex: none;
+}
+
+/* -- 5e. Small Button --------------------------------------------------- */
+
+.zrcpt-w-btn-sm {
+  min-height: 32px;
+  padding: var(--ref-space-1, 4px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-xs, 11px);
+  border-radius: var(--ref-radius-sm, 8px);
+}
+
+.zrcpt-w-btn-sm svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* -- 5f. Disabled State ------------------------------------------------- */
+
+.zrcpt-w-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+
+/* =========================================================================
+ * 6. FORM INPUTS
+ * ========================================================================= */
+
+/* -- 6a. Labels --------------------------------------------------------- */
+
+.zrcpt-w-label {
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+  line-height: 1.3;
+}
+
+.zrcpt-w-optional {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-text-ter, #64748B);
+  font-style: italic;
+}
+
+/* -- 6b. Text / URL / Date Inputs --------------------------------------- */
+
+.zrcpt-w-input {
+  width: 100%;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  min-height: 44px;
+  font-size: var(--ref-font-sm, 13px);
+  font-family: inherit;
+  color: var(--sys-text, #0F172A);
+  background: var(--sys-bg, #FFFFFF);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              background-color 0.3s ease;
+}
+
+.zrcpt-w-input::placeholder {
+  color: var(--sys-text-ter, #64748B);
+}
+
+.zrcpt-w-input:focus {
+  border-color: var(--sys-brand, #1E4D6E);
+  box-shadow: 0 0 0 2px rgba(30, 77, 110, 0.2);
+  outline: none;
+}
+
+.zrcpt-w-input-error {
+  border-color: #DC2626 !important;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15) !important;
+  background: #FEF2F2 !important;
+}
+
+.zrcpt-w-input-filled {
+  border-color: #16A34A !important;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15) !important;
+  background: #F0FDF4 !important;
+}
+
+
+/* =========================================================================
+ * 7. DROPZONE
+ * ========================================================================= */
+
+/* -- 7a. Dropzone Container --------------------------------------------- */
+
+.zrcpt-w-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-space-2, 8px);
+  min-height: 120px;
+  padding: var(--ref-space-4, 16px);
+  background: var(--sys-bg, #FFFFFF);
+  border: 2px dashed var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-md, 12px);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.zrcpt-w-dropzone:hover {
+  border-color: var(--sys-brand, #1E4D6E);
+  background: rgba(30, 77, 110, 0.03);
+}
+
+.zrcpt-w-dropzone:focus-visible {
+  outline: 2px solid var(--sys-brand, #1E4D6E);
+  outline-offset: 2px;
+}
+
+/* Dragover / active state (applied via JS on dragenter/dragover) */
+.zrcpt-w-dropzone.over,
+.zrcpt-w-dropzone.zrcpt-w-dropzone-over {
+  border-color: var(--sys-brand, #1E4D6E);
+  background: rgba(30, 77, 110, 0.06);
+  box-shadow: 0 0 0 3px rgba(30, 77, 110, 0.12);
+}
+
+/* -- 7b. Dropzone Icon -------------------------------------------------- */
+
+.zrcpt-w-dropzone svg {
+  width: 32px;
+  height: 32px;
+  color: var(--sys-text-ter, #64748B);
+  flex-shrink: 0;
+  transition: color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zrcpt-w-dropzone:hover svg,
+.zrcpt-w-dropzone.over svg,
+.zrcpt-w-dropzone.zrcpt-w-dropzone-over svg {
+  color: var(--sys-brand, #1E4D6E);
+}
+
+/* -- 7c. Dropzone Text -------------------------------------------------- */
+
+.zrcpt-w-dropzone-text {
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-text-sec, #475569);
+  line-height: 1.4;
+}
+
+.zrcpt-w-dropzone-text strong,
+.zrcpt-w-dropzone-text b {
+  color: var(--sys-brand, #1E4D6E);
+  font-weight: var(--sys-font-wt-sb, 600);
+}
+
+/* -- 7d. Dropzone Accepted File Types ----------------------------------- */
+
+.zrcpt-w-dropzone-types {
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-ter, #64748B);
+  font-style: italic;
+}
+
+/* -- 7e. Selected File Name --------------------------------------------- */
+
+.zrcpt-w-file-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-brand, #1E4D6E);
+  padding: var(--ref-space-1, 4px) 0;
+  word-break: break-all;
+}
+
+.zrcpt-w-file-name:empty {
+  display: none;
+}
+
+/* -- 7f. Dropzone disabled state ---------------------------------------- */
+
+.zrcpt-w-dropzone.disabled,
+.zrcpt-w-dropzone[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
+/* =========================================================================
+ * 8. THUMBNAILS  (photo upload previews)
+ * ========================================================================= */
+
+.zrcpt-w-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ref-space-2, 8px);
+  margin-top: var(--ref-space-2, 8px);
+}
+
+.zrcpt-w-thumbs:empty {
+  display: none;
+}
+
+/* -- 8a. Individual Thumbnail ------------------------------------------- */
+
+.zrcpt-w-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--ref-radius-sm, 8px);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zrcpt-w-thumb:hover {
+  border-color: var(--sys-brand, #1E4D6E);
+  box-shadow: 0 2px 6px rgba(30, 77, 110, 0.15);
+}
+
+.zrcpt-w-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* -- 8b. Remove Button (x) --------------------------------------------- */
+
+.zrcpt-w-thumb-rm {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: var(--sys-font-wt-b, 700);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  z-index: 1;
+}
+
+.zrcpt-w-thumb:hover .zrcpt-w-thumb-rm {
+  opacity: 1;
+}
+
+.zrcpt-w-thumb-rm:hover {
+  background: rgba(220, 38, 38, 0.85);
+}
+
+.zrcpt-w-thumb-rm:focus-visible {
+  opacity: 1;
+  outline: 2px solid #FFFFFF;
+  outline-offset: 1px;
+}
+
+/* -- 8c. Loading overlay (during upload) -------------------------------- */
+
+.zrcpt-w-thumb.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: zrcpt-w-pulse 1.5s ease infinite;
+  z-index: 2;
+}
+
+/* Always show remove on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .zrcpt-w-thumb-rm {
+    opacity: 1;
+  }
+}
+
+
+/* =========================================================================
+ * 9. STATUS BAR  (during AJAX operations)
+ * ========================================================================= */
+
+.zrcpt-w-status {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-3, 12px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-left: 4px solid var(--sys-brand, #1E4D6E);
+  border-radius: var(--ref-radius-md, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text, #0F172A);
+  animation: zrcpt-w-fade-in 200ms ease;
+}
+
+.zrcpt-w-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--sys-border, #E2E8F0);
+  border-top-color: var(--sys-brand, #1E4D6E);
+  border-radius: 50%;
+  animation: zrcpt-w-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+
+/* =========================================================================
+ * 10. SUCCESS PANEL
+ * ========================================================================= */
+
+.zrcpt-w-success-panel {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: var(--ref-radius-md, 12px);
+  padding: var(--ref-space-4, 16px);
+  animation: zrcpt-w-fade-in 200ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-3, 12px);
+}
+
+/* -- 10a. Success Title ------------------------------------------------- */
+
+.zrcpt-w-success-title {
+  margin: 0;
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-b, 700);
+  color: #16A34A;
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+}
+
+/* -- 10b. Success Details ----------------------------------------------- */
+
+.zrcpt-w-success-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-2, 8px);
+}
+
+.zrcpt-w-detail {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text, #0F172A);
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  background: var(--sys-bg, #FFFFFF);
+  border-left: 3px solid #16A34A;
+  border-radius: var(--ref-radius-sm, 8px);
+}
+
+.zrcpt-w-detail strong {
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+}
+
+.zrcpt-w-detail span {
+  color: var(--sys-text-sec, #475569);
+}
+
+
+/* =========================================================================
+ * 11. ERROR PANEL
+ * ========================================================================= */
+
+.zrcpt-w-error-panel {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: var(--ref-radius-md, 12px);
+  padding: var(--ref-space-4, 16px);
+  animation: zrcpt-w-fade-in 200ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-3, 12px);
+}
+
+.zrcpt-w-error-text {
+  margin: 0;
+  font-size: var(--ref-font-sm, 13px);
+  color: #991B1B;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ref-space-2, 8px);
+}
+
+/* Generic error bar (used outside error panel) */
+.zrcpt-w-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ref-space-3, 12px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-left: 4px solid #DC2626;
+  border-radius: var(--ref-radius-md, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  color: #991B1B;
+  line-height: 1.5;
+  animation: zrcpt-w-fade-in 200ms ease;
+}
+
+
+/* =========================================================================
+ * 12. HISTORY — RECENT LIST
+ * ========================================================================= */
+
+.zrcpt-w-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* -- 12a. Loading State ------------------------------------------------- */
+
+.zrcpt-w-loading {
+  text-align: center;
+  padding: var(--ref-space-4, 16px);
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-ter, #64748B);
+  animation: zrcpt-w-pulse 1.5s ease infinite;
+}
+
+/* -- 12b. Receipt Item -------------------------------------------------- */
+
+.zrcpt-w-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-3, 12px);
+  padding: var(--ref-space-3, 12px) 0;
+  border-bottom: 1px solid var(--sys-border, #E2E8F0);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zrcpt-w-item:last-child {
+  border-bottom: none;
+}
+
+.zrcpt-w-item:hover {
+  background: var(--sys-bg-alt, #F1F5F9);
+  border-radius: var(--ref-radius-sm, 8px);
+}
+
+/* -- 12c. Item Icon ----------------------------------------------------- */
+
+.zrcpt-w-item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ref-radius-sm, 8px);
+  background: var(--sys-brand, #1E4D6E);
+  color: var(--sys-text-brand, #FFFFFF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.zrcpt-w-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Icon status variants */
+.zrcpt-w-item-icon.created {
+  background: rgba(22, 163, 74, 0.08);
+  color: #16A34A;
+}
+
+.zrcpt-w-item-icon.synced {
+  background: rgba(59, 130, 246, 0.08);
+  color: #3B82F6;
+}
+
+.zrcpt-w-item-icon.failed {
+  background: rgba(220, 38, 38, 0.08);
+  color: #DC2626;
+}
+
+/* -- 12d. Item Info ----------------------------------------------------- */
+
+.zrcpt-w-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.zrcpt-w-item-title {
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-text, #0F172A);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zrcpt-w-item-meta {
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-ter, #64748B);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* -- 12e. Item Badge ---------------------------------------------------- */
+
+.zrcpt-w-item-badge {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.zrcpt-w-item-badge.created {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16A34A;
+}
+
+.zrcpt-w-item-badge.synced {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+}
+
+.zrcpt-w-item-badge.failed {
+  background: rgba(220, 38, 38, 0.1);
+  color: #DC2626;
+}
+
+/* -- 12f. Item Actions (view/delete links) ------------------------------ */
+
+.zrcpt-w-item-actions {
+  display: flex;
+  gap: var(--ref-space-2, 8px);
+  flex-shrink: 0;
+}
+
+.zrcpt-w-item-actions a,
+.zrcpt-w-item-actions button {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-brand, #1E4D6E);
+  background: none;
+  border: none;
+  padding: var(--ref-space-1, 4px) var(--ref-space-2, 8px);
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: var(--ref-radius-sm, 8px);
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.zrcpt-w-item-actions a:hover,
+.zrcpt-w-item-actions button:hover {
+  background: rgba(30, 77, 110, 0.08);
+  color: var(--sys-brand-hover, #163D58);
+}
+
+/* -- 12g. Empty State --------------------------------------------------- */
+
+.zrcpt-w-empty {
+  text-align: center;
+  padding: var(--ref-space-4, 16px) var(--ref-space-3, 12px);
+  color: var(--sys-text-ter, #64748B);
+  font-style: italic;
+  font-size: var(--ref-font-sm, 13px);
+}
+
+
+/* =========================================================================
+ * 13. MUTED TEXT
+ * ========================================================================= */
+
+.zrcpt-w-muted {
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-ter, #64748B);
+  font-style: italic;
+}
+
+
+/* =========================================================================
+ * 14. RESPONSIVE  (mobile-first adjustments)
+ * ========================================================================= */
+
+@media screen and (max-width: 599px) {
+
+  /* Stats: 3-col grid remains but tightens */
+  .zrcpt-w-stats {
+    gap: var(--ref-space-2, 8px);
+  }
+
+  .zrcpt-w-stat {
+    padding: var(--ref-space-2, 8px) var(--ref-space-1, 4px);
+  }
+
+  .zrcpt-w-stat-val {
+    font-size: 18px;
+  }
+
+  /* Dropzone: reduce min-height on narrow screens */
+  .zrcpt-w-dropzone {
+    min-height: 96px;
+    padding: var(--ref-space-3, 12px);
+  }
+
+  .zrcpt-w-dropzone svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Thumbnails: smaller on mobile */
+  .zrcpt-w-thumb {
+    width: 56px;
+    height: 56px;
+  }
+
+  /* Sections: tighter gap */
+  .zrcpt-w-section {
+    gap: var(--ref-space-2, 8px);
+  }
+
+  /* Success details: single column */
+  .zrcpt-w-success-details {
+    gap: var(--ref-space-2, 8px);
+  }
+
+  /* Tab text: slightly smaller */
+  .zrcpt-w-tab {
+    font-size: var(--ref-font-xs, 11px);
+    padding: var(--ref-space-2, 8px) var(--ref-space-2, 8px);
+  }
+
+  /* Item actions: hide text, keep icons */
+  .zrcpt-w-item-actions a,
+  .zrcpt-w-item-actions button {
+    padding: var(--ref-space-1, 4px);
+  }
+}
+
+
+/* =========================================================================
+ * 15. SUNLIGHT MODE OVERRIDES
+ * =========================================================================
+ *
+ * Sunlight mode uses high-contrast black/white with no color.
+ * The [data-theme="sunlight"] attribute is set on a parent element
+ * by the Zorderz theme.
+ */
+
+/* -- Container & text --------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w {
+  color: #000;
+}
+
+/* -- Tabs --------------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-tabs {
+  border-bottom-color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-tab {
+  color: #666;
+}
+
+[data-theme="sunlight"] .zrcpt-w-tab:hover {
+  color: #000;
+  background: #E0E0E0;
+}
+
+[data-theme="sunlight"] .zrcpt-w-tab-active,
+[data-theme="sunlight"] .zrcpt-w-tab-active:hover {
+  color: #000;
+  border-bottom-color: #000;
+  background: transparent;
+}
+
+[data-theme="sunlight"] .zrcpt-w-tab:focus-visible {
+  outline-color: #000;
+}
+
+/* -- Stats -------------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-stat {
+  border: 2px solid #000;
+  background: #F5F5F5;
+}
+
+[data-theme="sunlight"] .zrcpt-w-stat-val {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-stat-label {
+  color: #333;
+}
+
+/* -- Buttons ------------------------------------------------------------ */
+[data-theme="sunlight"] .zrcpt-w-btn-primary {
+  background: #000;
+  color: #FFF;
+}
+
+[data-theme="sunlight"] .zrcpt-w-btn-primary:hover:not(:disabled) {
+  background: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="sunlight"] .zrcpt-w-btn-secondary {
+  background: #F5F5F5;
+  color: #000;
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-btn-secondary:hover:not(:disabled) {
+  background: #E0E0E0;
+}
+
+[data-theme="sunlight"] .zrcpt-w-btn:focus-visible {
+  outline-color: #000;
+}
+
+/* -- Labels ------------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-label {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-optional {
+  color: #333;
+}
+
+/* -- Inputs ------------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-input {
+  border: 2px solid #000;
+  color: #000;
+  background: #FFF;
+}
+
+[data-theme="sunlight"] .zrcpt-w-input::placeholder {
+  color: #666;
+}
+
+[data-theme="sunlight"] .zrcpt-w-input:focus {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
+  border-color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-input-error {
+  border-color: #000 !important;
+  box-shadow: none !important;
+  background: #F5F5F5 !important;
+  text-decoration: underline wavy;
+}
+
+[data-theme="sunlight"] .zrcpt-w-input-filled {
+  border-color: #000 !important;
+  box-shadow: none !important;
+  background: #E8E8E8 !important;
+}
+
+/* -- Dropzone ----------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-dropzone {
+  border: 2px dashed #000;
+  background: #FFF;
+}
+
+[data-theme="sunlight"] .zrcpt-w-dropzone:hover {
+  background: #F0F0F0;
+  border-color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-dropzone.over,
+[data-theme="sunlight"] .zrcpt-w-dropzone.zrcpt-w-dropzone-over {
+  background: #E0E0E0;
+  border-color: #000;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="sunlight"] .zrcpt-w-dropzone svg {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-dropzone-text {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-dropzone-text strong,
+[data-theme="sunlight"] .zrcpt-w-dropzone-text b {
+  color: #000;
+  text-decoration: underline;
+}
+
+[data-theme="sunlight"] .zrcpt-w-dropzone-types {
+  color: #333;
+}
+
+[data-theme="sunlight"] .zrcpt-w-file-name {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-dropzone:focus-visible {
+  outline-color: #000;
+}
+
+/* -- Thumbnails --------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-thumb {
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-thumb:hover {
+  border-color: #000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="sunlight"] .zrcpt-w-thumb-rm {
+  background: #000;
+  color: #FFF;
+  opacity: 1;
+}
+
+[data-theme="sunlight"] .zrcpt-w-thumb-rm:hover {
+  background: #333;
+}
+
+[data-theme="sunlight"] .zrcpt-w-thumb.loading::after {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+/* -- Status / Spinner --------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-status {
+  background: #F5F5F5;
+  border-color: #000;
+  border-left-color: #000;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-spinner {
+  border-color: #CCC;
+  border-top-color: #000;
+}
+
+/* -- Success Panel ------------------------------------------------------ */
+[data-theme="sunlight"] .zrcpt-w-success-panel {
+  background: #F5F5F5;
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-success-title {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-detail {
+  background: #FFF;
+  border-left-color: #000;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-detail strong {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-detail span {
+  color: #333;
+}
+
+/* -- Error Panel -------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-error-panel {
+  background: #F5F5F5;
+  border: 2px solid #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-error-text {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-error {
+  background: #F5F5F5;
+  border: 2px solid #000;
+  border-left: 4px solid #000;
+  color: #000;
+}
+
+/* -- History Items ------------------------------------------------------ */
+[data-theme="sunlight"] .zrcpt-w-item {
+  border-bottom-color: #CCC;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item:hover {
+  background: #F0F0F0;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item-icon {
+  background: #000;
+  color: #FFF;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item-icon.created,
+[data-theme="sunlight"] .zrcpt-w-item-icon.synced,
+[data-theme="sunlight"] .zrcpt-w-item-icon.failed {
+  background: #E0E0E0;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item-title {
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item-meta {
+  color: #333;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item-badge.created,
+[data-theme="sunlight"] .zrcpt-w-item-badge.synced,
+[data-theme="sunlight"] .zrcpt-w-item-badge.failed {
+  background: #E0E0E0;
+  color: #000;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item-actions a,
+[data-theme="sunlight"] .zrcpt-w-item-actions button {
+  color: #000;
+  text-decoration: underline;
+}
+
+[data-theme="sunlight"] .zrcpt-w-item-actions a:hover,
+[data-theme="sunlight"] .zrcpt-w-item-actions button:hover {
+  background: #E0E0E0;
+}
+
+/* -- Empty State -------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-empty {
+  color: #333;
+}
+
+/* -- Loading ------------------------------------------------------------ */
+[data-theme="sunlight"] .zrcpt-w-loading {
+  color: #333;
+}
+
+/* -- Muted Text --------------------------------------------------------- */
+[data-theme="sunlight"] .zrcpt-w-muted {
+  color: #333;
+}
+
+
+/* =========================================================================
+ * 16. PRINT STYLES
+ * ========================================================================= */
+
+@media print {
+  .zrcpt-w-btn,
+  .zrcpt-w-tabs,
+  .zrcpt-w-dropzone,
+  .zrcpt-w-thumbs,
+  .zrcpt-w-thumb-rm,
+  .zrcpt-w-item-actions {
+    display: none !important;
+  }
+
+  .zrcpt-w {
+    color: #000;
+    font-size: 11px;
+  }
+
+  .zrcpt-w-panel {
+    animation: none;
+  }
+
+  .zrcpt-w-stat {
+    border: 1px solid #999;
+  }
+
+  .zrcpt-w-item {
+    border-bottom: 1px solid #999;
+  }
+
+  .zrcpt-w-success-panel {
+    border: 1px solid #999;
+    background: none;
+  }
+
+  .zrcpt-w-error-panel {
+    border: 1px solid #999;
+    background: none;
+  }
+
+  .zrcpt-w-status {
+    border: 1px solid #999;
+    background: none;
+  }
+
+  .zrcpt-w-detail {
+    border: 1px solid #999;
+    background: none;
+    border-left: 3px solid #000;
+  }
+
+  .zrcpt-w-input {
+    border: 1px solid #999;
+  }
+}
+
+/* ================================================================
+   v3.0.0 — Smart Lookup Styles (SPA Widget Context)
+   ================================================================
+   These styles work within the Zorderz dark/light/sunlight themes.
+   Uses CSS variables where available, with fallbacks.
+   ================================================================ */
+
+/* Lookup Section */
+.zrcpt-w-lookup {
+  margin-bottom: 4px;
+}
+
+.zrcpt-w-hint {
+  font-size: 0.78rem;
+  color: var(--ts-text-muted, #8899aa);
+  margin: 2px 0 8px;
+}
+
+.zrcpt-w-lookup-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.zrcpt-w-lookup-row .zrcpt-w-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.zrcpt-w-btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: var(--ts-accent, #3b82f6);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.zrcpt-w-btn-sm:hover {
+  background: var(--ts-accent-hover, #2563eb);
+}
+.zrcpt-w-btn-sm:active {
+  transform: scale(0.97);
+}
+
+/* Lookup Status */
+.zrcpt-w-lookup-status {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--ts-text-muted, #8899aa);
+}
+
+.zrcpt-w-lookup-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(220, 38, 38, 0.12);
+  border-left: 3px solid #dc2626;
+  color: #fca5a5;
+  font-size: 0.82rem;
+  border-radius: 4px;
+}
+
+.zrcpt-w-lookup-warn {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: rgba(234, 179, 8, 0.12);
+  border-left: 3px solid #eab308;
+  color: #fde68a;
+  font-size: 0.82rem;
+  border-radius: 4px;
+}
+
+/* Lookup Cards */
+.zrcpt-w-lookup-cards {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zrcpt-w-lookup-card {
+  padding: 10px 12px;
+  background: var(--ts-surface-alt, rgba(255,255,255,0.06));
+  border: 1px solid var(--ts-border, rgba(255,255,255,0.1));
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+.zrcpt-w-lookup-card:hover {
+  border-color: var(--ts-accent, #3b82f6);
+}
+
+.zrcpt-w-lookup-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.zrcpt-w-lookup-card-top strong {
+  color: var(--ts-text-primary, #e2e8f0);
+  font-size: 0.9rem;
+}
+
+.zrcpt-w-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.zrcpt-w-badge-inv {
+  background: #166534;
+  color: #bbf7d0;
+}
+.zrcpt-w-badge-est {
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+
+.zrcpt-w-lookup-addr {
+  font-size: 0.8rem;
+  color: var(--ts-text-secondary, #94a3b8);
+  margin-bottom: 4px;
+}
+.zrcpt-w-lookup-ref {
+  font-size: 0.78rem;
+  color: var(--ts-text-muted, #64748b);
+  margin-bottom: 6px;
+}
+
+.zrcpt-w-lookup-use {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  background: var(--ts-accent, #3b82f6);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.zrcpt-w-lookup-use:hover {
+  background: var(--ts-accent-hover, #2563eb);
+}
+
+/* Confirmed Selection */
+.zrcpt-w-lookup-confirmed {
+  margin-top: 8px;
+}
+
+.zrcpt-w-lookup-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(34, 197, 94, 0.12);
+  border-left: 3px solid #22c55e;
+  color: #86efac;
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+.zrcpt-w-lookup-ok strong {
+  color: #86efac;
+}
+
+.zrcpt-w-lookup-link {
+  background: none;
+  border: none;
+  color: var(--ts-accent, #3b82f6);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.8rem;
+  padding: 0;
+  margin-left: auto;
+}
+
+/* Nutshell hint */
+.zrcpt-w-lookup-nutshell {
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+.zrcpt-w-ns-ok {
+  color: #22c55e;
+  font-weight: 500;
+}
+
+/* Divider */
+.zrcpt-w-divider {
+  text-align: center;
+  position: relative;
+  margin: 12px 0 8px;
+  font-size: 0.72rem;
+  color: var(--ts-text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.zrcpt-w-divider::before,
+.zrcpt-w-divider::after {
+  content: '';
+  display: inline-block;
+  width: 25%;
+  border-top: 1px solid var(--ts-border, rgba(255,255,255,0.1));
+  vertical-align: middle;
+  margin: 0 8px;
+}
+
+/* ── Light / Sunlight theme overrides ── */
+@media (prefers-color-scheme: light) {
+  .zrcpt-w-lookup-error {
+    background: #fef2f2;
+    color: #991b1b;
+  }
+  .zrcpt-w-lookup-warn {
+    background: #fffbeb;
+    color: #78350f;
+  }
+  .zrcpt-w-lookup-ok {
+    background: #f0fdf4;
+    color: #166534;
+  }
+  .zrcpt-w-lookup-ok strong {
+    color: #166534;
+  }
+  .zrcpt-w-lookup-card {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+  }
+  .zrcpt-w-lookup-card-top strong {
+    color: #1e293b;
+  }
+  .zrcpt-w-lookup-addr {
+    color: #475569;
+  }
+}
+
+/* Failed photo upload indicator */
+.zrcpt-w-thumb.error {
+  border: 2px solid #dc2626;
+  opacity: 0.6;
+  position: relative;
+}
+.zrcpt-w-thumb.error::after {
+  content: '!';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* v3.0.0: Status overlay — stays on top of dimmed form to prevent height collapse */
+#zrcpt-w-tab-input {
+  position: relative;
+}
+#zrcpt-w-status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  background: var(--ts-surface, rgba(30, 30, 40, 0.95));
+  border-radius: 12px;
+  padding: 2rem 1.5rem;
+  min-width: 220px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+/* v3.0.0: Animated photo upload progress */
+.zrcpt-w-thumb.loading {
+  position: relative;
+  overflow: hidden;
+}
+.zrcpt-w-thumb.loading::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(59, 130, 246, 0.15) 50%,
+    transparent 70%
+  );
+  animation: zrcpt-shimmer 1.5s ease-in-out infinite;
+  z-index: 2;
+}
+.zrcpt-w-thumb.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2.5px solid rgba(255,255,255,0.2);
+  border-top-color: var(--ts-accent, #3b82f6);
+  border-radius: 50%;
+  animation: zrcpt-spin 0.8s linear infinite;
+  z-index: 3;
+}
+@keyframes zrcpt-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes zrcpt-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Upload count pulse when actively uploading */
+.zrcpt-w-muted.uploading {
+  animation: zrcpt-pulse 1.2s ease-in-out infinite;
+  color: var(--ts-accent, #3b82f6) !important;
+  font-weight: 600;
+}
+@keyframes zrcpt-pulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+
+/* =========================================================================
+ * 14. PHOTO-FIRST FLOW (v3.1.0)
+ * Auto-pulled capture "sets", manual-upload fallback, and the lookup-ok
+ * address line. Uses the same --sys-*/--ref-* tokens (with fallbacks) as the
+ * rest of the widget so it adapts to Light / Dark / System / Sunlight.
+ * ========================================================================= */
+
+/* ── Confirmed job: stacked text + address under the summary ── */
+.zrcpt-w-lookup-ok-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.zrcpt-w-lookup-ok-addr {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-n, 400);
+  color: var(--sys-text-sec, #475569);
+  line-height: 1.35;
+}
+
+/* ── Photo-set section ── */
+.zrcpt-w-photoset {
+  animation: zrcpt-w-fade-in var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+.zrcpt-w-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-2, 8px);
+}
+
+/* A single capture set (one trip to one property on one day). */
+.zrcpt-w-sess {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px);
+  background: var(--sys-surface, #FFFFFF);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-md, 12px);
+  cursor: pointer;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zrcpt-w-sess:hover {
+  border-color: var(--sys-brand, #1E4D6E);
+}
+.zrcpt-w-sess:focus-visible {
+  outline: 2px solid var(--sys-brand, #1E4D6E);
+  outline-offset: 2px;
+}
+.zrcpt-w-sess-active {
+  border-color: var(--sys-brand, #1E4D6E);
+  box-shadow: inset 0 0 0 1px var(--sys-brand, #1E4D6E);
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+.zrcpt-w-sess-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ref-space-2, 8px);
+}
+
+/* Faux radio that fills when the set is active. */
+.zrcpt-w-sess-radio {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 2px solid var(--sys-border, #CBD5E1);
+  background: transparent;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zrcpt-w-sess-active .zrcpt-w-sess-radio {
+  border-color: var(--sys-brand, #1E4D6E);
+  box-shadow: inset 0 0 0 4px var(--sys-brand, #1E4D6E);
+}
+
+.zrcpt-w-sess-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* Role chip: install / before / older. */
+.zrcpt-w-sess-role {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--ref-radius-pill, 999px);
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  line-height: 1.4;
+}
+.zrcpt-w-sess-role-install {
+  color: #0a7a3a;
+  background: rgba(16, 185, 129, 0.14);
+}
+.zrcpt-w-sess-role-before {
+  color: var(--sys-brand, #1E4D6E);
+  background: rgba(30, 77, 110, 0.12);
+}
+.zrcpt-w-sess-role-older {
+  color: var(--sys-text-sec, #475569);
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+.zrcpt-w-sess-date {
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-text-sec, #475569);
+}
+
+/* Thumbnail strip for the set (first few photos). */
+.zrcpt-w-sess-thumbs {
+  display: flex;
+  gap: var(--ref-space-1, 4px);
+  flex-wrap: wrap;
+}
+.zrcpt-w-sess-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--ref-radius-sm, 8px);
+  overflow: hidden;
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  flex: 0 0 auto;
+}
+.zrcpt-w-sess-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.zrcpt-w-sess-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+}
+
+/* "No photos in your library" notice. */
+.zrcpt-w-photoset-empty {
+  padding: var(--ref-space-3, 12px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px dashed var(--sys-border, #CBD5E1);
+  border-radius: var(--ref-radius-md, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-sec, #475569);
+  line-height: 1.5;
+}
+
+/* v3.6.2 — Upload-first photo step. The uploader is the primary action; the
+   captured-photo "sets" (when the tech has their own) are a secondary block. */
+.zrcpt-w-upload-primary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-2, 8px);
+}
+/* Make the primary uploader read as THE step: a touch larger and brand-tinted. */
+.zrcpt-w-dropzone-primary {
+  min-height: 132px;
+  border-color: var(--sys-brand, #1E4D6E);
+  background: rgba(30, 77, 110, 0.04);
+}
+.zrcpt-w-dropzone-primary svg { color: var(--sys-brand, #1E4D6E); }
+
+/* Secondary "or use photos you already captured" block. */
+.zrcpt-w-library {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-2, 8px);
+  margin-top: var(--ref-space-3, 12px);
+  animation: zrcpt-w-fade-in var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zrcpt-w-library-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+  margin: var(--ref-space-1, 4px) 0;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sys-text-ter, #64748B);
+}
+.zrcpt-w-library-divider::before,
+.zrcpt-w-library-divider::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--sys-border, #E2E8F0);
+}
+
+/* "These are the photos I want" confirm (upload path). */
+.zrcpt-w-upload-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ref-space-2, 8px);
+  margin-top: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-md, 12px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-text, #0F172A);
+  line-height: 1.45;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.zrcpt-w-upload-confirm input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--sys-brand, #1E4D6E);
+  cursor: pointer;
+}
+
+/* "Need to upload photos instead?" toggle. */
+.zrcpt-w-upload-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--ref-space-2, 8px);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-brand, #1E4D6E);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.zrcpt-w-upload-toggle:hover { opacity: 0.8; }
+
+/* ── Manual-upload fallback (collapsed by default) ── */
+.zrcpt-w-manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ref-space-4, 16px);
+  padding: var(--ref-space-3, 12px);
+  border: 1px dashed var(--sys-border, #CBD5E1);
+  border-radius: var(--ref-radius-md, 12px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  animation: zrcpt-w-fade-in var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zrcpt-w-manual-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sys-text-sec, #475569);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v3.4.0 — PHOTO SETS: batch-tag chip + per-photo include/exclude toggles
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* "Tagged set" chip — shown when the set comes from one Media-app upload
+   batch (a human grouped these photos), not from the time heuristic. */
+.zrcpt-w-sess-tag {
+  display: inline-block;
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: var(--ref-radius-pill, 999px);
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: 600;
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  color: var(--sys-text-sec, #475569);
+}
+
+/* The ACTIVE set's full photo grid (replaces the 5-thumb preview). */
+.zrcpt-w-sess-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: var(--ref-space-2, 8px);
+}
+
+/* One toggleable photo. Tap to exclude (dim + empty check) / include. */
+.zrcpt-w-ph {
+  position: relative;
+  appearance: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--ref-radius-sm, 8px);
+  overflow: hidden;
+  background: var(--sys-bg-alt, #F1F5F9);
+  -webkit-tap-highlight-color: transparent;
+}
+.zrcpt-w-ph img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zrcpt-w-ph:focus-visible {
+  outline: 2px solid var(--sys-brand, #1E4D6E);
+  outline-offset: 2px;
+}
+
+/* The check badge (filled = included). */
+.zrcpt-w-ph-check {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: #FFFFFF;
+  background: var(--sys-brand, #1E4D6E);
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+
+/* Excluded: dimmed photo, hollow check. */
+.zrcpt-w-ph-off img { opacity: 0.35; }
+.zrcpt-w-ph-off .zrcpt-w-ph-check {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* The live "N of M will be used" line under the active set's grid. */
+.zrcpt-w-sess-count {
+  font-size: var(--ref-font-xs, 12px);
+  line-height: 1.4;
+  color: var(--sys-text-ter, #64748B);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3.6.0 — APPROVE & SEND
+   Status badges in History, per-row action buttons, and the review/approve
+   modal. Uses the same --sys-*/--ref-* tokens (with hard fallbacks) as the
+   rest of the widget so it themes automatically.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── History status badge ── */
+.zrcpt-w-badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: var(--ref-space-2, 8px);
+  padding: 1px 8px;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  line-height: 1.6;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.zrcpt-w-badge-draft {
+  color: #92400E;
+  background: #FEF3C7;
+}
+.zrcpt-w-badge-approved {
+  color: #1E40AF;
+  background: #DBEAFE;
+}
+.zrcpt-w-badge-sent {
+  color: #065F46;
+  background: #D1FAE5;
+}
+
+/* ── Per-row action button ── */
+.zrcpt-w-item-action {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  border-radius: var(--ref-radius-sm, 8px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zrcpt-w-item-action-approve {
+  color: #fff;
+  background: var(--sys-brand, #1E4D6E);
+}
+.zrcpt-w-item-action-approve:hover {
+  filter: brightness(1.08);
+}
+.zrcpt-w-item-action-send {
+  color: #fff;
+  background: #4EAAA0;
+}
+.zrcpt-w-item-action-send:hover {
+  filter: brightness(1.06);
+}
+.zrcpt-w-item-action-ghost {
+  color: var(--sys-text-sec, #475569);
+  background: transparent;
+  border-color: var(--sys-border, #E2E8F0);
+}
+.zrcpt-w-item-action-ghost:hover {
+  background: var(--sys-bg-alt, #F1F5F9);
+  color: var(--sys-text, #0F172A);
+}
+
+/* ── Modal ── */
+body.zrcpt-w-modal-open {
+  overflow: hidden;
+}
+.zrcpt-w-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ref-space-4, 16px);
+}
+.zrcpt-w-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+}
+.zrcpt-w-modal-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 860px; /* v3.9.2 — wider on desktop so more of the receipt shows */
+  /* v3.9.2 — HONEST height cap. 90vh lies on phones (vh ignores the browser
+     chrome), so the card ran past the visible screen and, with overflow:
+     hidden, everything below the preview — checkbox, Approve, Send, the send
+     confirm — was clipped into the void. dvh tracks the real visible
+     viewport; vh stays as the fallback for old engines. */
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  background: var(--sys-bg, #ffffff);
+  color: var(--sys-text, #0F172A);
+  border-radius: var(--ref-radius-md, 12px);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+.zrcpt-w-modal-head {
+  flex: 0 0 auto; /* v3.9.2 */
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ref-space-3, 12px);
+  padding: var(--ref-space-4, 16px);
+  border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+.zrcpt-w-modal-title {
+  margin: 0;
+  font-size: var(--ref-font-lg, 16px);
+  font-weight: var(--sys-font-wt-b, 700);
+  color: var(--sys-text, #0F172A);
+}
+.zrcpt-w-modal-sub {
+  margin-top: 2px;
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-sec, #475569);
+}
+.zrcpt-w-modal-x {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--sys-text-sec, #475569);
+  background: transparent;
+  border: none;
+  border-radius: var(--ref-radius-sm, 8px);
+  cursor: pointer;
+}
+.zrcpt-w-modal-x:hover {
+  background: var(--sys-bg-alt, #F1F5F9);
+  color: var(--sys-text, #0F172A);
+}
+.zrcpt-w-modal-instruct {
+  flex: 0 0 auto; /* v3.9.2 */
+  margin: 0;
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px) 0;
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-sec, #475569);
+}
+.zrcpt-w-approved-banner {
+  flex: 0 0 auto; /* v3.9.2 */
+  margin: var(--ref-space-3, 12px) var(--ref-space-4, 16px) 0;
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: #065F46;
+  background: #D1FAE5;
+  border-radius: var(--ref-radius-sm, 8px);
+}
+
+
+/* v3.6.5 — Photo removal is now done on the photos INSIDE the receipt preview:
+   a corner × is injected onto each .gallery-item within the same-origin preview
+   iframe (its styles live in injectPhotoRemovers() so they apply inside the
+   iframe document, not here). Tapping a × opens the centered dialog below. */
+
+/* Centered "Delete this photo?" dialog — overlays the whole review modal so it
+   can never be clipped by a photo cell or the grid edge (the v3.6.4 problem). */
+.zrcpt-w-delconfirm {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ref-space-4, 16px);
+}
+.zrcpt-w-delconfirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+.zrcpt-w-delconfirm-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 340px;
+  background: var(--sys-surface, #fff);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-lg, 16px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.28);
+  padding: var(--ref-space-4, 16px);
+  text-align: center;
+}
+.zrcpt-w-delconfirm-thumb {
+  width: 120px;
+  height: 90px;
+  margin: 0 auto var(--ref-space-3, 12px);
+  border-radius: var(--ref-radius-sm, 8px);
+  overflow: hidden;
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+}
+.zrcpt-w-delconfirm-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.zrcpt-w-delconfirm-title {
+  margin: 0 0 var(--ref-space-1, 4px);
+  font-size: var(--ref-font-base, 15px);
+  font-weight: var(--sys-font-wt-b, 700);
+  color: var(--sys-text, #0F172A);
+}
+.zrcpt-w-delconfirm-text {
+  margin: 0 0 var(--ref-space-4, 16px);
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-sec, #475569);
+  line-height: 1.45;
+}
+.zrcpt-w-delconfirm-actions {
+  display: flex;
+  gap: var(--ref-space-2, 8px);
+  justify-content: center;
+}
+.zrcpt-w-delconfirm-actions .zrcpt-w-btn { flex: 1 1 0; justify-content: center; }
+
+/* Destructive (Delete) button. */
+.zrcpt-w-btn-danger {
+  background: #DC2626;
+  color: #fff;
+  border: 1px solid #DC2626;
+}
+.zrcpt-w-btn-danger:hover { background: #B91C1C; border-color: #B91C1C; }
+
+
+/* The scrollable receipt preview. THIS container is the scroller — the iframe
+   inside is sized to its content height by JS, so this overflows and scrolls.
+   We force the scrollbar to always show so users immediately understand there
+   is more to read below. */
+.zrcpt-w-preview {
+  position: relative;
+  /* v3.9.2 — the preview is the ONLY flexible region: it takes whatever
+     height is left after the header, instruction, checkbox and footer are
+     laid out, so those controls are ALWAYS on screen. min-height keeps a
+     usable sliver of receipt visible on tiny screens; the old fixed
+     min-height:240px + max-height:56vh pair is what starved phones. */
+  flex: 1 1 240px;
+  margin: var(--ref-space-3, 12px) var(--ref-space-4, 16px) 0;
+  min-height: 120px;
+  overflow-y: scroll;          /* always reserve + show the vertical scrollbar */
+  overflow-x: hidden;
+  overscroll-behavior: contain; /* v3.9.2 — never chain scroll to the page */
+  background: #fff;
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;                 /* Firefox */
+  scrollbar-color: #94A3B8 #E2E8F0;      /* Firefox: thumb / track */
+}
+/* WebKit/Blink: a prominent, always-visible scrollbar. */
+.zrcpt-w-preview::-webkit-scrollbar {
+  width: 14px;
+}
+.zrcpt-w-preview::-webkit-scrollbar-track {
+  background: #EEF2F6;
+  border-radius: 0 var(--ref-radius-sm, 8px) var(--ref-radius-sm, 8px) 0;
+}
+.zrcpt-w-preview::-webkit-scrollbar-thumb {
+  background: #94A3B8;
+  border: 3px solid #EEF2F6;   /* inset look so the thumb reads as a pill */
+  border-radius: 999px;
+  min-height: 40px;
+}
+.zrcpt-w-preview::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
+}
+.zrcpt-w-preview-frame {
+  display: block;
+  width: 100%;
+  height: 60vh;   /* initial height before JS measures content; JS sets exact px */
+  border: none;
+  background: #fff;
+}
+/* A clear end-of-receipt marker so reaching the bottom feels intentional. */
+.zrcpt-w-preview-end {
+  padding: 10px 0 14px;
+  margin: 0 var(--ref-space-4, 16px);
+  text-align: center;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sys-text-sec, #94A3B8);
+}
+.zrcpt-w-preview-end-reached {
+  color: #16A34A;
+}
+.zrcpt-w-preview-loading {
+  padding: var(--ref-space-5, 24px);
+  text-align: center;
+  font-size: var(--ref-font-sm, 13px);
+  color: var(--sys-text-sec, #475569);
+}
+.zrcpt-w-scroll-hint {
+  flex: 0 0 auto; /* v3.9.2 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: var(--ref-space-2, 8px) var(--ref-space-4, 16px) 0;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-brand, #1E4D6E);
+}
+
+/* Affirmative consent checkbox — the "signature" */
+.zrcpt-w-approve-check {
+  flex: 0 0 auto; /* v3.9.2 — always on screen, never crushed by the preview */
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ref-space-3, 12px);
+  margin: var(--ref-space-3, 12px) var(--ref-space-4, 16px) 0;
+  padding: var(--ref-space-3, 12px);
+  font-size: var(--ref-font-sm, 13px);
+  line-height: 1.5;
+  color: var(--sys-text, #0F172A);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zrcpt-w-approve-check.zrcpt-w-approve-check-ready {
+  opacity: 1;
+  border-color: var(--sys-brand, #1E4D6E);
+}
+.zrcpt-w-approve-check input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+.zrcpt-w-approve-check input:disabled {
+  cursor: not-allowed;
+}
+
+.zrcpt-w-modal-actions {
+  flex: 0 0 auto; /* v3.9.2 — the footer is always on screen */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  padding-bottom: max(var(--ref-space-3, 12px), env(safe-area-inset-bottom));
+  margin-top: var(--ref-space-2, 8px);
+  border-top: 1px solid var(--sys-border, #E2E8F0);
+  background: var(--sys-bg, #ffffff);
+}
+.zrcpt-w-modal-actions .zrcpt-w-btn {
+  width: auto;
+  flex: 0 0 auto;
+}
+.zrcpt-w-btn-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: #fff;
+  background: #4EAAA0;
+  border: none;
+  border-radius: var(--ref-radius-md, 12px);
+  cursor: pointer;
+}
+.zrcpt-w-btn-send:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.zrcpt-w-btn-send:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.zrcpt-w-modal-msg {
+  padding: 0 var(--ref-space-4, 16px) var(--ref-space-4, 16px);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+}
+.zrcpt-w-modal-msg-ok { color: #065F46; }
+.zrcpt-w-modal-msg-err { color: #B91C1C; }
+
+@media (max-width: 480px) {
+  .zrcpt-w-modal-card { max-height: 94vh; }
+  .zrcpt-w-modal-actions { flex-wrap: wrap; }
+  .zrcpt-w-item-actions { flex: 0 0 auto; }
+}
+
+/* ── v3.6.1 — Send button grouped right + send confirmation step ── */
+.zrcpt-w-modal-actions {
+  justify-content: space-between; /* Cancel left, action group right */
+}
+.zrcpt-w-modal-actions-right {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+}
+
+/* The confirm-send panel that appears when "Send via email" is clicked. */
+/* v3.9.2 — CENTERED overlay (was an in-flow panel BELOW the footer, which on
+   phones sat past the clipped card edge — unreachable). Same pattern as the
+   delete-photo confirm: overlays the modal card, can never be clipped. */
+.zrcpt-w-sendconfirm {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ref-space-4, 16px);
+}
+.zrcpt-w-sendconfirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+.zrcpt-w-sendconfirm-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+  border-radius: var(--ref-radius-lg, 16px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.28);
+  padding: var(--ref-space-4, 16px);
+}
+.zrcpt-w-sendconfirm-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ref-space-3, 12px);
+}
+.zrcpt-w-sendconfirm-icon {
+  flex: 0 0 auto;
+  color: #C2410C;
+  margin-top: 2px;
+}
+.zrcpt-w-sendconfirm-title {
+  margin: 0 0 4px;
+  font-size: var(--ref-font-md, 14px);
+  font-weight: var(--sys-font-wt-b, 700);
+  color: #7C2D12;
+}
+.zrcpt-w-sendconfirm-text {
+  margin: 0;
+  font-size: var(--ref-font-sm, 13px);
+  line-height: 1.5;
+  color: #9A3412;
+}
+.zrcpt-w-sendconfirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ref-space-2, 8px);
+  margin-top: var(--ref-space-3, 12px);
+}
+.zrcpt-w-sendconfirm-actions .zrcpt-w-btn {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+/* ── v3.6.1 — Copyable receipt link in each History row ── */
+.zrcpt-w-item-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  min-width: 0; /* allow the link text to ellipsize */
+}
+.zrcpt-w-item-link-a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--ref-font-xs, 11px);
+  color: var(--sys-brand, #1E4D6E);
+  text-decoration: none;
+}
+.zrcpt-w-item-link-a:hover { text-decoration: underline; }
+.zrcpt-w-item-link-a svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+.zrcpt-w-item-link-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zrcpt-w-item-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-sec, #475569);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-sm, 8px);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.zrcpt-w-item-copy svg { width: 12px; height: 12px; }
+.zrcpt-w-item-copy:hover {
+  background: var(--sys-bg, #fff);
+  color: var(--sys-text, #0F172A);
+  border-color: var(--sys-brand, #1E4D6E);
+}
+.zrcpt-w-item-copy-ok {
+  color: #166534;
+  background: #DCFCE7;
+  border-color: #BBF7D0;
+}
+.zrcpt-w-item-copy-warn {
+  color: #92400E;
+  background: #FEF3C7;
+  border-color: #FDE68A;
+}
+[data-theme="sunlight"] .zrcpt-w-item-link-a { color: #0B3550; }
+
+@media (max-width: 480px) {
+  .zrcpt-w-item-link-text { max-width: 46vw; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v3.8.0 — REDO FLOW: real touch targets on the invoice picker.
+   The v3.3.0 multi-select shipped with NO styling — a bare native checkbox
+   and a naked "Use anyway" text button nobody could find. These rules make
+   the checkbox big and obviously a checkbox, the whole card a tap target,
+   and replace "will be reused" with an explicit, labelled REDO state.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* The invoice card is a <label>: the whole card is the checkbox's tap target. */
+.zrcpt-w-inv {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+.zrcpt-w-inv:hover { border-color: var(--ts-accent, #3b82f6); }
+
+/* Big, unmissable checkbox (44px hit area, 26px control). */
+.zrcpt-w-inv-check {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px 0 0 -8px;
+  border-radius: 10px;
+}
+.zrcpt-w-inv-cb {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--ts-accent, #3b82f6);
+  cursor: pointer;
+}
+.zrcpt-w-inv-cb:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Checked card reads selected at a glance. */
+.zrcpt-w-inv:has(.zrcpt-w-inv-cb:checked) {
+  border-color: var(--ts-accent, #3b82f6);
+  box-shadow: inset 0 0 0 1px var(--ts-accent, #3b82f6);
+}
+
+.zrcpt-w-inv-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* "Already has a receipt" block. */
+.zrcpt-w-inv-receipted { opacity: 0.92; }
+/* v3.9.2 — no dead controls: the disabled checkbox is hidden until "Redo"
+   arms it (arming strips the -receipted class, revealing it checked). */
+.zrcpt-w-inv-receipted .zrcpt-w-inv-check { display: none; }
+.zrcpt-w-inv-flag {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(234, 179, 8, 0.10);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--ts-text-secondary, #cbd5e1);
+}
+.zrcpt-w-inv-flag-line { line-height: 1.45; }
+.zrcpt-w-inv-flag a {
+  color: var(--ts-accent, #60a5fa);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* v3.9.2 — the Redo button is COMPACT now: auto width, 40px tall, quieter
+   outline style. (The v3.8.0 full-width orange bar read as aggressive.) */
+.zrcpt-w-inv-flag-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.zrcpt-w-inv-override {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-height: 40px;
+  padding: 8px 14px;
+  background: transparent;
+  color: #E8A23D;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1.5px solid #B45309;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+  flex: 0 0 auto;
+}
+.zrcpt-w-inv-override:hover { background: #B45309; color: #fff; }
+.zrcpt-w-inv-override:active { transform: scale(0.985); }
+.zrcpt-w-inv-override-icon { font-size: 1.05rem; line-height: 1; }
+.zrcpt-w-inv-override-why {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--ts-text-muted, #94a3b8);
+  flex: 1 1 180px;
+  min-width: 150px;
+}
+.zrcpt-w-inv-override-why strong { color: var(--ts-text-secondary, #cbd5e1); }
+
+/* Armed REDO state (after tapping the button). */
+.zrcpt-w-inv-redo {
+  border-color: #D97706 !important;
+  box-shadow: inset 0 0 0 1px #D97706;
+}
+.zrcpt-w-inv-redo .zrcpt-w-inv-flag {
+  background: rgba(217, 119, 6, 0.14);
+  border-color: rgba(217, 119, 6, 0.55);
+}
+.zrcpt-w-inv-redo-on {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zrcpt-w-inv-redo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.zrcpt-w-inv-redo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #D97706;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.zrcpt-w-inv-redo-note {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--ts-text-secondary, #cbd5e1);
+}
+.zrcpt-w-inv-redo-note a {
+  color: var(--ts-accent, #60a5fa);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.zrcpt-w-inv-redo-undo {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--ts-text-secondary, #cbd5e1);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--ts-border, rgba(255,255,255,0.2));
+  border-radius: 8px;
+  cursor: pointer;
+}
+.zrcpt-w-inv-redo-undo:hover { border-color: var(--ts-text-secondary, #cbd5e1); }
+
+/* Non-invoice (estimate) info cards: clearly not interactive. */
+.zrcpt-w-noninv { opacity: 0.6; cursor: default; }
+.zrcpt-w-noninv-reason {
+  font-size: 0.75rem;
+  color: var(--ts-text-muted, #94a3b8);
+  margin-top: 2px;
+}
+
+/* Redo note on the confirmed-job card. */
+.zrcpt-w-redo-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(217, 119, 6, 0.12);
+  border-left: 3px solid #D97706;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--ts-text-secondary, #cbd5e1);
+}
+.zrcpt-w-redo-note .zrcpt-w-inv-redo-chip { margin-bottom: 2px; }
+.zrcpt-w-redo-note a { color: var(--ts-accent, #60a5fa); text-decoration: underline; }
+
+/* Redo styling for the Generate button. */
+.zrcpt-w-btn-redo { background: #B45309 !important; }
+.zrcpt-w-btn-redo:hover:not(:disabled) { background: #92400E !important; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v3.8.0 — BATCH REVIEW at selection: big photos, obvious toggles, drag
+   order, and a full-screen viewer. Mobile-first: two-up portrait so each
+   photo is as large as the screen allows without losing the grid.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Inactive set cards: hint that they open. */
+.zrcpt-w-sess-open-hint {
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-brand, #1E4D6E);
+}
+.zrcpt-w-sess-open-hint::after { content: ' ›'; }
+
+/* The ACTIVE set's large review grid. */
+.zrcpt-w-sess-photos-lg {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);   /* mobile-first: 2-up portrait */
+  gap: var(--ref-space-2, 8px);
+  touch-action: pan-y;                      /* vertical scroll stays native */
+}
+@media (min-width: 560px) {
+  .zrcpt-w-sess-photos-lg { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 900px) {
+  .zrcpt-w-sess-photos-lg { grid-template-columns: repeat(4, 1fr); }
+}
+
+.zrcpt-w-ph-lg {
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.zrcpt-w-ph-lg img { pointer-events: none; }
+
+/* Order number chip (top-left) — makes the drag order legible. */
+.zrcpt-w-ph-num {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.62);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* The include/leave-out toggle: a REAL 34px button, top-right. */
+.zrcpt-w-ph-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #FFFFFF;
+  background: var(--sys-brand, #1E4D6E);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, transform 0.1s;
+  z-index: 2;
+}
+.zrcpt-w-ph-toggle:active { transform: scale(0.92); }
+.zrcpt-w-ph-toggle-off { background: rgba(100, 116, 139, 0.85); }
+
+/* Excluded state: dimmed + labelled, but keeps its place in the order. */
+.zrcpt-w-ph-lg.zrcpt-w-ph-off img { opacity: 0.3; }
+.zrcpt-w-ph-offlabel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Drag states — same orange edge language as the Review & Approve preview. */
+.zrcpt-w-ph-dragging {
+  opacity: 0.45;
+  transform: scale(0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 3;
+}
+.zrcpt-w-drop-before { box-shadow: -4px 0 0 0 #e87722 !important; }
+.zrcpt-w-drop-after  { box-shadow:  4px 0 0 0 #e87722 !important; }
+
+/* Broken-photo placeholder cell. */
+.zrcpt-w-ph-broken { background: var(--sys-bg-alt, #F1F5F9); }
+.zrcpt-w-ph-broken img { object-fit: contain; padding: 18%; opacity: 0.9; }
+
+/* Helper line under the grid. */
+.zrcpt-w-sess-help {
+  font-size: var(--ref-font-xs, 11px);
+  line-height: 1.5;
+  color: var(--sys-text-ter, #64748B);
+}
+
+/* ── Full-screen photo viewer (pre-generate) ── */
+.zrcpt-w-lb {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zrcpt-w-lb-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.92);
+}
+.zrcpt-w-lb-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zrcpt-w-lb-imgwrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 54px 8px 76px;
+}
+.zrcpt-w-lb-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* v3.9.2 — the close control must be unmissable: solid white circle, dark ✕. */
+.zrcpt-w-lb-close {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 10px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: #FFFFFF;
+  color: #0F172A;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 3;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+.zrcpt-w-lb-close:hover { background: #E2E8F0; }
+.zrcpt-w-lb-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 3;
+}
+.zrcpt-w-lb-prev { left: 6px; }
+.zrcpt-w-lb-next { right: 6px; }
+.zrcpt-w-lb-nav:hover, .zrcpt-w-lb-close:hover { background: rgba(255, 255, 255, 0.24); }
+.zrcpt-w-lb-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 3;
+  padding: 0 12px;
+}
+.zrcpt-w-lb-count {
+  color: #E2E8F0;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 52px;
+  text-align: center;
+}
+.zrcpt-w-lb-toggle {
+  min-height: 46px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 999px;
+  background: #16A34A;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.zrcpt-w-lb-toggle-off { background: rgba(100, 116, 139, 0.9); }
+
+/* ── Success view: the "what happens next" truth block ── */
+.zrcpt-w-res-next {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  text-align: left;
+  background: var(--sys-bg-alt, #F1F5F9);
+  border-left: 3px solid var(--sys-brand, #1E4D6E);
+  border-radius: 6px;
+}
+.zrcpt-w-res-next-line {
+  font-size: var(--ref-font-sm, 13px);
+  line-height: 1.55;
+  color: var(--sys-text, #0F172A);
+}
+
+/* ── History: the "Redone" badge ── */
+.zrcpt-w-badge-redone {
+  background: #D97706;
+  color: #FFF7ED;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v3.8.1 — collapsed set picker: once a set is chosen, the other collections
+   tuck behind this one row so Generate is right below the chosen photos.
+   ════════════════════════════════════════════════════════════════════════ */
+.zrcpt-w-sess-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px dashed var(--sys-border, #CBD5E1);
+  border-radius: var(--ref-radius-md, 12px);
+  color: var(--sys-brand, #1E4D6E);
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+.zrcpt-w-sess-expand:hover {
+  border-color: var(--sys-brand, #1E4D6E);
+}
+.zrcpt-w-sess-expand-n {
+  font-weight: 400;
+  color: var(--sys-text-ter, #64748B);
+  font-size: var(--ref-font-xs, 11px);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v3.9.0 — deletion controls in the History list.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Badge: a deletion request is pending on this receipt. */
+.zrcpt-w-badge-delreq {
+  background: #B32D2E;
+  color: #FEE2E2;
+}
+
+/* The pending-request line under a row. */
+.zrcpt-w-delreq-line {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(179, 45, 46, 0.10);
+  border-left: 3px solid #B32D2E;
+  border-radius: 4px;
+  font-size: var(--ref-font-xs, 12px);
+  line-height: 1.5;
+  color: var(--sys-text, #0F172A);
+}
+.zrcpt-w-delreq-adminhint {
+  display: block;
+  color: var(--sys-text-ter, #64748B);
+}
+.zrcpt-w-delreq-cancel {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 4px 10px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid var(--sys-border, #CBD5E1);
+  border-radius: 999px;
+  font-size: var(--ref-font-xs, 11px);
+  font-weight: 600;
+  color: var(--sys-text-sec, #475569);
+  cursor: pointer;
+}
+.zrcpt-w-delreq-cancel:hover { border-color: #B32D2E; color: #B32D2E; }
+
+/* Secondary per-row buttons: admin Delete / non-admin Request deletion. */
+.zrcpt-w-item-actions .zrcpt-w-item-del,
+.zrcpt-w-item-actions .zrcpt-w-item-reqdel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--sys-border, #CBD5E1);
+  border-radius: 8px;
+  font-size: var(--ref-font-xs, 12px);
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.zrcpt-w-item-actions .zrcpt-w-item-del { color: #B32D2E; border-color: rgba(179, 45, 46, 0.5); background: transparent; }
+.zrcpt-w-item-actions .zrcpt-w-item-del:hover:not(:disabled) { background: rgba(179, 45, 46, 0.08); border-color: #B32D2E; color: #B32D2E; }
+.zrcpt-w-item-actions .zrcpt-w-item-reqdel { color: var(--sys-text-sec, #475569); background: transparent; }
+.zrcpt-w-item-actions .zrcpt-w-item-reqdel:hover:not(:disabled) { border-color: #B32D2E; color: #B32D2E; background: transparent; }
+.zrcpt-w-item-actions .zrcpt-w-item-del:disabled,
+.zrcpt-w-item-actions .zrcpt-w-item-reqdel:disabled { opacity: 0.6; cursor: default; }
+
+/* Inline "reason" form for a deletion request. */
+.zrcpt-w-delreq-form {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--sys-bg-alt, #F1F5F9);
+  border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: 8px;
+}
+.zrcpt-w-delreq-form-title {
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--sys-text, #0F172A);
+}
+.zrcpt-w-delreq-reason {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--sys-border, #CBD5E1);
+  border-radius: 8px;
+  font: inherit;
+  font-size: var(--ref-font-sm, 13px);
+  resize: vertical;
+  background: var(--sys-surface, #FFFFFF);
+  color: var(--sys-text, #0F172A);
+}
+.zrcpt-w-delreq-form-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.zrcpt-w-delreq-send {
+  min-height: 40px;
+  padding: 8px 14px;
+  background: #B32D2E;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: 700;
+  cursor: pointer;
+}
+.zrcpt-w-delreq-send:hover:not(:disabled) { background: #8a1f1f; }
+.zrcpt-w-delreq-send:disabled { opacity: 0.6; cursor: default; }
+.zrcpt-w-delreq-dismiss {
+  min-height: 40px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--sys-text-sec, #475569);
+  border: 1px solid var(--sys-border, #CBD5E1);
+  border-radius: 8px;
+  font-size: var(--ref-font-sm, 13px);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Per-row inline status note (errors etc.). */
+.zrcpt-w-item-note {
+  margin-top: 6px;
+  font-size: var(--ref-font-xs, 12px);
+  line-height: 1.45;
+  color: var(--sys-text-sec, #475569);
+}
+.zrcpt-w-item-note-err { color: #B32D2E; font-weight: 600; }
+
+/* Stack the actions column so the secondary delete button sits under the
+   primary action, keeping rows tidy on phones. */
+.zrcpt-w-item-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}

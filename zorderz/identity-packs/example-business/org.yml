@@ -1,0 +1,82 @@
+# Identity Pack · org.yml — EXAMPLE, entirely fictional.
+#
+# What a pack may do here: relabel a role, and choose which apps that role opens
+# with. What it may NOT do: create, rename or remove a role. The slugs below are
+# the platform's own — several are matched as literal strings by security checks,
+# so a pack that could rename one could silently switch off a privacy boundary.
+#
+# A slug that is not a registered Zorderz role is skipped and reported, never
+# invented.
+
+pack:
+  schema: 1
+  tenant_key: example-business
+
+departments:
+  - { key: sales,   label: "Sales" }
+  - { key: ops,     label: "Scheduling" }
+  - { key: mfg,     label: "Shop" }
+  - { key: field,   label: "Field" }
+  - { key: admin,   label: "Office" }
+
+roles:
+  - slug: zdz_owner
+    label: "Owner"
+    department: admin
+    default_apps:
+      allowed: { all: true }
+
+  - slug: zdz_admin
+    label: "Office Manager"          # this business does not say "Administrator"
+    department: admin
+    default_apps:
+      allowed: { all: true }
+
+  - slug: zdz_sales
+    label: "Estimator"
+    department: sales
+    default_apps:
+      allowed: [zdz-camera, zdz-media, internal-messaging, zdz-sketch-pad]
+
+  - slug: zdz_operator
+    label: "Scheduler"
+    department: ops
+    default_apps:
+      allowed: [zdz-media, internal-messaging]
+
+  - slug: zdz_mfg
+    label: "Shop Lead"
+    department: mfg
+    default_apps:
+      allowed: [zdz-camera, zdz-media, internal-messaging]
+
+  - slug: zdz_tech
+    label: "Service Tech"
+    department: field
+    default_apps:
+      allowed: [zdz-camera, zdz-sketch-pad, internal-messaging]
+
+  - slug: zdz_general
+    label: "Shop Tablet"
+    # The shared, unattended device. It is the most-shared identity on the
+    # platform, so it deliberately gets the least. Do not widen this without
+    # deciding who can walk up to that tablet.
+    default_apps:
+      allowed: [zdz-camera, internal-messaging]
+
+channels:
+  - slug: announcements
+    name: "#announcements"
+    description: "Company-wide. Managers post; everyone reads."
+    is_announcements: true
+    member_roles: []
+  - slug: scheduling
+    name: "#scheduling"
+    description: "Route changes, callbacks, and who is covering what."
+    member_roles: [zdz_operator, zdz_admin, zdz_owner]
+    department: ops
+  - slug: field
+    name: "#field"
+    description: "Techs and the shop."
+    member_roles: [zdz_tech, zdz_mfg, zdz_admin, zdz_owner]
+    department: field

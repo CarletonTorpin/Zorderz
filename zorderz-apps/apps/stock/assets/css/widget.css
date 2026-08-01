@@ -1,0 +1,34 @@
+/* Zorderz Stock — inline dashboard widget. Namespaced .zstock-w-*. */
+.zstock-w { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1f2430; position: relative; }
+.zstock-w-stats { display: flex; gap: 8px; margin-bottom: 12px; }
+.zstock-w-stat { flex: 1; background: #f6f7f9; border-radius: 8px; padding: 10px; text-align: center; }
+.zstock-w-stat--warn { background: #fff5e6; }
+.zstock-w-stat-val { display: block; font-size: 20px; font-weight: 700; }
+.zstock-w-stat-label { display: block; font-size: 11px; color: #6b7280; margin-top: 2px; }
+.zstock-w-actions { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.zstock-w-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; min-height: 36px; }
+.zstock-w-btn:hover { background: #f3f4f6; }
+.zstock-w-btn-primary { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+.zstock-w-btn-primary:hover { background: #6d28d9; }
+.zstock-w-cycle { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; padding: 10px; background: #f6f7f9; border-radius: 8px; }
+.zstock-w-cycle select, .zstock-w-cycle input { padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; }
+.zstock-w-section { margin-bottom: 12px; }
+.zstock-w-section-title { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; margin: 0 0 6px; }
+.zstock-w-list { display: flex; flex-direction: column; gap: 4px; }
+.zstock-w-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #fafafa; border-radius: 6px; }
+.zstock-w-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zstock-w-row-meta { font-size: 12px; color: #6b7280; }
+.zstock-w-empty { color: #9ca3af; font-size: 13px; margin: 4px 0; }
+.zstock-w-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: #9ca3af; }
+.zstock-w-dot--good { background: #16a34a; }
+.zstock-w-dot--low { background: #eab308; }
+.zstock-w-dot--critical { background: #dc2626; }
+.zstock-w-dot--out { background: #111827; }
+.zstock-w-badge { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: #e5e7eb; color: #374151; text-transform: capitalize; }
+.zstock-w-badge--approved { background: #dcfce7; color: #166534; }
+.zstock-w-badge--rejected { background: #fee2e2; color: #991b1b; }
+.zstock-w-footer { display: inline-block; margin-top: 4px; font-size: 13px; color: #7c3aed; text-decoration: none; }
+.zstock-w-toast { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); background: #111827; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.2); z-index: 20; }
+.zstock-w-toast--error { background: #dc2626; }
+.zstock-w-toast--success { background: #16a34a; }
+.zstock-w-toast--info { background: #2563eb; }
