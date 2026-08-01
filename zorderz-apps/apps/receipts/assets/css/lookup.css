@@ -1,0 +1,187 @@
+/*
+ * Zorderz Receipts — Auto-Lookup bar (v2.9.0).
+ * Matches the existing .zrcpt aesthetic — same colors, border-radius, spacing.
+ */
+
+.zrcpt-lookup {
+	max-width: 620px;
+	margin: 1.5rem auto 0;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	color: #333;
+}
+
+.zrcpt-lookup-card-wrap {
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	padding: 1.5rem;
+}
+
+.zrcpt-lookup-title {
+	color: #1e4d6e;
+	font-size: 1.1rem;
+	font-weight: 700;
+	margin: 0 0 .4rem;
+}
+
+.zrcpt-lookup-hint {
+	color: #777;
+	font-size: .85rem;
+	margin: 0 0 1rem;
+}
+
+.zrcpt-lookup-row {
+	display: flex;
+	gap: .5rem;
+}
+.zrcpt-lookup-row input[type=text] {
+	flex: 1;
+	padding: .55rem .7rem;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	font-size: .95rem;
+}
+.zrcpt-lookup-row input[type=text]:focus {
+	outline: none;
+	border-color: #1e4d6e;
+}
+.zrcpt-lookup-row button {
+	padding: .55rem 1.2rem;
+	background: #1e4d6e;
+	color: #fff;
+	font-size: .9rem;
+	font-weight: 600;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.zrcpt-lookup-row button:hover { background: #163d58; }
+
+.zrcpt-lookup-status {
+	margin-top: .6rem;
+	color: #777;
+	font-size: .85rem;
+	display: none;
+}
+.zrcpt-lookup-error {
+	margin-top: .6rem;
+	padding: .5rem .7rem;
+	background: #fde4e4;
+	border-left: 3px solid #b32d2e;
+	color: #8a1a1a;
+	font-size: .85rem;
+	border-radius: 4px;
+	display: none;
+	white-space: pre-wrap;
+}
+
+.zrcpt-lookup-warn {
+	margin: .8rem 0;
+	padding: .6rem .9rem;
+	background: #fff4e0;
+	border-left: 3px solid #d4881c;
+	color: #5a3d0a;
+	font-size: .85rem;
+	border-radius: 4px;
+}
+
+.zrcpt-lookup-cards {
+	margin-top: .8rem;
+	display: flex;
+	flex-direction: column;
+	gap: .6rem;
+}
+.zrcpt-lookup-card {
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	padding: .75rem 1rem;
+	background: #fafafa;
+}
+.zrcpt-lookup-card-head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5rem;
+	align-items: center;
+	margin-bottom: .3rem;
+}
+.zrcpt-lookup-card-head strong { color: #1e4d6e; }
+.zrcpt-lookup-badge {
+	background: #1e4d6e;
+	color: #fff;
+	font-size: .7rem;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-weight: 600;
+}
+.zrcpt-lookup-ref {
+	background: #e8ebf0;
+	color: #445;
+	font-size: .7rem;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-family: monospace;
+}
+.zrcpt-lookup-sub {
+	color: #666;
+	font-size: .82rem;
+	margin-bottom: .4rem;
+}
+.zrcpt-lookup-use {
+	display: inline-block;
+	padding: .4rem .9rem;
+	background: #1e4d6e;
+	color: #fff;
+	font-size: .85rem;
+	font-weight: 600;
+	border: none;
+	border-radius: 20px;
+	cursor: pointer;
+}
+.zrcpt-lookup-use:hover { background: #163d58; }
+
+.zrcpt-lookup-confirmed {
+	display: none;
+	margin-top: 1rem;
+	padding: .7rem .9rem;
+	background: #e6f4ea;
+	border-left: 3px solid #1a6b2e;
+	color: #1a4b22;
+	font-size: .9rem;
+	border-radius: 4px;
+}
+.zrcpt-lookup-linkbtn {
+	background: none;
+	border: none;
+	color: #1e4d6e;
+	cursor: pointer;
+	text-decoration: underline;
+	margin-left: .5rem;
+	font-size: .85rem;
+	padding: 0;
+}
+
+.zrcpt-lookup-nutshell-hint {
+	margin-top: .6rem;
+	font-size: .85rem;
+	color: #444;
+}
+
+.zrcpt-lookup-divider {
+	margin: 1.5rem auto 0;
+	max-width: 620px;
+	text-align: center;
+	font-size: .8rem;
+	color: #999;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	position: relative;
+}
+.zrcpt-lookup-divider::before,
+.zrcpt-lookup-divider::after {
+	content: '';
+	display: inline-block;
+	width: 30%;
+	border-top: 1px solid #ddd;
+	vertical-align: middle;
+	margin: 0 0.5rem;
+}
