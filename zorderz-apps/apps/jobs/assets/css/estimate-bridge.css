@@ -1,0 +1,174 @@
+/**
+ * Zorderz Jobs - Estimates bridge (UI) styles.
+ *
+ * The injected "Send as job(s)" button + the line-picker modal. Scoped to the
+ * zjobx- prefix so nothing bleeds into the Estimates app. Built on the theme's
+ * --sys-* / --ref-* design tokens (each with a hardcoded fallback, house style)
+ * so light / dark / system / sunlight track automatically.
+ *
+ * @package Zorderz\Jobs
+ * @since 1.7.0
+ */
+
+/* Injected history-row button (inherits .tsec-w-btn-small; add a teal accent). */
+.zjobx-send {
+	color: var(--sys-text-brand, #FFFFFF) !important;
+	background: #0E9F8E !important;
+	border-color: #0E9F8E !important;
+	white-space: nowrap;
+}
+.zjobx-send:hover { background: #0B8073 !important; border-color: #0B8073 !important; }
+.zjobx-send-ic { font-weight: 700; }
+
+/* Review/edit view button (sits next to the estimate send control). */
+.zjobx-send-review {
+	margin-left: 8px;
+	color: #FFFFFF !important;
+	background: #0E9F8E !important;
+	border-color: #0E9F8E !important;
+}
+.zjobx-send-review:hover { background: #0B8073 !important; border-color: #0B8073 !important; }
+
+/* ==========================================================================
+ * MODAL
+ * ========================================================================== */
+.zjobx-overlay {
+	position: fixed; inset: 0; z-index: 100000;
+	display: flex; align-items: center; justify-content: center;
+	padding: 16px;
+	background: rgba(15, 23, 42, 0.55);
+	-webkit-font-smoothing: antialiased;
+}
+.zjobx-dialog {
+	width: 100%; max-width: 560px; max-height: 90vh; overflow: auto;
+	display: flex; flex-direction: column;
+	background: var(--sys-surface, #FFFFFF);
+	color: var(--sys-text, #0F172A);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-lg, 16px);
+	box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+	font-family: inherit;
+	font-size: var(--ref-font-sm, 13px);
+}
+.zjobx-head {
+	display: flex; align-items: center; justify-content: space-between;
+	padding: 14px 16px 6px;
+}
+.zjobx-title {
+	font-size: var(--ref-font-lg, 17px);
+	font-weight: var(--sys-font-wt-b, 700);
+	color: var(--sys-text, #0F172A);
+}
+.zjobx-x {
+	appearance: none; border: none; background: transparent; cursor: pointer;
+	font-size: 22px; line-height: 1; color: var(--sys-text-ter, #64748B);
+	padding: 2px 6px; border-radius: var(--ref-radius-sm, 8px);
+}
+.zjobx-x:hover { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); }
+.zjobx-subhead {
+	padding: 0 16px 10px;
+	font-size: var(--ref-font-sm, 13px);
+	color: var(--sys-text-sec, #475569);
+	border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+.zjobx-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.zjobx-table { width: 100%; border-collapse: collapse; }
+.zjobx-table thead th {
+	text-align: left; font-size: var(--ref-font-xs, 11px);
+	text-transform: uppercase; letter-spacing: 0.03em;
+	color: var(--sys-text-ter, #64748B); font-weight: var(--sys-font-wt-sb, 600);
+	padding: 4px 6px; border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+.zjobx-table td { padding: 8px 6px; border-bottom: 1px solid var(--sys-border, #E2E8F0); vertical-align: middle; }
+.zjobx-c-check { width: 34px; text-align: center; }
+.zjobx-pick { width: 18px; height: 18px; accent-color: #0E9F8E; }
+.zjobx-c-desc { color: var(--sys-text, #0F172A); }
+.zjobx-sub { color: var(--sys-text-sec, #475569); }
+.zjobx-meta { display: block; font-size: var(--ref-font-xs, 11px); color: var(--sys-text-ter, #64748B); margin-top: 2px; }
+
+/* Phase 5.1: already-sent line badge + estimate rollup summary. */
+.zjobx-row.is-sent { opacity: 0.72; }
+.zjobx-sent {
+	display: inline-block; margin-left: 8px;
+	padding: 1px 7px; font-size: 10px; font-weight: 700;
+	text-transform: uppercase; letter-spacing: 0.04em;
+	color: var(--sys-tint-success-fg, #065F46);
+	background: var(--sys-tint-success-bg, #D1FAE5);
+	border-radius: var(--ref-radius-full, 999px);
+	vertical-align: middle;
+}
+.zjobx-rollup {
+	margin: 10px 16px 0; padding: 8px 11px;
+	font-size: var(--ref-font-sm, 13px);
+	color: var(--sys-text-sec, #475569);
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-sm, 8px);
+}
+.zjobx-rollup.is-done {
+	color: var(--sys-tint-success-fg, #065F46);
+	background: var(--sys-tint-success-bg, #D1FAE5);
+	border-color: var(--sys-tint-border, transparent);
+}
+.zjobx-orphan { color: var(--sys-warning, #D97706); font-weight: 600; }
+.zjobx-c-comp { width: 150px; }
+.zjobx-comp {
+	width: 100%; min-height: 38px; padding: 6px 8px; font-size: 15px; font-family: inherit;
+	color: var(--sys-text, #0F172A); background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0); border-radius: var(--ref-radius-sm, 8px);
+}
+
+.zjobx-field { display: flex; flex-direction: column; gap: 5px; }
+.zjobx-field label {
+	font-size: var(--ref-font-xs, 11px); font-weight: var(--sys-font-wt-sb, 600);
+	text-transform: uppercase; letter-spacing: 0.03em; color: var(--sys-text-sec, #475569);
+}
+.zjobx-opt { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--sys-text-ter, #64748B); }
+.zjobx-assignee, .zjobx-note {
+	width: 100%; min-height: 44px; padding: 10px 12px; font-size: 16px; font-family: inherit;
+	color: var(--sys-text, #0F172A); background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0); border-radius: var(--ref-radius-sm, 8px);
+}
+.zjobx-note { resize: vertical; line-height: 1.5; }
+.zjobx-assignee:focus, .zjobx-note:focus, .zjobx-comp:focus {
+	outline: none; border-color: #0E9F8E; box-shadow: 0 0 0 2px rgba(14, 159, 142, 0.2);
+}
+
+.zjobx-foot {
+	display: flex; align-items: center; gap: 10px;
+	padding: 12px 16px; border-top: 1px solid var(--sys-border, #E2E8F0);
+}
+.zjobx-status { flex: 1; font-size: var(--ref-font-sm, 13px); color: var(--sys-text-sec, #475569); }
+.zjobx-status.is-warn { color: var(--sys-warning, #D97706); }
+.zjobx-status.is-err  { color: var(--sys-error, #DC2626); }
+.zjobx-status.is-ok   { color: var(--sys-success, #16A34A); }
+.zjobx-status.is-busy { color: var(--sys-text-sec, #475569); }
+.zjobx-cancel, .zjobx-send-go {
+	appearance: none; cursor: pointer; font-family: inherit; font-size: 15px;
+	min-height: 44px; padding: 10px 18px; border-radius: var(--ref-radius-md, 12px);
+	font-weight: var(--sys-font-wt-sb, 600); border: 1px solid transparent;
+}
+.zjobx-cancel { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); border-color: var(--sys-border, #E2E8F0); }
+.zjobx-cancel:hover { border-color: var(--sys-border-strong, #CBD5E1); }
+.zjobx-send-go { background: #0E9F8E; color: #FFFFFF; border-color: #0E9F8E; }
+.zjobx-send-go:hover:not(:disabled) { background: #0B8073; border-color: #0B8073; }
+.zjobx-send-go:disabled { opacity: 0.55; cursor: default; }
+
+/* Toast for load errors. */
+.zjobx-toast {
+	position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); z-index: 100001;
+	max-width: 90vw; padding: 10px 16px; border-radius: var(--ref-radius-md, 12px);
+	background: var(--sys-error, #DC2626); color: #FFFFFF; font-size: var(--ref-font-sm, 13px);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Narrow screens: stack the component select under the description. */
+@media (max-width: 480px) {
+	.zjobx-table, .zjobx-table tbody, .zjobx-table tr, .zjobx-table td { display: block; width: auto; }
+	.zjobx-table thead { display: none; }
+	.zjobx-row { position: relative; padding: 8px 6px 8px 34px; border-bottom: 1px solid var(--sys-border, #E2E8F0); }
+	.zjobx-row td { border: none; padding: 2px 0; }
+	.zjobx-c-check { position: absolute; left: 0; top: 10px; width: 28px; }
+	.zjobx-c-comp { width: 100%; margin-top: 6px; }
+}

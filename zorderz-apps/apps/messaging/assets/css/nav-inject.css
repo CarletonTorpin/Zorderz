@@ -1,0 +1,172 @@
+/**
+ * TSIM v1.0.16 — Team bottom-nav tab styles
+ *
+ * The .ni button itself is styled by the theme; we only style our own
+ * additions (unread count badge on the Team icon).
+ */
+
+.bnav .ni #ni-team-badge,
+.bnav .ni-badge {
+	position: absolute;
+	top: 4px;
+	right: calc(50% - 18px);
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: 999px;
+	background: #EF4444;
+	color: #FFFFFF;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 16px;
+	text-align: center;
+	pointer-events: none;
+	box-shadow: 0 0 0 2px var(--sys-bg, #FFFFFF);
+}
+.bnav .ni[data-view="sv-team"] {
+	position: relative; /* anchor for the absolute-positioned badge */
+}
+
+/* v1.0.13 — Override the theme's .sub-view reading-width cap for the
+   Team tab. The theme caps .sub-view at 1200px (1400px on huge monitors)
+   with auto margins and inline padding. That makes sense for forms and
+   reports where readability matters, but for a chat app it leaves big
+   dead zones on the sides. iMessage on macOS is full-width by default;
+   we want the same.
+
+   Selectors are scoped to sv-team only — other sub-views keep their cap.
+   We use !important because the theme media query is at min-width:1280px
+   and our specificity needs to win without re-architecting the theme.
+
+   v1.0.16 — All these rules are now gated on `.active`. Previously
+   `#sv-team { display: flex }` defeated the theme's `.sub-view { display:
+   none }` via ID specificity, so the Team sub-view (skeleton + iframe)
+   would render on every page. With `.active`, the theme's hidden state
+   wins when the user isn't on Team, and our layout overrides win when
+   they are. Theme v2.14.0+ also enforces this with
+   `.sub-view:not(.active) { display:none !important }` as a safety net. */
+#sv-team.active {
+	max-width: none !important;
+	margin: 0 !important;
+	padding-inline: 0 !important;
+	width: 100% !important;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+#sv-team.active > iframe {
+	flex: 1;
+	min-height: 0;
+}
+@media (min-width: 1280px) {
+	#sv-team.active {
+		max-width: none !important;
+		padding-inline: 0 !important;
+	}
+}
+@media (min-width: 1680px) {
+	#sv-team.active { max-width: none !important; }
+}
+
+/* ── Skeleton loading state (v1.0.12, polished v1.0.13) ──
+   Shown briefly while the Team iframe loads. Mirrors the final layout
+   so the transition to loaded content feels stable. ── */
+#sv-team.active {
+	position: relative;
+	background: var(--sys-bg, #020617);
+}
+.zim-team-skeleton {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	background: var(--sys-bg, #020617);
+	z-index: 1;
+	pointer-events: none;
+}
+.zim-team-skeleton__sidebar {
+	width: 320px;
+	max-width: 40%;
+	border-right: 1px solid var(--sys-border, rgba(148,163,184,0.18));
+	padding: 14px 14px 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+@media (max-width: 720px) {
+	/* Mobile: only the sidebar-shaped shimmer is visible. The right pane
+	   gets hidden completely so we don't have a cramped mid-air spinner
+	   stuck in 30% of the viewport. The shimmer rows themselves *are*
+	   the loading indicator. */
+	.zim-team-skeleton__sidebar {
+		width: 100%;
+		max-width: none;
+		border-right: 0;
+	}
+	.zim-team-skeleton__main { display: none !important; }
+}
+.zim-team-skeleton__header {
+	height: 28px;
+	margin-bottom: 8px;
+	border-radius: 6px;
+	background: var(--sys-surface, rgba(148,163,184,0.10));
+}
+.zim-team-skeleton__section-hdr {
+	height: 12px;
+	width: 80px;
+	margin-top: 8px;
+	border-radius: 3px;
+	background: var(--sys-surface, rgba(148,163,184,0.08));
+}
+.zim-team-skeleton__row {
+	height: 44px;
+	border-radius: 8px;
+	background: linear-gradient(
+		90deg,
+		rgba(148,163,184,0.08) 0%,
+		rgba(148,163,184,0.18) 50%,
+		rgba(148,163,184,0.08) 100%
+	);
+	background-size: 200% 100%;
+	animation: zim-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+[data-theme="sunlight"] .zim-team-skeleton__row {
+	background: linear-gradient(
+		90deg,
+		rgba(148,163,184,0.20) 0%,
+		rgba(148,163,184,0.40) 50%,
+		rgba(148,163,184,0.20) 100%
+	);
+	background-size: 200% 100%;
+}
+.zim-team-skeleton__main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 16px;
+	color: var(--sys-text-ter, #64748B);
+	padding: 24px;
+}
+.zim-team-skeleton__spinner {
+	width: 32px;
+	height: 32px;
+	border: 3px solid var(--sys-surface, rgba(148,163,184,0.15));
+	border-top-color: var(--sys-brand, #3B82F6);
+	border-radius: 50%;
+	animation: zim-skeleton-spin 0.9s linear infinite;
+}
+.zim-team-skeleton__label {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--sys-text-sec, #94A3B8);
+	text-align: center;
+}
+@keyframes zim-skeleton-shimmer {
+	0%   { background-position: 200% 0; }
+	100% { background-position: -200% 0; }
+}
+@keyframes zim-skeleton-spin {
+	from { transform: rotate(0deg); }
+	to   { transform: rotate(360deg); }
+}

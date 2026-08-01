@@ -1,0 +1,12 @@
+/*
+ * Zorderz Prep v2.0.3 — Print Styles
+ *
+ * v2.0.3: Print mode now opens a clean popup window with its own CSS.
+ * This file is retained for the in-page print container fallback only.
+ * The popup window uses buildPrintCSS() in widget.js for self-contained styles.
+ */
+
+/* ====== Legacy: hide print container when not needed ====== */
+.zprep-w-print-container {
+  display: none !important;
+}

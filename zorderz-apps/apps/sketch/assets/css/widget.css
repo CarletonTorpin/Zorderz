@@ -1,0 +1,235 @@
+/* TS Sketch Pad — Widget Styles v1.0.4
+   Theme-aware: dark, light (yellow paper), sunlight (B&W)
+   v1.0.4: One-tap finish — header Close(X) + big primary Save; view-mode banner
+           for loaded sketches; dark-mode gallery thumbnail correction.
+   v1.0.3: Fix system-theme dark mode, sticky save button, phone canvas height
+   v1.0.2: Landscape safe-area insets for Dynamic Island */
+
+.zsp-w { display:flex; flex-direction:column; gap:12px; font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif); color:var(--sys-text,#0F172A); }
+
+/* Tabs */
+.zsp-w-tabs { display:flex; border-bottom:1px solid var(--sys-border,#E2E8F0); }
+.zsp-w-tab { flex:1; padding:12px 12px; font-size:15px; font-weight:600; color:var(--sys-text-sec,#94A3B8); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; text-align:center; transition:color 150ms,border-color 150ms; -webkit-tap-highlight-color:transparent; }
+.zsp-w-tab:hover { color:var(--sys-text,#0F172A); }
+.zsp-w-tab-active,.zsp-w-tab-active:hover { color:var(--sys-brand,#2C5F8A); border-bottom-color:var(--sys-brand,#2C5F8A); }
+.zsp-w-panel { display:flex; flex-direction:column; gap:10px; }
+
+/* Canvas */
+.zsp-w-canvas-wrap { position:relative; width:100%; border:1px solid var(--sys-border,#E2E8F0); border-radius:12px; overflow:hidden;
+  background:#FFFDE7 repeating-linear-gradient(to bottom,transparent,transparent 29px,rgba(100,140,200,0.15) 29px,rgba(100,140,200,0.15) 30px);
+  /* Default: yellow notebook paper for light mode */
+}
+.zsp-w-canvas { display:block; width:100%; height:300px; cursor:pointer; touch-action:none; -webkit-user-select:none; user-select:none; }
+.zsp-w-placeholder { position:absolute; top:14px; left:16px; right:16px; font-size:15px; line-height:1.6; color:var(--sys-text-ter,#64748B); pointer-events:none; transition:opacity 150ms; }
+.zsp-hidden { opacity:0; }
+/* v1.0.4: persistent corner hint so the widget canvas reads as "tap to draw". */
+.zsp-w-canvas-hint { position:absolute; right:8px; bottom:8px; display:inline-flex; align-items:center; gap:5px; padding:5px 10px; font-size:11px; font-weight:600; color:#fff; background:rgba(44,95,138,0.82); border-radius:8px; pointer-events:none; }
+.zsp-w-canvas-hint svg { width:14px; height:14px; }
+
+/* Toolbar */
+.zsp-w-toolbar { display:flex; align-items:center; gap:6px; }
+.zsp-w-tool { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; padding:0; border:1px solid var(--sys-border,#E2E8F0); border-radius:10px; background:transparent; color:var(--sys-text-sec,#94A3B8); cursor:pointer; transition:all 150ms; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.zsp-w-tool:hover { background:rgba(44,95,138,0.08); color:var(--sys-text,#0F172A); }
+.zsp-w-tool:active { transform:scale(0.92); }
+.zsp-w-tool svg { width:20px; height:20px; }
+.zsp-w-tool:disabled { opacity:0.3; cursor:not-allowed; transform:none; }
+.zsp-w-sep { width:1px; height:24px; background:var(--sys-border,rgba(226,232,240,0.5)); flex-shrink:0; }
+.zsp-w-status { flex:1; font-size:11px; color:var(--sys-text-ter,#64748B); text-align:right; }
+/* v1.0.4: highlight the full-screen expand control as the primary draw entry. */
+.zsp-w-tool-cta { border-color:var(--sys-brand,#2C5F8A); color:var(--sys-brand,#2C5F8A); }
+.zsp-w-tool-cta:hover { background:rgba(44,95,138,0.1); color:var(--sys-brand,#2C5F8A); }
+
+/* Buttons */
+.zsp-w-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:52px; padding:12px 20px; font-size:16px; font-weight:600; border:none; border-radius:12px; cursor:pointer; transition:all 150ms; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.zsp-w-btn svg { flex-shrink:0; }
+.zsp-w-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.zsp-w-btn-full { width:100%; }
+.zsp-w-btn-primary { background:var(--sys-brand,#2C5F8A); color:#FFF; }
+.zsp-w-btn-primary:hover:not(:disabled) { filter:brightness(1.1); box-shadow:0 2px 8px rgba(44,95,138,0.3); }
+.zsp-w-btn-secondary { background:var(--sys-bg-alt,#F1F5F9); color:var(--sys-text,#0F172A); border:1px solid var(--sys-border,#E2E8F0); }
+.zsp-w-btn-sm { min-height:32px; padding:4px 12px; font-size:11px; }
+
+/* Save status */
+.zsp-w-save-status { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:13px; background:var(--sys-bg-alt,#F1F5F9); border:1px solid var(--sys-border,#E2E8F0); border-radius:8px; color:var(--sys-text-sec,#94A3B8); }
+.zsp-w-spinner { width:16px; height:16px; border:2px solid var(--sys-border,#E2E8F0); border-top-color:var(--sys-brand,#2C5F8A); border-radius:50%; animation:zsp-spin 0.6s linear infinite; }
+@keyframes zsp-spin { to { transform:rotate(360deg); } }
+.zsp-w-success-msg { display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px; color:#16a34a; font-size:13px; font-weight:500; }
+
+/* Gallery */
+.zsp-w-gallery { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+.zsp-w-gallery-item { position:relative; border:1px solid var(--sys-border,#E2E8F0); border-radius:12px; overflow:hidden; background:var(--sys-bg-alt,#F1F5F9); transition:box-shadow 150ms; }
+.zsp-w-gallery-item:hover { box-shadow:0 4px 12px rgba(0,0,0,0.12); }
+.zsp-w-gal-tap { position:relative; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.zsp-w-gal-tap:active { opacity:0.8; }
+.zsp-w-gallery-thumb { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
+.zsp-w-gal-edit-badge,.zsp-w-gal-view-badge { position:absolute; bottom:6px; left:6px; padding:3px 8px; font-size:10px; font-weight:600; border-radius:6px; pointer-events:none; }
+.zsp-w-gal-edit-badge { background:rgba(245,158,11,0.85); color:#fff; }
+.zsp-w-gal-view-badge { background:rgba(100,116,139,0.75); color:#fff; }
+.zsp-w-gallery-info { padding:8px 10px; }
+.zsp-w-gallery-title { font-size:12px; font-weight:500; color:var(--sys-text,#0F172A); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.zsp-w-gallery-date { font-size:10px; color:var(--sys-text-ter,#64748B); margin-top:2px; }
+.zsp-w-gallery-actions { display:flex; gap:4px; padding:4px 10px 8px; }
+.zsp-w-gallery-empty { grid-column:1/-1; text-align:center; padding:32px 16px; color:var(--sys-text-ter,#64748B); font-size:14px; }
+.zsp-w-loading { grid-column:1/-1; text-align:center; padding:24px; color:var(--sys-text-ter,#64748B); }
+
+/* Loaded sketch indicator */
+.zsp-w-loaded-msg { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:13px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); border-radius:8px; color:#92400E; animation:zsp-fade-in 300ms ease; }
+.zsp-w-loaded-msg strong { font-weight:600; }
+@keyframes zsp-fade-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+
+/* Image viewer (no-stroke fallback) */
+.zsp-w-img-body { display:flex; align-items:center; justify-content:center; padding:16px; }
+.zsp-w-img-full { max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; box-shadow:0 2px 12px rgba(0,0,0,0.15); }
+
+/* Fullscreen */
+.zsp-w-fs-overlay { position:fixed; inset:0; z-index:99999; display:flex; flex-direction:column; background:#FFFDE7; animation:zsp-fs-in 250ms ease; }
+@keyframes zsp-fs-in { from{opacity:0;transform:scale(0.96)} to{opacity:1;transform:scale(1)} }
+.zsp-w-fs-header { display:flex; align-items:center; gap:12px;
+  padding:10px 16px;
+  padding-top:max(10px,env(safe-area-inset-top,10px));
+  padding-left:max(16px,env(safe-area-inset-left,16px));
+  padding-right:max(16px,env(safe-area-inset-right,16px));
+  border-bottom:1px solid var(--sys-border,#E2E8F0); background:rgba(255,253,231,0.95); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); flex-shrink:0; z-index:1; }
+.zsp-w-fs-icon { width:28px; height:28px; border-radius:6px; background:#F59E0B; display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0; }
+.zsp-w-fs-icon svg { width:16px; height:16px; }
+.zsp-w-fs-title { flex:1; font-size:15px; font-weight:600; color:#1a1a2e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* v1.0.4: Close (X) on the left — leave without saving. Generous tap target. */
+.zsp-w-fs-close { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; margin-left:-6px; padding:0; flex-shrink:0; border:none; border-radius:10px; background:transparent; color:var(--sys-text-sec,#64748B); cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:background 150ms; }
+.zsp-w-fs-close:hover { background:rgba(100,116,139,0.12); color:var(--sys-text,#1a1a2e); }
+.zsp-w-fs-close:active { transform:scale(0.92); }
+
+/* v1.0.4: Save — the big, obvious primary finish action (top-right). */
+.zsp-w-fs-save { display:inline-flex; align-items:center; gap:7px; min-height:44px; padding:8px 20px; font-size:16px; font-weight:700; color:#FFF; background:var(--sys-brand,#2C5F8A); border:none; border-radius:11px; cursor:pointer; flex-shrink:0; box-shadow:0 1px 3px rgba(44,95,138,0.35); -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:filter 150ms,transform 100ms,opacity 150ms; }
+.zsp-w-fs-save:hover:not(:disabled) { filter:brightness(1.08); }
+.zsp-w-fs-save:active:not(:disabled) { transform:scale(0.97); }
+.zsp-w-fs-save:disabled { opacity:0.6; cursor:default; }
+.zsp-w-fs-save svg { flex-shrink:0; }
+.zsp-w-fs-save.zsp-w-fs-saving { opacity:0.7; pointer-events:none; }
+.zsp-w-fs-save.zsp-w-fs-saving span { opacity:0.85; }
+
+/* v1.0.4: "Viewing" badge shown for read-only loaded sketches (tap = edit). */
+.zsp-w-fs-viewbadge { display:inline-flex; align-items:center; min-height:44px; padding:6px 14px; font-size:13px; font-weight:600; color:var(--sys-text-sec,#64748B); background:rgba(100,116,139,0.1); border-radius:11px; flex-shrink:0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+
+/* Legacy done button (kept so any stale markup still styles correctly). */
+.zsp-w-fs-done { display:inline-flex; align-items:center; gap:6px; min-height:38px; padding:6px 16px; font-size:14px; font-weight:600; color:#FFF; background:var(--sys-brand,#2C5F8A); border:none; border-radius:8px; cursor:pointer; }
+.zsp-w-fs-body { flex:1; position:relative; overflow:hidden;
+  padding-left:env(safe-area-inset-left,0px); padding-right:env(safe-area-inset-right,0px);
+  background:#FFFDE7 repeating-linear-gradient(to bottom,transparent,transparent 29px,rgba(100,140,200,0.15) 29px,rgba(100,140,200,0.15) 30px); }
+.zsp-w-fs-canvas { display:block; width:100%; height:100%; cursor:crosshair; touch-action:none; -webkit-user-select:none; user-select:none; }
+.zsp-w-fs-toolbar { display:flex; align-items:center; gap:8px;
+  padding:10px 16px;
+  padding-bottom:max(10px,env(safe-area-inset-bottom,10px));
+  padding-left:max(16px,env(safe-area-inset-left,16px));
+  padding-right:max(16px,env(safe-area-inset-right,16px));
+  border-top:1px solid var(--sys-border,#E2E8F0); background:rgba(255,253,231,0.95); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); flex-shrink:0; z-index:1; }
+
+/* v1.0.4: View-mode action banner — shown when a saved sketch is opened
+   read-only. The primary button explicitly opts into editing. */
+.zsp-w-fs-viewbar { display:flex; align-items:center; gap:12px;
+  padding:12px 16px;
+  padding-bottom:max(12px,env(safe-area-inset-bottom,12px));
+  padding-left:max(16px,env(safe-area-inset-left,16px));
+  padding-right:max(16px,env(safe-area-inset-right,16px));
+  border-top:1px solid var(--sys-border,#E2E8F0); background:rgba(255,253,231,0.96); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); flex-shrink:0; z-index:1; }
+.zsp-w-fs-viewbar-label { flex:1; font-size:13px; font-weight:500; color:var(--sys-text-sec,#64748B); }
+.zsp-w-fs-editbtn { flex-shrink:0; min-height:48px; }
+/* In view mode the canvas invites a tap (no crosshair). */
+.zsp-w-fs-overlay.zsp-w-fs-viewing .zsp-w-fs-canvas { cursor:pointer; }
+
+/* ── DARK MODE ── */
+[data-theme="dark"] .zsp-w-canvas-wrap,
+[data-theme="dark"] .zsp-w-fs-overlay,
+[data-theme="dark"] .zsp-w-fs-body {
+  background:var(--sys-bg,#0F1B2D) repeating-linear-gradient(to bottom,transparent,transparent 29px,rgba(255,255,255,0.08) 29px,rgba(255,255,255,0.08) 30px);
+}
+[data-theme="dark"] .zsp-w-fs-header,
+[data-theme="dark"] .zsp-w-fs-toolbar,
+[data-theme="dark"] .zsp-w-fs-viewbar {
+  background:rgba(15,27,45,0.95);
+}
+[data-theme="dark"] .zsp-w-fs-title { color:#e2e8f0; }
+[data-theme="dark"] .zsp-w-fs-close { color:#94A3B8; }
+[data-theme="dark"] .zsp-w-fs-close:hover { background:rgba(148,163,184,0.18); color:#e2e8f0; }
+[data-theme="dark"] .zsp-w-fs-viewbar-label { color:#94A3B8; }
+[data-theme="dark"] .zsp-w-loaded-msg { background:rgba(245,158,11,0.15); border-color:rgba(245,158,11,0.3); color:#FCD34D; }
+[data-theme="dark"] .zsp-w-img-full { box-shadow:0 2px 12px rgba(0,0,0,0.4); }
+/* v1.0.4: saved-sketch thumbnails are exported as dark ink on WHITE (for
+   portability). On a dark gallery tile that reads as a glaring white card.
+   Invert luminance for display only so the ink shows light-on-dark, matching
+   the canvas. The stored file is untouched. The image viewer (full) is left
+   as-is — there we show the true exported image. */
+[data-theme="dark"] .zsp-w-gallery-thumb { filter:invert(1) hue-rotate(180deg) brightness(0.92); }
+[data-theme="dark"] .zsp-w-gallery-item { background:var(--sys-surface,#16243A); }
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme]) .zsp-w-canvas-wrap,
+  :root:not([data-theme]) .zsp-w-fs-overlay,
+  :root:not([data-theme]) .zsp-w-fs-body,
+  [data-theme="system"] .zsp-w-canvas-wrap,
+  [data-theme="system"] .zsp-w-fs-overlay,
+  [data-theme="system"] .zsp-w-fs-body {
+    background:var(--sys-bg,#0F1B2D) repeating-linear-gradient(to bottom,transparent,transparent 29px,rgba(255,255,255,0.08) 29px,rgba(255,255,255,0.08) 30px);
+  }
+  :root:not([data-theme]) .zsp-w-fs-header,
+  :root:not([data-theme]) .zsp-w-fs-toolbar,
+  :root:not([data-theme]) .zsp-w-fs-viewbar,
+  [data-theme="system"] .zsp-w-fs-header,
+  [data-theme="system"] .zsp-w-fs-toolbar,
+  [data-theme="system"] .zsp-w-fs-viewbar {
+    background:rgba(15,27,45,0.95);
+  }
+  :root:not([data-theme]) .zsp-w-fs-title,
+  [data-theme="system"] .zsp-w-fs-title { color:#e2e8f0; }
+  :root:not([data-theme]) .zsp-w-fs-close,
+  [data-theme="system"] .zsp-w-fs-close { color:#94A3B8; }
+  :root:not([data-theme]) .zsp-w-fs-close:hover,
+  [data-theme="system"] .zsp-w-fs-close:hover { background:rgba(148,163,184,0.18); color:#e2e8f0; }
+  :root:not([data-theme]) .zsp-w-fs-viewbar-label,
+  [data-theme="system"] .zsp-w-fs-viewbar-label { color:#94A3B8; }
+  :root:not([data-theme]) .zsp-w-loaded-msg,
+  [data-theme="system"] .zsp-w-loaded-msg { background:rgba(245,158,11,0.15); border-color:rgba(245,158,11,0.3); color:#FCD34D; }
+  :root:not([data-theme]) .zsp-w-img-full,
+  [data-theme="system"] .zsp-w-img-full { box-shadow:0 2px 12px rgba(0,0,0,0.4); }
+  :root:not([data-theme]) .zsp-w-gallery-thumb,
+  [data-theme="system"] .zsp-w-gallery-thumb { filter:invert(1) hue-rotate(180deg) brightness(0.92); }
+  :root:not([data-theme]) .zsp-w-gallery-item,
+  [data-theme="system"] .zsp-w-gallery-item { background:var(--sys-surface,#16243A); }
+}
+
+/* ── SUNLIGHT MODE ── */
+[data-theme="sunlight"] .zsp-w-canvas-wrap { background:#FFF repeating-linear-gradient(to bottom,transparent,transparent 29px,rgba(0,0,0,0.1) 29px,rgba(0,0,0,0.1) 30px); border:2px solid #000; }
+[data-theme="sunlight"] .zsp-w-fs-overlay,
+[data-theme="sunlight"] .zsp-w-fs-body { background:#FFF repeating-linear-gradient(to bottom,transparent,transparent 29px,rgba(0,0,0,0.1) 29px,rgba(0,0,0,0.1) 30px); }
+[data-theme="sunlight"] .zsp-w-fs-header,
+[data-theme="sunlight"] .zsp-w-fs-toolbar,
+[data-theme="sunlight"] .zsp-w-fs-viewbar { background:rgba(255,255,255,0.95); }
+[data-theme="sunlight"] .zsp-w-btn-primary { background:#000; color:#FFF; }
+[data-theme="sunlight"] .zsp-w-tool { color:#333; border-color:#999; }
+[data-theme="sunlight"] .zsp-w-tool-cta { color:#000; border-color:#000; }
+[data-theme="sunlight"] .zsp-w-tab-active { color:#000; border-bottom-color:#000; }
+[data-theme="sunlight"] .zsp-w-gallery-item { border:2px solid #000; }
+[data-theme="sunlight"] .zsp-w-fs-done { background:#000; }
+[data-theme="sunlight"] .zsp-w-fs-save { background:#000; box-shadow:none; }
+[data-theme="sunlight"] .zsp-w-fs-close { color:#000; }
+[data-theme="sunlight"] .zsp-w-fs-close:hover { background:rgba(0,0,0,0.08); }
+[data-theme="sunlight"] .zsp-w-fs-viewbadge { color:#000; background:rgba(0,0,0,0.08); }
+[data-theme="sunlight"] .zsp-w-fs-viewbar-label { color:#333; }
+[data-theme="sunlight"] .zsp-w-canvas-hint { background:rgba(0,0,0,0.78); }
+[data-theme="sunlight"] .zsp-w-fs-icon { background:#000; }
+[data-theme="sunlight"] .zsp-w-loaded-msg { background:rgba(0,0,0,0.05); border-color:rgba(0,0,0,0.2); color:#333; }
+[data-theme="sunlight"] .zsp-w-gal-edit-badge { background:rgba(0,0,0,0.7); }
+[data-theme="sunlight"] .zsp-w-gal-view-badge { background:rgba(0,0,0,0.5); }
+
+/* v1.0.4: the in-widget "Save Sketch" action bar was removed — Save now lives
+   in the full-screen overlay header. (.zsp-w-actions kept harmless if any
+   stale markup references it.) */
+.zsp-w-actions { display:flex; gap:8px; position:sticky; bottom:0; z-index:2; background:var(--sys-surface,#fff); padding-top:8px; padding-bottom:4px; }
+
+/* Responsive */
+@media (max-width:599px) {
+  .zsp-w-canvas { height:220px; }
+}
+@media (min-width:820px) {
+  .zsp-w-canvas { height:400px; }
+  .zsp-w-gallery { grid-template-columns:repeat(3,1fr); }
+}

@@ -1,0 +1,1037 @@
+/**
+ * Zorderz Admin Dashboard — User Management
+ *
+ * Styles for the #zdz-admin-dashboard interface rendered by admin-dashboard.js.
+ * Pure CSS, no external dependencies. Designed for the WordPress admin context.
+ *
+ * Color palette
+ *   Primary blue   : #2C5F8A
+ *   Primary hover  : #234B6E
+ *   Slate 900      : #1e293b
+ *   Slate 600      : #475569
+ *   Slate 400      : #94a3b8
+ *   Slate 200      : #e2e8f0
+ *   Slate 100      : #f1f5f9
+ *   Slate 50       : #f8fafc
+ *   White          : #ffffff
+ */
+
+/* =========================================================================
+   0. RESET & ROOT
+   ========================================================================= */
+
+#zdz-admin-dashboard {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  color: #1e293b;
+  line-height: 1.5;
+  box-sizing: border-box;
+  max-width: 1400px;
+  margin: 20px 0;
+  padding: 0;
+}
+
+#zdz-admin-dashboard *,
+#zdz-admin-dashboard *::before,
+#zdz-admin-dashboard *::after {
+  box-sizing: inherit;
+}
+
+/* =========================================================================
+   1. TAB BAR
+   ========================================================================= */
+
+.zdz-tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 24px;
+  padding: 0;
+}
+
+.zdz-tab {
+  position: relative;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.zdz-tab:hover {
+  color: #2C5F8A;
+}
+
+.zdz-tab.active {
+  color: #2C5F8A;
+  border-bottom-color: #2C5F8A;
+  font-weight: 600;
+}
+
+/* =========================================================================
+   2. TAB CONTENT
+   ========================================================================= */
+
+.zdz-tab-content {
+  display: none;
+}
+
+.zdz-tab-content.active {
+  display: block;
+}
+
+/* =========================================================================
+   3. STATS ROW
+   ========================================================================= */
+
+.zdz-stats-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.zdz-stat-card {
+  flex: 1 1 0%;
+  min-width: 160px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.zdz-stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.zdz-stat-val {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.zdz-stat-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* =========================================================================
+   4. TOOLBAR
+   ========================================================================= */
+
+.zdz-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.zdz-toolbar input,
+.zdz-toolbar select {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zdz-toolbar input {
+  min-width: 220px;
+}
+
+.zdz-toolbar input::placeholder {
+  color: #94a3b8;
+}
+
+.zdz-toolbar input:focus,
+.zdz-toolbar select:focus {
+  border-color: #2C5F8A;
+  box-shadow: 0 0 0 3px rgba(44, 95, 138, 0.12);
+}
+
+.zdz-toolbar select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+.zdz-toolbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* =========================================================================
+   5. BUTTONS
+   ========================================================================= */
+
+.zdz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.zdz-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.zdz-btn:active {
+  background: #f1f5f9;
+}
+
+.zdz-btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.zdz-btn-primary {
+  color: #ffffff;
+  background: #2C5F8A;
+  border-color: #2C5F8A;
+}
+
+.zdz-btn-primary:hover {
+  background: #234B6E;
+  border-color: #234B6E;
+  color: #ffffff;
+}
+
+.zdz-btn-primary:active {
+  background: #1c3d58;
+  border-color: #1c3d58;
+}
+
+.zdz-btn:disabled,
+.zdz-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* =========================================================================
+   6. TABLE
+   ========================================================================= */
+
+.zdz-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.zdz-table thead {
+  background: #f8fafc;
+}
+
+.zdz-table th {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.zdz-table td {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.zdz-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.zdz-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.zdz-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* =========================================================================
+   7. BADGES
+   ========================================================================= */
+
+.zdz-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  border-radius: 4px;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.zdz-badge-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  border-radius: 4px;
+  color: #ffffff;
+  white-space: nowrap;
+  /* background-color set inline by JS */
+}
+
+.zdz-badge-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  border-radius: 4px;
+  background: #e0f2fe;
+  color: #0369a1;
+  white-space: nowrap;
+}
+
+.zdz-badge-app {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.zdz-badge-safe {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #92400e;
+  white-space: nowrap;
+}
+
+.zdz-badge-denied {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+/* =========================================================================
+   8. SLIDE-IN PANEL
+   ========================================================================= */
+
+/* Overlay / Backdrop */
+.zdz-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 99999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.zdz-panel-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Panel */
+.zdz-panel {
+  position: fixed;
+  top: 32px; /* v2.17.1: Below WP admin bar */
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 100%;
+  background: #ffffff;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+.zdz-panel.show {
+  transform: translateX(0);
+}
+
+/* Panel Header */
+.zdz-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.zdz-panel-header h3,
+.zdz-panel-header .zdz-panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.zdz-panel-header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569; /* v2.17.1: Explicit dark color so X icon is visible */
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.zdz-panel-header button:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.zdz-panel-header button svg {
+  stroke: currentColor;
+}
+
+/* Panel Tabs */
+.zdz-panel-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 24px;
+  flex-shrink: 0;
+}
+
+.zdz-panel-tab {
+  position: relative;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #94a3b8;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.zdz-panel-tab:hover {
+  color: #475569;
+}
+
+.zdz-panel-tab.active {
+  color: #2C5F8A;
+  border-bottom-color: #2C5F8A;
+  font-weight: 600;
+}
+
+/* Panel Body */
+.zdz-panel-body {
+  flex: 1 1 auto;
+  min-height: 0; /* v2.17.1: Required for flex children to scroll */
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  padding: 24px;
+}
+
+/* =========================================================================
+   9. PANEL — DETAILS (FIELDS / TOGGLES)
+   ========================================================================= */
+
+.zdz-field-group {
+  margin-bottom: 20px;
+}
+
+.zdz-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.zdz-field-group input,
+.zdz-field-group select,
+.zdz-field-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zdz-field-group input:focus,
+.zdz-field-group select:focus,
+.zdz-field-group textarea:focus {
+  border-color: #2C5F8A;
+  box-shadow: 0 0 0 3px rgba(44, 95, 138, 0.12);
+}
+
+.zdz-field-group input:read-only {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: default;
+}
+
+/* Custom toggle switch */
+.zdz-toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  background: #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.zdz-toggle-track.active {
+  background: #2C5F8A;
+}
+
+.zdz-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease;
+}
+
+.zdz-toggle-track.active .zdz-toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* =========================================================================
+   10. PANEL — PERMISSIONS
+   ========================================================================= */
+
+.zdz-perm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.zdz-perm-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zdz-perm-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.zdz-perm-card .zdz-perm-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.zdz-perm-card .zdz-perm-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.zdz-perm-card .zdz-perm-category {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* 3-state toggle (Allow / Default / Deny) */
+.zdz-perm-controls {
+  display: flex;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.zdz-perm-btn {
+  flex: 1;
+  padding: 5px 0;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  background: #ffffff;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.zdz-perm-btn + .zdz-perm-btn {
+  border-left: 1px solid #e2e8f0;
+}
+
+.zdz-perm-btn:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* Active states — color depends on which button is active */
+.zdz-perm-btn.active {
+  color: #ffffff;
+}
+
+/* Allow = green */
+.zdz-perm-btn[data-value="allow"].active,
+.zdz-perm-btn:first-child.active {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+/* Default = blue/gray */
+.zdz-perm-btn[data-value="default"].active,
+.zdz-perm-btn:nth-child(2).active {
+  background: #475569;
+  color: #ffffff;
+}
+
+/* Deny = red */
+.zdz-perm-btn[data-value="deny"].active,
+.zdz-perm-btn:last-child.active {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+/* Info banner for admin users */
+.zdz-perm-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #475569;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+/* =========================================================================
+   11. PANEL — ACTIVITY TIMELINE
+   ========================================================================= */
+
+.zdz-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+.zdz-timeline::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  bottom: 6px;
+  width: 2px;
+  background: #e2e8f0;
+  border-radius: 1px;
+}
+
+.zdz-tl-item {
+  position: relative;
+  padding-bottom: 20px;
+}
+
+.zdz-tl-item:last-child {
+  padding-bottom: 0;
+}
+
+.zdz-tl-dot {
+  position: absolute;
+  left: -24px;
+  top: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2C5F8A;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px #e2e8f0;
+  z-index: 1;
+}
+
+.zdz-tl-content {
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.zdz-tl-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.zdz-tl-time {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* =========================================================================
+   12. PAGINATION
+   ========================================================================= */
+
+.zdz-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.zdz-pagination-info {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.zdz-pagination-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.zdz-pagination-btns button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.zdz-pagination-btns button:hover:not(:disabled):not(.active) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.zdz-pagination-btns button.active {
+  background: #2C5F8A;
+  border-color: #2C5F8A;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.zdz-pagination-btns button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* =========================================================================
+   13. LOADING OVERLAY
+   ========================================================================= */
+
+.zdz-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
+  z-index: 50;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.zdz-loading.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* CSS-only spinner */
+.zdz-loading::after {
+  content: "";
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2C5F8A;
+  border-radius: 50%;
+  animation: zdz-spin 0.7s linear infinite;
+}
+
+@keyframes zdz-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =========================================================================
+   14. TOAST NOTIFICATIONS
+   ========================================================================= */
+
+.zdz-toast {
+  position: fixed;
+  top: 40px;
+  right: 24px;
+  min-width: 280px;
+  max-width: 420px;
+  padding: 14px 20px;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 200000;
+  transform: translateX(calc(100% + 24px));
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.zdz-toast.show {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.zdz-toast.success {
+  border-left: 4px solid #16a34a;
+}
+
+.zdz-toast.error {
+  border-left: 4px solid #dc2626;
+}
+
+.zdz-toast.warning {
+  border-left: 4px solid #f59e0b;
+}
+
+/* =========================================================================
+   15. UTILITY / MISC
+   ========================================================================= */
+
+/* Ensure the root container positions the loading overlay correctly */
+#zdz-admin-dashboard {
+  position: relative;
+}
+
+/* Make table wrapper scroll horizontally when needed */
+.zdz-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Clickable rows */
+.zdz-table tbody tr[data-id] {
+  cursor: pointer;
+}
+
+/* =========================================================================
+   16. RESPONSIVE — 960px (tablets / narrow screens)
+   ========================================================================= */
+
+@media (max-width: 960px) {
+  .zdz-perm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .zdz-panel {
+    width: 380px;
+  }
+}
+
+/* =========================================================================
+   17. RESPONSIVE — 600px (mobile / compact admin views)
+   ========================================================================= */
+
+@media (max-width: 600px) {
+  #zdz-admin-dashboard {
+    margin: 10px 0;
+  }
+
+  /* Stats stack vertically */
+  .zdz-stats-row {
+    flex-direction: column;
+  }
+
+  .zdz-stat-card {
+    min-width: 0;
+  }
+
+  /* Toolbar wraps */
+  .zdz-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .zdz-toolbar input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .zdz-toolbar-right {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  /* Table scrolls horizontally */
+  .zdz-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Panel goes full-width */
+  .zdz-panel {
+    width: 100%;
+  }
+
+  /* Panel body tighter padding */
+  .zdz-panel-body {
+    padding: 16px;
+  }
+
+  .zdz-panel-tabs {
+    padding: 0 16px;
+  }
+
+  .zdz-panel-header {
+    padding: 16px;
+  }
+
+  /* Permissions grid single column */
+  .zdz-perm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Pagination stacks */
+  .zdz-pagination {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  /* Tabs can scroll horizontally */
+  .zdz-tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .zdz-tab {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  /* Toast full-width on mobile */
+  .zdz-toast {
+    left: 16px;
+    right: 16px;
+    min-width: 0;
+    max-width: none;
+  }
+}

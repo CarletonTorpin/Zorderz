@@ -1,0 +1,860 @@
+/**
+ * Zorderz Jobs - Inline Dashboard Widget CSS
+ *
+ * Scoped to .zjob-w (and the zjob- prefix) to prevent CSS bleed into the
+ * the dashboard SPA host. Built entirely on the theme's --sys-* / --ref-*
+ * design tokens so Light / Dark / System / Sunlight all track automatically;
+ * every token carries a hard-coded fallback so the widget still renders if it
+ * is ever loaded outside the theme shell (house convention, per tsec/tssc).
+ *
+ * The theme wraps this body in the shared .dash-widget-container /
+ * .dash-widget-header / .dash-widget-body shell (bridge_type inline_widget),
+ * so this file styles ONLY the body content - no outer card, no title bar.
+ *
+ * WIDGET-OVERFLOW-CONTRACT-v1: no internal scroll. The widget grows to its
+ * natural height and the dashboard page scrolls as one document.
+ *
+ * @package Zorderz\Jobs
+ * @since 1.1.0
+ */
+
+/* ==========================================================================
+ * 0. ROOT + RESET
+ * ========================================================================== */
+.zjob-w {
+	display: flex;
+	flex-direction: column;
+	gap: var(--ref-space-3, 12px);
+	font-family: inherit;
+	font-size: var(--ref-font-sm, 13px);
+	line-height: 1.5;
+	color: var(--sys-text, #0F172A);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	/* Keep the widget clear of the sticky dash top + icon bar when scrolled to. */
+	scroll-margin-top: calc(var(--dash-top-h, 0px) + var(--dash-sticky-h, 56px) + 8px);
+}
+.zjob-w *,
+.zjob-w *::before,
+.zjob-w *::after { box-sizing: border-box; }
+
+/* Full-screen mobile springboard wrapper (render_mobile_view). */
+.zjob-fullscreen { padding: var(--ref-space-4, 16px); }
+
+@keyframes zjob-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes zjob-spin { to { transform: rotate(360deg); } }
+
+/* ==========================================================================
+ * 1. TAB BAR
+ * ========================================================================== */
+.zjob-w-tabs {
+	display: flex;
+	gap: 0;
+	border-bottom: 2px solid var(--sys-border, #E2E8F0);
+}
+.zjob-w-tab {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--ref-space-2, 8px);
+	min-height: 44px;
+	padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+	font-size: var(--ref-font-sm, 13px);
+	font-weight: var(--sys-font-wt-sb, 600);
+	color: var(--sys-text-sec, #475569);
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-w-tab:hover { color: var(--sys-text, #0F172A); background: var(--sys-bg-alt, #F1F5F9); }
+.zjob-w-tab:focus-visible {
+	outline: 2px solid var(--sys-brand, #2C5F8A);
+	outline-offset: -2px;
+	border-radius: var(--ref-radius-sm, 8px) var(--ref-radius-sm, 8px) 0 0;
+}
+.zjob-w-tab.is-active,
+.zjob-w-tab.is-active:hover {
+	color: var(--sys-brand, #2C5F8A);
+	border-bottom-color: var(--sys-brand, #2C5F8A);
+	background: transparent;
+}
+
+/* ==========================================================================
+ * 2. PANELS
+ * ========================================================================== */
+.zjob-w-panel { display: none; flex-direction: column; gap: var(--ref-space-3, 12px); }
+.zjob-w-panel.is-active { display: flex; animation: zjob-fade-in 200ms ease; }
+
+.zjob-note {
+	margin: 0;
+	font-size: var(--ref-font-sm, 13px);
+	line-height: 1.5;
+	color: var(--sys-text-sec, #475569);
+}
+.zjob-note strong { color: var(--sys-text, #0F172A); font-weight: var(--sys-font-wt-sb, 600); }
+
+/* ==========================================================================
+ * 3. FILTER CHIPS
+ * ========================================================================== */
+.zjob-w-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--ref-space-2, 8px);
+}
+.zjob-chip {
+	display: inline-flex;
+	align-items: center;
+	min-height: 34px;
+	padding: 6px 14px;
+	font-size: var(--ref-font-xs, 11px);
+	font-weight: var(--sys-font-wt-sb, 600);
+	letter-spacing: 0.02em;
+	color: var(--sys-text-sec, #475569);
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-full, 999px);
+	cursor: pointer;
+	white-space: nowrap;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition: color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-chip:hover { color: var(--sys-text, #0F172A); border-color: var(--sys-border-strong, #CBD5E1); }
+.zjob-chip.is-active {
+	color: var(--sys-text-brand, #FFFFFF);
+	background: var(--sys-brand, #2C5F8A);
+	border-color: var(--sys-brand, #2C5F8A);
+}
+.zjob-chip:focus-visible { outline: 2px solid var(--sys-brand, #2C5F8A); outline-offset: 2px; }
+
+/* ==========================================================================
+ * 4. LIST + ITEMS
+ * ========================================================================== */
+.zjob-w-list { display: flex; flex-direction: column; gap: var(--ref-space-2, 8px); }
+
+.zjob-empty {
+	padding: var(--ref-space-4, 16px);
+	text-align: center;
+	font-size: var(--ref-font-sm, 13px);
+	color: var(--sys-text-sec, #475569);
+	background: var(--sys-surface-subtle, var(--sys-bg-alt, #F1F5F9));
+	border: 1px dashed var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-md, 12px);
+}
+.zjob-loading { display: flex; align-items: center; justify-content: center; gap: var(--ref-space-2, 8px); }
+.zjob-loading::before {
+	content: "";
+	width: 15px; height: 15px;
+	border: 2px solid var(--sys-border, #E2E8F0);
+	border-top-color: var(--sys-brand, #2C5F8A);
+	border-radius: 50%;
+	animation: zjob-spin 0.7s linear infinite;
+}
+
+.zjob-item {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--ref-space-3, 12px);
+	padding: var(--ref-space-3, 12px) var(--ref-space-3, 12px);
+	background: var(--sys-surface, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-left: 4px solid var(--sys-brand, #2C5F8A);
+	border-radius: var(--ref-radius-md, 12px);
+	animation: zjob-fade-in 180ms ease;
+}
+.zjob-item[data-status="done"]      { border-left-color: var(--sys-success, #16A34A); }
+.zjob-item[data-status="cancelled"] { border-left-color: var(--sys-border-strong, #CBD5E1); opacity: 0.82; }
+.zjob-item[data-status="in_progress"] { border-left-color: var(--sys-warning, #D97706); }
+.zjob-item[data-status="pending_close"] { border-left-color: #0E9F8E; }
+
+.zjob-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.zjob-item-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ref-space-2, 8px); }
+.zjob-item-comp {
+	font-size: var(--ref-font-md, 15px);
+	font-weight: var(--sys-font-wt-b, 700);
+	color: var(--sys-text, #0F172A);
+}
+.zjob-item-cust { font-size: var(--ref-font-sm, 13px); color: var(--sys-text, #0F172A); }
+.zjob-muted { color: var(--sys-text-ter, #64748B); font-style: italic; }
+.zjob-item-meta {
+	display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+	font-size: var(--ref-font-xs, 11px);
+	color: var(--sys-text-sec, #475569);
+}
+.zjob-dot { color: var(--sys-text-ter, #64748B); opacity: 0.6; }
+.zjob-item-people {
+	display: flex; flex-wrap: wrap; align-items: center; gap: var(--ref-space-3, 12px);
+	margin-top: 2px;
+	font-size: var(--ref-font-xs, 11px);
+	color: var(--sys-text-sec, #475569);
+}
+.zjob-item-people > span { display: inline-flex; align-items: center; gap: 4px; }
+.zjob-item-people i { width: 13px; height: 13px; opacity: 0.75; }
+.zjob-item-crm { color: var(--sys-text-brand, #2C5F8A); font-weight: var(--sys-font-wt-sb, 600); }
+.zjob-item-crm i { width: 13px; height: 13px; }
+.zjob-item-notes {
+	margin-top: 2px;
+	font-size: var(--ref-font-xs, 11px);
+	line-height: 1.45;
+	color: var(--sys-text-sec, #475569);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* --------------------------------------------------------------------------
+ * 4b. RICH WORKER CARD (Phase 2)
+ * Headline (job type) . customer/business . tap-to-map . tap-to-call .
+ * access callout . meta . people . notes . actions. Reuses the .zjob-item base
+ * and restacks it into a full-width vertical card via .zjob-card.
+ * ------------------------------------------------------------------------- */
+.zjob-card { flex-direction: column; align-items: stretch; gap: var(--ref-space-2, 8px); }
+
+.zjob-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ref-space-2, 8px); }
+.zjob-card-title {
+	font-size: var(--ref-font-md, 15px);
+	font-weight: var(--sys-font-wt-b, 700);
+	color: var(--sys-text, #0F172A);
+	letter-spacing: 0.01em;
+}
+.zjob-card-head .zjob-badge { margin-left: auto; }
+.zjob-mine {
+	display: inline-flex; align-items: center;
+	padding: 1px 8px;
+	font-size: 10px; font-weight: var(--sys-font-wt-b, 700);
+	text-transform: uppercase; letter-spacing: 0.05em;
+	color: var(--sys-text-brand, #FFFFFF);
+	background: var(--sys-brand, #2C5F8A);
+	border-radius: var(--ref-radius-full, 999px);
+}
+
+.zjob-card-who {
+	display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+	font-size: var(--ref-font-sm, 13px);
+	color: var(--sys-text, #0F172A);
+}
+.zjob-c-name { font-weight: var(--sys-font-wt-sb, 600); }
+.zjob-c-biz  { color: var(--sys-text-sec, #475569); }
+
+/* Tappable rows: address -> maps, phone -> call. Full-width touch targets. */
+.zjob-tap {
+	display: flex; align-items: center; gap: var(--ref-space-2, 8px);
+	min-height: 42px;
+	padding: 8px 11px;
+	font-size: var(--ref-font-sm, 13px);
+	text-decoration: none;
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-sm, 8px);
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-tap:hover { border-color: var(--sys-brand, #2C5F8A); background: var(--sys-surface, #FFFFFF); }
+.zjob-tap:focus-visible { outline: 2px solid var(--sys-brand, #2C5F8A); outline-offset: 2px; }
+.zjob-tap > i:first-child { width: 16px; height: 16px; flex-shrink: 0; color: var(--sys-brand, #2C5F8A); }
+.zjob-tap-txt {
+	flex: 1; min-width: 0;
+	color: var(--sys-text, #0F172A);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.zjob-tap-go { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.65; color: var(--sys-text-sec, #475569); }
+
+/* Site / access notes: warning-tinted callout so it reads at a glance. */
+.zjob-access {
+	display: flex; align-items: flex-start; gap: 7px;
+	padding: 8px 11px;
+	font-size: var(--ref-font-sm, 13px);
+	line-height: 1.4;
+	color: var(--sys-tint-warning-fg, #92400E);
+	background: var(--sys-tint-warning-bg, #FEF3C7);
+	border: 1px solid var(--sys-tint-border, transparent);
+	border-radius: var(--ref-radius-sm, 8px);
+	word-break: break-word;
+}
+.zjob-access i { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+
+/* Card action row: horizontal, full-width, top divider (overrides the base
+   right-aligned action column). */
+.zjob-card .zjob-item-actions {
+	flex-direction: row; align-items: center; align-self: stretch;
+	flex-wrap: wrap; gap: var(--ref-space-2, 8px);
+	padding-top: 8px;
+	border-top: 1px solid var(--sys-border, #E2E8F0);
+}
+
+/* --------------------------------------------------------------------------
+ * 4c. SCHEDULE (Phase 3) - the "when" chip + the admin set-time editor.
+ * ------------------------------------------------------------------------- */
+.zjob-sched {
+	display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+	font-size: var(--ref-font-sm, 13px);
+}
+.zjob-sched.is-set {
+	padding: 7px 11px;
+	background: var(--sys-tint-info-bg, #DBEAFE);
+	border: 1px solid var(--sys-tint-border, transparent);
+	border-radius: var(--ref-radius-sm, 8px);
+}
+.zjob-sched.is-set > i { width: 16px; height: 16px; flex-shrink: 0; color: var(--sys-tint-info-fg, #1E40AF); }
+.zjob-sched-when { font-weight: var(--sys-font-wt-sb, 600); color: var(--sys-tint-info-fg, #1E40AF); }
+.zjob-sched-none {
+	display: inline-flex; align-items: center; gap: 6px;
+	color: var(--sys-text-ter, #64748B); font-style: italic;
+}
+.zjob-sched-none i { width: 15px; height: 15px; }
+.zjob-sched-flag {
+	display: inline-flex; align-items: center;
+	padding: 1px 8px;
+	font-size: 10px; font-weight: var(--sys-font-wt-b, 700);
+	text-transform: uppercase; letter-spacing: 0.04em;
+	border-radius: var(--ref-radius-full, 999px);
+}
+.zjob-sched-flag.is-soon { background: var(--sys-tint-warning-bg, #FEF3C7); color: var(--sys-tint-warning-fg, #92400E); }
+.zjob-sched-flag.is-over { background: var(--sys-tint-danger-bg, #FEE2E2); color: var(--sys-tint-danger-fg, #991B1B); }
+
+/* Small text button: "Edit" (when set) / "Set time" (when not). */
+.zjob-sched-edit {
+	display: inline-flex; align-items: center; gap: 4px;
+	margin-left: auto;
+	padding: 4px 8px;
+	font-size: var(--ref-font-xs, 11px); font-weight: var(--sys-font-wt-sb, 600);
+	font-family: inherit;
+	color: var(--sys-text-brand, #2C5F8A);
+	background: transparent; border: 1px solid transparent;
+	border-radius: var(--ref-radius-sm, 8px);
+	cursor: pointer; white-space: nowrap;
+	-webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.zjob-sched-edit:hover { background: var(--sys-bg-alt, #F1F5F9); }
+.zjob-sched-edit i { width: 13px; height: 13px; }
+.zjob-sched-edit.is-set-time { color: var(--sys-brand, #2C5F8A); border-color: var(--sys-border, #E2E8F0); }
+.zjob-sched-edit.is-set-time:hover { border-color: var(--sys-brand, #2C5F8A); background: var(--sys-bg-alt, #F1F5F9); }
+
+/* The date/time editor. */
+.zjob-sched-form { display: flex; flex-direction: column; gap: 8px; }
+.zjob-sched-form[hidden] { display: none; }
+.zjob-sched-input {
+	width: 100%; min-height: 44px;
+	padding: 9px 11px;
+	font-size: 16px; /* >=16px avoids iOS zoom-on-focus */
+	font-family: inherit;
+	color: var(--sys-text, #0F172A);
+	background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-sm, 8px);
+	transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-sched-input:focus { outline: none; border-color: var(--sys-brand, #2C5F8A); box-shadow: 0 0 0 2px rgba(44, 95, 138, 0.2); }
+.zjob-sched-factions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Primary mini button (Save / Schedule) - filled variant of .zjob-mini. */
+.zjob-mini-primary {
+	color: var(--sys-text-brand, #FFFFFF);
+	background: var(--ref-brand-500, #2C5F8A);
+	border-color: var(--ref-brand-500, #2C5F8A);
+}
+.zjob-mini-primary:hover:not(:disabled) {
+	background: var(--ref-brand-600, #1E3A5F);
+	border-color: var(--ref-brand-600, #1E3A5F);
+	color: var(--sys-text-brand, #FFFFFF);
+}
+[data-theme="sunlight"] .zjob-mini-primary { background: #1A1A1A; color: #FFFFFF; border-color: #1A1A1A; }
+[data-theme="sunlight"] .zjob-mini-primary:hover:not(:disabled) { background: #000000; border-color: #000000; }
+
+/* Status badge - semantic tint pairs (identical in dark + system-dark). */
+.zjob-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 9px;
+	font-size: 10.5px;
+	font-weight: var(--sys-font-wt-b, 700);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	border-radius: var(--ref-radius-full, 999px);
+	border: 1px solid var(--sys-tint-border, transparent);
+	white-space: nowrap;
+}
+.zjob-badge.is-open        { background: var(--sys-tint-info-bg, #DBEAFE);    color: var(--sys-tint-info-fg, #1E40AF); }
+.zjob-badge.is-progress    { background: var(--sys-tint-warning-bg, #FEF3C7); color: var(--sys-tint-warning-fg, #92400E); }
+.zjob-badge.is-done        { background: var(--sys-tint-success-bg, #D1FAE5); color: var(--sys-tint-success-fg, #065F46); }
+.zjob-badge.is-cancelled   { background: var(--sys-tint-neutral-bg, #F3F4F6); color: var(--sys-tint-neutral-fg, #475569); }
+/* Awaiting close-out (worker done, originator to close): the app's teal accent,
+   translucent so it reads in light + dark without a dedicated theme token. */
+.zjob-badge.is-pending-close { background: rgba(14, 159, 142, 0.16); color: #0B8073; border-color: rgba(14, 159, 142, 0.35); }
+[data-theme="dark"] .zjob-badge.is-pending-close { color: #5EEAD4; }
+@media (prefers-color-scheme: dark) { [data-theme="system"] .zjob-badge.is-pending-close { color: #5EEAD4; } }
+
+/* Per-item action buttons (status transitions). */
+.zjob-item-actions {
+	display: flex; flex-direction: column; align-items: flex-end;
+	gap: 6px; flex-shrink: 0;
+}
+.zjob-mini {
+	display: inline-flex; align-items: center; gap: 5px;
+	min-height: 32px;
+	padding: 6px 11px;
+	font-size: var(--ref-font-xs, 11px);
+	font-weight: var(--sys-font-wt-sb, 600);
+	font-family: inherit;
+	color: var(--sys-text, #0F172A);
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-sm, 8px);
+	cursor: pointer;
+	white-space: nowrap;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            opacity var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-mini:hover:not(:disabled) { border-color: var(--sys-brand, #2C5F8A); color: var(--sys-brand, #2C5F8A); }
+.zjob-mini:disabled { opacity: 0.5; cursor: default; }
+.zjob-mini i { width: 13px; height: 13px; }
+.zjob-mini-ghost { background: transparent; color: var(--sys-text-ter, #64748B); border-color: transparent; }
+.zjob-mini-ghost:hover:not(:disabled) { color: var(--sys-error, #DC2626); border-color: transparent; }
+.zjob-mini-msg { font-size: 10.5px; color: var(--sys-error, #DC2626); max-width: 160px; text-align: right; line-height: 1.35; }
+
+/* ==========================================================================
+ * 5. FORM (Hand off panel)
+ * ========================================================================== */
+.zjob-field-row { display: flex; gap: var(--ref-space-3, 12px); }
+.zjob-field-row > .zjob-field { flex: 1; min-width: 0; }
+.zjob-field { display: flex; flex-direction: column; gap: 5px; }
+.zjob-field-qty { flex: 0 0 78px; }
+.zjob-field label {
+	font-size: var(--ref-font-xs, 11px);
+	font-weight: var(--sys-font-wt-sb, 600);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: var(--sys-text-sec, #475569);
+}
+.zjob-opt { font-weight: var(--sys-font-wt, 400); text-transform: none; letter-spacing: 0; color: var(--sys-text-ter, #64748B); }
+
+.zjob-field input,
+.zjob-field select,
+.zjob-field textarea {
+	width: 100%;
+	min-height: 46px;
+	padding: 11px 13px;
+	font-size: 16px; /* >=16px avoids iOS zoom-on-focus */
+	font-family: inherit;
+	color: var(--sys-text, #0F172A);
+	background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-sm, 8px);
+	transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-field textarea { min-height: 66px; resize: vertical; line-height: 1.5; }
+.zjob-field input::placeholder,
+.zjob-field textarea::placeholder { color: var(--sys-text-ter, #64748B); }
+.zjob-field input:focus,
+.zjob-field select:focus,
+.zjob-field textarea:focus {
+	outline: none;
+	border-color: var(--sys-brand, #2C5F8A);
+	box-shadow: 0 0 0 2px rgba(44, 95, 138, 0.2);
+}
+
+/* Native select: paint our own chevron (the default glyph is invisible on a
+   dark surface in dark mode). Dark + system-dark override to a light chevron.
+   Per the iOS lesson: background-color + background-image SEPARATELY, never the
+   `background` shorthand (iOS Safari tiles it). */
+.zjob-field select {
+	-webkit-appearance: none; -moz-appearance: none; appearance: none;
+	padding-right: 36px;
+	background-color: var(--sys-bg, #FFFFFF);
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23475569' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 12px center;
+	background-size: 12px 8px;
+}
+[data-theme="dark"] .zjob-field select {
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23CBD5E1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) {
+	[data-theme="system"] .zjob-field select {
+		background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23CBD5E1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+	}
+}
+
+/* ==========================================================================
+ * 6. ACTIONS + PRIMARY BUTTON + INLINE STATUS
+ * ========================================================================== */
+.zjob-actions { display: flex; align-items: center; gap: var(--ref-space-3, 12px); flex-wrap: wrap; }
+.zjob-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--ref-space-2, 8px);
+	min-height: 48px;
+	padding: var(--ref-space-3, 12px) var(--ref-space-5, 20px);
+	font-size: 16px;
+	font-weight: var(--sys-font-wt-sb, 600);
+	font-family: inherit;
+	line-height: 1.2;
+	border: 1px solid transparent;
+	border-radius: var(--ref-radius-md, 12px);
+	cursor: pointer;
+	white-space: nowrap;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition: background var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            box-shadow var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+	            opacity var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-btn:disabled { opacity: 0.55; cursor: default; }
+.zjob-btn i { width: 17px; height: 17px; }
+.zjob-btn-primary {
+	background: var(--ref-brand-500, #2C5F8A); /* pinned for AA text in dark */
+	color: var(--sys-text-brand, #FFFFFF);
+	border-color: var(--ref-brand-500, #2C5F8A);
+}
+.zjob-btn-primary:hover:not(:disabled) {
+	background: var(--ref-brand-600, #1E3A5F);
+	border-color: var(--ref-brand-600, #1E3A5F);
+	box-shadow: 0 2px 8px rgba(44, 95, 138, 0.35);
+}
+
+.zjob-inline-status {
+	font-size: var(--ref-font-sm, 13px);
+	color: var(--sys-text-sec, #475569);
+	opacity: 0;
+	transition: opacity var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+}
+.zjob-inline-status.is-visible { opacity: 1; }
+.zjob-inline-status.zjob-is-busy { color: var(--sys-text-sec, #475569); }
+.zjob-inline-status.zjob-is-ok   { color: var(--sys-success, #16A34A); }
+.zjob-inline-status.zjob-is-warn { color: var(--sys-warning, #D97706); }
+.zjob-inline-status.zjob-is-err  { color: var(--sys-error, #DC2626); }
+
+/* ==========================================================================
+ * 7. SUNLIGHT MODE - high-contrast overrides (matches tsec/tsemc)
+ * ========================================================================== */
+[data-theme="sunlight"] .zjob-btn-primary {
+	background: #1A1A1A; color: #FFFFFF; border-color: #1A1A1A;
+}
+[data-theme="sunlight"] .zjob-btn-primary:hover:not(:disabled) { background: #000000; border-color: #000000; }
+[data-theme="sunlight"] .zjob-chip.is-active { background: #1A1A1A; border-color: #1A1A1A; color: #FFFFFF; }
+[data-theme="sunlight"] .zjob-w-tab.is-active { color: #1A1A1A; border-bottom-color: #1A1A1A; }
+[data-theme="sunlight"] .zjob-item { border-color: var(--sys-border-strong, #94A3B8); }
+
+/* ==========================================================================
+ * 8. REDUCED MOTION
+ * ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+	.zjob-w-panel.is-active,
+	.zjob-item { animation: none; }
+	.zjob-loading::before { animation-duration: 1.4s; }
+	.zjob-w-tab, .zjob-chip, .zjob-mini, .zjob-btn, .zjob-tap, .zjob-sched-edit,
+	.zjob-field input, .zjob-field select, .zjob-field textarea, .zjob-sched-input { transition: none; }
+}
+
+/* ==========================================================================
+ * 9. NARROW WIDTHS - stack action column under the item
+ * ========================================================================== */
+@media (max-width: 480px) {
+	.zjob-item { flex-direction: column; }
+	.zjob-item-actions { flex-direction: row; align-items: center; align-self: stretch; flex-wrap: wrap; }
+	.zjob-field-row { flex-direction: column; gap: var(--ref-space-3, 12px); }
+	.zjob-field-qty { flex-basis: auto; }
+}
+
+
+/* ==========================================================================
+ * 10. FINISH PHOTOS + COMPLETION MODAL (Phase 7a)
+ * The submitted-photos strip on a pending_close / done card, and the worker's
+ * capture modal ("Mark my part complete"). Modal is tsjc- prefixed and appended
+ * to <body>, so it is styled independently of the .zjob-w widget scope.
+ * ========================================================================== */
+
+/* ---- submitted finish-photo strip on the card ------------------------- */
+.zjob-finish {
+	display: flex; flex-direction: column; gap: 8px;
+	padding: 9px 11px;
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-sm, 8px);
+}
+.zjob-fp-head {
+	display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+	font-size: var(--ref-font-sm, 13px); font-weight: var(--sys-font-wt-sb, 600);
+	color: var(--sys-text, #0F172A);
+}
+.zjob-fp-head > i:first-child { width: 15px; height: 15px; color: #0E9F8E; }
+.zjob-fp-badge {
+	display: inline-flex; align-items: center; gap: 4px; margin-left: auto;
+	padding: 1px 8px;
+	font-size: 10px; font-weight: var(--sys-font-wt-b, 700);
+	text-transform: uppercase; letter-spacing: 0.04em;
+	border-radius: var(--ref-radius-full, 999px);
+}
+.zjob-fp-badge i { width: 12px; height: 12px; }
+.zjob-fp-badge.is-ok   { background: var(--sys-tint-success-bg, #D1FAE5); color: var(--sys-tint-success-fg, #065F46); }
+.zjob-fp-badge.is-warn { background: var(--sys-tint-warning-bg, #FEF3C7); color: var(--sys-tint-warning-fg, #92400E); }
+.zjob-fp-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.zjob-fp {
+	display: block; width: 56px; height: 56px;
+	border-radius: var(--ref-radius-sm, 8px); overflow: hidden;
+	border: 1px solid var(--sys-border, #E2E8F0);
+	-webkit-tap-highlight-color: transparent;
+}
+.zjob-fp img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.zjob-fp-note { font-size: var(--ref-font-xs, 11px); color: var(--sys-text-sec, #475569); font-style: italic; }
+
+/* ---- capture modal ---------------------------------------------------- */
+.tsjc-overlay {
+	position: fixed; inset: 0; z-index: 100000;
+	display: flex; align-items: center; justify-content: center;
+	padding: 16px;
+	background: rgba(15, 23, 42, 0.55);
+	-webkit-font-smoothing: antialiased;
+	font-family: inherit;
+}
+.tsjc-dialog {
+	width: 100%; max-width: 460px; max-height: 92vh; overflow: auto;
+	display: flex; flex-direction: column;
+	background: var(--sys-surface, #FFFFFF);
+	color: var(--sys-text, #0F172A);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-lg, 16px);
+	box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+	font-size: var(--ref-font-sm, 13px);
+	animation: zjob-fade-in 180ms ease;
+}
+.tsjc-head {
+	display: flex; align-items: center; justify-content: space-between;
+	padding: 14px 16px 8px;
+}
+.tsjc-title { font-size: var(--ref-font-lg, 17px); font-weight: var(--sys-font-wt-b, 700); color: var(--sys-text, #0F172A); }
+.tsjc-x {
+	appearance: none; border: none; background: transparent; cursor: pointer;
+	font-size: 22px; line-height: 1; color: var(--sys-text-ter, #64748B);
+	padding: 2px 6px; border-radius: var(--ref-radius-sm, 8px);
+}
+.tsjc-x:hover { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); }
+.tsjc-sub {
+	padding: 0 16px 12px; font-size: var(--ref-font-sm, 13px);
+	line-height: 1.5; color: var(--sys-text-sec, #475569);
+	border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+.tsjc-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.tsjc-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.tsjc-tile {
+	position: relative; width: 84px; height: 84px;
+	display: flex; align-items: center; justify-content: center;
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 2px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-md, 12px); overflow: hidden;
+}
+.tsjc-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tsjc-tile.is-verified   { border-color: var(--sys-success, #16A34A); }
+.tsjc-tile.is-unverified { border-color: var(--sys-warning, #D97706); }
+.tsjc-tile-spin {
+	width: 20px; height: 20px;
+	border: 2px solid var(--sys-border, #E2E8F0);
+	border-top-color: #0E9F8E; border-radius: 50%;
+	animation: zjob-spin 0.7s linear infinite;
+}
+.tsjc-tile-x {
+	position: absolute; top: 2px; right: 2px;
+	width: 20px; height: 20px; padding: 0;
+	display: flex; align-items: center; justify-content: center;
+	font-size: 15px; line-height: 1; color: #FFFFFF;
+	background: rgba(15, 23, 42, 0.72); border: none;
+	border-radius: 50%; cursor: pointer;
+}
+.tsjc-tile-x:hover { background: var(--sys-error, #DC2626); }
+.tsjc-tile-badge {
+	position: absolute; left: 0; right: 0; bottom: 0;
+	padding: 1px 0; text-align: center;
+	font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+	color: #FFFFFF; background: rgba(15, 23, 42, 0.66);
+}
+.tsjc-tile.is-verified .tsjc-tile-badge   { background: rgba(22, 163, 74, 0.85); }
+.tsjc-tile.is-unverified .tsjc-tile-badge { background: rgba(217, 119, 6, 0.9); }
+.tsjc-add {
+	display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	min-height: 46px; padding: 10px 16px;
+	font-size: 15px; font-family: inherit; font-weight: var(--sys-font-wt-sb, 600);
+	color: var(--sys-text, #0F172A);
+	background: var(--sys-bg, #FFFFFF);
+	border: 1px dashed var(--sys-border-strong, #CBD5E1);
+	border-radius: var(--ref-radius-md, 12px);
+	cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.tsjc-add:hover:not(:disabled) { border-color: #0E9F8E; color: #0B8073; }
+.tsjc-add:disabled { opacity: 0.55; cursor: default; }
+.tsjc-add i { width: 18px; height: 18px; }
+.tsjc-foot {
+	display: flex; align-items: center; gap: 10px;
+	padding: 12px 16px; border-top: 1px solid var(--sys-border, #E2E8F0);
+}
+.tsjc-status { flex: 1; min-width: 0; font-size: var(--ref-font-sm, 13px); color: var(--sys-text-sec, #475569); }
+.tsjc-status.is-busy { color: var(--sys-text-sec, #475569); }
+.tsjc-status.is-ok   { color: var(--sys-success, #16A34A); }
+.tsjc-status.is-warn { color: var(--sys-warning, #D97706); }
+.tsjc-status.is-err  { color: var(--sys-error, #DC2626); }
+.tsjc-cancel, .tsjc-go {
+	appearance: none; cursor: pointer; font-family: inherit; font-size: 15px;
+	min-height: 46px; padding: 10px 18px; border-radius: var(--ref-radius-md, 12px);
+	font-weight: var(--sys-font-wt-sb, 600); border: 1px solid transparent;
+	display: inline-flex; align-items: center; gap: 6px;
+}
+.tsjc-cancel { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); border-color: var(--sys-border, #E2E8F0); }
+.tsjc-cancel:hover { border-color: var(--sys-border-strong, #CBD5E1); }
+.tsjc-go { background: #0E9F8E; color: #FFFFFF; border-color: #0E9F8E; }
+.tsjc-go:hover:not(:disabled) { background: #0B8073; border-color: #0B8073; }
+.tsjc-go:disabled { opacity: 0.5; cursor: default; }
+.tsjc-go i { width: 17px; height: 17px; }
+[data-theme="sunlight"] .tsjc-go { background: #1A1A1A; border-color: #1A1A1A; }
+[data-theme="sunlight"] .tsjc-go:hover:not(:disabled) { background: #000000; border-color: #000000; }
+
+@media (prefers-reduced-motion: reduce) {
+	.tsjc-dialog { animation: none; }
+	.tsjc-tile-spin { animation-duration: 1.4s; }
+}
+
+
+/* ==========================================================================
+ * 11. CLOSE-OUT (Phase 7b) - SLA flag, chip count badge, close-confirm state
+ * ========================================================================== */
+.zjob-sla-flag {
+	display: inline-flex; align-items: center;
+	margin-left: 6px; padding: 1px 8px;
+	font-size: 10px; font-weight: var(--sys-font-wt-b, 700);
+	text-transform: uppercase; letter-spacing: 0.04em;
+	border-radius: var(--ref-radius-full, 999px);
+	vertical-align: middle;
+}
+.zjob-sla-flag.is-soon { background: var(--sys-tint-warning-bg, #FEF3C7); color: var(--sys-tint-warning-fg, #92400E); }
+.zjob-sla-flag.is-over { background: var(--sys-tint-danger-bg, #FEE2E2); color: var(--sys-tint-danger-fg, #991B1B); }
+
+/* "Pending my close" count badge on the Awaiting-close chip. */
+.zjob-chip-count {
+	display: inline-flex; align-items: center; justify-content: center;
+	min-width: 16px; height: 16px; margin-left: 6px; padding: 0 4px;
+	font-size: 10px; font-weight: var(--sys-font-wt-b, 700); line-height: 1;
+	color: #FFFFFF; background: #0E9F8E;
+	border-radius: var(--ref-radius-full, 999px);
+}
+.zjob-chip.is-active .zjob-chip-count { background: rgba(255, 255, 255, 0.28); }
+
+/* Close-out button two-click confirm state. */
+.zjob-mini.is-confirm { background: var(--sys-warning, #D97706); border-color: var(--sys-warning, #D97706); color: #FFFFFF; }
+.zjob-mini.is-confirm:hover:not(:disabled) { background: #B45309; border-color: #B45309; color: #FFFFFF; }
+[data-theme="sunlight"] .zjob-mini.is-confirm { background: #1A1A1A; border-color: #1A1A1A; color: #FFFFFF; }
+
+
+/* ==========================================================================
+ * 12. AUTO-CLOSE COUNTDOWN + EXTEND FORM (Phase 7c)
+ * ========================================================================== */
+/* Countdown neutral variant (far from the deadline); is-soon/is-over reuse section 11. */
+.zjob-sla-flag.is-ok { background: var(--sys-tint-info-bg, #DBEAFE); color: var(--sys-tint-info-fg, #1E40AF); }
+
+/* "Extended Nx" badge on a pending_close card. */
+.zjob-ext-badge {
+	display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 8px;
+	font-size: 10px; font-weight: var(--sys-font-wt-b, 700);
+	text-transform: uppercase; letter-spacing: 0.04em;
+	color: var(--sys-text-sec, #475569);
+	background: var(--sys-bg-alt, #F1F5F9);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-full, 999px);
+	vertical-align: middle;
+}
+
+/* Extend-deadline inline form (revealed by the "Extend" button). */
+.zjob-ext-form { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.zjob-ext-form[hidden] { display: none; }
+.zjob-ext-label { font-size: var(--ref-font-xs, 11px); line-height: 1.4; color: var(--sys-text-sec, #475569); }
+.zjob-ext-reason {
+	width: 100%; min-height: 48px; padding: 9px 11px;
+	font-size: 16px; font-family: inherit; line-height: 1.4; resize: vertical;
+	color: var(--sys-text, #0F172A); background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0); border-radius: var(--ref-radius-sm, 8px);
+}
+.zjob-ext-reason:focus { outline: none; border-color: #0E9F8E; box-shadow: 0 0 0 2px rgba(14, 159, 142, 0.2); }
+.zjob-ext-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.zjob-ext-days-l {
+	display: inline-flex; align-items: center; gap: 6px;
+	font-size: var(--ref-font-xs, 11px); font-weight: var(--sys-font-wt-sb, 600);
+	text-transform: uppercase; letter-spacing: 0.03em; color: var(--sys-text-sec, #475569);
+}
+.zjob-ext-days {
+	width: 72px; min-height: 36px; padding: 6px 8px;
+	font-size: 15px; font-family: inherit;
+	color: var(--sys-text, #0F172A); background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0); border-radius: var(--ref-radius-sm, 8px);
+}
+.zjob-ext-days:focus { outline: none; border-color: #0E9F8E; }
+.zjob-ext-msg { font-size: 11px; color: var(--sys-text-sec, #475569); }
+.zjob-ext-msg.is-err { color: var(--sys-error, #DC2626); }
+
+/* Solo single-party attestation inline form (revealed by "Close (solo attestation)"). */
+.zjob-att-form { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.zjob-att-form[hidden] { display: none; }
+.zjob-att-label { font-size: var(--ref-font-xs, 11px); line-height: 1.4; color: var(--sys-text-sec, #475569); }
+.zjob-att-reason {
+	width: 100%; min-height: 48px; padding: 9px 11px;
+	font-size: 16px; font-family: inherit; line-height: 1.4; resize: vertical;
+	color: var(--sys-text, #0F172A); background: var(--sys-bg, #FFFFFF);
+	border: 1px solid var(--sys-border, #E2E8F0); border-radius: var(--ref-radius-sm, 8px);
+}
+.zjob-att-reason:focus { outline: none; border-color: #0E9F8E; box-shadow: 0 0 0 2px rgba(14, 159, 142, 0.2); }
+.zjob-att-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.zjob-att-msg { font-size: 11px; color: var(--sys-text-sec, #475569); }
+.zjob-att-msg.is-err { color: var(--sys-error, #DC2626); }
+
+
+/* ==========================================================================
+ * 13. WORKER INBOX (Worker inbox) - day-group headers + ETA signal
+ * ========================================================================== */
+/* Day-group header (Overdue / Today / Tomorrow / This week / ...). */
+.zjob-group-head {
+	display: flex; align-items: center; gap: 8px;
+	margin: 8px 2px 2px;
+	font-size: var(--ref-font-xs, 11px); font-weight: var(--sys-font-wt-b, 700);
+	text-transform: uppercase; letter-spacing: 0.06em;
+	color: var(--sys-text-ter, #64748B);
+}
+.zjob-w-list > .zjob-group-head:first-child { margin-top: 0; }
+.zjob-group-count {
+	display: inline-flex; align-items: center; justify-content: center;
+	min-width: 18px; height: 16px; padding: 0 5px;
+	font-size: 10px; font-weight: 700; line-height: 1;
+	color: var(--sys-text-sec, #475569); background: var(--sys-bg-alt, #F1F5F9);
+	border-radius: var(--ref-radius-full, 999px);
+}
+
+/* ETA chip a dispatcher/viewer sees on the card. */
+.zjob-eta-chip {
+	display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+	padding: 3px 10px;
+	font-size: var(--ref-font-xs, 11px); font-weight: var(--sys-font-wt-sb, 600);
+	border-radius: var(--ref-radius-full, 999px);
+}
+.zjob-eta-chip i { width: 13px; height: 13px; }
+.zjob-eta-chip.is-otw  { background: var(--sys-tint-info-bg, #DBEAFE);   color: var(--sys-tint-info-fg, #1E40AF); }
+.zjob-eta-chip.is-late { background: var(--sys-tint-danger-bg, #FEE2E2); color: var(--sys-tint-danger-fg, #991B1B); }
+.zjob-eta-when { opacity: 0.85; font-weight: var(--sys-font-wt, 400); }
+
+/* "Running late" mini button (warning-tinted; "On my way" reuses .zjob-mini-primary). */
+.zjob-mini-warn { background: var(--sys-warning, #D97706); border-color: var(--sys-warning, #D97706); color: #FFFFFF; }
+.zjob-mini-warn:hover:not(:disabled) { background: #B45309; border-color: #B45309; color: #FFFFFF; }
+[data-theme="sunlight"] .zjob-mini-warn { background: #1A1A1A; border-color: #1A1A1A; color: #FFFFFF; }

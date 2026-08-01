@@ -1,0 +1,257 @@
+/* TS Camera — Widget Styles v1.7.2 */
+
+/* Defensive surface lock (v1.2.2). The camera widget is NOT resizable and must
+   not shift horizontally. The widget itself carries no `resize:` and no drag
+   handles — but lock it explicitly so it can never be dragged bigger/smaller or
+   pushed left/right, and so nothing inside can overflow the dashboard column.
+   (The pinch/drag of the live preview with the "black corners" is the iOS NATIVE
+   camera surface — an OS behavior outside the web layer — not this element.) */
+.zcam-w { display:flex; flex-direction:column; gap:12px; font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif); color:var(--sys-text,#0F172A);
+  width:100%; max-width:100%; box-sizing:border-box; resize:none; overflow-x:hidden; }
+.zcam-w *, .zcam-w *::before, .zcam-w *::after { box-sizing:border-box; }
+
+/* Tabs */
+.zcam-w-tabs { display:flex; border-bottom:1px solid var(--sys-border,#E2E8F0); }
+.zcam-w-tab { flex:1; padding:10px 12px; font-size:13px; font-weight:500; color:var(--sys-text-sec,#94A3B8); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; text-align:center; transition:color 150ms,border-color 150ms; -webkit-tap-highlight-color:transparent; }
+.zcam-w-tab:hover { color:var(--sys-text,#0F172A); }
+.zcam-w-tab-active,.zcam-w-tab-active:hover { color:var(--sys-brand,#0EA5E9); border-bottom-color:var(--sys-brand,#0EA5E9); }
+.zcam-w-panel { display:flex; flex-direction:column; gap:10px; }
+
+.zcam-hidden { display:none !important; }
+.zcam-hidden-input { position:absolute; width:0; height:0; opacity:0; pointer-events:none; }
+
+/* Capture hint */
+.zcam-w-hint { margin:0; font-size:12px; line-height:1.45; color:var(--sys-text-ter,#64748B); text-align:center; }
+
+/* Per-photo note field */
+.zcam-w-note-wrap { position:relative; display:flex; align-items:center; }
+.zcam-w-note { width:100%; min-height:44px; padding:10px 36px 10px 12px; font-size:14px; font-family:inherit; color:var(--sys-text,#0F172A); background:var(--sys-bg-alt,#F8FAFC); border:1px solid var(--sys-border,#E2E8F0); border-radius:10px; -webkit-appearance:none; appearance:none; transition:border-color 150ms; box-sizing:border-box; }
+.zcam-w-note::placeholder { color:var(--sys-text-ter,#94A3B8); }
+.zcam-w-note:focus { outline:none; border-color:var(--sys-brand,#0EA5E9); }
+.zcam-w-note-clear { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; font-size:20px; line-height:1; color:var(--sys-text-ter,#94A3B8); background:none; border:none; border-radius:50%; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.zcam-w-note-clear:hover { color:var(--sys-text,#0F172A); }
+
+/* Sticky pre-label chip (orchestrator: "label all my photos as 'before'") */
+.zcam-w-sticky-chip { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 8px; padding:8px 12px; min-height:40px; font-size:13px; line-height:1.4; color:var(--sys-text,#0F172A); background:var(--sys-brand-soft,#E0F2FE); border:1px solid var(--sys-brand,#0EA5E9); border-radius:10px; box-sizing:border-box; }
+.zcam-w-sticky-chip strong { font-weight:700; }
+.zcam-w-sticky-clear { margin-left:auto; min-height:32px; padding:4px 12px; font-size:12px; font-weight:600; color:var(--sys-brand,#0EA5E9); background:var(--sys-bg,#FFFFFF); border:1px solid var(--sys-brand,#0EA5E9); border-radius:8px; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.zcam-w-sticky-clear:hover { color:var(--sys-bg,#FFFFFF); background:var(--sys-brand,#0EA5E9); }
+
+/* Buttons */
+.zcam-w-actions { display:flex; gap:8px; }
+.zcam-w-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:52px; padding:12px 20px; font-size:16px; font-weight:600; border:none; border-radius:12px; cursor:pointer; transition:all 150ms; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.zcam-w-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.zcam-w-btn-full { width:100%; }
+.zcam-w-btn-primary { background:#0EA5E9; color:#FFF; }
+.zcam-w-btn-primary:hover:not(:disabled) { background:#0284C7; }
+.zcam-w-btn-sm { min-height:32px; padding:4px 12px; font-size:11px; border-radius:6px; }
+
+/* Stray-line fix (v1.2.2). The theme paints `button:focus-visible{box-shadow}`,
+   and after the native-camera round-trip the Take Photo button can keep focus,
+   leaving that ring drawn as a "line on the button." We blur it in JS on return;
+   this is the CSS belt: clear any box-shadow that lingers from plain :focus (NOT
+   :focus-visible, so real keyboard focus is preserved for accessibility). */
+.zcam-w-btn-primary:focus:not(:focus-visible) { box-shadow:none; outline:none; }
+
+/* Spinner */
+.zcam-w-spinner { display:inline-block; width:16px; height:16px; border:2px solid var(--sys-border,#E2E8F0); border-top-color:#0EA5E9; border-radius:50%; animation:zcam-spin 0.6s linear infinite; flex:none; }
+@keyframes zcam-spin { to { transform:rotate(360deg); } }
+
+/* Async upload queue strip (non-blocking).
+   CLS fix (v1.2.0): the strip ALWAYS occupies a reserved region rather than
+   appearing/growing. min-height keeps the widget's height constant whether the
+   queue is empty or full; max-height + overflow-y caps growth so a 15-photo
+   burst scrolls WITHIN the strip instead of pushing the dashboard down. This
+   nested scroll is self-contained (no sticky children), so it doesn't conflict
+   with the theme's `overflow: clip` widget-body contract. */
+.zcam-w-queue { display:flex; flex-direction:column; gap:8px; min-height:56px; max-height:188px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+/* CSS-only caption while idle — makes the reserved region (CLS fix) read as
+   intentional rather than blank. No JS toggling, so nothing can shift layout. */
+.zcam-w-queue:empty::before { content:"Photos upload here as you take them."; display:flex; align-items:center; justify-content:center; height:56px; font-size:12px; color:var(--sys-text-ter,#94A3B8); }
+.zcam-w-q-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--sys-border,#E2E8F0); border-radius:10px; background:var(--sys-bg-alt,#F8FAFC); transition:opacity 300ms; flex:none; }
+.zcam-w-q-thumb { width:40px; height:40px; flex:none; border-radius:8px; overflow:hidden; background:var(--sys-border,#E2E8F0); }
+.zcam-w-q-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+.zcam-w-q-state { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--sys-text-sec,#64748B); min-width:0; }
+.zcam-w-q-label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.zcam-w-q-done { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#16A34A; color:#FFF; font-size:11px; font-weight:700; flex:none; }
+.zcam-w-q-item-done { border-color:rgba(34,197,94,0.35); background:rgba(34,197,94,0.08); }
+.zcam-w-q-fail { color:#DC2626; font-weight:600; }
+.zcam-w-q-item-failed { border-color:rgba(220,38,38,0.35); background:rgba(220,38,38,0.06); }
+.zcam-w-q-retry { margin-left:auto; min-height:28px; padding:3px 12px; font-size:12px; font-weight:600; color:#FFF; background:#0EA5E9; border:none; border-radius:6px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.zcam-w-q-retry:hover { background:#0284C7; }
+/* v1.2.10: discard control on failed items. Neutral by default; first tap arms
+   an explicit red "Discard?" confirm (two-tap — this deletes the only copy of
+   a never-uploaded photo), auto-disarms after 4s. */
+.zcam-w-q-discard { min-height:28px; min-width:28px; padding:3px 8px; font-size:14px; font-weight:600; line-height:1; color:var(--sys-text-sec,#64748B); background:transparent; border:1px solid var(--sys-border,#CBD5E1); border-radius:6px; cursor:pointer; flex:none; -webkit-tap-highlight-color:transparent; }
+.zcam-w-q-discard:hover { color:#DC2626; border-color:#DC2626; }
+.zcam-w-q-discard-armed, .zcam-w-q-discard-armed:hover { color:#FFF; background:#DC2626; border-color:#DC2626; font-size:11px; white-space:nowrap; }
+
+/* v1.4.0: Live in-page camera — the viewfinder STAYS on screen between shots.
+   Camera-app chrome: black surface, round shutter, translucent pills. Theme-
+   independent on purpose (photography context). Safe-area aware. */
+.zcam-live { position:fixed; inset:0; z-index:2147483000; display:none; background:#000; overflow:hidden; touch-action:none; }
+/* v1.6.1: the AE/AF press-and-hold was triggering iOS TEXT SELECTION (blue
+   tint over everything + magnifier loupe). Kill selection and the long-press
+   callout for the entire live view — nothing in it is selectable text. */
+.zcam-live, .zcam-live * { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+.zcam-live-open { display:block; }
+.zcam-live video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; transform-origin:50% 50%; }
+/* v1.5.1: shared cover-canvas styling (freeze frame + captured still). */
+.zcam-live-cover { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform-origin:50% 50%; pointer-events:none; opacity:0; }
+/* Freeze frame: shown instantly (no transition in), fades out quickly once
+   the new lens is painting — hides the stream-swap gap completely. */
+#zcam-live-freeze { transition:opacity 140ms ease-out; }
+.zcam-live-freeze-on { opacity:1; transition:none; }
+/* Captured still: the photo just taken, full screen — holds, then shrinks
+   toward the corner thumbnail. Unmissable per-shot confirmation. */
+#zcam-live-still { transform-origin:14% 86%; }
+.zcam-live-still-on { animation:tscamStill 700ms cubic-bezier(.3,.7,.35,1) forwards; }
+@keyframes tscamStill {
+  0%   { opacity:1; transform:none; }
+  55%  { opacity:1; transform:none; }
+  100% { opacity:0; transform:scale(.14); }
+}
+/* v1.5.0/1.5.1: shutter blink — a hair longer so the cut to the still reads
+   as a real shutter, not a flicker. */
+.zcam-live-blink { position:absolute; inset:0; background:#000; opacity:0; pointer-events:none; }
+.zcam-live-blink-on { animation:tscamBlink 180ms ease-out; }
+@keyframes tscamBlink { 0%{opacity:0;} 18%{opacity:1;} 60%{opacity:1;} 100%{opacity:0;} }
+/* v1.6.0: iOS-style focus square + sun exposure slider + AE/AF LOCK pill. */
+.zcam-live-focus { position:absolute; width:74px; height:74px; transform:translate(-50%,-50%); opacity:0; pointer-events:none; transition:opacity 220ms; }
+.zcam-live-focus-on { opacity:1; transition:opacity 90ms; }
+.zcam-live-focus-box { position:absolute; inset:0; border:1.5px solid #FFD60A; border-radius:2px; box-shadow:0 0 4px rgba(0,0,0,.35); animation:tscamFocusPop 260ms ease-out; }
+@keyframes tscamFocusPop { 0%{transform:scale(1.45);opacity:.4;} 100%{transform:scale(1);opacity:1;} }
+.zcam-live-focus-pulse .zcam-live-focus-box { animation:tscamFocusPulse 700ms ease-out; }
+@keyframes tscamFocusPulse { 0%{transform:scale(1.45);} 30%{transform:scale(1);} 50%{transform:scale(1.12);} 70%{transform:scale(1);} 85%{transform:scale(1.08);} 100%{transform:scale(1);} }
+.zcam-live-ev { position:absolute; left:88px; top:-18px; width:26px; height:110px; }
+.zcam-live-focus-flip .zcam-live-ev { left:auto; right:88px; }
+.zcam-live-ev-track { position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(255,214,10,.65); transform:translateX(-50%); }
+.zcam-live-ev-sun { position:absolute; left:50%; transform:translateX(-50%); top:43px; font-size:20px; line-height:1; color:#FFD60A; text-shadow:0 0 4px rgba(0,0,0,.5); }
+.zcam-live-lock { position:absolute; top:calc(44px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); padding:4px 12px; border-radius:4px; background:#FFD60A; color:#000; font-size:12px; font-weight:700; letter-spacing:.4px; opacity:0; pointer-events:none; transition:opacity 160ms; }
+.zcam-live-lock-on { opacity:1; }
+
+/* v1.5.0: zoom factor chip — appears while pinching, fades out after. */
+.zcam-live-zoom { position:absolute; top:calc(72px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); padding:5px 14px; border-radius:999px; background:rgba(0,0,0,.55); color:#FFD60A; font-size:15px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 160ms; }
+.zcam-live-zoom-on { opacity:1; }
+
+/* ── v1.7.0: PERSISTENT zoom UI (discoverability) ─────────────────────────
+   Previously zoom was pinch-only with a 0.9s chip, so users never knew it
+   existed (an employee shot everything on the wide lens). Now there is an
+   always-visible iOS-style zoom pill (tap lens/step buttons) sitting just
+   above the shutter controls, plus a vertical fine-zoom slider, plus a
+   one-time hint. Theme-independent black/yellow camera chrome, safe-area
+   aware. All of it drives the existing setZoom()/zoomSt engine. */
+
+/* Zoom pill: a translucent capsule of tappable factor buttons, centered just
+   above the controls bar. Buttons are built from the discovered lenses
+   (e.g. .5 / 1× / 3×) or digital steps on single-lens devices. */
+.zcam-live-zoombar {
+  position:absolute; left:50%; transform:translateX(-50%);
+  bottom:calc(132px + env(safe-area-inset-bottom,0px));
+  display:flex; align-items:center; gap:6px;
+  padding:5px 6px; border-radius:999px;
+  background:rgba(0,0,0,.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  z-index:3; max-width:calc(100% - 120px); overflow-x:auto; -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.zcam-live-zoombar::-webkit-scrollbar { display:none; }
+.zcam-live-zoom-btn {
+  flex:none; min-width:40px; min-height:40px; padding:0 8px;
+  border-radius:999px; border:none; background:transparent;
+  color:#FFF; font-size:13px; font-weight:700; line-height:1;
+  cursor:pointer; -webkit-tap-highlight-color:transparent;
+  display:flex; align-items:center; justify-content:center;
+  transition:background 120ms, color 120ms, transform 90ms;
+}
+.zcam-live-zoom-btn:active { transform:scale(.9); }
+/* Active lens/step: filled yellow chip, slightly larger digits, like iOS. */
+.zcam-live-zoom-btn-active { background:#FFD60A; color:#000; min-width:46px; font-size:15px; }
+
+/* Vertical fine-zoom slider on the right edge (optical where available,
+   digital beyond). Thumb is draggable across the full zoom range. */
+.zcam-live-zoomslider {
+  position:absolute; right:calc(14px + env(safe-area-inset-right,0px));
+  top:50%; transform:translateY(-50%);
+  width:34px; height:190px; z-index:3;
+  display:flex; align-items:center; justify-content:center;
+  touch-action:none;
+}
+.zcam-live-zoomslider-track {
+  position:absolute; left:50%; top:8px; bottom:8px; width:4px;
+  transform:translateX(-50%); border-radius:999px;
+  background:rgba(255,255,255,.28);
+}
+.zcam-live-zoomslider-fill {
+  position:absolute; left:0; right:0; bottom:0; border-radius:999px;
+  background:rgba(255,214,10,.9);
+}
+.zcam-live-zoomslider-thumb {
+  position:absolute; left:50%; transform:translate(-50%,50%);
+  width:26px; height:26px; border-radius:50%;
+  background:#FFF; box-shadow:0 1px 4px rgba(0,0,0,.5);
+  display:flex; align-items:center; justify-content:center;
+  font-size:9px; font-weight:800; color:#000;
+}
+/* '+' and '−' end caps for affordance */
+.zcam-live-zoomslider-cap {
+  position:absolute; left:50%; transform:translateX(-50%);
+  color:rgba(255,255,255,.85); font-size:16px; font-weight:700; line-height:1;
+  text-shadow:0 1px 2px rgba(0,0,0,.6); pointer-events:none;
+}
+.zcam-live-zoomslider-cap-top { top:-4px; }
+.zcam-live-zoomslider-cap-bot { bottom:-4px; }
+
+/* One-time discoverability hint near the pill. */
+.zcam-live-zoomhint {
+  position:absolute; left:50%; transform:translateX(-50%);
+  bottom:calc(182px + env(safe-area-inset-bottom,0px));
+  padding:6px 14px; border-radius:999px;
+  background:rgba(0,0,0,.6); color:#FFF; font-size:13px; font-weight:600;
+  white-space:nowrap; z-index:4; pointer-events:none;
+  opacity:0; transition:opacity 260ms;
+}
+.zcam-live-zoomhint-on { opacity:1; }
+/* v1.5.0: captured-frame thumbnail pop (roll-style confirmation). */
+.zcam-live-thumb { position:absolute; left:18px; bottom:calc(132px + env(safe-area-inset-bottom,0px)); width:62px; height:62px; border-radius:10px; border:2px solid rgba(255,255,255,.9); overflow:hidden; background:#000; opacity:0; transform:scale(.55); transition:opacity 160ms, transform 200ms cubic-bezier(.2,.9,.3,1.2); pointer-events:none; }
+.zcam-live-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+.zcam-live-thumb-on { opacity:1; transform:scale(1); }
+.zcam-live-top { position:absolute; top:0; left:0; right:0; padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px; display:flex; flex-direction:column; gap:6px; align-items:center; background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,0)); pointer-events:none; }
+.zcam-live-status { font-size:15px; font-weight:600; color:#FFF; text-shadow:0 1px 2px rgba(0,0,0,.6); }
+.zcam-live-up { color:#7DD3FC; }
+.zcam-live-saved { color:#86EFAC; }
+.zcam-live-note { font-size:13px; color:#E2E8F0; background:rgba(0,0,0,.45); border-radius:8px; padding:3px 10px; max-width:90%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.zcam-live-controls { position:absolute; left:0; right:0; bottom:0; padding:18px 22px calc(26px + env(safe-area-inset-bottom,0px)); display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.6)); }
+.zcam-live-shutter { width:84px; height:84px; flex:none; border-radius:50%; background:#FFF; border:5px solid rgba(255,255,255,.4); background-clip:padding-box; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:transform 90ms; }
+.zcam-live-shutter:active { transform:scale(.92); }
+.zcam-live-btn { min-height:48px; min-width:74px; padding:10px 14px; border-radius:12px; font-size:16px; font-weight:600; color:#FFF; background:rgba(15,23,42,.55); border:1px solid rgba(255,255,255,.35); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.zcam-live-btn:active { background:rgba(15,23,42,.8); }
+
+/* Gallery */
+.zcam-w-gallery { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+.zcam-w-gallery-item { position:relative; border:1px solid var(--sys-border,#E2E8F0); border-radius:12px; overflow:hidden; background:var(--sys-bg-alt,#F1F5F9); transition:all 200ms; }
+.zcam-w-gallery-thumb { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
+.zcam-w-gallery-info { padding:8px 10px; }
+.zcam-w-gallery-title { font-size:12px; font-weight:500; color:var(--sys-text,#0F172A); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.zcam-w-gallery-note { font-size:11px; line-height:1.35; color:var(--sys-text-sec,#64748B); margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.zcam-w-gallery-meta { display:flex; justify-content:space-between; align-items:center; margin-top:3px; }
+.zcam-w-gallery-meta span { font-size:10px; color:var(--sys-text-ter,#64748B); }
+.zcam-w-badge { display:inline-flex; padding:1px 6px; border-radius:4px; font-size:9px; font-weight:600; background:rgba(14,165,233,0.1); color:#0284C7; }
+.zcam-w-gallery-actions { display:flex; gap:4px; padding:4px 10px 8px; }
+.zcam-w-gallery-empty { grid-column:1/-1; text-align:center; padding:32px 16px; color:var(--sys-text-ter,#64748B); font-size:14px; }
+.zcam-w-loading { grid-column:1/-1; text-align:center; padding:24px; color:var(--sys-text-ter,#64748B); }
+
+/* Dark theme */
+[data-theme="dark"] .zcam-w-q-item { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); }
+[data-theme="dark"] .zcam-w-gallery-item { background:var(--sys-surface,#1E293B); }
+[data-theme="dark"] .zcam-w-note { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); color:var(--sys-text,#E2E8F0); }
+
+/* Sunlight */
+[data-theme="sunlight"] .zcam-w-btn-primary { background:#000; color:#FFF; }
+[data-theme="sunlight"] .zcam-w-tab-active { color:#000; border-bottom-color:#000; }
+[data-theme="sunlight"] .zcam-w-gallery-item { border:2px solid #000; }
+[data-theme="sunlight"] .zcam-w-q-item { border:2px solid #000; background:#FFF; }
+[data-theme="sunlight"] .zcam-w-q-retry { background:#000; }
+[data-theme="sunlight"] .zcam-w-q-discard { border:2px solid #000; color:#000; }
+[data-theme="sunlight"] .zcam-w-q-discard-armed, [data-theme="sunlight"] .zcam-w-q-discard-armed:hover { background:#000; border-color:#000; color:#FFF; }
+[data-theme="sunlight"] .zcam-w-note { border:2px solid #000; background:#FFF; color:#000; }
+[data-theme="sunlight"] .zcam-w-note:focus { border-color:#000; }

@@ -1,0 +1,69 @@
+/**
+ * Commission widget styles. Neutral, theme-token-driven; no brand palette.
+ *
+ * @package Zorderz\Commission
+ */
+.zcc-widget {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 4px 0;
+}
+
+.zcc-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 10px;
+}
+
+.zcc-label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 0.85rem;
+	min-width: 0;
+}
+
+.zcc-period {
+	min-width: 0;
+	max-width: 100%;
+	padding: 8px 10px;
+	min-height: 44px;
+	box-sizing: border-box;
+}
+
+.zcc-run {
+	min-height: 44px;
+}
+
+.zcc-result {
+	min-height: 1.5em;
+}
+
+.zcc-figure {
+	font-size: 1.6rem;
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+.zcc-basis {
+	font-size: 0.85rem;
+	opacity: 0.75;
+	margin-top: 2px;
+}
+
+.zcc-note {
+	font-size: 0.9rem;
+	opacity: 0.8;
+	margin: 0;
+}
+
+.zcc-warn {
+	margin-top: 8px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: rgba( 200, 60, 60, 0.12 );
+	color: #a01919;
+	font-size: 0.85rem;
+}

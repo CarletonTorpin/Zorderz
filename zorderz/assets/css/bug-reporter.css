@@ -1,0 +1,372 @@
+/* ================================================================
+   BUG REPORT — NAV TRIGGER BUTTON
+   Added to bottom nav (mobile) and sidebar (desktop).
+   Uses CSS order to position: Apps | Chat | Bug | Logo
+   ================================================================ */
+
+/* Reorder nav items so Bug sits between Chat and Logo */
+.bnav .ni          { order: 1; }  /* Apps, Chat (injected) */
+.bnav-bug          { order: 8; }  /* Bug trigger */
+.bnav-logo         { order: 9; }  /* Settings / Logo */
+
+.bnav-bug {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  color: var(--sys-text-ter, #94A3B8);
+  border-radius: var(--ref-radius-md, 12px);
+  transition: color var(--ref-dur-fast, 150ms) var(--ref-ease, ease),
+              background var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  cursor: pointer;
+  padding: 0;
+  border: none;
+  background: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bnav-bug svg,
+.bnav-bug .zdz-ladybug-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: var(--sys-icon-wt, 2);
+}
+.zdz-ladybug-icon {
+  display: inline-block;
+  vertical-align: middle;
+}
+.bnav-bug:hover {
+  color: var(--sys-text-sec, #64748B);
+  background: var(--sys-brand-light, rgba(44,95,138,.08));
+}
+.bnav-bug:active {
+  transform: scale(.9);
+}
+
+/* Sunlight override */
+[data-theme="sunlight"] .bnav-bug {
+  color: #000;
+}
+
+/* ---- Desktop: bug button above logo at bottom of sidebar ---- */
+@media (min-width: 768px) {
+  .bnav-bug {
+    flex-shrink: 0;            /* Never collapse */
+    width: calc(100% - 16px);
+    min-height: 48px;
+    padding: var(--ref-space-2, 8px);
+    margin: auto var(--ref-space-2, 8px) 0;  /* margin-top:auto pushes to bottom; zero bottom margin */
+    order: 90;                 /* Below nav items (1), above logo (99) */
+    border: 1.5px solid var(--sys-border, #E2E8F0);
+    border-radius: var(--ref-radius-md, 12px);
+    background: var(--sys-bg-alt, #F1F5F9);
+    color: var(--sys-text-sec, #64748B);
+  }
+  .bnav-bug:hover {
+    border-color: var(--sys-brand, #2C5F8A);
+    background: var(--sys-brand-light, rgba(44,95,138,.08));
+    color: var(--sys-brand, #2C5F8A);
+  }
+  .bnav-bug svg,
+  .bnav-bug .zdz-ladybug-icon {
+    width: 24px;
+    height: 24px;
+  }
+  /* Flex ordering: Dashboard(1) Chat(1) ... Bug(90 above logo) Logo(99 at very bottom) */
+  .bnav .ni  { order: 1; }
+  .bnav-bug  { order: 90; }
+  .bnav-logo {
+    order: 99;
+    margin-bottom: var(--ref-space-2, 8px);
+  }
+}
+
+/* ---- Sunlight override for desktop bug button ---- */
+@media (min-width: 768px) {
+  [data-theme="sunlight"] .bnav-bug {
+    border: 2.5px solid #000;
+    background: #fff;
+  }
+}
+
+
+/* ================================================================
+   BUG REPORT — MODAL OVERLAY
+   ================================================================ */
+.zdz-bug-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--sys-overlay, rgba(0,0,0,.5));
+  z-index: 260;
+  display: none;
+  align-items: flex-end;    /* Slide up from bottom on mobile */
+  justify-content: center;
+  padding: 0;
+  /* v2.14.4 NEW-2: Respect safe-area on all edges */
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+.zdz-bug-overlay.show {
+  display: flex;
+}
+@media (min-width: 768px) {
+  .zdz-bug-overlay {
+    align-items: center;    /* Center on desktop */
+    padding: var(--ref-space-4, 16px);
+    /* v2.14.4 NEW-2: Extra top padding on tablet to clear Safari chrome */
+    padding-top: max(var(--ref-space-4, 16px), env(safe-area-inset-top, 0));
+  }
+}
+
+/* ---- Modal Card ---- */
+.zdz-bug-modal {
+  background: var(--sys-surface, #fff);
+  width: 100%;
+  max-width: 480px;
+  border-radius: var(--ref-radius-2xl, 28px) var(--ref-radius-2xl, 28px) 0 0;
+  box-shadow: var(--sys-shadow-xl, 0 20px 60px rgba(0,0,0,.15));
+  display: flex;
+  flex-direction: column;
+  max-height: min(85dvh, calc(100vh - 60px));  /* v2.14.4: Account for Safari chrome on iPad */
+  transform: translateY(100%);
+  transition: transform var(--ref-dur-slow, 350ms) var(--ref-ease-spring, cubic-bezier(.32,.72,0,1));
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  /* v2.14.4 NEW-2: Safe-area insets prevent clipping on iPhone notch/Dynamic Island */
+  margin-left: env(safe-area-inset-left, 0);
+  margin-right: env(safe-area-inset-right, 0);
+  box-sizing: border-box;
+}
+.zdz-bug-overlay.show .zdz-bug-modal {
+  transform: translateY(0);
+}
+@media (min-width: 768px) {
+  .zdz-bug-modal {
+    border-radius: var(--ref-radius-xl, 20px);
+    transform: scale(.95);
+    opacity: 0;
+    transition: transform var(--ref-dur-norm, 250ms) var(--ref-ease, ease),
+                opacity var(--ref-dur-norm, 250ms) var(--ref-ease, ease);
+  }
+  .zdz-bug-overlay.show .zdz-bug-modal {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ---- Header ---- */
+.zdz-bug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ref-space-4, 16px) var(--ref-space-5, 20px);
+  border-bottom: 1px solid var(--sys-border, #E2E8F0);
+}
+.zdz-bug-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+}
+.zdz-bug-title-icon {
+  color: var(--ref-amber-500, #F59E0B);
+}
+.zdz-bug-header h3 {
+  font-size: var(--ref-font-lg, 22px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  margin: 0;
+}
+.zdz-bug-close-btn {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  border-radius: var(--ref-radius-md, 12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sys-text-ter, #94A3B8);
+}
+.zdz-bug-close-btn:hover {
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+
+/* ---- Body ---- */
+.zdz-bug-body {
+  padding: var(--ref-space-4, 16px) var(--ref-space-5, 20px);
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Context badge */
+.zdz-bug-context-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-2, 8px);
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  background: var(--sys-bg-alt, #F1F5F9);
+  border-radius: var(--ref-radius-sm, 8px);
+  margin-bottom: var(--ref-space-3, 12px);
+  font-size: var(--ref-font-xs, 13px);
+  color: var(--sys-text-sec, #64748B);
+}
+.zdz-bug-context-label {
+  white-space: nowrap;
+}
+.zdz-bug-context-badge {
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text, #0F172A);
+}
+
+/* Category buttons */
+.zdz-bug-cats {
+  display: flex;
+  flex-wrap: wrap;               /* Allow wrapping on narrow screens */
+  gap: var(--ref-space-2, 8px);
+  margin-bottom: var(--ref-space-4, 16px);
+}
+.zdz-bug-cat-btn {
+  flex: 1 1 auto;                /* Grow but also allow shrinking & wrapping */
+  min-width: calc(50% - 6px);    /* At most 2 per row on very narrow screens */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-space-1, 4px);
+  padding: var(--ref-space-2, 8px) var(--ref-space-3, 12px);
+  border: 1.5px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-full, 9999px);
+  font-size: var(--ref-font-sm, 15px);
+  font-weight: var(--sys-font-wt-md, 500);
+  color: var(--sys-text-sec, #64748B);
+  background: var(--sys-surface, #fff);
+  min-height: 44px;
+  white-space: nowrap;           /* Prevent button text itself from wrapping */
+  cursor: pointer;
+  transition: all var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.zdz-bug-cat-btn:hover {
+  border-color: var(--sys-brand, #2C5F8A);
+  color: var(--sys-brand, #2C5F8A);
+}
+.zdz-bug-cat-btn.active {
+  background: var(--sys-brand, #2C5F8A);
+  border-color: var(--sys-brand, #2C5F8A);
+  color: var(--sys-text-brand, #fff);
+}
+.zdz-bug-cat-btn svg {
+  flex-shrink: 0;
+}
+
+/* Textarea */
+.zdz-bug-fg {
+  margin-bottom: var(--ref-space-3, 12px);
+}
+.zdz-bug-fg textarea {
+  width: 100%;
+  padding: var(--ref-space-3, 12px) var(--ref-space-4, 16px);
+  border: 1.5px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-md, 12px);
+  background: var(--sys-bg, #F8FAFC);
+  font-size: var(--ref-font-base, 17px);
+  color: var(--sys-text, #0F172A);
+  min-height: 120px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+  transition: border-color var(--ref-dur-fast, 150ms) var(--ref-ease, ease);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.zdz-bug-fg textarea::placeholder {
+  color: var(--sys-text-ter, #94A3B8);
+}
+.zdz-bug-fg textarea:focus {
+  border-color: var(--sys-brand, #2C5F8A);
+  outline: none;
+}
+
+/* Auto-capture notice */
+.zdz-bug-auto-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--ref-space-1, 4px);
+  font-size: var(--ref-font-xs, 13px);
+  color: var(--sys-text-ter, #94A3B8);
+}
+
+/* ---- Footer ---- */
+.zdz-bug-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ref-space-3, 12px);
+  padding: var(--ref-space-3, 12px) var(--ref-space-5, 20px) var(--ref-space-4, 16px);
+  border-top: 1px solid var(--sys-border, #E2E8F0);
+}
+
+/* ---- Shake Animation (validation error) ---- */
+@keyframes zdz-bug-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.zdz-bug-shake {
+  animation: zdz-bug-shake 0.5s ease-in-out;
+  border-color: var(--ref-red-500, #EF4444) !important;
+}
+
+/* ---- Spinner (submit loading) ---- */
+.zdz-bug-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: zdz-bug-spin .6s linear infinite;
+}
+@keyframes zdz-bug-spin {
+  to { transform: rotate(360deg); }
+}
+
+
+/* ================================================================
+   SUNLIGHT MODE OVERRIDES
+   ================================================================ */
+[data-theme="sunlight"] .zdz-bug-modal {
+  border: 2.5px solid #000;
+  box-shadow: none;
+}
+[data-theme="sunlight"] .zdz-bug-header {
+  border-bottom: 2px solid #000;
+}
+[data-theme="sunlight"] .zdz-bug-footer {
+  border-top: 2px solid #000;
+}
+[data-theme="sunlight"] .zdz-bug-cat-btn {
+  border: 2px solid #000;
+}
+[data-theme="sunlight"] .zdz-bug-cat-btn.active {
+  background: #000;
+  color: #fff;
+}
+[data-theme="sunlight"] .zdz-bug-fg textarea {
+  border: 2px solid #000;
+}
+[data-theme="sunlight"] .zdz-bug-context-row {
+  border: 1.5px solid #000;
+  background: #fff;
+}
+
+/* ================================================================
+   REDUCED MOTION
+   ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .zdz-bug-modal {
+    transition-duration: 0.01ms !important;
+  }
+  .zdz-bug-shake {
+    animation-duration: 0.01ms !important;
+  }
+}
