@@ -669,9 +669,12 @@ class ZKV_Dashboard {
 			zkv_create_secure_vault_dir();
 		}
 
-		// Write file to vault.
-		$safe_name = wp_unique_filename( ZKV_VAULT_DIR, $filename );
-		$file_path = ZKV_VAULT_DIR . '/' . $safe_name;
+		// Write file to vault, under an unguessable per-file random subdirectory so the raw
+		// file URL cannot be guessed on servers that ignore the .htaccess deny (e.g. nginx).
+		$vault_sub = ZKV_VAULT_DIR . '/' . bin2hex( random_bytes( 16 ) );
+		wp_mkdir_p( $vault_sub );
+		$safe_name = wp_unique_filename( $vault_sub, $filename );
+		$file_path = $vault_sub . '/' . $safe_name;
 		$written   = file_put_contents( $file_path, $decoded );
 
 		if ( false === $written ) {
@@ -1636,7 +1639,10 @@ Respond with ONLY the JSON object.";
 		// Save text as .txt file in vault.
 		$safe_title = sanitize_file_name( $title ?: 'pasted-text' );
 		$filename   = date( 'Y-m-d' ) . '-' . $safe_title . '.txt';
-		$file_path  = ZKV_VAULT_DIR . '/' . wp_unique_filename( ZKV_VAULT_DIR, $filename );
+		// Unguessable per-file random subdirectory (see the upload path) so the URL can't be guessed.
+		$vault_sub  = ZKV_VAULT_DIR . '/' . bin2hex( random_bytes( 16 ) );
+		wp_mkdir_p( $vault_sub );
+		$file_path  = $vault_sub . '/' . wp_unique_filename( $vault_sub, $filename );
 
 		file_put_contents( $file_path, $pasted_text );
 

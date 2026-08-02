@@ -119,7 +119,7 @@ class ZDZ_Admin_Dashboard {
 	 * @param string $hook_suffix Current admin page hook.
 	 */
 	public function enqueue_assets( $hook_suffix ) {
-		if ( 'zorderz_page_ts-user-management' !== $hook_suffix ) {
+		if ( 'zorderz_page_zdz-user-management' !== $hook_suffix ) {
 			return;
 		}
 
