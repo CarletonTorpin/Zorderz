@@ -138,13 +138,19 @@ class ZEST_Dashboard {
 		foreach ( (array) ( $raw['line_items'] ?? array() ) as $li ) {
 			$total += (float) ( $li['unit_price'] ?? 0 ) * (int) ( $li['quantity'] ?? 1 );
 		}
-		if ( $total > 0 && '' === $email ) {
-			wp_send_json_error( array( 'message' => 'This estimate needs a valid email address to create and deliver the customer document.' ) );
-		}
-
-		$res = ZEST_FreshBooks::create_estimate( $raw, self::output_ctx( $uid ) );
-		if ( empty( $res['ok'] ) ) {
-			wp_send_json_error( array( 'message' => $res['error'] ) );
+		if ( ZEST_FreshBooks::is_configured() ) {
+			// Billing connected: a priced estimate needs an email to deliver, and we create through the provider.
+			if ( $total > 0 && '' === $email ) {
+				wp_send_json_error( array( 'message' => 'This estimate needs a valid email address to create and deliver the customer document.' ) );
+			}
+			$res = ZEST_FreshBooks::create_estimate( $raw, self::output_ctx( $uid ) );
+			if ( empty( $res['ok'] ) ) {
+				wp_send_json_error( array( 'message' => $res['error'] ) );
+			}
+		} else {
+			// No billing provider connected: save a local estimate the app owns. It syncs to a
+			// provider later, when one is connected. Estimates never require an external service.
+			$res = array( 'ok' => true, 'id' => '', 'number' => self::next_local_number(), 'local' => true );
 		}
 
 		// Mirror locally for ownership + history (source of truth for "my estimates").
@@ -161,7 +167,7 @@ class ZEST_Dashboard {
 			}
 		}
 
-		wp_send_json_success( array( 'number' => $res['number'], 'id' => $res['id'] ) );
+		wp_send_json_success( array( 'number' => $res['number'], 'id' => $res['id'], 'local' => ! empty( $res['local'] ) ) );
 	}
 
 	/** Open estimates: admin sees all (unless collapsed), a rep sees their own. */
@@ -381,6 +387,13 @@ class ZEST_Dashboard {
 			'created'  => (string) $row['created_at'],
 			'items'    => (int) $row['item_count'],
 		);
+	}
+
+	/** Sequential local estimate number for the no-billing fallback (EST-0001, EST-0002, ...). */
+	private static function next_local_number(): string {
+		global $wpdb;
+		$n = (int) $wpdb->get_var( 'SELECT COALESCE(MAX(id),0)+1 FROM ' . ZEST_DB::estimates_table() );
+		return 'EST-' . str_pad( (string) $n, 4, '0', STR_PAD_LEFT );
 	}
 
 	private static function store_row( array $raw, array $res, int $uid ): void {

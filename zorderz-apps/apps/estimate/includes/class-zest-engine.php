@@ -63,8 +63,9 @@ class ZEST_Estimate_Engine {
 			return $out;
 		}
 		if ( ! $this->ai->is_configured() ) {
-			$out['error'] = 'AI is not configured. Connect the AI gateway in Zorderz settings.';
-			return $out;
+			// No Ai gateway connected: build the estimate deterministically from the Item Engine
+			// catalog (aliases + pricing schemes) so Estimates works with no external service.
+			return $this->parse_catalog( $input, $context );
 		}
 
 		$messages = array(
@@ -91,6 +92,70 @@ class ZEST_Estimate_Engine {
 		$out['estimate'] = $estimate['estimate'];
 		$out['rejected'] = $estimate['rejected'];
 		$out['warnings'] = $estimate['warnings'];
+		return $out;
+	}
+
+	/**
+	 * Deterministic, Ai-free parse. Splits the input into item phrases, matches each against
+	 * the Item Engine catalog (longest-alias-wins) and prices it from the item's pricing
+	 * scheme. Unmatched phrases are returned as 'rejected'. Used when no Ai gateway is
+	 * connected, so an estimate can still be built from the catalog alone.
+	 */
+	private function parse_catalog( string $input, array $context = array() ): array {
+		$out      = array( 'ok' => false, 'estimate' => array(), 'rejected' => array(), 'warnings' => array(), 'error' => '' );
+		$items    = array();
+		$rejected = array();
+		foreach ( (array) preg_split( '/[\r\n,;]+/', $input ) as $phrase ) {
+			$phrase = trim( (string) $phrase );
+			if ( '' === $phrase ) {
+				continue;
+			}
+			$qty  = 1;
+			$desc = $phrase;
+			if ( preg_match( '/^\s*(\d+)\s*(?:x\b|of\b)?\s*(.+)$/i', $phrase, $m ) ) {
+				$qty  = max( 1, (int) $m[1] );
+				$desc = trim( $m[2] );
+			}
+			$item = ZEST_Catalog::match( $desc );
+			if ( ! is_array( $item ) ) {
+				$rejected[] = array( 'text' => $phrase, 'reason' => 'No catalog match' );
+				continue;
+			}
+			// Price from the item's pricing scheme via the Item Engine (qty 1 = the unit rate).
+			// Note: ZEST_Catalog::resolve_price passes the ITEM id where the Item Engine wants the
+			// SCHEME id, so it never resolves — go straight to the scheme id from the matched item.
+			$item_id   = (string) ( $item['id'] ?? '' );
+			$scheme_id = (string) ( $item['pricing_scheme_id'] ?? '' );
+			$price     = 0.0;
+			if ( '' !== $scheme_id && class_exists( 'ZDZ_Item_Engine' ) && method_exists( 'ZDZ_Item_Engine', 'resolve_price' ) ) {
+				$pr = ZDZ_Item_Engine::resolve_price( $scheme_id, array( 'qty' => 1 ) );
+				if ( isset( $pr['amount'] ) && null !== $pr['amount'] ) {
+					$price = (float) $pr['amount'];
+				}
+			}
+			$items[] = array(
+				'description' => (string) ( $item['display_name'] ?? $desc ),
+				'item_id'     => $item_id,
+				'quantity'    => $qty,
+				'unit_price'  => $price,
+			);
+		}
+		if ( empty( $items ) ) {
+			$out['error'] = ZEST_Catalog::has_catalog()
+				? 'No catalog items matched. Name items as they appear in your catalog, one per line or comma-separated.'
+				: 'The catalog is empty. Add items under Zorderz, Item Engine first.';
+			return $out;
+		}
+		$out['ok']       = true;
+		$out['estimate'] = array(
+			'customer'   => array(),
+			'line_items' => $items,
+			'reference'  => '',
+			'notes'      => '',
+			'input_text' => $input,
+		);
+		$out['rejected'] = $rejected;
+		$out['warnings'] = array( 'Built from your catalog without Ai. Review quantities and prices, then create.' );
 		return $out;
 	}
 

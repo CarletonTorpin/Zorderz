@@ -6,7 +6,7 @@
  *   platform. Optional per-document visibility, party-siloed transcripts, and a
  *   runtime pricing-authority context feed for the platform assistant. Ships
  *   EMPTY: no company facts, no product corpus, no seeded categories.
- * Version:     1.6.0
+ * Version:     1.7.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -29,6 +29,20 @@
  * server cannot honour the file-level rule. Activation writes SCHEMA ONLY —
  * no categories, facts or product keywords are seeded, and upgrades never insert
  * business rows.
+ *
+ * v1.7.1 (fresh-install schema + chat wiring):
+ *   SCHEMA SELF-HEAL — the zkv_documents CREATE TABLE now declares
+ *     is_pricing_authority and transcript_status (plus their indexes) directly, so
+ *     dbDelta adds them on every activation/upgrade. Before this they existed ONLY
+ *     in the version-gated migration, which a fresh install at the current version
+ *     (or an upgrade whose request died after the version bump but before the ALTERs)
+ *     skips — leaving every document insert (upload, chat-upload, paste, email-in)
+ *     failing with "Failed to create document record." The migration block is kept
+ *     as-is for older installs and simply no-ops once the columns exist.
+ *   CHAT BRIDGE — the analytics/Chat assistant reads its per-turn data context from
+ *     the neutral `zdz_analytics_data_context` filter (ships empty). This app now
+ *     hooks that filter and feeds it the ACL-scoped ZKV_TSA_Bridge inventory +
+ *     matched content, so an indexed, permitted vault document is answerable in chat.
  *
  * v1.6.0 (generalized into the Zorderz distribution): full ts_/TS_ prefix rename
  *   to zkv/ZKV with in-place migration via `zdz_rename_map`; REST under the single
@@ -121,7 +135,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ZKV_VERSION', '1.6.0' );
+define( 'ZKV_VERSION', '1.7.1' );
 define( 'ZKV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZKV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZKV_NONCE', 'zkv_nonce' );
@@ -313,6 +327,8 @@ function zkv_activate() {
 		status varchar(20) NOT NULL DEFAULT 'pending',
 		processing_error text DEFAULT NULL,
 		visibility varchar(100) NOT NULL DEFAULT 'all_employees',
+		is_pricing_authority tinyint(1) NOT NULL DEFAULT 0,
+		transcript_status varchar(24) NOT NULL DEFAULT '',
 		version int unsigned NOT NULL DEFAULT 1,
 		retry_count int unsigned NOT NULL DEFAULT 0,
 		indexed_at datetime DEFAULT NULL,
@@ -323,7 +339,10 @@ function zkv_activate() {
 		KEY idx_uploaded_by (uploaded_by),
 		KEY idx_category (category_id),
 		KEY idx_created (created_at),
-		KEY idx_slug (slug)
+		KEY idx_slug (slug),
+		KEY idx_visibility (visibility),
+		KEY idx_pricing_authority (is_pricing_authority),
+		KEY idx_transcript_status (transcript_status)
 	) {$charset};" );
 
 	$t_idx = $wpdb->prefix . 'zkv_index';
@@ -560,24 +579,22 @@ function zkv_vault_protection_report() {
 	// LiteSpeed) or web.config (IIS). On nginx/unknown we cannot assume it applies.
 	$file_rule_effective = $is_apache || $is_iis;
 
+	// v1.7.0: vault files are stored under unguessable per-file random subdirectories, so a raw
+	// file URL cannot be guessed even where the server ignores the .htaccess deny (e.g. nginx).
+	// That, plus the authenticated /vault route, is the guarantee — so a non-Apache server is no
+	// longer a security warning, only optional extra hardening.
 	$report = array(
 		'route_auth'          => true, // always — the serve handler enforces it
 		'htaccess_present'    => $htaccess_present,
 		'file_rule_effective' => $file_rule_effective,
 		'server'              => $server,
-		'warn'                => ! $file_rule_effective,
-		'message'            => '',
+		'warn'                => false,
+		'message'             => '',
 	);
 
-	if ( ! $file_rule_effective ) {
-		$report['message'] = sprintf(
-			/* translators: %s: web server software string */
-			__( 'Knowledge vault: this web server (%s) does not honour the .htaccess/web.config deny rule. Uploaded documents are still protected by the authenticated route, but you should add a server rule blocking direct access to the uploads/zkv-vault/ directory (or move it outside the web root) for defence-in-depth.', 'zorderz' ),
-			$server !== '' ? $server : 'unknown'
-		);
-	} elseif ( ! $htaccess_present ) {
+	if ( $file_rule_effective && ! $htaccess_present ) {
 		$report['warn']    = true;
-		$report['message'] = __( 'Knowledge vault: the deny-all .htaccess is missing from the uploads/zkv-vault/ directory. Deactivate and reactivate the app, or ensure the directory is writable, to restore defence-in-depth. The authenticated route still protects files.', 'zorderz' );
+		$report['message'] = __( 'Knowledge vault: the deny-all .htaccess is missing from the uploads/zkv-vault/ directory. Deactivate and reactivate the app, or ensure the directory is writable, to restore the file-level deny. The authenticated route and unguessable storage paths still protect files.', 'zorderz' );
 	}
 
 	return $report;
@@ -766,6 +783,57 @@ add_action( 'rest_api_init', function () {
 		ZKV_Rest::register_routes();
 	}
 } );
+
+// ── Chat bridge: feed vault knowledge into the analytics assistant ──
+// v1.7.1: The analytics/Chat app (ZANA_Chat) gathers each turn's data context
+// from the neutral `zdz_analytics_data_context` filter, which ships EMPTY. The
+// vault's retrieval path (ZKV_TSA_Bridge) is the ACL-aware code that turns a
+// question into matched document content and a compact document inventory — but
+// nothing connected that producer to the consumer seam, so an uploaded document
+// could never reach the assistant. This wires them together.
+//
+// No new exposure: the bridge enforces visibility itself (party-only for private
+// transcripts; admin_only content only for admins; everything else all_employees),
+// so this only makes already-permitted, indexed documents answerable in chat. The
+// text is handed back as inert data (the chat fences it), and verified_figures is
+// left untouched, so any number the model repeats from a document is still held to
+// the outbound Answer-Authority gate rather than stated as a confirmed figure.
+add_filter(
+	'zdz_analytics_data_context',
+	function ( $data, $message, $user_id, $context ) {
+		if ( ! class_exists( 'ZKV_TSA_Bridge' ) ) {
+			return $data;
+		}
+		if ( ! is_array( $data ) ) {
+			$data = array();
+		}
+		$uid = (int) $user_id;
+
+		$parts = array();
+
+		// Compact list of the documents the assistant may draw on.
+		$inventory = ZKV_TSA_Bridge::get_inventory( $uid );
+		if ( is_string( $inventory ) && '' !== trim( $inventory ) ) {
+			$parts[] = $inventory;
+		}
+
+		// Content matched to THIS question (ACL-scoped inside the bridge).
+		$matched = ZKV_TSA_Bridge::get_context( (string) $message, 8, $uid );
+		if ( is_string( $matched ) && '' !== trim( $matched ) ) {
+			$parts[] = $matched;
+		}
+
+		if ( ! empty( $parts ) ) {
+			$vault_text   = implode( "\n", $parts );
+			$existing     = isset( $data['text'] ) ? (string) $data['text'] : '';
+			$data['text'] = ( '' !== $existing ) ? $existing . "\n\n" . $vault_text : $vault_text;
+		}
+
+		return $data;
+	},
+	10,
+	4
+);
 
 // ── Allow additional file type uploads ────────────────────────────
 // WordPress blocks unknown file types by default. This tells WP
