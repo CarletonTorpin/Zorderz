@@ -102,6 +102,13 @@ if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
 // Load all inc/ class files explicitly
 require_once get_template_directory() . '/inc/interface-zdz-app.php';
 require_once get_template_directory() . '/inc/class-zdz-core-settings.php';
+// v1.1.1 fix: instantiate Core Settings NOW so its parent admin menu (zdz-core-settings)
+// hooks admin_menu before the Business Profile / Item Engine submenu classes (loaded just
+// below) do. Otherwise those submenus register against a not-yet-existent parent, become
+// orphaned, and WordPress denies direct access ("Sorry, you are not allowed to access this
+// page.") even for administrators. get_instance() is a singleton, so the later call in the
+// init block is a harmless no-op.
+ZDZ_Core_Settings::get_instance();
 require_once get_template_directory() . '/inc/class-zdz-business-profile.php'; // v1.0.0: the business's own identity (names, brand, contact, senders, locale)
 require_once get_template_directory() . '/inc/class-zdz-identity-pack.php';    // v1.0.0: import a business as data — preview, confirm, revert
 require_once get_template_directory() . '/inc/class-zdz-business-profile-admin.php'; // v1.0.0: the screens for both of the above

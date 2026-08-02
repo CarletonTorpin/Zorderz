@@ -23,7 +23,8 @@
 			body.append( k, typeof v === 'object' ? JSON.stringify( v ) : v );
 		} );
 		return fetch( cfg.ajaxurl, { method: 'POST', credentials: 'same-origin', body: body } )
-			.then( function ( r ) { return r.json(); } );
+			.then( function ( r ) { return r.json(); } )
+			.catch( function () { return { success: false, data: { message: 'Request failed. Please try again.' } }; } );
 	}
 
 	function esc( s ) {

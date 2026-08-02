@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZEST_DB {
 
-	const DB_VERSION = '1.20.8';
+	const DB_VERSION = '1.22.0';
 
 	public static function estimates_table(): string {
 		global $wpdb;
@@ -28,6 +28,16 @@ class ZEST_DB {
 	public static function jobs_table(): string {
 		global $wpdb;
 		return $wpdb->prefix . 'zest_parse_jobs';
+	}
+
+	public static function invoices_table(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'zest_invoices';
+	}
+
+	public static function payments_table(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'zest_payments';
 	}
 
 	/** Create/upgrade the schema (idempotent via dbDelta). Never seeds data. */
@@ -65,6 +75,15 @@ class ZEST_DB {
 			customer_state  VARCHAR(50)  NOT NULL DEFAULT '',
 			customer_zip    VARCHAR(20)  NOT NULL DEFAULT '',
 			reference       VARCHAR(100) NOT NULL DEFAULT '',
+			customer_org    VARCHAR(200) NOT NULL DEFAULT '',
+			doc_number      VARCHAR(50)  NOT NULL DEFAULT '',
+			doc_date        DATE         NULL DEFAULT NULL,
+			discount_type   VARCHAR(10)  NOT NULL DEFAULT 'none',
+			discount_value  DECIMAL(12,2) NOT NULL DEFAULT 0,
+			tax_amount      DECIMAL(12,2) NOT NULL DEFAULT 0,
+			shipping_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+			terms           TEXT         NULL,
+			converted_invoice_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			sent_at         DATETIME     NULL DEFAULT NULL,
 			accepted_at     DATETIME     NULL DEFAULT NULL,
 			accepted_by     BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -92,6 +111,60 @@ class ZEST_DB {
 			KEY idx_user (user_id),
 			KEY idx_status (status),
 			KEY idx_created (created_at)
+		) {$charset};" );
+
+		// ── Phase 2: the no-API invoice document (mirrors the estimate) ──
+		$invoices = self::invoices_table();
+		dbDelta( "CREATE TABLE {$invoices} (
+			id                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			invoice_number     VARCHAR(50)  NOT NULL DEFAULT '',
+			source_estimate_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			customer_name      VARCHAR(200) NOT NULL DEFAULT '',
+			customer_org       VARCHAR(200) NOT NULL DEFAULT '',
+			customer_email     VARCHAR(200) NOT NULL DEFAULT '',
+			customer_phone     VARCHAR(50)  NOT NULL DEFAULT '',
+			customer_street    VARCHAR(200) NOT NULL DEFAULT '',
+			customer_city      VARCHAR(100) NOT NULL DEFAULT '',
+			customer_state     VARCHAR(50)  NOT NULL DEFAULT '',
+			customer_zip       VARCHAR(20)  NOT NULL DEFAULT '',
+			salesperson        VARCHAR(50)  NOT NULL DEFAULT '',
+			reference          VARCHAR(100) NOT NULL DEFAULT '',
+			items_json         LONGTEXT     NOT NULL,
+			discount_type      VARCHAR(10)  NOT NULL DEFAULT 'none',
+			discount_value     DECIMAL(12,2) NOT NULL DEFAULT 0,
+			tax_amount         DECIMAL(12,2) NOT NULL DEFAULT 0,
+			shipping_amount    DECIMAL(12,2) NOT NULL DEFAULT 0,
+			notes              TEXT         NULL,
+			terms              TEXT         NULL,
+			total_amount       DECIMAL(14,2) NOT NULL DEFAULT 0,
+			amount_paid        DECIMAL(14,2) NOT NULL DEFAULT 0,
+			status             VARCHAR(20)  NOT NULL DEFAULT 'draft',
+			doc_date           DATE         NULL DEFAULT NULL,
+			due_date           DATE         NULL DEFAULT NULL,
+			created_by         BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			created_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at         DATETIME     NULL DEFAULT NULL,
+			sent_at            DATETIME     NULL DEFAULT NULL,
+			paid_at            DATETIME     NULL DEFAULT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_number (invoice_number),
+			KEY idx_status (status),
+			KEY idx_source (source_estimate_id),
+			KEY idx_created (created_at)
+		) {$charset};" );
+
+		$payments = self::payments_table();
+		dbDelta( "CREATE TABLE {$payments} (
+			id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			invoice_id  BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			method      VARCHAR(20)  NOT NULL DEFAULT 'other',
+			amount      DECIMAL(14,2) NOT NULL DEFAULT 0,
+			note        VARCHAR(255) NOT NULL DEFAULT '',
+			received_at DATE         NULL DEFAULT NULL,
+			created_by  BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY idx_invoice (invoice_id)
 		) {$charset};" );
 
 		// Failsafe: only stamp the version once the table really exists.

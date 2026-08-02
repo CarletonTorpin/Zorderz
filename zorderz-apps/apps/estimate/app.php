@@ -11,7 +11,7 @@
  *   compiled into the model prompt. Reads identity from ZDZ_Business_Profile,
  *   ZDZ_Item_Engine, ZDZ_Party, ZDZ_Core_FreshBooks, ZDZ_Core_Nutshell, ZDZ_Core_Poe and
  *   ZDZ_Core_Settings.
- * Version:     1.20.8
+ * Version:     1.21.2
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -52,7 +52,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /* ── Identity ──────────────────────────────────────────────────────── */
-define( 'ZEST_VERSION', '1.20.8' );
+define( 'ZEST_VERSION', '1.24.0' );
 define( 'ZEST_FILE', __FILE__ );
 define( 'ZEST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZEST_URL', plugin_dir_url( __FILE__ ) );
@@ -132,6 +132,7 @@ require_once ZEST_DIR . 'includes/class-zest-background.php';
 require_once ZEST_DIR . 'includes/class-zest-tsa-bridge.php';
 require_once ZEST_DIR . 'includes/class-zest-admin.php';
 require_once ZEST_DIR . 'includes/class-zest-dashboard.php';
+require_once ZEST_DIR . 'includes/class-zest-doc-renderer.php';
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
@@ -256,6 +257,178 @@ add_action( 'zest_daily_sync', function () {
 	if ( class_exists( 'ZEST_Dashboard' ) && method_exists( 'ZEST_Dashboard', 'cron_sync_estimates' ) ) {
 		ZEST_Dashboard::cron_sync_estimates();
 	}
+} );
+
+/* ── Phase 1: printable FreshBooks-parity document view + generic import ── */
+// A logged-in, access-gated printable page for an estimate: /?zest_doc=<id>.
+// No rewrite rules needed. The renderer escapes its own inputs.
+add_action( 'template_redirect', function () {
+	if ( ! isset( $_GET['zest_doc'] ) ) {
+		return;
+	}
+	$id = (int) $_GET['zest_doc'];
+	if ( ! is_user_logged_in() ) {
+		auth_redirect();
+	}
+	$ok = current_user_can( 'manage_options' );
+	if ( ! $ok && is_callable( array( 'ZDZ_Plugin_API', 'user_can_access_app' ) ) ) {
+		$ok = ZDZ_Plugin_API::user_can_access_app( get_current_user_id(), ZEST_APP_ID );
+	}
+	if ( ! $ok ) {
+		wp_die( esc_html__( 'Access denied.', 'zorderz' ), 403 );
+	}
+	if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+		wp_die( 'Document renderer unavailable.' );
+	}
+	$html = ZEST_Doc_Renderer::render_estimate( $id );
+	if ( '' === $html ) {
+		status_header( 404 );
+		wp_die( 'Document not found.' );
+	}
+	header( 'Content-Type: text/html; charset=utf-8' );
+	echo $html; // phpcs:ignore WordPress.Security.EscapeOutput — renderer escapes inputs
+	exit;
+} );
+
+// Generic document importer (admin). The seam the manual PDF-import pipeline feeds:
+// POST a normalized document JSON, get an estimate row that preserves its number,
+// date and totals verbatim. POST {ns}/estimate/import  (wp_rest nonce).
+add_action( 'rest_api_init', function () {
+	$ns = defined( 'ZDZ_REST_NS' ) ? ZDZ_REST_NS : 'zorderz/v1';
+	register_rest_route( $ns, '/estimate/import', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+		'callback'            => function ( WP_REST_Request $req ) {
+			if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+				return new WP_Error( 'zest_no_renderer', 'Renderer unavailable.', array( 'status' => 500 ) );
+			}
+			$doc = $req->get_json_params();
+			if ( ! is_array( $doc ) || empty( $doc ) ) {
+				$maybe = $req->get_param( 'doc' );
+				if ( is_string( $maybe ) ) {
+					$doc = json_decode( $maybe, true );
+				}
+			}
+			if ( ! is_array( $doc ) || empty( $doc ) ) {
+				return new WP_Error( 'zest_bad_doc', 'Missing or invalid document.', array( 'status' => 400 ) );
+			}
+			$id = ZEST_Doc_Renderer::import_estimate( $doc );
+			if ( ! $id ) {
+				return new WP_Error( 'zest_insert_failed', 'Insert failed.', array( 'status' => 500 ) );
+			}
+			return array( 'ok' => true, 'id' => $id, 'view' => home_url( '/?zest_doc=' . $id ) );
+		},
+	) );
+} );
+
+/* ── Phase 2: invoice document view + estimate→invoice convert + payments ── */
+// Printable invoice at /?zest_inv=<id> (logged-in + access-gated), same renderer.
+add_action( 'template_redirect', function () {
+	if ( ! isset( $_GET['zest_inv'] ) ) {
+		return;
+	}
+	$id = (int) $_GET['zest_inv'];
+	if ( ! is_user_logged_in() ) {
+		auth_redirect();
+	}
+	$ok = current_user_can( 'manage_options' );
+	if ( ! $ok && is_callable( array( 'ZDZ_Plugin_API', 'user_can_access_app' ) ) ) {
+		$ok = ZDZ_Plugin_API::user_can_access_app( get_current_user_id(), ZEST_APP_ID );
+	}
+	if ( ! $ok ) {
+		wp_die( esc_html__( 'Access denied.', 'zorderz' ), 403 );
+	}
+	if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+		wp_die( 'Document renderer unavailable.' );
+	}
+	$html = ZEST_Doc_Renderer::render_invoice( $id );
+	if ( '' === $html ) {
+		status_header( 404 );
+		wp_die( 'Invoice not found.' );
+	}
+	header( 'Content-Type: text/html; charset=utf-8' );
+	echo $html; // phpcs:ignore WordPress.Security.EscapeOutput — renderer escapes inputs
+	exit;
+} );
+
+// Invoice endpoints (admin, wp_rest nonce): import an invoice, convert an estimate,
+// record a payment. Kept intentionally minimal — document + payment tracking only.
+add_action( 'rest_api_init', function () {
+	$ns    = defined( 'ZDZ_REST_NS' ) ? ZDZ_REST_NS : 'zorderz/v1';
+	$admin = function () { return current_user_can( 'manage_options' ); };
+
+	register_rest_route( $ns, '/invoice/import', array(
+		'methods'             => 'POST',
+		'permission_callback' => $admin,
+		'callback'            => function ( WP_REST_Request $req ) {
+			if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+				return new WP_Error( 'zest_no_renderer', 'Renderer unavailable.', array( 'status' => 500 ) );
+			}
+			$doc = $req->get_json_params();
+			if ( ! is_array( $doc ) || empty( $doc ) ) {
+				return new WP_Error( 'zest_bad_doc', 'Missing or invalid document.', array( 'status' => 400 ) );
+			}
+			$id = ZEST_Doc_Renderer::import_invoice( $doc );
+			return $id ? array( 'ok' => true, 'id' => $id, 'view' => home_url( '/?zest_inv=' . $id ) )
+				: new WP_Error( 'zest_insert_failed', 'Insert failed.', array( 'status' => 500 ) );
+		},
+	) );
+
+	register_rest_route( $ns, '/estimate/(?P<id>\d+)/convert', array(
+		'methods'             => 'POST',
+		'permission_callback' => $admin,
+		'callback'            => function ( WP_REST_Request $req ) {
+			if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+				return new WP_Error( 'zest_no_renderer', 'Renderer unavailable.', array( 'status' => 500 ) );
+			}
+			$eid  = (int) $req->get_param( 'id' );
+			$opts = (array) ( $req->get_json_params() ?: array() );
+			$inv  = ZEST_Doc_Renderer::convert_estimate_to_invoice( $eid, $opts );
+			return $inv ? array( 'ok' => true, 'estimate_id' => $eid, 'invoice_id' => $inv, 'view' => home_url( '/?zest_inv=' . $inv ) )
+				: new WP_Error( 'zest_convert_failed', 'Conversion failed (estimate not found?).', array( 'status' => 400 ) );
+		},
+	) );
+
+	register_rest_route( $ns, '/invoice/(?P<id>\d+)/payment', array(
+		'methods'             => 'POST',
+		'permission_callback' => $admin,
+		'callback'            => function ( WP_REST_Request $req ) {
+			if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+				return new WP_Error( 'zest_no_renderer', 'Renderer unavailable.', array( 'status' => 500 ) );
+			}
+			$iid = (int) $req->get_param( 'id' );
+			$b   = (array) ( $req->get_json_params() ?: array() );
+			$res = ZEST_Doc_Renderer::record_payment( $iid, $b['amount'] ?? 0, $b['method'] ?? 'other', $b['note'] ?? '', $b['received_at'] ?? '' );
+			return ! empty( $res['ok'] ) ? $res : new WP_Error( 'zest_payment_failed', 'Payment failed (invoice not found?).', array( 'status' => 400 ) );
+		},
+	) );
+} );
+
+/* ── Estimates & Invoices management console: /?zdz_docs=1 ────────────── */
+// Staff-usable page: lists estimates + invoices with View/Print, Convert, and
+// Record-Payment, wired to the Phase 2 REST endpoints. Self-contained (does not
+// touch the app widget JS). View is app-access-gated; the write actions themselves
+// re-check manage_options server-side at the REST layer.
+add_action( 'template_redirect', function () {
+	if ( ! isset( $_GET['zdz_docs'] ) ) {
+		return;
+	}
+	if ( ! is_user_logged_in() ) {
+		auth_redirect();
+	}
+	$ok = current_user_can( 'manage_options' );
+	if ( ! $ok && is_callable( array( 'ZDZ_Plugin_API', 'user_can_access_app' ) ) ) {
+		$ok = ZDZ_Plugin_API::user_can_access_app( get_current_user_id(), ZEST_APP_ID );
+	}
+	if ( ! $ok ) {
+		wp_die( esc_html__( 'Access denied.', 'zorderz' ), 403 );
+	}
+	if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+		wp_die( 'Document renderer unavailable.' );
+	}
+	header( 'Content-Type: text/html; charset=utf-8' );
+	echo ZEST_Doc_Renderer::render_console(); // phpcs:ignore WordPress.Security.EscapeOutput — renderer escapes inputs
+	exit;
 } );
 
 /* ── Dashboard app registration (theme interface — after_setup_theme) ─── */

@@ -12,8 +12,8 @@ Zorderz is a field service management platform: a mobile-first dashboard, roles 
 
 Most business software wants to *be* your invoicing, your CRM, your calendar. Zorderz does the opposite. It assumes you already pay for tools that do those jobs well, and its purpose is to put them behind one interface your team actually uses, on infrastructure you own.
 
-- **It connects to what you already run.** Point Zorderz at your billing, CRM, scheduling and Ai providers through one Connections layer. It reads and writes to them; it does not try to replace them. Zorderz is deliberately *not* an invoicing engine or a CRM. WordPress is the wrong place to build those, and you already have them.
-- **No prerequisites, either.** No CRM or billing system yet? That's fine. The apps stand alone and hook into external systems later, when you have them.
+- **It connects to what you already run.** Point Zorderz at your billing, CRM, scheduling and Ai providers through one Connections layer; register a provider once and the apps read and write through it. Zorderz is deliberately *not* a full CRM and *not* a comprehensive billing system: WordPress is the wrong place to store that much moving data, duplicating a CRM would only bloat your database and slow the apps, and you already pay for tools that do it well.
+- **But you can start with nothing.** No billing system yet? Zorderz ships a basic built-in estimate and invoice generator, documents and payment tracking, so a business whose only tool is Zorderz can run from day one: build an estimate from your catalog, convert it to an invoice, and track payments through to paid. It is a floor, not a billing platform. Connect a real provider later and that becomes the system of record.
 - **It models the business you already run.** Designate someone a chief; scope that authority to a service type, a product line, or the person in general. Each level of the hierarchy carries its own rules. If you can describe how your business works, you can configure it.
 - **Bring your own intelligence.** The Ai gateway is provider-agnostic and the model slots are configurable, so you choose which model does which job, and you pay your provider directly. Nothing is hardwired to one vendor.
 - **Ai-installable by design.** An Ai agent is an intended *user* of this repo, not just a subject of it. The install guide at [`docs/INSTALL-FOR-AI.md`](docs/INSTALL-FOR-AI.md) is written for an autonomous agent to follow start to finish.
@@ -26,8 +26,8 @@ An install is two files, in this order:
 
 | Artifact | Zip | What it is |
 |---|---|---|
-| **Theme** | `zorderz-theme-1.1.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
-| **Apps** | `zorderz-apps-1.1.zip` | The 18 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
+| **Theme** | `zorderz-theme-1.2.0.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
+| **Apps** | `zorderz-apps-1.2.0.zip` | The 18 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
 
 The theme is the platform; the plugin is the apps that plug into it. **The theme must be active first**: it defines the roles, the shared media store, the plugin registration API and the `zorderz/v1` REST namespace that every app builds on. Install the plugin first and the apps load but have nowhere to appear (you'll get a plain admin notice telling you so).
 
@@ -52,7 +52,7 @@ Everything below ships empty or neutral. A fresh install names no business anywh
 
 ## The 18 apps
 
-Bundled in `zorderz-apps-1.1.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
+Bundled in `zorderz-apps-1.2.0.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
 
 | App | What it does |
 |---|---|
@@ -62,7 +62,7 @@ Bundled in `zorderz-apps-1.1.zip`. An app whose dependencies aren't present decl
 | **Team** | Internal channels and direct messages between team members. |
 | **Quick-ID** | A shareable business identity card, built entirely from the Business Profile. |
 | **Game** | A small built-in extra. |
-| **Invoices** | Draft and send invoices through a connected billing provider. |
+| **Invoices** | Draft and send invoices through a connected billing provider (for example Stripe). For the no-provider path, see Estimates. |
 | **Knowledge Base** | A searchable store of company facts the assistant is allowed to cite. Ships empty. |
 | **Scheduler** | Appointments, plus per-user Connected Calendars authorized through Connections. |
 | **Jobs** | Job handoffs and completion tracking, with a photo or recorded-attestation gate. |
@@ -71,7 +71,7 @@ Bundled in `zorderz-apps-1.1.zip`. An app whose dependencies aren't present decl
 | **Leads** | Intake and qualification of new leads, routed by service area. |
 | **Prep** | A fabrication and preparation queue driven by the Item Engine. |
 | **Receipts** | Itemized receipts and document output. |
-| **Estimates** | Build estimates from the catalog and price book. |
+| **Estimates** | Build estimates from the catalog and price book. With no billing provider connected, it also generates basic invoices: estimates convert to trackable invoices and payments are recorded through to paid. Documents and payment tracking only. |
 | **Commission** | Compensation and commission calculation. Ships no pay data. |
 | **Chat** | The Ai assistant, gated by Answer Authority and grounded in the Business Profile, catalog, roster and rule set. |
 
@@ -101,13 +101,13 @@ WordPress defaults to plain permalinks, under which `/wp-json/` returns your hom
 
 ### 2. Install and activate the theme (first)
 
-**Appearance → Themes → Add New → Upload Theme**, choose `zorderz-theme-1.1.zip`, install, and **Activate**.
+**Appearance → Themes → Add New → Upload Theme**, choose `zorderz-theme-1.2.0.zip`, install, and **Activate**.
 
 This is the platform. Activating it registers the roles, the shared media store, the plugin API and the `zorderz/v1` REST namespace that the apps need.
 
 ### 3. Install and activate the apps plugin (second)
 
-**Plugins → Add New → Upload Plugin**, choose `zorderz-apps-1.1.zip`, install, and **Activate**.
+**Plugins → Add New → Upload Plugin**, choose `zorderz-apps-1.2.0.zip`, install, and **Activate**.
 
 Activation runs each app's first-run work (tables, scheduling) and flushes the rewrite rules. If the theme isn't active yet, the plugin will tell you so with an admin notice instead of failing silently. Activate the theme, and the apps appear.
 
