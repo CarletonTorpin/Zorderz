@@ -11,6 +11,97 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.2.0] - 2026-08-02
+
+The release that came back from the first full end-to-end install: a business set
+up from scratch on a clean WordPress, then actually used. 1.1.0 proved the platform
+boots; 1.2.0 is what using it surfaced, plus the first built-in, no-external-API way
+to run estimates and invoices.
+
+**Unified versioning starts here.** From 1.2.0 on, the two artifacts ship on one
+number: "Zorderz 1.2.0" is theme 1.2.0 and apps 1.2.0, and they move together from
+now on. The apps inside the bundle keep their own internal version constants (each
+drives its own schema migrations); it is the distribution that is single-numbered.
+
+### Added
+
+- **A built-in estimate and invoice generator that needs no external billing API.**
+  One shared document engine renders estimates and invoices in a single consistent,
+  print-ready layout, pulling the company header straight from the Business Profile
+  so both look on-brand and identical. Line items and pricing come from the Item
+  Engine, so pricing is deterministic and works fully offline. An estimate converts
+  to an invoice (continuing an existing number sequence), and payments are recorded
+  and tracked from sent, to partial, to paid. Staff drive all of it from a
+  self-contained console. This is deliberately **documents and payment tracking
+  only**: not a billing gateway, not inventory, not accounts-receivable aging, and
+  not a CRM. It is the floor that lets a business whose only tool is Zorderz operate
+  from day one; a connected provider (Stripe, FreshBooks) stays the system of record
+  when present and maps onto this same model.
+- **A generic document importer**, so an existing business's estimates and invoices
+  can be brought in and tracked. The manual PDF-parsing front end is designed and
+  endpoint-ready and is the next milestone.
+- **The Knowledge Vault now feeds the Chat assistant.** An indexed, permitted
+  document becomes answerable in Chat through the single neutral data seam the
+  assistant reads each turn from. Visibility is enforced at the source, so wiring
+  the two together added reach, not exposure.
+- **An admin debug-log reader**, with opt-in capture of PHP error output to a
+  readable file, for managed hosts that keep no readable log by default. Off by
+  default.
+
+### Fixed
+
+- **Config screens were denied to a full administrator (blocker).** Business
+  Profile, Identity Pack and the Item Engine admin returned "you are not allowed to
+  access this page," because the submenus registered before their parent menu
+  existed. The parent is now registered first.
+- **User Management rendered blank**, gated on a stale pre-rename hook id. Corrected.
+- **The Estimates app was unusable without a billing API.** It hung forever on a
+  failed call (now degrades to an honest error), required an external provider to
+  create an estimate (now falls back to a local number), and priced everything at
+  zero because the price resolver was handed the wrong id (fixed).
+- **The Knowledge Vault could accept no documents at all (severe).** Two columns
+  were declared only in a version-gated migration that fresh installs skip, so every
+  upload failed with "Failed to create document record." Both now live in the table
+  definition and self-heal on every install and upgrade.
+- **Knowledge Vault file storage hardened** for managed hosts where a deny-all
+  `.htaccess` is inert: vault files now write under an unguessable per-file random
+  subdirectory.
+
+### Changed
+
+- **The theme is now titled "Zorderz Core"** (a leftover pre-release prefix
+  removed), and the apps bundle header no longer carries it.
+- **Both artifacts renumbered to 1.2.0** in lockstep (see "Unified versioning"
+  above).
+
+### Scope, on purpose
+
+The built-in estimates and invoices are documents and payment tracking, nothing
+more. Zorderz does not aim to become a CRM (the system of record for the whole
+customer relationship: contacts, accounts, the sales pipeline, activity history and
+reporting) or a comprehensive billing platform. WordPress is the wrong place to
+store and move that much data, and duplicating a CRM inside it would only bloat the
+database and slow the apps. Compatibility with external CRMs is the path, through
+the same Connections layer that already handles billing, scheduling and Ai;
+WooCommerce is not involved.
+
+### Still pending
+
+A legacy `TS` prefix from the pre-Zorderz source still appears in a few individual
+app headers and one admin label (cosmetic; sweep pending); chat turns are
+synchronous (a slow one can hit a managed-host origin timeout, and async is the next
+hardening); and the manual PDF import front end is designed but not yet built.
+
+### Verification
+
+Both zips rebuilt at 1.2.0; PHP files parse clean; the REST surface stays under the
+single `zorderz/v1` namespace; the release string-scan is clean of company, roster,
+customer and brand strings; and the estimate, invoice and payment lifecycle (create,
+convert, record payment through to paid) was exercised on a live install through the
+console UI.
+
+---
+
 ## [1.1.0] - 2026-08-01
 
 A maximal port. This release advances the platform onto the current internal
