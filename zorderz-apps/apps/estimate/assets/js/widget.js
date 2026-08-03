@@ -152,7 +152,7 @@
 		}
 		var text = input ? input.value.trim() : '';
 		if ( ! text ) { return; }
-		setStatus( 'Reading&hellip;' );
+		setStatus( 'Reading…' );
 		post( 'zest_parse', { text: text } ).then( function ( res ) {
 			setStatus( '' );
 			if ( ! res || ! res.success ) {
@@ -167,7 +167,7 @@
 		var urls = [];
 		// The theme media store handles upload; here we assume already-hosted URLs are
 		// provided by the shell. Fall back to text-only if none.
-		setStatus( 'Uploading&hellip;' );
+		setStatus( 'Uploading…' );
 		post( 'zest_enqueue_parse', { text: input ? input.value.trim() : '', images: urls } ).then( function ( res ) {
 			if ( ! res || ! res.success ) { setStatus( 'Upload failed.' ); return; }
 			pollJob( res.data.job );
@@ -192,7 +192,7 @@
 
 	function doCreate() {
 		if ( ! lastEstimate ) { return; }
-		setStatus( 'Creating&hellip;' );
+		setStatus( 'Creating…' );
 		post( 'zest_create', { estimate: lastEstimate } ).then( function ( res ) {
 			setStatus( '' );
 			if ( ! res || ! res.success ) {

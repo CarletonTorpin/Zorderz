@@ -1,3 +1,11 @@
+# Zorderz 1.3.3 (theme + apps)
+
+**August 3, 2026 · Zorderz Core theme 1.3.3 · Zorderz Apps bundle 1.3.3**
+
+A correctness release for the built-in estimates. Estimates created by dictating or typing them (the Ai-assisted path) were saved with every price at $0.00: the catalog price resolver asked the Item Engine with the item id where it expects a pricing-scheme id, so nothing resolved and each line fell back to $0.00 (the no-Ai fallback already worked around this). Prices now resolve from the scheme id, and the fill asks for the unit rate (quantity one) so a per-unit price is not squared against the quantity. Overpaid invoices no longer show a negative amount due (it is clamped at zero in the console, the printable invoice, the import review, and the payment response), and the Estimates widget status text now renders a proper ellipsis instead of a raw HTML entity. Internal app version this release: Estimates (ZEST) 1.25.2.
+
+---
+
 # Zorderz 1.3.2 (theme + apps)
 
 **August 3, 2026 · Zorderz Core theme 1.3.2 · Zorderz Apps bundle 1.3.2**

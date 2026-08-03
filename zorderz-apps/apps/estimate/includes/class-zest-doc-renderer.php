@@ -226,7 +226,7 @@ class ZEST_Doc_Renderer {
 			$col3 = self::lab( 'Invoice Number' ) . self::val( $doc['number'] ?? '' )
 				. '<div class="gap"></div>' . self::lab( 'Reference' ) . self::val( '' !== $ref ? $ref : ' ' );
 			$paid = (float) ( $doc['amount_paid'] ?? 0 );
-			$due  = $t['total'] - $paid;
+			$due  = max( 0, $t['total'] - $paid );
 			$col4 = '<div class="lab">Amount Due (USD)</div><div class="bigdue">' . self::money( $due ) . '</div>';
 			$meta = '<div class="col"><div class="lab">Billed To</div><div class="val">' . $cust_lines . '</div></div>'
 				. '<div class="col">' . $col2 . '</div>'
@@ -259,7 +259,7 @@ class ZEST_Doc_Renderer {
 			$paid = (float) ( $doc['amount_paid'] ?? 0 );
 			$tr  .= '<div class="row grand"><span class="l">Total</span><span class="r">' . self::money( $t['total'], false ) . '</span></div>';
 			$tr  .= '<div class="row"><span class="l">Amount Paid</span><span class="r">' . self::money( $paid, false ) . '</span></div>';
-			$tr  .= '<div class="row grand"><span class="l">Amount Due (USD)</span><span class="r">' . self::money( $t['total'] - $paid ) . '</span></div>';
+			$tr  .= '<div class="row grand"><span class="l">Amount Due (USD)</span><span class="r">' . self::money( max( 0, $t['total'] - $paid ) ) . '</span></div>';
 		}
 
 		// ── notes / terms ──
@@ -670,7 +670,7 @@ table.items tbody td.desc{text-align:left}
 			'paid_at'     => ( 'paid' === $status ) ? current_time( 'mysql' ) : null,
 			'updated_at'  => current_time( 'mysql' ),
 		), array( 'id' => (int) $invoice_id ) );
-		return array( 'ok' => true, 'invoice_id' => (int) $invoice_id, 'amount_paid' => $paid, 'total' => $total, 'amount_due' => round( $total - $paid, 2 ), 'status' => $status );
+		return array( 'ok' => true, 'invoice_id' => (int) $invoice_id, 'amount_paid' => $paid, 'total' => $total, 'amount_due' => max( 0, round( $total - $paid, 2 ) ), 'status' => $status );
 	}
 
 	/* ─────────────────── management console (Phase-2 UI) ────────────────── */
@@ -738,7 +738,7 @@ table.items tbody td.desc{text-align:left}
 		foreach ( $invs as $v ) {
 			$total = (float) ( $v['total_amount'] ?? 0 );
 			$paid  = (float) ( $v['amount_paid'] ?? 0 );
-			$due   = round( $total - $paid, 2 );
+			$due   = max( 0, round( $total - $paid, 2 ) );
 			$num   = (string) ( $v['invoice_number'] ?? '' ) ?: ( '#' . (int) $v['id'] );
 			$date  = $fmt( $v['doc_date'] ?? ( $v['created_at'] ?? '' ) );
 			$status = (string) ( $v['status'] ?? 'draft' );

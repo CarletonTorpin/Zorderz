@@ -122,8 +122,8 @@ class ZEST_Estimate_Engine {
 				continue;
 			}
 			// Price from the item's pricing scheme via the Item Engine (qty 1 = the unit rate).
-			// Note: ZEST_Catalog::resolve_price passes the ITEM id where the Item Engine wants the
-			// SCHEME id, so it never resolves — go straight to the scheme id from the matched item.
+			// Resolve straight from the matched item's scheme id here (clear and direct).
+			// (ZEST_Catalog::resolve_price also resolves from the scheme id as of 1.3.3.)
 			$item_id   = (string) ( $item['id'] ?? '' );
 			$scheme_id = (string) ( $item['pricing_scheme_id'] ?? '' );
 			$price     = 0.0;
@@ -384,9 +384,12 @@ class ZEST_Estimate_Engine {
 				continue;
 			}
 			if ( $price <= 0 ) {
+				// Ask for the UNIT rate (qty 1), not the extended amount: unit_price is
+				// multiplied by the line quantity downstream (ajax_create, compute_totals),
+				// so passing the real quantity here would square it. Matches parse_catalog().
 				$catalog_price = ZEST_Catalog::price_for_text(
 					(string) ( $li['description'] ?? '' ),
-					array( 'qty' => (int) ( $li['quantity'] ?? 1 ) )
+					array( 'qty' => 1 )
 				);
 				if ( null !== $catalog_price ) {
 					$li['unit_price'] = $catalog_price;
