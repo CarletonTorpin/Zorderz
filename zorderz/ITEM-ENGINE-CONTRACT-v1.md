@@ -1,6 +1,6 @@
-# Item Engine Contract — v1
+# Item Engine Contract (v1)
 
-> **Status:** Stable — the catalog authority every module binds to
+> **Status:** Stable (the catalog authority every module binds to)
 > **Since:** Theme v1.1.0
 > **Owner:** `ZDZ_Item_Engine` (`inc/class-zdz-item-engine.php`)
 > **Admin:** Zorderz → Item Engine (`ZDZ_Item_Engine_Admin`)
@@ -11,7 +11,7 @@
 
 ## Why this exists
 
-Before the Item Engine, "what this business sells" was hardcoded in **eight** places — a
+Before the Item Engine, "what this business sells" was hardcoded in **eight** places: a
 separate product taxonomy in every module, each drifting from the others. That taxonomy was
 also the **wire format** between modules: one app counted units into a fixed seven-bucket enum
 and taught every other app those seven English words. A business that did not sell those seven
@@ -25,7 +25,7 @@ in the engine.
 
 - **Two types only.** Every Item is a `product` (tangible) or a `service` (intangible). Fixed forever.
 - **User-named subtypes** underneath, each `global` (offered on future items) or `one_off`.
-  Subtypes are WordPress taxonomy terms (`zdz_item_subtype`) — the platform's own taxonomy engine,
+  Subtypes are WordPress taxonomy terms (`zdz_item_subtype`): the platform's own taxonomy engine,
   not a parallel store. Scope/type/priority live in term meta.
 - **Per-item Pricing Schemes**, reusable and cloneable: `flat`, `per_unit`, `per_hour`, `per_area`,
   `per_visit`, `tiered`, `formula` (e.g. `cost * markup`), `quote_only`.
@@ -37,7 +37,7 @@ taxonomy registration). **No item, subtype, price or SKU is ever seeded.** With 
 every resolver returns a neutral value (`null` / `''` / `[]`), so every consumer falls back to its
 own neutral default and nothing breaks. An optional, clearly-marked **sample set** exists
 (`ZDZ_Item_Engine::sample_pack()`) but is applied only by an explicit, typed-confirmation admin
-action — never automatically. The sample set is fictional and names no real product, person, place,
+action, never automatically. The sample set is fictional and names no real product, person, place,
 or company.
 
 ---
@@ -62,7 +62,7 @@ ZDZ_Item_Engine::version()          : int     // content version / cache-buster
 An Item is a count category when its `countable` flag is set. Empty catalog ⇒ all of these return
 empty/null.
 
-### The count payload shape — `item_keyed_v2`
+### The count payload shape: `item_keyed_v2`
 
 Producers build a payload with `new_counts()` / `add_count()`; consumers **branch on the shape
 discriminator**, never by probing for keys.
@@ -73,7 +73,7 @@ $c = ZDZ_Item_Engine::add_count( $c, $item_id, $n );
 
 // resulting shape:
 [
-  'shape'              => 'item_keyed_v2',        // discriminator — branch on this
+  'shape'              => 'item_keyed_v2',        // discriminator: branch on this
   'counts'             => [ item_id => int ],     // SCALAR ONLY at the top level
   'counts_meta'        => [ item_id => [
                              'type', 'subtype', 'display_name',
@@ -88,12 +88,12 @@ Rules the shape enforces (validated by `ZDZ_Item_Engine::validate_counts()`):
 
 1. **Scalar-only counts.** `counts` is `{ item_id => int }`. Brand/other splits go in
    `counts_meta[id]['by_attribute']`, never nested inside `counts`. (The old enum went heterogeneous
-   once — a nested `*_by_brand` map — and broke its consumer. This is why.)
+   once, a nested `*_by_brand` map, and broke its consumer. This is why.)
 2. **Unit nouns per item.** Every prose builder reads `unit_noun_singular` / `unit_noun_plural`
    from `counts_meta` (or uses `count_phrase()`), so no module ever hardcodes "screen"/"door"/"unit".
 3. **Composition stays visible.** A parent job line whose count comes from child lines carries
    `parent_item_id` in its meta, so regrouping never double-counts.
-4. **A shape discriminator.** `shape: 'item_keyed_v2'` — consumers switch on it instead of guessing
+4. **A shape discriminator.** `shape: 'item_keyed_v2'`: consumers switch on it instead of guessing
    which shape they received.
 5. **Absent ≠ zero.** `requested_item_ids` travels alongside `counts`, so "we didn't ask" stays
    distinguishable from "we sold none."
@@ -107,11 +107,11 @@ add_filter( 'zdz_item_legacy_count_map', fn( $m ) => $m + [ 'legacy_word' => 'so
 ZDZ_Item_Engine::legacy_count_map();  // legacy_key => item_id
 ```
 
-Ships **empty** — the platform defines no legacy words.
+Ships **empty**: the platform defines no legacy words.
 
 ---
 
-## Consumer contract — the canonical resolver API
+## Consumer contract: the canonical resolver API
 
 Future consumers (Commission, Estimate, Stock, the Prep/Receipts pair) bind to this. Prefer the static API
 when class load order allows; otherwise use the mirrored filters.
@@ -160,7 +160,7 @@ ZDZ_Item_Engine::clone_scheme( $id, $nid, $nm ): string|WP_Error
 ZDZ_Item_Engine::ensure_subtype( $slug, $label, $scope, $type, $priority ) : string|WP_Error
 ```
 
-### Discovery (hooks only — never tenant data)
+### Discovery (hooks only, never tenant data)
 
 ```php
 ZDZ_Item_Engine::discover( $sources = [] )  // returns a PROPOSAL; writes nothing
@@ -174,7 +174,7 @@ so out of the box the proposal is empty.
 
 ---
 
-## Adapters — the shipped Jobs module resolves THROUGH the engine
+## Adapters: the shipped Jobs module resolves THROUGH the engine
 
 The Jobs module (`zorderz-apps/apps/jobs`) already binds four filters with neutral fallbacks. The
 Item Engine registers on each so Jobs becomes catalog-driven, while an **empty catalog leaves Jobs'
@@ -188,7 +188,7 @@ own `other` / `service` defaults untouched**.
 | `zdz_job_detect_brand` (`$brand, $text`) | matched item's `attributes.brand` | returns `''` |
 
 This is the pattern every other consumer follows: **bind a filter, degrade to neutral, never invent
-a taxonomy.** The Item Engine's contract *subsumes* the Jobs taxonomy filters — Jobs no longer owns
+a taxonomy.** The Item Engine's contract *subsumes* the Jobs taxonomy filters: Jobs no longer owns
 a component list; the catalog does.
 
 ---
@@ -201,16 +201,16 @@ A scheme is a reusable, cloneable object (`wp_zdz_pricing_schemes`), referenced 
 
 | Method | Context keys | Result |
 |---|---|---|
-| `flat` | — | `params.amount` |
+| `flat` | none | `params.amount` |
 | `per_unit` | `qty` | `rate × qty` |
 | `per_hour` | `hours` | `rate × hours` |
 | `per_area` | `area` or `width_in`+`height_in` | `rate × area`, floored at `params.min_charge` |
-| `per_visit` | — | `rate` (a minimum/visit charge) |
+| `per_visit` | none | `rate` (a minimum/visit charge) |
 | `tiered` | `params.axis` (default `qty`) | bracket over `params.tiers[{up_to,amount}]` |
 | `formula` | any names in the expression | `eval_formula(expression, params+ctx)` |
-| `quote_only` | — | `amount = null` (a declared "no price" state) |
+| `quote_only` | none | `amount = null` (a declared "no price" state) |
 
-`per_hour` ships even though the demo trade has no hourly rate — the proof the method set is CORE,
+`per_hour` ships even though the demo trade has no hourly rate: the proof the method set is CORE,
 not tenant. The formula evaluator is a closed shunting-yard parser (`+ - * /`, parens, named vars;
 unknown var ⇒ 0; divide-by-zero ⇒ 0) with **no `eval()`**.
 
@@ -234,9 +234,9 @@ backfill.
 
 All under `ZDZ_REST_NS` (`zorderz/v1`), logged-in only:
 
-- `GET /item-engine/catalog` — version, empty flag, types, subtypes, items
-- `GET /item-engine/count-categories` — shape, kinds, count categories
-- `GET /item-engine/classify?text=…` — `{ kind, item }`
+- `GET /item-engine/catalog`: version, empty flag, types, subtypes, items
+- `GET /item-engine/count-categories`: shape, kinds, count categories
+- `GET /item-engine/classify?text=…`: `{ kind, item }`
 
 ---
 
@@ -248,9 +248,9 @@ All under `ZDZ_REST_NS` (`zorderz/v1`), logged-in only:
 3. **Do not seed catalog rows on activation.** Schema only. Use the sample set (confirmed) or
    discovery (approved) instead.
 4. **Do not branch on count payload shape by probing for keys.** Switch on `shape`.
-5. **Do not couple a consumer to the Jobs filters for product taxonomy** — bind the canonical
+5. **Do not couple a consumer to the Jobs filters for product taxonomy**: bind the canonical
    `zdz_item_*` filters or the static API.
 
 ---
 
-*— End of Item Engine Contract v1 —*
+*End of Item Engine Contract v1*

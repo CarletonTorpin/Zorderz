@@ -2,9 +2,14 @@
 /**
  * ZANA_DB — the session/message store for the chat surface.
  *
- * Two tables, created SCHEMA-ONLY on activation (no rows ever seeded):
- *   - wp_zana_sessions : one row per conversation (owner, title, timestamps).
- *   - wp_zana_messages : one row per turn (session, role, body, tier, created).
+ * Three tables, created SCHEMA-ONLY on activation (no rows ever seeded):
+ *   - wp_zana_sessions  : one row per conversation (owner, title, timestamps).
+ *   - wp_zana_messages  : one row per turn (session, role, body, tier, created).
+ *   - wp_zana_turn_jobs : one row per QUEUED async turn (owner, session, message,
+ *     status, result). Added in DB 1.2.0 so a slow (vault-augmented / thinking) turn
+ *     can run in a background loopback and be polled, instead of holding the browser
+ *     request open past a managed host's gateway timeout. The row carries no company
+ *     data — only the user's own message and the same result the sync turn returns.
  *
  * The store is deliberately small: the ported core keeps a durable transcript so a
  * user can reopen a conversation and the digest deep-link can resolve a session id.
@@ -21,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZANA_DB {
 
-	const DB_VERSION = '1.1.0';
+	const DB_VERSION = '1.2.0';
 
 	public static function sessions_table(): string {
 		global $wpdb;
@@ -33,6 +38,12 @@ class ZANA_DB {
 		return $wpdb->prefix . 'zana_messages';
 	}
 
+	/** Queue for async chat turns run in a background loopback (DB 1.2.0). */
+	public static function jobs_table(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'zana_turn_jobs';
+	}
+
 	/** Create/upgrade the schema. Idempotent (dbDelta). No data is seeded. */
 	public static function install(): void {
 		global $wpdb;
@@ -41,6 +52,7 @@ class ZANA_DB {
 
 		$sessions = self::sessions_table();
 		$messages = self::messages_table();
+		$jobs     = self::jobs_table();
 
 		$sql_sessions = "CREATE TABLE {$sessions} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -67,8 +79,27 @@ class ZANA_DB {
 			KEY user_id (user_id)
 		) {$charset};";
 
+		// One row per queued async turn. Deleted after a day by the cleanup cron;
+		// the durable transcript lives in wp_zana_messages, written by ZANA_Chat::send.
+		$sql_jobs = "CREATE TABLE {$jobs} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			user_id BIGINT UNSIGNED NOT NULL,
+			session_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			status VARCHAR(16) NOT NULL DEFAULT 'queued',
+			message MEDIUMTEXT NOT NULL,
+			result_json LONGTEXT NULL,
+			error_msg TEXT NULL,
+			created_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
+			updated_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
+			PRIMARY KEY  (id),
+			KEY user_id (user_id),
+			KEY status (status),
+			KEY created_at (created_at)
+		) {$charset};";
+
 		dbDelta( $sql_sessions );
 		dbDelta( $sql_messages );
+		dbDelta( $sql_jobs );
 		update_option( 'zana_db_version', self::DB_VERSION, false );
 	}
 

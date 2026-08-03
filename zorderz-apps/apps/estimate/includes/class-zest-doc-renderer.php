@@ -434,6 +434,31 @@ table.items tbody td.desc{text-align:left}
 		return $ok ? (int) $wpdb->insert_id : 0;
 	}
 
+	/**
+	 * Render a normalized IMPORT $doc (flat customer{name,org,…}) to printable HTML for the
+	 * manual-import review panel, reusing render_html(). Maps the flat customer fields to the
+	 * display "lines" render_html expects. Pure render — no DB, no side effect. It renders a
+	 * DRAFT for human review only; it imports nothing.
+	 */
+	public static function preview_html( array $doc ) {
+		$c = (array) ( $doc['customer'] ?? array() );
+		if ( ! isset( $c['lines'] ) ) {
+			$lines = array();
+			$push  = function ( $v ) use ( &$lines ) { $v = trim( (string) $v ); if ( '' !== $v ) { $lines[] = $v; } };
+			$push( $c['name'] ?? '' );
+			$push( $c['org'] ?? '' );
+			$push( $c['street'] ?? '' );
+			$push( $c['phone'] ?? '' );
+			$city = trim( (string) ( $c['city'] ?? '' ) );
+			$st   = trim( (string) ( $c['state'] ?? '' ) );
+			$zip  = trim( (string) ( $c['zip'] ?? '' ) );
+			$cl   = trim( $city . ( '' !== $st ? ', ' . $st : '' ) . ( '' !== $zip ? '  ' . $zip : '' ), ' ,' );
+			$push( $cl );
+			$doc['customer'] = array( 'lines' => $lines );
+		}
+		return self::render_html( $doc );
+	}
+
 	/* ───────────────────────── invoices (Phase 2) ───────────────────────── */
 	// Deliberately scoped to the DOCUMENT + payment tracking — not a CRM, not a
 	// store. Customer details live on the document; products/prices come from the
@@ -672,6 +697,12 @@ table.items tbody td.desc{text-align:left}
 		$rest    = $ctx['rest_base'] ?? ( function_exists( 'rest_url' ) ? rest_url( ( defined( 'ZDZ_REST_NS' ) ? ZDZ_REST_NS : 'zorderz/v1' ) . '/' ) : '/wp-json/zorderz/v1/' );
 		$nonce   = $ctx['nonce'] ?? ( function_exists( 'wp_create_nonce' ) ? wp_create_nonce( 'wp_rest' ) : '' );
 		$home    = $ctx['home'] ?? ( function_exists( 'home_url' ) ? home_url( '/' ) : '/' );
+		// Manual PDF-import (milestone #54): the async parse queue uses admin-ajax with the
+		// ZEST nonce; the vendored pdf.js + import.js load by ZEST_URL. Injectable for tests.
+		$ajax   = $ctx['ajax_url'] ?? ( function_exists( 'admin_url' ) ? admin_url( 'admin-ajax.php' ) : '/wp-admin/admin-ajax.php' );
+		$znonce = $ctx['zest_nonce'] ?? ( function_exists( 'wp_create_nonce' ) ? wp_create_nonce( defined( 'ZEST_NONCE' ) ? ZEST_NONCE : 'zest_nonce' ) : '' );
+		$aurl   = $ctx['asset_base'] ?? ( defined( 'ZEST_URL' ) ? ZEST_URL : '' );
+		$aver   = $ctx['asset_ver'] ?? ( function_exists( 'zest_asset_ver' ) ? zest_asset_ver( 'assets/js/import.js' ) : ( defined( 'ZEST_VERSION' ) ? ZEST_VERSION : '1' ) );
 
 		$fmt = function ( $d ) { $d = (string) $d; return ( $d && '0000-00-00' !== $d ) ? date( 'm/d/Y', strtotime( $d ) ) : ''; };
 		$cust = function ( $r ) {
@@ -735,13 +766,64 @@ table.items tbody td.desc{text-align:left}
 		$css  = self::console_css();
 		$js   = self::console_js( $rest, $nonce );
 
+		$import_card    = self::import_card_html();
+		$import_scripts = self::import_scripts( $rest, $nonce, $ajax, $znonce, $aurl, $aver );
+
 		return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Estimates &amp; Invoices</title><style>' . $css . '</style></head><body>'
 			. '<header class="bar"><div class="brand">' . $logo . '</div><div class="h1">Estimates &amp; Invoices</div></header>'
 			. '<main>'
 			. '<div id="msg" class="msg" hidden></div>'
+			. $import_card
 			. '<section class="card"><h2>Estimates</h2><table><thead><tr><th>Number</th><th>Date</th><th>Customer</th><th class="r">Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>' . $erows . '</tbody></table></section>'
 			. '<section class="card"><h2>Invoices</h2><table><thead><tr><th>Number</th><th>Date</th><th>Customer</th><th class="r">Total</th><th class="r">Paid</th><th class="r">Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>' . $irows . '</tbody></table></section>'
-			. '</main><script>' . $js . '</script></body></html>';
+			. '</main><script>' . $js . '</script>' . $import_scripts . '</body></html>';
+	}
+
+	/**
+	 * The "Import a PDF" card + empty review panel. All behaviour lives in import.js; this
+	 * is just the static shell. The review panel is populated with an editable draft after
+	 * the client extracts + parses; nothing is imported until the operator confirms.
+	 */
+	private static function import_card_html() {
+		return '<section class="card" id="import-card">'
+			. '<h2>Import a PDF</h2>'
+			. '<p class="hint">Upload an existing estimate or invoice PDF. The text is read in your browser, parsed into a draft, and shown below for review. Nothing is imported until you confirm.</p>'
+			. '<div class="importbar">'
+			. '<label class="filelbl">Choose PDF<input id="imp-file" type="file" accept="application/pdf"></label>'
+			. '<select id="imp-kind" title="Document type"><option value="">Auto-detect type</option><option value="estimate">Estimate</option><option value="invoice">Invoice</option></select>'
+			. '<span id="imp-fname" class="fname"></span>'
+			. '</div>'
+			. '<div id="imp-status" class="impstatus" hidden></div>'
+			. '<div id="imp-manual" class="manual" hidden>'
+			. '<p class="hint">Little or no text was found — this PDF may be scanned images. Paste the document text here (or type the details), then parse.</p>'
+			. '<textarea id="imp-text" rows="8" placeholder="Paste the estimate or invoice text here…"></textarea>'
+			. '<div><button class="btn primary" id="imp-parse-text">Parse pasted text</button></div>'
+			. '</div>'
+			. '<div id="imp-review" class="review" hidden></div>'
+			. '</section>';
+	}
+
+	/**
+	 * Inject the vendored pdf.js + import.js as direct <script src> tags (this console page
+	 * is a standalone document with no wp_head/wp_enqueue), preceded by an inline config
+	 * object. workerSrc points at the VENDORED worker, never a CDN. All values are escaped.
+	 */
+	private static function import_scripts( $rest, $nonce, $ajax, $znonce, $aurl, $aver ) {
+		$cfg = function_exists( 'wp_json_encode' )
+			? wp_json_encode( array(
+				'rest'      => (string) $rest,
+				'restNonce' => (string) $nonce,
+				'ajaxurl'   => (string) $ajax,
+				'nonce'     => (string) $znonce,
+				'pdfWorker' => (string) $aurl . 'assets/js/vendor/pdf.worker.min.js',
+			) )
+			: json_encode( array( 'rest' => (string) $rest, 'restNonce' => (string) $nonce, 'ajaxurl' => (string) $ajax, 'nonce' => (string) $znonce, 'pdfWorker' => (string) $aurl . 'assets/js/vendor/pdf.worker.min.js' ) );
+		$v      = rawurlencode( (string) $aver );
+		$pdfjs  = self::e( $aurl . 'assets/js/vendor/pdf.min.js' ) . '?v=' . $v;
+		$importjs = self::e( $aurl . 'assets/js/import.js' ) . '?v=' . $v;
+		return '<script>window.zestImport=' . $cfg . ';</script>'
+			. '<script src="' . $pdfjs . '"></script>'
+			. '<script src="' . $importjs . '"></script>';
 	}
 
 	private static function console_css() {
@@ -780,6 +862,45 @@ td.act{white-space:nowrap}
 .payform .amt{width:120px}
 .msg{margin:0 0 14px;padding:10px 14px;border-radius:8px;font-weight:600}
 .msg.ok{background:#e6f6ec;color:#1b7a44}.msg.err{background:#fbe6e6;color:#b3261e}
+.hint{color:#5b6675;font-size:13px;margin:2px 0 12px}
+.importbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.filelbl{display:inline-flex;align-items:center;gap:8px;border:1px solid #c3ccd6;background:#fff;border-radius:6px;padding:6px 10px;font-size:12.5px;font-weight:600;color:#26415a;cursor:pointer}
+.filelbl input{font-size:12px}
+#imp-kind{padding:6px 8px;border:1px solid #c3ccd6;border-radius:6px;font-size:13px}
+.fname{color:#5b6675;font-size:12.5px}
+.impstatus{margin-top:12px;padding:8px 12px;border-radius:8px;background:#eef3f8;color:#26415a;font-size:13px;font-weight:600}
+.impstatus.err{background:#fbe6e6;color:#b3261e}.impstatus.warn{background:#fdf0dd;color:#a9701a}
+.manual{margin-top:12px}
+.manual textarea{width:100%;padding:9px 11px;border:1px solid #c3ccd6;border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:8px}
+.review{margin-top:16px;border-top:1px solid #eef1f5;padding-top:14px}
+.review h3{margin:0 0 10px;font-size:14px;color:#12233b}
+.review .warns{margin-bottom:12px}
+.review .warn{background:#fdf0dd;color:#a9701a;border-radius:7px;padding:7px 11px;font-size:12.5px;font-weight:600;margin-bottom:6px}
+.review .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px;margin-bottom:14px}
+.review .fld{display:flex;flex-direction:column;gap:3px}
+.review .fld.wide{grid-column:1/-1}
+.review .fld label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#7a8794;font-weight:700}
+.review .fld input,.review .fld select,.review .fld textarea{padding:6px 8px;border:1px solid #c3ccd6;border-radius:6px;font-size:13px;font-family:inherit}
+.litable{width:100%;border-collapse:collapse;margin-bottom:8px}
+.litable th{font-size:10.5px}
+.litable td{padding:5px 6px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
+.litable input,.litable select{width:100%;padding:5px 6px;border:1px solid #d3dae2;border-radius:5px;font-size:12.5px;font-family:inherit}
+.litable input.r{text-align:right}
+.litable td.r,.litable th.r{text-align:right}
+.litable .liqty{width:64px}.litable .lirate,.litable .lilt{width:96px}
+.litable .lidel{border:1px solid #e0b4b0;background:#fff;color:#b3261e;border-radius:5px;padding:3px 8px;font-size:12px;cursor:pointer;font-weight:700}
+.adj{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:10px 0 14px}
+.adj label{font-size:12.5px;color:#26415a;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.adj input,.adj select{padding:5px 8px;border:1px solid #c3ccd6;border-radius:6px;font-size:13px}
+.adj input{width:100px;text-align:right}
+.totbar{display:flex;flex-direction:column;gap:3px;align-items:flex-end;margin:6px 0 14px;font-size:13px}
+.totbar .trow{display:flex;gap:24px;min-width:260px;justify-content:space-between}
+.totbar .grand{font-weight:800;color:#12233b;border-top:1px solid #cfd8dd;padding-top:5px;margin-top:3px}
+.totbar .flag{background:#fbe6e6;color:#b3261e;border-radius:7px;padding:6px 11px;font-weight:700;align-self:stretch;text-align:center}
+.prevwrap{margin:8px 0 16px}
+.prevhd{display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:12.5px;color:#7a8794;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.prevframe{width:100%;height:420px;border:1px solid #e6e9ee;border-radius:8px;background:#fff}
+.confirmbar{display:flex;gap:10px;align-items:center}
 ';
 	}
 
