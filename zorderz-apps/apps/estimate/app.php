@@ -52,7 +52,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /* ── Identity ──────────────────────────────────────────────────────── */
-define( 'ZEST_VERSION', '1.25.1' );
+define( 'ZEST_VERSION', '1.25.2' );
 define( 'ZEST_FILE', __FILE__ );
 define( 'ZEST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZEST_URL', plugin_dir_url( __FILE__ ) );
