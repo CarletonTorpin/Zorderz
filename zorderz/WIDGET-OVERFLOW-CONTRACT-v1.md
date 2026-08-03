@@ -1,6 +1,6 @@
-# Widget Overflow Contract — v1
+# Widget Overflow Contract (v1)
 
-> **Status:** Stable — plugins depend on this contract
+> **Status:** Stable (plugins depend on this contract)
 > **Since:** Theme v2.20.1
 > **Formalized:** Theme v2.20.3
 > **Depends on:** None
@@ -10,7 +10,7 @@
 
 ## The Contract
 
-`.dash-widget-body` uses `overflow: clip` — NOT `hidden`, NOT `auto`, NOT `scroll`.
+`.dash-widget-body` uses `overflow: clip`, NOT `hidden`, NOT `auto`, NOT `scroll`.
 
 ```css
 .dash-widget-body {
@@ -24,14 +24,14 @@ This is a **hard contract**. Changing this property breaks plugin sticky positio
 
 ## Why This Matters
 
-`overflow: clip` and `overflow: hidden` look identical visually — both clip content that exceeds the container. But they behave differently for layout:
+`overflow: clip` and `overflow: hidden` look identical visually: both clip content that exceeds the container. But they behave differently for layout:
 
 | Property         | Creates scroll container? | `position: sticky` works inside? |
 |------------------|--------------------------|----------------------------------|
-| `overflow: clip`   | NO                       | YES — sticky binds to page scroll |
-| `overflow: hidden` | YES                      | NO — sticky binds to the hidden scroll container |
-| `overflow: auto`   | YES                      | NO — same problem as hidden |
-| `overflow: scroll`  | YES                      | NO — same problem |
+| `overflow: clip`   | NO                       | YES: sticky binds to page scroll |
+| `overflow: hidden` | YES                      | NO: sticky binds to the hidden scroll container |
+| `overflow: auto`   | YES                      | NO: same problem as hidden |
+| `overflow: scroll`  | YES                      | NO: same problem |
 
 When a plugin places `position: sticky` on an element inside `.dash-widget-body` (like a save button at the bottom or a section header), it needs to stick relative to the **page-level scroll**, not a nested scroll container. `overflow: clip` is the only overflow value that clips visual overflow without creating a scrolling context.
 
@@ -55,7 +55,7 @@ The batch history header sticks below the dashboard top bar. If `.dash-widget-bo
   bottom: 0;
 }
 ```
-The save action bar sticks to the bottom of the viewport. Same dependency — needs page-level scroll binding.
+The save action bar sticks to the bottom of the viewport. Same dependency: needs page-level scroll binding.
 
 ### Future inline_widget plugins
 Any plugin registered with `bridge_type: 'inline_widget'` renders inside `.dash-widget-body`. If that plugin uses `position: sticky` on any element, it depends on this contract.
@@ -90,4 +90,4 @@ After any CSS change to `.dash-widget-body` or its ancestors:
 
 ---
 
-*— End of Widget Overflow Contract v1 —*
+*End of Widget Overflow Contract v1*

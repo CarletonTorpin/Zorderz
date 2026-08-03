@@ -1,6 +1,6 @@
-# Data-Theme Attribute Contract — v1
+# Data-Theme Attribute Contract (v1)
 
-> **Status:** Stable — plugins depend on this contract
+> **Status:** Stable (plugins depend on this contract)
 > **Since:** Theme v2.14.3 (4-theme system)
 > **Formalized:** Theme v2.20.3
 > **Depends on:** None
@@ -19,14 +19,14 @@ The `<html>` element always has a `data-theme` attribute set to one of four stab
 | `"system"`  | Follow OS preference (auto light/dark)               |
 | `"sunlight"` | High-contrast light mode for outdoor field use      |
 
-These are the **only** values. The attribute is **always present** — it is never absent, empty, or set to any other value.
+These are the **only** values. The attribute is **always present**: it is never absent, empty, or set to any other value.
 
 ---
 
 ## How the Theme Sets It
 
 ```javascript
-// app.js — setTheme()
+// app.js, setTheme()
 document.documentElement.setAttribute('data-theme', theme);
 ```
 
@@ -39,13 +39,13 @@ The theme is read from `localStorage` on boot, defaulting to `"system"` for new 
 ### CSS: Targeting specific themes
 
 ```css
-/* Dark mode — explicit selection */
+/* Dark mode: explicit selection */
 [data-theme="dark"] .my-plugin-element {
   background: #1a1a1a;
   color: #e0e0e0;
 }
 
-/* System mode — follows OS dark preference */
+/* System mode: follows OS dark preference */
 [data-theme="system"] .my-plugin-element {
   /* Default to light styles (no override needed) */
 }
@@ -56,14 +56,14 @@ The theme is read from `localStorage` on boot, defaulting to `"system"` for new 
   }
 }
 
-/* Sunlight mode — high contrast for outdoor use */
+/* Sunlight mode: high contrast for outdoor use */
 [data-theme="sunlight"] .my-plugin-element {
   background: #ffffff;
   color: #000000;
 }
 ```
 
-### CSS: Preferred approach — use theme CSS variables
+### CSS: Preferred approach, use theme CSS variables
 
 Rather than targeting `data-theme` directly, prefer the theme's CSS custom properties which automatically resolve correctly in all four modes:
 
@@ -102,13 +102,13 @@ observer.observe(document.documentElement, { attributes: true });
 
 ## What You Must NOT Do
 
-1. **Do NOT check for attribute absence.** The pre-v2.14.3 pattern `:root:not([data-theme])` as a dark-mode fallback does not work — the attribute is always present. This was the root cause of the Sketch Pad v1.0.2 dark mode bug (white pen on yellow paper when OS was in dark mode with `data-theme="system"`).
+1. **Do NOT check for attribute absence.** The pre-v2.14.3 pattern `:root:not([data-theme])` as a dark-mode fallback does not work: the attribute is always present. This was the root cause of the Sketch Pad v1.0.2 dark mode bug (white pen on yellow paper when OS was in dark mode with `data-theme="system"`).
 
    ```css
-   /* ❌ WRONG — never matches because data-theme is always set */
+   /* ❌ WRONG: never matches because data-theme is always set */
    :root:not([data-theme]) .my-element { ... }
 
-   /* ✅ CORRECT — target system mode + OS dark preference */
+   /* ✅ CORRECT: target system mode + OS dark preference */
    @media (prefers-color-scheme: dark) {
      [data-theme="system"] .my-element { ... }
    }
@@ -143,17 +143,17 @@ The theme defines these token families, resolved per-mode:
 | `--sys-border`   | `#E2E8F0`              | `#334155`                        | `#000000`                 |
 | `--sys-brand`    | `#2C5F8A`              | `#4796F7`                        | `#000000`                 |
 
-**v2.21.0 contrast retune (why these changed):** the secondary/tertiary text tokens were previously tuned for contrast against the *page background*, but plugin widgets render on the lighter `--sys-surface`. On dark mode, the old `--sys-text-ter` (gray-500) was only **3.07:1** on the widget surface — a WCAG failure, and the source of the "gray text on dark-gray" field report. Values were raised so **every** `--sys-text-*` token clears AA (≥4.5:1) on `--sys-surface`, with secondary text at AAA. Light-mode tertiary was raised so it also passes on the `--sys-bg` header zone (gray-100), not only on white.
+**v2.21.0 contrast retune (why these changed):** the secondary/tertiary text tokens were previously tuned for contrast against the *page background*, but plugin widgets render on the lighter `--sys-surface`. On dark mode, the old `--sys-text-ter` (gray-500) was only **3.07:1** on the widget surface: a WCAG failure, and the source of the "gray text on dark-gray" field report. Values were raised so **every** `--sys-text-*` token clears AA (≥4.5:1) on `--sys-surface`, with secondary text at AAA. Light-mode tertiary was raised so it also passes on the `--sys-bg` header zone (gray-100), not only on white.
 
 ---
 
 ## Widget Body Readability Contract (v2.21.0)
 
-Because the theme cannot reach inside a plugin's widget markup, **plugins are responsible for honoring these minimums** — and the theme guarantees the tokens that make them achievable.
+Because the theme cannot reach inside a plugin's widget markup, **plugins are responsible for honoring these minimums**, and the theme guarantees the tokens that make them achievable.
 
 1. **Body text** in a widget MUST use `≥ --ref-font-sm` (18px on phones as of v2.21.0) and SHOULD use `--ref-font-base` (20px on phones). Never render body copy below 16px on mobile.
-2. **Secondary text** MUST use `--sys-text-sec` (now guaranteed ≥4.5:1 on `--sys-surface`) — never a hardcoded gray (`#999`, `#aaa`, etc.). Hardcoded grays were the cause of the dark-mode low-contrast reports.
-3. **Section headers inside a widget** (e.g. a Leads "All Leads" / "Generate Leads" header) MUST use `--sys-text` (primary). Do **not** use a faint accent color on a dark surface — that renders nearly invisible. If you want an accent, pair it with sufficient weight/size and verify ≥4.5:1.
+2. **Secondary text** MUST use `--sys-text-sec` (now guaranteed ≥4.5:1 on `--sys-surface`), never a hardcoded gray (`#999`, `#aaa`, etc.). Hardcoded grays were the cause of the dark-mode low-contrast reports.
+3. **Section headers inside a widget** (e.g. a Leads "All Leads" / "Generate Leads" header) MUST use `--sys-text` (primary). Do **not** use a faint accent color on a dark surface; that renders nearly invisible. If you want an accent, pair it with sufficient weight/size and verify ≥4.5:1.
 4. **Verify in light AND dark.** A color that passes in one mode can fail in the other. Use the table above; when in doubt, measure against `--sys-surface`.
 
 ---
@@ -168,7 +168,7 @@ The bottom-nav logo and login logo are **theme-aware** and require BOTH variants
 | `zdz_logo_dark`   | a **light-inked** wordmark (light text) | dark mode                  |
 | `zdz_logo_vertical` | optional vertical lockup           | ≥820px sidebar                |
 
-**The rule:** light/sunlight modes need a *dark-inked* logo; dark mode needs a *light-inked* logo. If only one variant is uploaded, the theme falls back to it for both modes (`light || dark` / `dark || light`), which can render a **low-contrast or invisible wordmark** — e.g. a light-inked logo shown on the near-white light-mode nav bar (the v2.21.0 field report). Always upload both. A defensive neutral chip is painted behind the nav logo in light/sunlight as a backstop, but it is **not** a substitute for the correct asset.
+**The rule:** light/sunlight modes need a *dark-inked* logo; dark mode needs a *light-inked* logo. If only one variant is uploaded, the theme falls back to it for both modes (`light || dark` / `dark || light`), which can render a **low-contrast or invisible wordmark**, e.g. a light-inked logo shown on the near-white light-mode nav bar (the v2.21.0 field report). Always upload both. A defensive neutral chip is painted behind the nav logo in light/sunlight as a backstop, but it is **not** a substitute for the correct asset.
 
 ---
 
@@ -185,8 +185,8 @@ After any theme-related CSS change in a plugin:
 1. Switch to each of the 4 themes in Settings → verify colors render correctly
 2. Set theme to `system` → toggle OS dark mode → verify plugin responds
 3. Set theme to `sunlight` → verify high-contrast rendering (text readable in direct sunlight)
-4. Verify no hardcoded colors remain — all colors should come from `--sys-*` tokens or `[data-theme]` selectors
+4. Verify no hardcoded colors remain: all colors should come from `--sys-*` tokens or `[data-theme]` selectors
 
 ---
 
-*— End of Data-Theme Attribute Contract v1 —*
+*End of Data-Theme Attribute Contract v1*

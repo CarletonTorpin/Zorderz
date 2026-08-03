@@ -6,7 +6,7 @@ Stripe account; a signed Stripe webhook marks the invoice paid and emails a
 receipt. When a FreshBooks connection is configured, the pay link is appended to
 the matching FreshBooks invoice. Refunds and a CSV export are included.
 
-This module is **optional and beta**. It ships **empty** — no invoices, no
+This module is **optional and beta**. It ships **empty**: no invoices, no
 payments, no credentials, no seeds. Everything is configured by an admin under
 **Invoices → Settings**.
 

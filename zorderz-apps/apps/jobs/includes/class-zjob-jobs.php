@@ -152,6 +152,41 @@ class ZJOB_Jobs {
 	}
 
 	/**
+	 * May $actor SCHEDULE this job, INCLUDING the single-operator relaxation? This is
+	 * the gate the scheduling OPERATIONS use (set_schedule / clear_schedule, the "when"
+	 * control, and the bucket that decides "act now vs. wait on a dispatcher").
+	 *
+	 * It is a strict SUPERSET of actor_can_schedule(): every dispatcher who already
+	 * qualifies still qualifies, and — ONLY when the org has turned on single-operator
+	 * mode / self-scheduling (see workers_may_self_schedule()) — the plain ASSIGNEE may
+	 * also schedule their OWN job. With the mode off (the default) this collapses to
+	 * exactly actor_can_schedule(), so the dispatcher-only rule is unchanged.
+	 *
+	 * Deliberately NOT wired into actor_can_close() or the set_status() 'done' gate:
+	 * the two-party close and the photo-gated completion floor stay bound to the strict
+	 * actor_can_schedule(), so a solo operator may set their own time yet still cannot
+	 * jump straight to `done` or launder a two-party close on their own job.
+	 */
+	public static function actor_can_self_schedule( int $actor_id, array $row ): bool {
+		if ( self::actor_can_schedule( $actor_id, $row ) ) {
+			return true; // the dispatcher-only rule already grants it
+		}
+		if ( $actor_id <= 0 || empty( $row ) ) {
+			return false;
+		}
+		if ( class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_kiosk( $actor_id ) ) {
+			return false; // a shared device is not a person
+		}
+		// Single-operator relaxation: the assignee may set their OWN time when the org
+		// has enabled it. Off by default -> this branch never fires and the strict
+		// dispatcher rule above stands.
+		if ( $actor_id === (int) ( $row['assigned_user_id'] ?? 0 ) && self::workers_may_self_schedule() ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * May $actor CLOSE OUT job $row (the two-party sign-off)? Same set as dispatch:
 	 * the originator, an admin, or an overseeing lead — never the plain worker.
 	 * (The solo-operator single-party attestation is a SEPARATE, recorded path:
@@ -204,6 +239,21 @@ class ZJOB_Jobs {
 	public static function self_attest_allowed( array $row, int $actor_id ): bool {
 		$default = self::is_genuine_solo( $row, $actor_id ) || (bool) get_option( 'zjob_solo_operator', false );
 		return (bool) apply_filters( 'zdz_job_allow_self_attest', $default, $row, $actor_id );
+	}
+
+	/**
+	 * Is worker self-scheduling permitted org-wide (the `workers_may_self_schedule`
+	 * capability)? Default: single-operator mode is on (option zjob_solo_operator), OR
+	 * the dedicated option (zjob_workers_may_self_schedule) is set. Filterable via
+	 * `zdz_job_workers_may_self_schedule` so a business can set its own policy.
+	 *
+	 * OFF by default -> the dispatcher-only schedule rule stands (see
+	 * actor_can_self_schedule(), which is the per-row gate that consumes this).
+	 */
+	public static function workers_may_self_schedule(): bool {
+		$default = (bool) get_option( 'zjob_solo_operator', false )
+			|| (bool) get_option( 'zjob_workers_may_self_schedule', false );
+		return (bool) apply_filters( 'zdz_job_workers_may_self_schedule', $default );
 	}
 
 	/* =======================================================================
@@ -568,7 +618,9 @@ class ZJOB_Jobs {
 
 	/**
 	 * Set (or move) a job's time. Only someone who can dispatch may schedule it —
-	 * never the plain assignee. Creates/updates a native Scheduler appointment.
+	 * never the plain assignee — UNLESS single-operator mode / self-scheduling is on,
+	 * in which case the assignee may set their own time (actor_can_self_schedule()).
+	 * Creates/updates a native Scheduler appointment.
 	 *
 	 * @return array{ok:bool,error:string,appt_id:int,scheduled_start_utc:string,scheduled_tz:string}
 	 */
@@ -577,7 +629,7 @@ class ZJOB_Jobs {
 		$out = [ 'ok' => false, 'error' => '', 'appt_id' => 0, 'scheduled_start_utc' => '', 'scheduled_tz' => '' ];
 
 		$row = self::get( $id );
-		if ( ! $row || ! self::actor_can_schedule( $actor_id, $row ) ) {
+		if ( ! $row || ! self::actor_can_self_schedule( $actor_id, $row ) ) {
 			$out['error'] = 'not_permitted';
 			return $out;
 		}
@@ -621,7 +673,8 @@ class ZJOB_Jobs {
 	}
 
 	/**
-	 * Clear a job's schedule (delete the linked appointment). Dispatch-gated.
+	 * Clear a job's schedule (delete the linked appointment). Dispatch-gated, with the
+	 * same single-operator relaxation as set_schedule() (actor_can_self_schedule()).
 	 *
 	 * @return array{ok:bool,error:string}
 	 */
@@ -630,7 +683,7 @@ class ZJOB_Jobs {
 		$out = [ 'ok' => false, 'error' => '' ];
 
 		$row = self::get( $id );
-		if ( ! $row || ! self::actor_can_schedule( $actor_id, $row ) ) {
+		if ( ! $row || ! self::actor_can_self_schedule( $actor_id, $row ) ) {
 			$out['error'] = 'not_permitted';
 			return $out;
 		}
@@ -1019,7 +1072,8 @@ class ZJOB_Jobs {
 		}
 		$scheduled = ( (int) ( $row['scheduled_appt_id'] ?? 0 ) > 0 );
 		if ( ! $scheduled ) {
-			return self::actor_can_schedule( $viewer, $row ) ? 'present' : 'future';
+			// Self-schedule aware: a solo operator's own unscheduled job is their move now.
+			return self::actor_can_self_schedule( $viewer, $row ) ? 'present' : 'future';
 		}
 		return $is_mine ? 'present' : 'future';
 	}

@@ -58,5 +58,5 @@ profile save.
 - Prefix: `zqid`. Class: `ZQID_Card`. Text domain: `zorderz`.
 - Typeface: bundled Source Sans 3 (SIL OFL, see `assets/fonts/LICENSE-OFL.txt`)
   with a system fallback.
-- The card face intentionally ignores light/dark/sunlight modes — only the
+- The card face intentionally ignores light/dark/sunlight modes; only the
   backdrop is themed.

@@ -156,7 +156,7 @@ class ZJOB_AJAX {
 				'creator_name'      => $creator ? $creator->display_name : ( '#' . $r['created_by'] ),
 				'is_mine'           => $is_mine,
 				'bucket'            => ZJOB_Jobs::bucket_for( $r, (int) $uid ),
-				'can_schedule'      => ZJOB_Jobs::actor_can_schedule( $uid, $r ),
+				'can_schedule'      => ZJOB_Jobs::actor_can_self_schedule( $uid, $r ),
 				'can_complete'      => $can_complete,
 				'can_close'         => $can_close,
 				'can_self_attest'   => $can_self_attest,
