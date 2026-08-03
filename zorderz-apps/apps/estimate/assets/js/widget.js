@@ -12,7 +12,41 @@
 
 	var cfg = window.zestWidget || {};
 	var root = document.getElementById( 'zest-widget' );
-	if ( ! root ) { return; }
+
+	// Idempotency guard: a fallback boot may inject a second copy of this file.
+	// If the widget is already mounted, do nothing (no double listeners/renders).
+	if ( root && root.getAttribute( 'data-zest-mounted' ) === '1' ) { return; }
+
+	// The widget HTML is injected by the theme's renderWidgets() and can appear
+	// AFTER this footer script evaluates. Bailing on a null root here was the
+	// 1.3.1 defect: the Open list stayed on "Loading..." and the tabs never bound.
+	// Instead, wait for the theme's "zdz_widgets_rendered" event (plus
+	// DOMContentLoaded and a short poll) and boot once the markup is present.
+	if ( ! root ) {
+		var booted = false;
+		var tryBoot = function () {
+			if ( booted ) { return; }
+			root = document.getElementById( 'zest-widget' );
+			if ( root ) { booted = true; start(); }
+		};
+		document.addEventListener( 'zdz_widgets_rendered', tryBoot );
+		document.addEventListener( 'DOMContentLoaded', tryBoot );
+		var polls = 0;
+		var iv = setInterval( function () {
+			tryBoot();
+			if ( booted || ++polls > 40 ) { clearInterval( iv ); } // ~10s max
+		}, 250 );
+		return;
+	}
+
+	start();
+
+	// Everything below is wrapped so it runs either immediately (widget HTML
+	// already in the DOM) or deferred (the race above).
+	function start() {
+		// Mark mounted so a second (fallback-injected) copy no-ops at the guard.
+		if ( root.getAttribute( 'data-zest-mounted' ) === '1' ) { return; }
+		root.setAttribute( 'data-zest-mounted', '1' );
 
 	function post( action, data ) {
 		var body = new FormData();
@@ -174,4 +208,5 @@
 
 	/* initial load */
 	loadList( 'zest_list_open', 'zest-open-list' );
+	}
 }() );
