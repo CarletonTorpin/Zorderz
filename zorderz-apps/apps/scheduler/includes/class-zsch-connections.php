@@ -235,7 +235,7 @@ class ZSCH_Connections {
 	// ── admin roster (status only) ─────────────────────────────────
 
 	/**
-	 * Roster for Settings → TS Scheduler: who has what connected. Status
+	 * Roster for Settings → Zorderz Scheduler: who has what connected. Status
 	 * only — no tokens, no calendar contents.
 	 *
 	 * @return array

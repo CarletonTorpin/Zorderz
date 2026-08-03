@@ -137,7 +137,7 @@
  *     widget (own assets connections.js/.css — core widget.js untouched);
  *     REST zorderz/v1/scheduler/connections* (owner-scoped rows, admin sees status-only
  *     roster, Cache-Control: no-store).
- *   - ADMIN: Settings → TS Scheduler gains a Connected Calendars section
+ *   - ADMIN: Settings → Zorderz Scheduler gains a Connected Calendars section
  *     (Google/Microsoft delegated credentials in isolated options exactly
  *     like zsch_graph_secret; per-provider config test; conflict policy;
  *     roster).
@@ -275,12 +275,12 @@
  *     front-end only. After deploy, re-tapping a painted day correctly clears it.
  *
  * v1.1.0 (deploy-confidence + scheduler↔bot wiring):
- *   - VERSION BEACON: on load the plugin logs "TS Scheduler ACTIVE — version X"
+ *   - VERSION BEACON: on load the plugin logs "Zorderz Scheduler ACTIVE — version X"
  *     to debug.log once per hour. This makes it trivial to confirm WHICH build is
  *     actually running — the fix for a stale cache/install that left an old
  *     version live (the "Column 'source' cannot be null" availability bug was
  *     fixed in 1.0.7 but a site stuck on 1.0.5 kept failing). Grep the log for
- *     "TS Scheduler ACTIVE" after installing to verify it says 1.1.0.
+ *     "Zorderz Scheduler ACTIVE" after installing to verify it says 1.1.0.
  *   - Carries the v1.0.7 availability fix (source coalesces to 'manual' before
  *     the insert — see includes/class-zsch-availability.php) so painting a day
  *     "open" logs reliably once this build is genuinely live.
@@ -661,7 +661,7 @@ add_filter( 'cron_schedules', function ( $schedules ) {
 			// `init`, so a translation call here trips WP 6.7+'s
 			// "_load_textdomain_just_in_time" notice (which can corrupt the
 			// TSA chat's AJAX JSON). Admin-only label; no early i18n needed.
-			'display'  => 'Every 5 minutes (TS Scheduler)',
+			'display'  => 'Every 5 minutes (Zorderz Scheduler)',
 		);
 	}
 	return $schedules;
@@ -705,7 +705,7 @@ function zsch_maybe_upgrade() {
 		update_option( 'zsch_db_version', ZSCH_VERSION );
 
 		if ( $needs_tables && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( 'TS Scheduler: tables were missing — ran schema migration on load (likely a file-overwrite update).' );
+			error_log( 'Zorderz Scheduler: tables were missing — ran schema migration on load (likely a file-overwrite update).' );
 		}
 	}
 }
@@ -748,10 +748,10 @@ function zsch_load_includes() {
 	// v1.1.0 — VERSION BEACON. Log the running version ONCE per hour (throttled
 	// so it doesn't spam). This makes it trivial to confirm from debug.log exactly
 	// which build is live — critical when a stale cache/install leaves an old
-	// version running after an update. Grep the log for "TS Scheduler ACTIVE".
+	// version running after an update. Grep the log for "Zorderz Scheduler ACTIVE".
 	if ( false === get_transient( 'zsch_version_beacon' ) ) {
 		set_transient( 'zsch_version_beacon', 1, HOUR_IN_SECONDS );
-		error_log( 'TS Scheduler ACTIVE — version ' . ZSCH_VERSION . ' (file: ' . __FILE__ . ')' );
+		error_log( 'Zorderz Scheduler ACTIVE — version ' . ZSCH_VERSION . ' (file: ' . __FILE__ . ')' );
 	}
 
 	// ── v1.1.2: Register capabilities with the (future) orchestrator registry. ──

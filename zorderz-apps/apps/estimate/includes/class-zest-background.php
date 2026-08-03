@@ -52,7 +52,17 @@ class ZEST_Background {
 		$uid   = get_current_user_id();
 		$text  = isset( $_POST['text'] ) ? wp_kses_post( wp_unslash( $_POST['text'] ) ) : '';
 		$imgs  = isset( $_POST['images'] ) ? array_map( 'esc_url_raw', (array) wp_unslash( $_POST['images'] ) ) : array();
+		$mode  = isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : '';
+		$kind  = isset( $_POST['kind'] ) ? sanitize_key( wp_unslash( $_POST['kind'] ) ) : '';
 		$ctx   = array( 'user_id' => $uid );
+		// Milestone #54: an 'import' job carries the extracted PDF text of an existing
+		// business's estimate/invoice — parsed VERBATIM (no pricing) by parse_document().
+		if ( 'import' === $mode ) {
+			$ctx['mode'] = 'import';
+			if ( in_array( $kind, array( 'estimate', 'invoice' ), true ) ) {
+				$ctx['kind'] = $kind;
+			}
+		}
 
 		$wpdb->insert( ZEST_DB::jobs_table(), array(
 			'user_id'      => $uid,
@@ -102,9 +112,14 @@ class ZEST_Background {
 		$images = (array) json_decode( (string) $row['image_urls'], true );
 		$engine = self::engine();
 
-		$result = ! empty( $images )
-			? $engine->parse_vision( $images, $ctx )
-			: $engine->parse( (string) $row['input_text'], $ctx );
+		if ( 'import' === ( $ctx['mode'] ?? '' ) ) {
+			// Verbatim import parse: returns { ok, doc, warnings, error } — no pricing.
+			$result = $engine->parse_document( (string) $row['input_text'], $ctx );
+		} elseif ( ! empty( $images ) ) {
+			$result = $engine->parse_vision( $images, $ctx );
+		} else {
+			$result = $engine->parse( (string) $row['input_text'], $ctx );
+		}
 
 		ZEST_Progress::set( $job_id, 'pricing', 80 );
 		$ok = ! empty( $result['ok'] );

@@ -10,7 +10,7 @@
  *   ZDZ_Business_Profile, ZDZ_Item_Engine, ZDZ_Party, ZDZ_Rule_Governance,
  *   ZDZ_Model_Registry, ZDZ_Answer_Authority, ZDZ_Core_Poe, ZDZ_Data_Permissions,
  *   ZDZ_Hierarchy.
- * Version:     1.1.0
+ * Version:     1.2.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -28,11 +28,13 @@
  *
  * WHAT IS PORTED vs DEFERRED (honest scope — see README): the runtime prompt
  * builder, the model routing, the outbound gate, the rendered rule set, the session
- * store and the synchronous chat turn are ported. The off-repo async job queue, the
- * token-streaming channel, the scheduled digests, the per-provider data connectors
- * (billing/CRM/analytics), the self-check auditor pass and the memory extractor are
- * DEFERRED — each is a separate surface and is wired as a documented extension point
- * (a filter with a neutral fallback) rather than shipped half-built.
+ * store, the synchronous chat turn and (1.2.0) the async turn queue that runs a slow
+ * turn in a background loopback so it cannot 502 behind a managed host's gateway
+ * timeout are ported. The token-streaming channel, the scheduled digests, the
+ * per-provider data connectors (billing/CRM/analytics), the self-check auditor pass
+ * and the memory extractor are DEFERRED — each is a separate surface and is wired as a
+ * documented extension point (a filter with a neutral fallback) rather than shipped
+ * half-built.
  *
  * @package Zorderz\Analytics
  */
@@ -42,7 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZANA_VERSION', '1.1.0' );
+define( 'ZANA_VERSION', '1.2.0' );
 define( 'ZANA_FILE', __FILE__ );
 define( 'ZANA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZANA_URL', plugin_dir_url( __FILE__ ) );
@@ -67,6 +69,7 @@ require_once ZANA_DIR . 'includes/class-zana-markers.php';
 require_once ZANA_DIR . 'includes/class-zana-db.php';
 require_once ZANA_DIR . 'includes/class-zana-prompt-builder.php';
 require_once ZANA_DIR . 'includes/class-zana-chat.php';
+require_once ZANA_DIR . 'includes/class-zana-background.php';
 require_once ZANA_DIR . 'includes/class-zana-rest.php';
 
 /**
@@ -138,6 +141,9 @@ add_action(
 	function () {
 		ZANA_DB::maybe_upgrade();
 		ZANA_REST::init();
+		// The background turn runner (loopback + cleanup cron). Registered on every
+		// load so the loopback admin-ajax handler exists when that request arrives.
+		ZANA_Background::boot();
 	},
 	20
 );
@@ -169,10 +175,17 @@ add_action(
 			'zana-chat',
 			'zanaChat',
 			array(
-				'apiUrl'  => esc_url_raw( rest_url( ZDZ_REST_NS . '/analytics' ) ),
-				'nonce'   => wp_create_nonce( 'wp_rest' ),
-				'appId'   => ZANA_APP_ID,
-				'isKiosk' => (bool) $is_kiosk,
+				'apiUrl'    => esc_url_raw( rest_url( ZDZ_REST_NS . '/analytics' ) ),
+				'nonce'     => wp_create_nonce( 'wp_rest' ),
+				'appId'     => ZANA_APP_ID,
+				'isKiosk'   => (bool) $is_kiosk,
+				// Async turn queue: submit → poll, so a slow turn cannot 502. The client
+				// falls back to the sync /chat route if this is false or if enqueue fails.
+				'async'     => (bool) apply_filters( 'zana_async_enabled', true ),
+				'pollMs'    => 1500,
+				// Headroom over the model gateway's worst-case 180s blocking timeout so a
+				// slow-but-completing turn still resolves via a poll before the client caps.
+				'maxPollMs' => 210000,
 				'i18n'    => array(
 					'title'       => __( 'Chat', 'zorderz' ),
 					'placeholder' => __( 'Ask about your data…', 'zorderz' ),
@@ -180,6 +193,8 @@ add_action(
 					'thinking'    => __( 'Thinking…', 'zorderz' ),
 					'kioskNote'   => __( 'Read-only on this shared device.', 'zorderz' ),
 					'empty'       => __( 'Ask a question to get started.', 'zorderz' ),
+					'timeout'     => __( 'This is taking longer than usual — your answer will appear in this conversation when it\'s ready.', 'zorderz' ),
+					'error'       => __( 'Something went wrong. Please try again.', 'zorderz' ),
 				),
 			)
 		);

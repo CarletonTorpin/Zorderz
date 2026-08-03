@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Zorderz - TS - Messaging
+ * Plugin Name: Zorderz Messaging
  * Plugin URI:  https://zorderz.org
  * Description: One-to-one DMs and department channels inside the Zorderz Field OS. @mentions, push notifications, inline FreshBooks preview cards. Minimum Effective Product.
  * Version:     1.1.3

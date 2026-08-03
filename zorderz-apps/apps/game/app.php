@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Zorderz - TS - Game
+ * Plugin Name: Zorderz Game
  * Description: Casual block-breaker for the Zorderz dashboard. Optional "extras" tile — no external calls, no cron, no business data. High scores persist per user.
  * Version:     1.5.4
  * Author:      Zorderz

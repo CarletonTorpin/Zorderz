@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Zorderz - TS - Media
+ * Plugin Name: Zorderz Media
  * Description: Organization media library for Zorderz Field OS. Browse public photos & sketches across the org, plus your own uploads — grouped by date, filterable by type/source, with transcribable notes and per-photo visibility control. Add photos directly via bulk upload. Reads from / writes to ZDZ_User_Media.
  * Version: 2.3.3
  * Author: Zorderz

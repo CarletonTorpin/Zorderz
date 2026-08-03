@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: Zorderz - TS - Sketch Pad
+Plugin Name: Zorderz Sketch Pad
 Description: Canvas-based drawing app for field sketches, diagrams, and visual notes. Save, manage, and share sketches across Zorderz apps.
 Version: 1.0.6
 Author: Zorderz
