@@ -11,6 +11,29 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.3.2] - 2026-08-03
+
+A front-end hotfix for the Estimates widget. On the dashboard the widget's script
+could evaluate before the theme finished injecting the widget markup, so it found no
+root element and stopped: the Open and History lists stayed on the "Loading"
+placeholder and the tabs did not respond. The widget now initializes when its markup
+is present. Server side was already correct; this is a front-end fix only. Theme and
+apps move together to 1.3.2.
+
+### Fixed
+
+- **Estimates widget did not initialize on the dashboard.** The widget script loads in
+  the footer and could run before the theme's renderWidgets() injected the widget
+  markup, so it bailed on a missing root and never bound its tabs or loaded its lists;
+  the Open and History panels sat on the "Loading" placeholder forever. It now boots
+  when the markup is present, waiting for the theme's zdz_widgets_rendered event with a
+  DOMContentLoaded handler and a short poll as fallbacks, and it guards against double
+  initialization. The estimate list, the tabs, and the parse-to-create flow work again.
+  The server side was already correct (the list endpoint and the estimate preview route
+  both respond normally). Estimates app internal version ZEST 1.25.1; no schema change.
+
+---
+
 ## [1.3.1] - 2026-08-03
 
 A hotfix for a site-down bug. Under one upgrade path a Knowledge Base database
