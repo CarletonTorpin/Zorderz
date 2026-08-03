@@ -135,7 +135,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ZKV_VERSION', '1.7.1' );
+define( 'ZKV_VERSION', '1.7.2' );
 define( 'ZKV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZKV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZKV_NONCE', 'zkv_nonce' );
@@ -633,73 +633,89 @@ function zkv_deactivate() {
 // ── DB Upgrade ─────────────────────────────────────────────────────
 add_action( 'plugins_loaded', 'zkv_maybe_upgrade', 5 );
 
+/**
+ * Ensure the Knowledge Vault schema is present and current.
+ *
+ * Runs on every load, independent of the stored DB version, so schema drift
+ * self-heals. A version-gated migration cannot fix a column that goes missing
+ * while the DB version already equals the plugin version (for example after a
+ * staging DB pull from an environment that never had these columns). A missing
+ * column here previously fatalled the whole site (a failed query counted or
+ * iterated under PHP 8), so this must stay resilient. It is cheap on a healthy
+ * install: a short-lived transient plus one sentinel SHOW COLUMNS; it only does
+ * real work (ALTER or rebuild) when something is actually missing. SCHEMA ONLY,
+ * it never inserts a business row.
+ */
+function zkv_ensure_schema() {
+	global $wpdb;
+	$docs = $wpdb->prefix . 'zkv_documents';
+
+	// Fast path: recently verified and the sentinel column is still present.
+	if ( get_transient( 'zkv_schema_ok' ) ) {
+		$sentinel = $wpdb->get_results( "SHOW COLUMNS FROM {$docs} LIKE 'is_pricing_authority'" );
+		if ( ! empty( $sentinel ) ) {
+			return;
+		}
+		delete_transient( 'zkv_schema_ok' ); // drift detected; fall through and heal
+	}
+
+	// Whole table missing (for example a staging DB refresh): rebuild every table.
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $docs ) ) !== $docs ) {
+		zkv_activate();
+		set_transient( 'zkv_schema_ok', 1, HOUR_IN_SECONDS );
+		return;
+	}
+
+	// Ensure the columns later versions added exist (self-heal a dropped column).
+	// transcript_status is a lifecycle column ('' normal; 'suggested', 'detected',
+	// 'active', 'latent', 'not_transcript'); the source of truth for "is this a
+	// transcript" stays visibility='transcript_private'.
+	$columns = array(
+		'is_pricing_authority' => 'ADD COLUMN is_pricing_authority TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility',
+		'transcript_status'    => "ADD COLUMN transcript_status VARCHAR(24) NOT NULL DEFAULT '' AFTER visibility",
+	);
+	foreach ( $columns as $col => $add_sql ) {
+		if ( empty( $wpdb->get_results( "SHOW COLUMNS FROM {$docs} LIKE '{$col}'" ) ) ) {
+			$wpdb->query( "ALTER TABLE {$docs} {$add_sql}" );
+		}
+	}
+
+	// Ensure supporting indexes exist.
+	$indexes = array(
+		'idx_pricing_authority' => 'ADD KEY idx_pricing_authority (is_pricing_authority)',
+		'idx_transcript_status' => 'ADD KEY idx_transcript_status (transcript_status)',
+		'idx_visibility'        => 'ADD KEY idx_visibility (visibility)',
+	);
+	foreach ( $indexes as $idx => $add_sql ) {
+		if ( empty( $wpdb->get_results( $wpdb->prepare( "SHOW INDEX FROM {$docs} WHERE Key_name = %s", $idx ) ) ) ) {
+			$wpdb->query( "ALTER TABLE {$docs} {$add_sql}" );
+		}
+	}
+
+	set_transient( 'zkv_schema_ok', 1, HOUR_IN_SECONDS );
+}
+
 function zkv_maybe_upgrade() {
 	$db_ver = get_option( 'zkv_db_version', '0' );
-	if ( version_compare( $db_ver, ZKV_VERSION, '<' ) ) {
+	$needs  = version_compare( $db_ver, ZKV_VERSION, '<' );
+
+	if ( $needs ) {
 		zkv_activate();
+	}
 
-		global $wpdb;
-		// NOTE: upgrades write SCHEMA ONLY. No category (or any business row) is
-		// ever inserted on a version bump — a distribution must never seed a
-		// stranger's install with trade-shaped data. Only the column/index
-		// migrations below run here.
+	// Always self-heal the schema, independent of the stored version (see
+	// zkv_ensure_schema). This is the fix for the missing-column 502.
+	zkv_ensure_schema();
 
-		// Add is_pricing_authority column (the pricing-authority mechanism).
-		$col_exists = $wpdb->get_results(
-			"SHOW COLUMNS FROM {$wpdb->prefix}zkv_documents LIKE 'is_pricing_authority'"
-		);
-		if ( empty( $col_exists ) ) {
-			$wpdb->query(
-				"ALTER TABLE {$wpdb->prefix}zkv_documents ADD COLUMN is_pricing_authority TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility"
-			);
-			$wpdb->query(
-				"ALTER TABLE {$wpdb->prefix}zkv_documents ADD KEY idx_pricing_authority (is_pricing_authority)"
-			);
-		}
-
-		// v1.5.0+ migration: transcript_status lifecycle column + visibility index.
-		// SINGLE SOURCE OF TRUTH for "is this a transcript" is
-		// visibility='transcript_private' (no separate boolean that could drift —
-		// the fail-toward-hiding tripwire and the ACL must key off the SAME
-		// column). transcript_status is lifecycle only:
-		//   ''            → normal document
-		//   'suggested'   → AI/structure thinks it is a transcript; still a
-		//                   normal visible doc until an admin confirms (D4)
-		//   'detected'    → uploader asserted private transcript; privatized at
-		//                   insert, party resolution pending
-		//   'active'      → ≥1 party resolved; live to its parties
-		//   'latent'      → 0 parties resolved; retained, dark, in admin queue
-		//   'not_transcript' → admin rejected a suggestion; never re-suggest
-		$col_exists = $wpdb->get_results(
-			"SHOW COLUMNS FROM {$wpdb->prefix}zkv_documents LIKE 'transcript_status'"
-		);
-		if ( empty( $col_exists ) ) {
-			$wpdb->query(
-				"ALTER TABLE {$wpdb->prefix}zkv_documents ADD COLUMN transcript_status VARCHAR(24) NOT NULL DEFAULT '' AFTER visibility"
-			);
-			$wpdb->query(
-				"ALTER TABLE {$wpdb->prefix}zkv_documents ADD KEY idx_transcript_status (transcript_status)"
-			);
-		}
-		$idx_exists = $wpdb->get_results(
-			"SHOW INDEX FROM {$wpdb->prefix}zkv_documents WHERE Key_name = 'idx_visibility'"
-		);
-		if ( empty( $idx_exists ) ) {
-			$wpdb->query(
-				"ALTER TABLE {$wpdb->prefix}zkv_documents ADD KEY idx_visibility (visibility)"
-			);
-		}
-
+	if ( $needs ) {
 		// v1.3.0+ migration: backfill content chunks for existing indexed docs.
-		// The chunks table was created above by zkv_activate(). Now schedule
-		// a background task to extract and store content chunks for all existing
-		// documents that don't have chunks yet.
+		// The chunks table was created above by zkv_activate(). Schedule a
+		// background task to extract and store chunks for docs that lack them.
 		if ( version_compare( $db_ver, '1.3.0', '<' ) ) {
 			if ( ! wp_next_scheduled( 'zkv_backfill_chunks' ) ) {
 				wp_schedule_single_event( time() + 30, 'zkv_backfill_chunks' );
 			}
 		}
-
 		update_option( 'zkv_db_version', ZKV_VERSION );
 	}
 }

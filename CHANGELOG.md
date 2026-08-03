@@ -11,6 +11,29 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.3.1] - 2026-08-03
+
+A hotfix for a site-down bug. Under one upgrade path a Knowledge Base database
+column could be missing while the module still expected it, and on PHP 8.4 the
+resulting query error could take the whole site down with a 502 on every page.
+The Knowledge Base now repairs its own schema on every load instead of only when
+its internal version number advances, so a missing column or index is added back
+automatically. Theme and apps move together to 1.3.1.
+
+### Fixed
+
+- **Site-down 502 from a missing Knowledge Base column.** The Knowledge Base read
+  paths query an `is_pricing_authority` column. If that column was absent (for
+  example after a database was copied from an environment that predated the
+  column, while the stored schema version already matched the running code), PHP
+  8.4 turned the failed query into a fatal error and every page returned a 502.
+  The module now verifies and heals its own table on every load, independent of
+  the stored version number, adding any missing column or index in place. A short
+  transient records that the schema is healthy, so the check costs nothing on the
+  common path.
+
+---
+
 ## [1.3.0] - 2026-08-03
 
 A features-and-cleanup release. The headline is a built-in way to bring an existing
