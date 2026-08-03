@@ -109,17 +109,24 @@ class ZEST_Catalog {
 	public static function resolve_price( string $item_id, array $ctx = array() ): array {
 		$neutral = array( 'amount' => null, 'method' => 'none', 'quote_only' => false, 'explain' => '' );
 		$item    = self::get( $item_id );
-		$scheme  = $item['pricing_scheme_id'] ?? ( $item['pricing_scheme'] ?? '' );
+		$scheme  = (string) ( $item['pricing_scheme_id'] ?? ( $item['pricing_scheme'] ?? '' ) );
 
+		// An item with no pricing scheme has no catalog price; leave it for a human.
+		if ( '' === $scheme ) {
+			return $neutral;
+		}
+
+		// The Item Engine resolves by pricing-SCHEME id, not item id. Passing $item_id
+		// here (the bug fixed in 1.3.3) meant it never resolved, so every Ai-parsed line
+		// came back $0.00 while the no-Ai fallback — which uses the scheme id directly —
+		// priced correctly. Resolve from the scheme id in both paths now.
 		if ( class_exists( 'ZDZ_Item_Engine' ) && method_exists( 'ZDZ_Item_Engine', 'resolve_price' ) ) {
-			$r = ZDZ_Item_Engine::resolve_price( $item_id, $ctx );
+			$r = ZDZ_Item_Engine::resolve_price( $scheme, $ctx );
 			return is_array( $r ) ? array_merge( $neutral, $r ) : $neutral;
 		}
-		if ( '' !== (string) $scheme ) {
-			$r = apply_filters( 'zdz_pricing_resolve', null, (string) $scheme, $ctx );
-			if ( is_array( $r ) ) {
-				return array_merge( $neutral, $r );
-			}
+		$r = apply_filters( 'zdz_pricing_resolve', null, $scheme, $ctx );
+		if ( is_array( $r ) ) {
+			return array_merge( $neutral, $r );
 		}
 		return $neutral;
 	}
