@@ -1,3 +1,11 @@
+# Zorderz 1.3.2 (theme + apps)
+
+**August 3, 2026 · Zorderz Core theme 1.3.2 · Zorderz Apps bundle 1.3.2**
+
+A front-end hotfix for the Estimates widget. On the dashboard the widget's footer script could evaluate before the theme's renderWidgets() injected the widget markup, so it bailed on a missing root element and left the Open and History lists stuck on the "Loading" placeholder with unresponsive tabs. The widget now boots when its markup is present, waiting for the theme's zdz_widgets_rendered event with a DOMContentLoaded handler and a short poll as fallbacks, and it guards against double initialization. The estimate list, the tabs, and the parse-to-create flow work again. The server side was already correct (the list endpoint and the estimate preview route both respond normally); this release changes only the widget's boot. Internal app version this release: Estimates (ZEST) 1.25.1.
+
+---
+
 # Zorderz 1.3.1 (theme + apps)
 
 **August 3, 2026 · Zorderz Core theme 1.3.1 · Zorderz Apps bundle 1.3.1**
