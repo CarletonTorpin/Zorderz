@@ -11,6 +11,32 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.3.3] - 2026-08-03
+
+A correctness release for the built-in estimates. Estimates created by dictating or
+typing them (the Ai-assisted path) were being saved with every price at $0.00 because
+the catalog price lookup asked the Item Engine with the wrong id. Catalog prices now
+resolve as they should, overpaid invoices no longer show a negative amount due, and the
+Estimates widget status text renders correctly. Theme and apps move together to 1.3.3.
+
+### Fixed
+
+- **Ai-parsed estimates priced every line at $0.00.** The catalog price resolver passed
+  the item id where the Item Engine expects a pricing-scheme id, so it never resolved
+  and each line fell back to $0.00 (the no-Ai fallback parser already worked around
+  this). It now resolves from the scheme id, and the price fill asks for the unit rate
+  (quantity one) so a per-unit price is not multiplied by the quantity a second time.
+  Dictated or typed estimates now carry their catalog prices. Estimates app ZEST 1.25.2.
+- **Overpaid invoices showed a negative amount due.** A payment at or above the invoice
+  total now clamps the amount due at zero everywhere it appears (the management console,
+  the printable invoice, the import review, and the payment response) instead of showing
+  a negative figure.
+- **Widget status text showed a raw HTML entity.** The Estimates widget status (for
+  example while reading or creating an estimate) rendered a literal entity instead of an
+  ellipsis; it now shows a proper ellipsis.
+
+---
+
 ## [1.3.2] - 2026-08-03
 
 A front-end hotfix for the Estimates widget. On the dashboard the widget's script

@@ -377,7 +377,7 @@
 		html += '<div class="trow grand"><span>' + ( doc.kind === 'invoice' ? 'Total' : 'Estimate Total' ) + '</span><span>' + money( t.total ) + '</span></div>';
 		if ( doc.kind === 'invoice' && num( doc.amount_paid ) ) {
 			html += '<div class="trow"><span>Amount paid</span><span>' + money( doc.amount_paid ) + '</span></div>';
-			html += '<div class="trow grand"><span>Amount due</span><span>' + money( t.total - num( doc.amount_paid ) ) + '</span></div>';
+			html += '<div class="trow grand"><span>Amount due</span><span>' + money( Math.max( 0, t.total - num( doc.amount_paid ) ) ) + '</span></div>';
 		}
 		// Reconcile against the total printed on the source; flag, never auto-correct.
 		if ( doc.stated_total != null && doc.stated_total !== '' ) {
