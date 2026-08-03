@@ -11,6 +11,62 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.3.0] - 2026-08-03
+
+A features-and-cleanup release. The headline is a built-in way to bring an existing
+business's paperwork in: upload a PDF estimate or invoice and import it. Chat turns no
+longer block, the last of the pre-Zorderz "TS" branding is gone, and the docs are cleaned
+up. Theme and apps move together to 1.3.0.
+
+### Added
+
+- **Manual PDF import for estimates and invoices.** Upload an existing business's PDF
+  estimate or invoice and it is parsed into the same canonical document model the built-in
+  generator uses, then shown in an editable preview to review and confirm before anything
+  is saved. Text is extracted in the browser (vendored pdf.js: no server-side PDF
+  dependency and nothing to install); parsing uses the configured Ai model when present,
+  with a paste-the-text or manual-entry fallback when it is not, or when a PDF is
+  image-only. Totals are reconciled against the printed total and any mismatch is flagged,
+  never silently corrected. This is the on-ramp for someone migrating onto Zorderz: their
+  history comes with them. Nothing is trusted to the model for a side effect; a human
+  confirms every import.
+- **Single-operator mode (off by default).** A solo owner who runs everything can turn on
+  one setting to self-schedule their own jobs and close them with a self-attested
+  completion, instead of being blocked by the dispatcher-and-crew rules (assignment by a
+  dispatcher, two-party sign-off) that a one-person shop cannot satisfy. With the mode off,
+  every existing multi-user guard is unchanged.
+
+### Changed
+
+- **Chat turns are now asynchronous.** A slow, vault-augmented turn used to hold one
+  request open long enough to hit a managed host's gateway timeout and return a 502. The
+  turn now runs as a background job the browser polls, so it always completes and is saved.
+  The previous synchronous path remains as a fallback, every answer still passes through
+  the same Answer Authority gate, and shared-device (kiosk) turns stay synchronous and
+  unrecorded as before.
+- **The pre-Zorderz "TS" branding is gone.** The remaining app headers that read
+  "Zorderz - TS - X" are now "Zorderz X", and the Scheduler's admin label, cron entry, and
+  log beacons read "Zorderz Scheduler". Functional identifiers (class prefixes, the
+  tsim/v1 REST namespace, backward-compatible meta keys) are unchanged.
+
+### Docs
+
+- Removed every em and en dash from the repository's Markdown (README, changelog, contract
+  specs, app READMEs), per house style.
+- Confirmed a clean install ships empty: activation creates roles and the generic
+  Login/Register/Terms pages only, and every business-data path (Item Engine,
+  Compensation, Business Profile, Identity Pack, the demo catalog) is create-schema-only or
+  hand-applied, never seeded.
+
+### Verification
+
+Both zips rebuilt at 1.3.0; 286 PHP files parse clean; the new client scripts parse clean;
+imports write only through the existing manage_options-gated endpoints; the async chat path
+preserves the synchronous fallback and the outbound gate. Internal app versions this
+release: Estimates (ZEST) 1.25.0, Chat (ZANA) 1.2.0, Jobs (ZJOB) 1.17.0.
+
+---
+
 ## [1.2.0] - 2026-08-02
 
 The release that came back from the first full end-to-end install: a business set

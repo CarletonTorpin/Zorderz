@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Zorderz - TS - Camera
+ * Plugin Name: Zorderz Camera
  * Description: Camera and photo capture for Zorderz Field OS. Photos saved to ZDZ_User_Media for cross-app use.
  * Version: 1.7.4
  * == 1.7.4 == DOC-ONLY (no behavior change): documented, at the capture save

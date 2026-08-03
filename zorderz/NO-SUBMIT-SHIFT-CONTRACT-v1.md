@@ -1,8 +1,8 @@
-# No-Submit-Shift Contract — v1
+# No-Submit-Shift Contract (v1)
 
-> **Status:** Stable — new in Theme v2.21.0
+> **Status:** Stable (new in Theme v2.21.0)
 > **Depends on:** `--sys-*` tokens (DATA-THEME-CONTRACT), `.dash-widget-body { overflow: clip }` (WIDGET-OVERFLOW-CONTRACT)
-> **Depended on by (should adopt):** TSSV (Surveys), TSL (Leads), TSCC (Commissions), TSEC (Estimates) — any widget with an action button that triggers a server round-trip.
+> **Depended on by (should adopt):** TSSV (Surveys), TSL (Leads), TSCC (Commissions), TSEC (Estimates): any widget with an action button that triggers a server round-trip.
 
 ---
 
@@ -18,9 +18,9 @@ When a user taps an action button inside a dashboard widget ("Send to CRM", "Run
 
 1. **Keep the button's box dimensions while busy.** Do not let the label text change resize the button. Swap to a spinner *inside the same box*.
 2. **Reserve the status region.** The status slot must occupy its space **even when empty**, so revealing a message never pushes anything. Never inject a status node *above* existing content without reserved space.
-3. **Animate with `opacity`/`transform` only** — never `width`, `height`, `top`, or `left`.
-4. **Patch results in place on success** — do not re-render or replace the whole widget, and do not scroll the viewport.
-5. **Announce to assistive tech** — set `aria-busy="true"` on the busy button and use a visually-hidden `aria-live="polite"` region for the status text.
+3. **Animate with `opacity`/`transform` only**: never `width`, `height`, `top`, or `left`.
+4. **Patch results in place on success**: do not re-render or replace the whole widget, and do not scroll the viewport.
+5. **Announce to assistive tech**: set `aria-busy="true"` on the busy button and use a visually-hidden `aria-live="polite"` region for the status text.
 
 (These mirror the CLS guidance in web.dev / Core Web Vitals: reserve space for post-interaction content, transform/opacity for motion, never inject above existing content.)
 
@@ -30,7 +30,7 @@ When a user taps an action button inside a dashboard widget ("Send to CRM", "Run
 
 These ship in `app.css` (v2.21.0). Plugins opt in by toggling the classes.
 
-### `.zdz-btn-busy` — the busy button state
+### `.zdz-btn-busy`: the busy button state
 
 Add it to your existing button (works on `.btn`, `.btn-brand`, `.btn-outline`, `.btn-sm`, or your own button). It:
 
@@ -49,7 +49,7 @@ btn.removeAttribute('aria-busy');
 
 The spinner inks itself from the button's intended text color: `--sys-text-brand` for filled buttons (default) and `--sys-text` for `.btn-outline`. If your button is light-on-light or needs the text ink, add `.zdz-btn-busy-ink-text`.
 
-### `.zdz-inline-status` — the reserved status slot
+### `.zdz-inline-status`: the reserved status slot
 
 Place an **always-present** status element directly above or below the action button. It has a reserved `min-height`, an opaque `--sys-surface` background, and fades in via opacity.
 
@@ -70,7 +70,7 @@ showStatus(statusEl, 'Working… this will update in a moment');   // spinner + 
 // on success:
 showStatus(statusEl, 'Sent to CRM ✓', 'success');                // green, no spinner
 // on error:
-showStatus(statusEl, 'Could not send — tap to retry', 'error');  // red
+showStatus(statusEl, 'Could not send, tap to retry', 'error');  // red
 ```
 
 Modifiers: `.is-visible` (fades in), `.is-success` (green text), `.is-error` (red text), `.zdz-inline-spinner` (a small inline spinner element). Sunlight mode gets a 2px black border automatically.
@@ -81,19 +81,19 @@ Modifiers: `.is-visible` (fades in), `.is-success` (green text), `.is-error` (re
 
 ```js
 async function onSubmit(btn, statusEl, doRequest) {
-  // 1. Busy the button in place — no reflow.
+  // 1. Busy the button in place: no reflow.
   btn.classList.add('zdz-btn-busy');
   btn.setAttribute('aria-busy', 'true');
   showStatus(statusEl, 'Working…');           // appears in reserved space
 
   try {
     const result = await doRequest();          // your AJAX/REST call
-    // 2. Patch the result IN PLACE — do not re-render the whole widget.
+    // 2. Patch the result IN PLACE: do not re-render the whole widget.
     applyResultInPlace(result);
     showStatus(statusEl, 'Done ✓', 'success');
     setTimeout(() => clearStatus(statusEl), 3000);
   } catch (e) {
-    showStatus(statusEl, 'Something went wrong — tap to retry', 'error');
+    showStatus(statusEl, 'Something went wrong, tap to retry', 'error');
   } finally {
     btn.classList.remove('zdz-btn-busy');
     btn.removeAttribute('aria-busy');
@@ -120,8 +120,8 @@ async function onSubmit(btn, statusEl, doRequest) {
 3. On success, the result appears **without** a scroll jump or full re-render.
 4. Verify in all four theme modes (light, dark, system, sunlight).
 5. With VoiceOver/TalkBack on, the busy state and status are announced.
-6. Measure CLS (Chrome DevTools Performance → Layout Shift) across the action — should be ~0.
+6. Measure CLS (Chrome DevTools Performance → Layout Shift) across the action: should be ~0.
 
 ---
 
-*— End of No-Submit-Shift Contract v1 —*
+*End of No-Submit-Shift Contract v1*

@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Scheduler schema migration — v1.0.0
+ * Zorderz Scheduler schema migration — v1.0.0
  *
  * Idempotent. Safe to run repeatedly; dbDelta handles schema diffs.
  *

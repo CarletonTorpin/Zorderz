@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Zorderz - TS - Quick-ID
+ * Plugin Name: Zorderz Quick-ID
  * Description: Swipe from the left edge of the homepage to slide in a full-screen, photographable digital business card for the signed-in person. The card face is built from the Business Profile (logo, phone, licence, former-name line, promo banner) and the person's own account.
  * Version: 1.6.0
  * Author: Zorderz

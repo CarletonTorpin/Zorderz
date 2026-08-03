@@ -1,4 +1,4 @@
-# Zorderz — Knowledge
+# Zorderz: Knowledge
 
 A company-wide document repository with AI indexing, bundled as an app module of
 the Zorderz distribution (loaded by `zorderz-apps.php`). Upload documents; an
@@ -18,20 +18,20 @@ build is GPL and carries no company, product, place or person names.)
 
 - **Upload / scan / paste** documents (PDF, DOC/DOCX, MD, TXT, images, and
   caption/transcript formats: SRT, VTT, ITT, …), up to 50 MB each.
-- **AI indexing** — a background job extracts a short title, a category, a
+- **AI indexing**: a background job extracts a short title, a category, a
   synopsis, key facts, entities and tags, and stores raw text in FULLTEXT
   content chunks so specific lookups (a price, a dimension, a part number) hit
   the actual document text, not just the summary.
-- **Per-document visibility** — `all_employees`, `admin_only`, or
+- **Per-document visibility**: `all_employees`, `admin_only`, or
   `transcript_private` (fail-closed; a transcript is readable only by the WP
   users who are its named parties, everywhere at once, with no admin bypass).
 - **Party-initiated sharing** of a transcript (whole-document or a materialized
   excerpt), view-only, revocable, optional expiry.
-- **Pricing-authority documents** — a document placed in a designated pricing
+- **Pricing-authority documents**: a document placed in a designated pricing
   category and explicitly enabled becomes a quotable pricing source the
   assistant reads. The density-scoring retrieval that pulls pricing tables out of
   number-dense PDF grids is preserved.
-- **Email-in (optional)** — staff forward mail to a mailbox the admin configures;
+- **Email-in (optional)**: staff forward mail to a mailbox the admin configures;
   a Microsoft Graph poller files each message into the vault. The site only ever
   calls **out**; there is no inbound webhook, REST route or `nopriv` AJAX.
 
@@ -40,33 +40,33 @@ build is GPL and carries no company, product, place or person names.)
 The **authenticated `/vault/{slug}` route is the primary access control.** It
 enforces login, the app-access grant and the per-document visibility ACL before
 streaming a byte. The physical store also carries a deny-all `.htaccess` (Apache)
-and `web.config` (IIS) as **defence-in-depth** — but `.htaccess` is inert on
+and `web.config` (IIS) as **defence-in-depth**, but `.htaccess` is inert on
 nginx and is never the guarantee. `zkv_vault_protection_report()` raises a loud
 admin health warning when the web server cannot honour a file-level deny rule,
 and recommends a server rule (or moving the directory outside the web root).
 
 ## Core services consumed
 
-- **`ZDZ_Plugin_API`** — app registration + `user_can_access_app()`.
-- **`ZDZ_Business_Profile`** — the business name / industry used to assemble
+- **`ZDZ_Plugin_API`**: app registration + `user_can_access_app()`.
+- **`ZDZ_Business_Profile`**: the business name / industry used to assemble
   indexer & classifier prompts at runtime (`zkv_business_descriptor()`); no
   company/product is typed into any prompt.
-- **`ZDZ_Core_Poe` / `ZDZ_Core_Settings`** — the model call and the Poe API key.
-- **`ZDZ_User_Roles`, `ZDZ_Share_Link`** — admin-role checks and response hygiene.
+- **`ZDZ_Core_Poe` / `ZDZ_Core_Settings`**: the model call and the Poe API key.
+- **`ZDZ_User_Roles`, `ZDZ_Share_Link`**: admin-role checks and response hygiene.
 
 Where a Core service does not exist yet, the module binds through a documented
 filter with a graceful, empty default (see **Filters** below).
 
 ## Settings-driven, ships empty
 
-- **Document categories** — `defaults/categories.json` is `[]`. `seed_defaults()`
-  runs once on first activation and inserts whatever that file holds — nothing by
+- **Document categories**: `defaults/categories.json` is `[]`. `seed_defaults()`
+  runs once on first activation and inserts whatever that file holds: nothing by
   default. No category is ever re-inserted on upgrade; upgrades write schema only.
-- **Product / brand keywords** — the pricing-query detector and the product-line
+- **Product / brand keywords**: the pricing-query detector and the product-line
   coverage boost read `zkv_product_keywords()` (option `zkv_product_keywords`,
   empty by default). The business-specific product literals that used to be
   hardcoded are gone; the density-scoring mechanics are unchanged.
-- **Login route** — `zkv_login_url()` reads the `zkv_login_slug` option / the
+- **Login route**: `zkv_login_url()` reads the `zkv_login_slug` option / the
   `zkv_login_url` filter, else defers to `wp_login_url()` (which the theme already
   points at the tenant's login page). No route hardcodes a slug.
 

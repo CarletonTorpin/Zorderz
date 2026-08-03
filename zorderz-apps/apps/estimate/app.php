@@ -52,7 +52,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /* ── Identity ──────────────────────────────────────────────────────── */
-define( 'ZEST_VERSION', '1.24.0' );
+define( 'ZEST_VERSION', '1.25.0' );
 define( 'ZEST_FILE', __FILE__ );
 define( 'ZEST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZEST_URL', plugin_dir_url( __FILE__ ) );
@@ -317,6 +317,46 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'zest_insert_failed', 'Insert failed.', array( 'status' => 500 ) );
 			}
 			return array( 'ok' => true, 'id' => $id, 'view' => home_url( '/?zest_doc=' . $id ) );
+		},
+	) );
+
+	// Sync alternative to the async parse queue (mode:'import'): parse extracted PDF text
+	// into the canonical $doc VERBATIM (no pricing, no catalog). A thin wrapper over the
+	// engine's parse_document(); the async queue is the primary path. Admin only. This is
+	// NOT a side effect — a human still reviews + confirms before /estimate|invoice/import.
+	register_rest_route( $ns, '/estimate/parse', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+		'callback'            => function ( WP_REST_Request $req ) {
+			$text = (string) $req->get_param( 'text' );
+			if ( '' === trim( $text ) ) {
+				return new WP_Error( 'zest_no_text', 'No text to parse.', array( 'status' => 400 ) );
+			}
+			$kind   = sanitize_key( (string) $req->get_param( 'kind' ) );
+			$engine = new ZEST_Estimate_Engine();
+			return $engine->parse_document( $text, array(
+				'kind'    => in_array( $kind, array( 'estimate', 'invoice' ), true ) ? $kind : '',
+				'user_id' => get_current_user_id(),
+			) ); // { ok, doc, warnings, error }
+		},
+	) );
+
+	// Render a draft $doc to printable HTML for the import review panel. Pure render —
+	// no DB write, no import. Admin only.
+	register_rest_route( $ns, '/estimate/preview', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+		'callback'            => function ( WP_REST_Request $req ) {
+			if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
+				return new WP_Error( 'zest_no_renderer', 'Renderer unavailable.', array( 'status' => 500 ) );
+			}
+			$params = $req->get_json_params();
+			$params = is_array( $params ) ? $params : array();
+			$doc    = ( isset( $params['doc'] ) && is_array( $params['doc'] ) ) ? $params['doc'] : $params;
+			if ( ! is_array( $doc ) || empty( $doc ) ) {
+				return new WP_Error( 'zest_bad_doc', 'Missing or invalid document.', array( 'status' => 400 ) );
+			}
+			return array( 'ok' => true, 'html' => ZEST_Doc_Renderer::preview_html( $doc ) );
 		},
 	) );
 } );

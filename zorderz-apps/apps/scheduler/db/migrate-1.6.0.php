@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Scheduler schema migration — v1.6.0 (Connected Calendars, Phase 0).
+ * Zorderz Scheduler schema migration — v1.6.0 (Connected Calendars, Phase 0).
  *
  * Idempotent. Safe to run repeatedly; dbDelta handles schema diffs. Additive
  * only — the three v1.0.0 tables are untouched.

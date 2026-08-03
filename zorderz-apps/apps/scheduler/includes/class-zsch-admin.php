@@ -2,7 +2,7 @@
 /**
  * ZSCH_Admin — the Microsoft 365 connection settings screen.
  *
- * One admin page (Settings → TS Scheduler) where an owner/admin enters the
+ * One admin page (Settings → Zorderz Scheduler) where an owner/admin enters the
  * Azure AD app registration details that switch on two-way Outlook sync:
  *   • Directory (tenant) ID
  *   • Application (client) ID
@@ -38,8 +38,8 @@ class ZSCH_Admin {
 
 	public function menu() {
 		add_options_page(
-			'TS Scheduler',
-			'TS Scheduler',
+			'Zorderz Scheduler',
+			'Zorderz Scheduler',
 			'manage_options',
 			'zsch-settings',
 			array( $this, 'render' )

@@ -8,7 +8,7 @@
  *   photo-gated completion, with a recorded single-party attestation path for a solo
  *   operator. Consumes the theme's crew-lead hierarchy (ZDZ_Hierarchy), party roster
  *   (ZDZ_Party), media store (ZDZ_User_Media) and geocoder (ZDZ_Media_Geocoder).
- * Version:     1.16.0
+ * Version:     1.17.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -45,7 +45,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZJOB_VERSION', '1.16.0' );
+define( 'ZJOB_VERSION', '1.17.0' );
 define( 'ZJOB_FILE', __FILE__ );
 define( 'ZJOB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZJOB_URL', plugin_dir_url( __FILE__ ) );
@@ -136,6 +136,7 @@ require_once ZJOB_DIR . 'includes/class-zjob-user-log.php';
 require_once ZJOB_DIR . 'includes/class-zjob-photos.php';
 require_once ZJOB_DIR . 'includes/class-zjob-ajax.php';
 require_once ZJOB_DIR . 'includes/class-zjob-chat-bridge.php';
+require_once ZJOB_DIR . 'includes/class-zjob-admin.php';
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
@@ -228,6 +229,12 @@ add_action( 'plugins_loaded', function () {
 		ZJOB_Photos::init();
 	}
 	ZJOB_AJAX::init();
+
+	// Admin settings screen (Settings -> Zorderz Jobs), incl. the single-operator toggle.
+	// Admin requests only; hooks admin_menu/admin_init so it must register before those fire.
+	if ( is_admin() && class_exists( 'ZJOB_Admin' ) ) {
+		new ZJOB_Admin();
+	}
 
 	// Publish the jobs.handoff capability to the orchestrator registry so the chat
 	// verb is discoverable like the other bridges. Until the central resolver exists

@@ -414,6 +414,271 @@ class ZEST_Estimate_Engine {
 	}
 
 	/* ============================================================== *
+	 *  IMPORT PARSE  (verbatim — no pricing, no catalog matching)
+	 * ============================================================== */
+
+	/**
+	 * Parse the extracted text of an EXISTING business's estimate/invoice PDF into the
+	 * canonical document model, VERBATIM. This is the AI seam for the manual PDF-import
+	 * pipeline (milestone #54): it never prices, never matches the Item Engine catalog and
+	 * never calls fill_prices() — the source document's own numbers (rates, line totals,
+	 * tax, discounts, totals) are the truth and are preserved exactly. The model returns a
+	 * draft; the human operator reviews and confirms before any import side effect.
+	 *
+	 * One bounded rejection-retry, mirroring the create parser. When no AI gateway is
+	 * connected there is no deterministic fallback (the document is free-form), so the
+	 * caller falls back to manual entry in the review panel.
+	 *
+	 * @param string $text    Extracted document text (all pages).
+	 * @param array  $context { kind:'estimate'|'invoice'|'', user_id:int }
+	 * @return array{ ok:bool, doc:array, warnings:array, error:string }
+	 */
+	public function parse_document( string $text, array $context = array() ): array {
+		$out  = array( 'ok' => false, 'doc' => array(), 'warnings' => array(), 'error' => '' );
+		$text = trim( $text );
+		if ( '' === $text ) {
+			$out['error'] = 'Nothing to parse.';
+			return $out;
+		}
+		if ( ! $this->ai->is_configured() ) {
+			$out['error'] = 'AI is not configured. Enter or edit the document manually in the review panel.';
+			return $out;
+		}
+
+		$kind_hint = in_array( ( $context['kind'] ?? '' ), array( 'estimate', 'invoice' ), true ) ? (string) $context['kind'] : '';
+
+		$messages = array(
+			array( 'role' => 'system', 'content' => $this->build_import_prompt( $context ) ),
+			array( 'role' => 'user', 'content' => $text ),
+		);
+		$res = $this->ai->complete( $messages, array( 'role' => 'parse', 'temperature' => 0.0, 'extra' => array( 'thinking_budget' => 8192 ) ) );
+		if ( empty( $res['ok'] ) ) {
+			$out['error'] = $res['error'] ?: 'Parse failed.';
+			return $out;
+		}
+		$data = $this->ai->parse_json( $res['text'] );
+		if ( ! is_array( $data ) ) {
+			$data = $this->rejection_retry( $messages, $res['text'] ); // one bounded retry
+		}
+		if ( ! is_array( $data ) ) {
+			$out['error'] = 'Could not read a structured document from the AI response.';
+			return $out;
+		}
+
+		$norm            = $this->normalize_import_doc( $data, $text, $kind_hint );
+		$out['ok']       = true;
+		$out['doc']      = $norm['doc'];
+		$out['warnings'] = $norm['warnings'];
+		return $out;
+	}
+
+	/**
+	 * Map a raw import-model response to the canonical $doc, VERBATIM. Coerces types and
+	 * parses currency (stripping "$", commas, "()" and U+2212) but NEVER reprices:
+	 * unit_price and line_total come straight from the source. Reconciles the computed
+	 * total against the total printed on the source and appends a WARNING (never a silent
+	 * correction) when they differ by more than a cent.
+	 *
+	 * @return array{ doc:array, warnings:array }
+	 */
+	private function normalize_import_doc( array $data, string $source_text, string $kind_hint ): array {
+		$warnings = array();
+
+		$kind = (string) ( $data['kind'] ?? '' );
+		$kind = in_array( $kind, array( 'estimate', 'invoice' ), true ) ? $kind : '';
+		if ( '' !== $kind_hint ) {
+			if ( '' !== $kind && $kind !== $kind_hint ) {
+				$warnings[] = sprintf( 'The model read this as an %s; importing as %s per your selection.', $kind, $kind_hint );
+			}
+			$kind = $kind_hint; // operator's explicit choice wins over the model's guess
+		}
+		if ( '' === $kind ) {
+			$kind = 'estimate';
+		}
+
+		$c        = (array) ( $data['customer'] ?? array() );
+		$customer = array(
+			'name'   => (string) ( $c['name'] ?? '' ),
+			'org'    => (string) ( $c['org'] ?? '' ),
+			'email'  => (string) ( $c['email'] ?? '' ),
+			'phone'  => (string) ( $c['phone'] ?? '' ),
+			'street' => (string) ( $c['street'] ?? '' ),
+			'city'   => (string) ( $c['city'] ?? '' ),
+			'state'  => (string) ( $c['state'] ?? '' ),
+			'zip'    => (string) ( $c['zip'] ?? '' ),
+		);
+
+		$raw_items = $data['items'] ?? ( $data['line_items'] ?? array() );
+		$raw_items = is_array( $raw_items ) ? $raw_items : array();
+		$items     = array();
+		foreach ( $raw_items as $li ) {
+			if ( ! is_array( $li ) ) {
+				continue;
+			}
+			$lk  = (string) ( $li['kind'] ?? '' );
+			$lk  = in_array( $lk, array( 'item', 'context', 'discount', 'fee', 'note' ), true ) ? $lk : 'item';
+			$qty = isset( $li['quantity'] ) ? (float) $li['quantity'] : ( isset( $li['qty'] ) ? (float) $li['qty'] : 1.0 );
+			if ( $qty <= 0 ) {
+				$qty = 1.0;
+			}
+			$rate   = $this->money_to_float( $li['unit_price'] ?? ( $li['rate'] ?? 0 ) );
+			$has_lt = array_key_exists( 'line_total', $li );
+			$lt     = $has_lt ? $this->money_to_float( $li['line_total'] ) : ( $rate * $qty );
+			// A discount/credit line reads as negative even if the source dropped the sign.
+			if ( 'discount' === $lk && $lt > 0 ) {
+				$lt = -$lt;
+				if ( $rate > 0 ) {
+					$rate = -$rate;
+				}
+			}
+			$items[] = array(
+				'kind'            => $lk,
+				'description'     => (string) ( $li['description'] ?? '' ),
+				'sub_description' => (string) ( $li['sub_description'] ?? ( $li['sub'] ?? '' ) ),
+				'quantity'        => $qty,
+				'unit_price'      => $rate,
+				'line_total'      => $lt,
+				'is_lot'          => ! empty( $li['is_lot'] ),
+				'attribution'     => (string) ( $li['attribution'] ?? '' ),
+			);
+		}
+
+		$discount_type = (string) ( $data['discount_type'] ?? 'none' );
+		$discount_type = in_array( $discount_type, array( 'none', 'percent', 'amount' ), true ) ? $discount_type : 'none';
+
+		$doc = array(
+			'kind'           => $kind,
+			'number'         => (string) ( $data['number'] ?? '' ),
+			'date'           => (string) ( $data['date'] ?? '' ),
+			'due_date'       => (string) ( $data['due_date'] ?? '' ),
+			'reference'      => (string) ( $data['reference'] ?? '' ),
+			'customer'       => $customer,
+			'items'          => $items,
+			'discount_type'  => $discount_type,
+			'discount_value' => $this->money_to_float( $data['discount_value'] ?? 0 ),
+			'tax'            => $this->money_to_float( $data['tax'] ?? 0 ),
+			'shipping'       => $this->money_to_float( $data['shipping'] ?? 0 ),
+			'amount_paid'    => $this->money_to_float( $data['amount_paid'] ?? 0 ),
+			'salesperson'    => (string) ( $data['salesperson'] ?? '' ),
+			'notes'          => (string) ( $data['notes'] ?? '' ),
+			'terms'          => (string) ( $data['terms'] ?? '' ),
+			'source_text'    => $source_text,
+			'status'         => 'imported',
+		);
+
+		// Reconcile the computed total against the total printed on the source. Never
+		// correct silently — surface it for the human to resolve in the review panel.
+		$stated = array_key_exists( 'stated_total', $data ) ? $this->money_to_float( $data['stated_total'] )
+			: ( array_key_exists( 'total', $data ) ? $this->money_to_float( $data['total'] ) : null );
+		if ( null !== $stated && class_exists( 'ZEST_Doc_Renderer' ) ) {
+			$t     = ZEST_Doc_Renderer::compute_totals( $items, $doc['discount_type'], $doc['discount_value'], $doc['tax'], $doc['shipping'] );
+			$delta = round( (float) $t['total'] - $stated, 2 );
+			if ( abs( $delta ) > 0.01 ) {
+				$warnings[] = sprintf(
+					'Totals mismatch: computed %s vs printed %s (off by %s). Check the line items — nothing was auto-corrected.',
+					number_format( (float) $t['total'], 2 ),
+					number_format( $stated, 2 ),
+					number_format( $delta, 2 )
+				);
+			}
+			$doc['stated_total'] = $stated; // review aid only; the import writers ignore it
+		}
+
+		$conf = isset( $data['confidence'] ) ? (int) $data['confidence'] : 0;
+		if ( $conf > 0 && $conf < 70 ) {
+			$warnings[] = sprintf( 'Low extraction confidence (%d%%). Review every field before importing.', $conf );
+		}
+
+		return array( 'doc' => $doc, 'warnings' => $warnings );
+	}
+
+	/**
+	 * Parse a currency-ish value to a float. A number passes through; a string has "$",
+	 * thousands commas and whitespace stripped, with wrapping parentheses "(175.00)", a
+	 * leading U+2212 (−) or an ASCII "-" read as NEGATIVE. Unparseable → 0.0.
+	 */
+	private function money_to_float( $v ): float {
+		if ( is_int( $v ) || is_float( $v ) ) {
+			return (float) $v;
+		}
+		$s = trim( (string) $v );
+		if ( '' === $s ) {
+			return 0.0;
+		}
+		$s   = str_replace( "\u{2212}", '-', $s ); // U+2212 MINUS SIGN → ASCII hyphen
+		$neg = false;
+		if ( preg_match( '/^\((.*)\)$/', $s, $m ) ) { // (175.00) accounting negative
+			$neg = true;
+			$s   = $m[1];
+		}
+		if ( strpos( $s, '-' ) !== false ) {
+			$neg = true;
+		}
+		$s = preg_replace( '/[^0-9.]/', '', $s ); // drop $, commas, letters, sign, spaces
+		if ( '' === $s || '.' === $s ) {
+			return 0.0;
+		}
+		if ( substr_count( $s, '.' ) > 1 ) { // collapse stray dots, keep the first as the point
+			$first = strpos( $s, '.' );
+			$s     = substr( $s, 0, $first + 1 ) . str_replace( '.', '', substr( $s, $first + 1 ) );
+		}
+		$f = (float) $s;
+		return $neg ? -$f : $f;
+	}
+
+	/** The import (verbatim-extraction) system prompt. No catalog, no pricing, no conventions. */
+	private function build_import_prompt( array $context ): string {
+		$kind_hint = in_array( ( $context['kind'] ?? '' ), array( 'estimate', 'invoice' ), true ) ? (string) $context['kind'] : '';
+		$p         = array();
+		$p[]       = 'You transcribe an EXISTING business document — an estimate/quote or an invoice — from the raw text of an uploaded PDF into structured JSON. This is a data-entry import, not a new quote. Copy every value EXACTLY as printed. Do NOT price anything, do NOT do math beyond reading printed numbers, and do NOT invent, reorder, merge, drop or "improve" any line. Preserve the document\'s own numbers verbatim (rates, line totals, tax, discounts, totals).';
+		if ( '' !== $kind_hint ) {
+			$p[] = 'The operator says this document is an ' . $kind_hint . '. Set "kind" to "' . $kind_hint . '".';
+		} else {
+			$p[] = 'Decide "kind": "invoice" if it shows an invoice number, an "Amount Due"/"Amount Paid" line, or a due date; otherwise "estimate" (also for a quote or proposal).';
+		}
+		$p[] = "## Line items\n"
+			. "Each printed table row becomes one item, in order. Set each line's \"kind\":\n"
+			. "- \"item\": a billable product/service line (the default).\n"
+			. "- \"context\": a \$0 metadata line that is NOT a charge — e.g. a \"Location\" line, a heading, or a closing \"Tax & installation\" note. Keep it as its own line with line_total 0.\n"
+			. "- \"discount\": a credit/discount line shown IN the items table (negative line_total).\n"
+			. "- \"fee\": an explicit surcharge/fee line.\n"
+			. "- \"note\": a free-text note line with no charge.\n"
+			. "Copy each line's description and any secondary text (into sub_description). Put the printed quantity in \"quantity\", the printed unit price in \"unit_price\", and the printed line total in \"line_total\". If only a line total is printed, set quantity 1 and unit_price equal to that total.";
+		$p[] = "## Currency\n"
+			. "Return every money value as a number. When reading, strip \"\$\" and thousands commas, and treat wrapping parentheses \"(175.00)\" or a leading minus (\"-\" or the U+2212 \u{2212} sign) as NEGATIVE.";
+		$p[] = "## House-paperwork rules to encode (common FreshBooks exports)\n"
+			. "- A rep/initials code such as \"(GT)\" or a trailing \"- (AS)\" identifies the SALESPERSON: put the code (letters only, e.g. \"GT\" or \"AS\") in \"salesperson\". STILL keep the \"Location\" line itself as a kind:\"context\" line — do not delete it and do not move its text.\n"
+			. "- A line worded like \"per Geoff\" or \"per Dana\" is a manual DISCOUNT/credit: kind:\"discount\", negative line_total, and put the name (\"Geoff\"/\"Dana\") in \"attribution\".\n"
+			. "- A totals-section line like \"5% Discount\" is a HEADER discount, not an item: set discount_type:\"percent\" and discount_value:5 (the number only). A flat total-section discount like \"Discount -\$50\" → discount_type:\"amount\", discount_value:50. Do NOT also emit it as a line item.\n"
+			. "- A grouped/lot line like \"(4) ... Total for Lot\" is ONE item: kind:\"item\", is_lot:true, quantity 1, and line_total equal to the printed lot total (keep the \"(4)\" in the description).";
+		$p[] = "## Customer\n"
+			. "Fill customer.name, org (company, if any), email, phone, street, city, state, zip from the bill-to / prepared-for block. Use \"\" for anything not printed. Never guess.";
+		$p[] = $this->import_schema_block();
+		return implode( "\n\n", array_filter( array_map( 'trim', $p ) ) );
+	}
+
+	/** The strict JSON schema the import model must return (canonical $doc + review aids). */
+	private function import_schema_block(): string {
+		return implode( "\n", array(
+			'## Output — return ONLY this JSON object, no prose, no code fence',
+			'{',
+			'  "kind": "estimate",',
+			'  "number": "", "date": "", "due_date": "", "reference": "",',
+			'  "customer": {"name":"","org":"","email":"","phone":"","street":"","city":"","state":"","zip":""},',
+			'  "items": [',
+			'    {"kind":"item","description":"","sub_description":"","quantity":1,"unit_price":0,"line_total":0,"is_lot":false,"attribution":""}',
+			'  ],',
+			'  "discount_type": "none", "discount_value": 0,',
+			'  "tax": 0, "shipping": 0, "amount_paid": 0,',
+			'  "salesperson": "", "notes": "", "terms": "",',
+			'  "stated_total": 0,',
+			'  "confidence": 0',
+			'}',
+			'Rules: kind is "estimate" or "invoice". discount_type is "none", "percent" or "amount". item.kind is one of "item","context","discount","fee","note". "stated_total" is the grand total EXACTLY as printed on the document (used only for a mismatch check — do not compute it yourself). "confidence" is 0-100 for how cleanly the text extracted. Keep dates as printed (e.g. "05/14/2024") — do not reformat.',
+		) );
+	}
+
+	/* ============================================================== *
 	 *  PROMPT ASSEMBLY  (one author; everything from services)
 	 * ============================================================== */
 

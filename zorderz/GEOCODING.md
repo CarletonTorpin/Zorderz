@@ -1,8 +1,8 @@
-# Geocoding — privacy model & upgrade path
+# Geocoding: privacy model & upgrade path
 
 The EXIF inspector turns a photo's GPS coordinate into a human place name
 ("Mount Helix, La Mesa, CA 91941"). This is the **only** part of the inspector
-that *could* send data off your server — so it's built privacy-first.
+that *could* send data off your server, so it's built privacy-first.
 
 ## What ships today (zero data egress)
 
@@ -10,12 +10,12 @@ that *could* send data off your server — so it's built privacy-first.
    place list (`data/sd-county-places.tsv`, GeoNames-compatible) is searched for
    the nearest named place. No network call, nothing leaves the server. Returns
    neighborhood + city + state, and the ZIP **only when the coordinate is within
-   ~4 km** of the place centroid (otherwise the ZIP is dropped — "show ZIP only
+   ~4 km** of the place centroid (otherwise the ZIP is dropped: "show ZIP only
    when confident"). Beyond ~30 km from any known place it returns nothing and
    the UI shows raw coordinates only.
 
 2. **User-initiated map link.** The panel shows an "Open in Maps" link. The
-   user's browser contacts the map provider **only if they tap it** — the server
+   user's browser contacts the map provider **only if they tap it**; the server
    never phones home.
 
 3. **Resolve-once + cache.** The REST layer resolves lazily (only when a Details
@@ -34,7 +34,7 @@ that *could* send data off your server — so it's built privacy-first.
 
 ## Expanding coverage (still offline, still zero egress)
 
-Drop in a larger GeoNames file — no code changes, same parser, same format.
+Drop in a larger GeoNames file: no code changes, same parser, same format.
 Download e.g. `US.txt` (or `cities5000.txt`) from GeoNames (CC-BY licensed),
 keep the tab-separated columns, and point the dataset filter at it:
 
@@ -53,7 +53,7 @@ add_filter( 'zdz_media_geocode_dataset_path', function () {
 
 When you stand up your own OpenStreetMap Nominatim instance (e.g. on the Mac
 Studio, or any box you control), you get street-level accuracy **with no public
-API and no third-party data sharing** — the coordinate goes only to *your* server.
+API and no third-party data sharing**: the coordinate goes only to *your* server.
 Wire it through the single filter seam; the inspector code doesn't change:
 
 ```php
@@ -128,7 +128,7 @@ add_filter( 'zdz_media_reverse_geocode', function ( $pre, $lat, $lng ) {
 
 ### Standing up Nominatim (outline)
 - Use the official `mediagis/nominatim` Docker image.
-- Import a region extract (e.g. `north-america-latest.osm.pbf` from Geofabrik) —
+- Import a region extract (e.g. `north-america-latest.osm.pbf` from Geofabrik):
   for San Diego work, a `california-latest.osm.pbf` import is small and fast.
 - A 96 GB machine handles a full North-America (or even planet) import; for a
   state extract it's very comfortable.
@@ -144,7 +144,7 @@ add_filter( 'zdz_media_reverse_geocode', function ( $pre, $lat, $lng ) {
   generic geocoder and forbids systematic queries. Use a **self-hosted** instance
   instead (above).
 - **BigDataCloud's free tier** requires the coordinate to be the *device's current
-  location sent from the browser* — a mismatch for looking up stored photo
+  location sent from the browser*: a mismatch for looking up stored photo
   coordinates, and it sends data to them. Not used.
 - A **keyed commercial provider** (Google, etc.) can be wired through the same
   `zdz_media_reverse_geocode` filter if you accept sending coordinates to them.

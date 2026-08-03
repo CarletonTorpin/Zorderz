@@ -18,10 +18,16 @@
  * Fail loudly, never silently: a model or configuration error returns an honest
  * "I couldn't reach the assistant" — never a fabricated answer, never a bare zero.
  *
- * DEFERRED (documented extension points, not shipped half-built): the async job
- * queue + polling, token streaming, the self-check auditor second pass, the memory
- * extractor, and the live billing/CRM/analytics connectors. Each is a filter with a
- * neutral fallback so the surface degrades to "no data bound" rather than breaking.
+ * This method is the ONE turn implementation. It runs unchanged whether the REST
+ * route calls it synchronously or ZANA_Background calls it from a loopback for a slow
+ * turn — same prompt, same gateway, same outbound gate, same persistence. The async
+ * wrapper only changes WHERE it runs; do not fork the logic.
+ *
+ * DEFERRED (documented extension points, not shipped half-built): token streaming, the
+ * self-check auditor second pass, the memory extractor, and the live billing/CRM/
+ * analytics connectors. Each is a filter with a neutral fallback so the surface
+ * degrades to "no data bound" rather than breaking. (The async job queue + polling,
+ * once deferred, now ships — see ZANA_Background.)
  *
  * @package Zorderz\Analytics
  */

@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Zorderz - TS - Invoice Creator
+ * Plugin Name: Zorderz Invoice Creator
  * Description: Optional (beta) invoicing app: create a pay-by-card invoice, take payment through a Stripe account, and optionally append the pay link to a FreshBooks invoice. An optional, clearly-disclosed platform fee can be retained via Stripe Connect. Ships with no billing data and no credentials.
  * Version: 0.2.0-beta
  * Author: Zorderz
