@@ -1,3 +1,11 @@
+# Zorderz 1.3.1 (theme + apps)
+
+**August 3, 2026 · Zorderz Core theme 1.3.1 · Zorderz Apps bundle 1.3.1**
+
+A hotfix for a site-down bug. The Knowledge Base read paths query an `is_pricing_authority` column; if that column was missing while the module's stored schema version already matched the running code (for instance after a database was copied from an environment that predated the column), PHP 8.4 turned the failed query into a fatal error and every page returned a 502. The Knowledge Base now verifies and heals its own table on every load, independent of the stored version number, so a missing column or index is added back in place, and a short transient marks the schema healthy so the check is free on the common path. Theme and apps move together to 1.3.1. Internal app version this release: Knowledge Base (ZKV) 1.7.2.
+
+---
+
 # Zorderz 1.3.0 (theme + apps)
 
 **August 3, 2026 · Zorderz Core theme 1.3.0 · Zorderz Apps bundle 1.3.0**
