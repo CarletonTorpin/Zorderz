@@ -18,6 +18,10 @@
 .zest-btn-secondary { background: transparent; border-color: var(--zdz-border, #dcdcde); }
 
 .zest-status { margin-top: 10px; display: flex; align-items: center; gap: 8px; color: var(--zdz-muted, #646970); }
+/* The status is toggled with the [hidden] attribute in JS. Its own display:flex above
+   would otherwise beat the UA [hidden] rule, so setStatus('') left "Reading..." on
+   screen above the finished preview. Restore hide-on-clear. */
+.zest-status[hidden] { display: none; }
 .zest-preview { margin-top: 12px; }
 .zest-line { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--zdz-border, #f0f0f1); }
 .zest-line-meta { color: var(--zdz-muted, #646970); font-size: .9em; }
