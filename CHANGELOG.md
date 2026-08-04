@@ -11,6 +11,41 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.4.0] - 2026-08-04
+
+A new capability: Company Data Export and Import. A business can now take all of its Zorderz
+data off one install as a single portable file and restore it on another (a fresh WordPress
+plus Zorderz), from Tools -> Zorderz Data. This is the portability, backup, and migration
+tool in one, and it reports a manifest of what moved so a migration can be scored. Theme
+feature only; the apps bundle moves to 1.4.0 in lock-step with no app-side changes.
+
+### Added
+
+- **Company Data Export / Import (Tools -> Zorderz Data).** Export writes every Zorderz area
+  to one JSON bundle: settings and business profile (options), the Item Engine catalog, the
+  user roster with roles, all app custom tables (estimates, invoices, knowledge, and the
+  rest), and media references, with a manifest of per-area record counts. Import restores a
+  bundle onto a fresh install. Built on WordPress' own data-portability conventions: data
+  moves through get_option/update_option and typed rows, never a raw SQL find-and-replace
+  (which is what corrupts serialized data); tables are discovered by prefix so new apps are
+  covered automatically; and rows keep their primary keys so every internal reference stays
+  valid on the fresh target. A dry run previews the restore counts before anything is written.
+- **Security by construction.** Connection credentials (Poe, FreshBooks, Nutshell, calendar
+  OAuth) are never exported: they are removed by an option-name denylist, by scrubbing
+  secret-named columns out of table rows, and by skipping credential and queue tables. The
+  new install re-connects its own services. Export and import require the manage_options
+  capability and are nonce-protected.
+
+### Notes
+
+- Import assumes a FRESH target (empty Zorderz tables); re-import is idempotent. Media files
+  travel by copying wp-content/uploads separately; the bundle carries the references so they
+  resolve once the files are in place. Users are restored with their original ids, so the
+  default admin on the fresh install may be replaced by the imported owner. Log in with your
+  existing Zorderz credentials after an import.
+
+---
+
 ## [1.3.6] - 2026-08-04
 
 A small cosmetic fix for the built-in estimates. After an estimate parse finished, the grey
