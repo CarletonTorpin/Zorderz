@@ -11,6 +11,26 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.4.1] - 2026-08-04
+
+A correctness fix for 1.4.0's Company Data Export, found by running it on real data. On some
+hosts (WP Engine included) get_users() does not return the password hash, so exported users
+carried an empty password and an import could leave the owner's admin account unable to log
+in. The export now reads user rows straight from the users table so hashes travel with the
+roster, and the import never writes an empty password. Because hashes now travel, treat the
+downloaded bundle as sensitive. Theme fix only; the apps bundle moves to 1.4.1 in lock-step.
+
+### Fixed
+
+- **Exported users had no password (import lock-out risk).** collect_users now reads the
+  users table directly via $wpdb instead of relying on get_users(), which returned an empty
+  user_pass on WP Engine. Password hashes now export, so logins carry over to the new install.
+- **Import never leaves an account password-less.** If an incoming user has no password hash,
+  the import preserves the target account's existing password (which protects the admin
+  running the import) or, for a brand-new account, sets a strong random password to be reset.
+
+---
+
 ## [1.4.0] - 2026-08-04
 
 A new capability: Company Data Export and Import. A business can now take all of its Zorderz
