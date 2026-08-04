@@ -1,3 +1,11 @@
+# Zorderz 1.5.0 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.5.0 · Zorderz Apps bundle 1.5.0**
+
+Comprehensive, frictionless data portability for Company Data Export/Import (Tools -> Zorderz Data). The bundle now carries the two things it used to leave behind, so a fresh install lands ready to use. Media travels: the export includes the actual upload files (logos, photos, and every generated thumbnail size), not just their database references. When media is present the download is a single `.zip` (the JSON bundle plus an `uploads/` tree); with no media, or no ZipArchive on the server, it falls back to the plain `.json`, and the import accepts either and extracts the files into `wp-content/uploads` so references resolve with no separate copy step. Portable WordPress settings travel too: a safe allowlist (site title, tagline, timezone, date and time formats, week start, and the permalink structure) is exported and applied on import, flushing rewrite rules so pretty URLs work at once; install-specific options (siteurl, home, upload paths) are deliberately excluded and only allowlisted names are applied, so a bundle can never repoint the new site at the old one. The import also keeps you logged in: restoring the owner account used to invalidate the acting admin's session and bounce you to a login screen, and it now re-issues the auth cookie for the same account so the session simply continues. Finally, the shared Ai client reports the real reason a call failed (an unset key, a rejected key on HTTP 401 or 403, another HTTP error, or a genuinely empty model response, naming the model) instead of a blank "No response content," so a bad Poe key is self-diagnosable. Internal: the meta-filtering shared by the user, post-type and taxonomy collectors is now one helper. Theme changes only; the apps bundle moves to 1.5.0 in lock-step. Internal app version this release: Estimates (ZEST) 1.25.5 (unchanged).
+
+---
+
 # Zorderz 1.4.3 (theme + apps)
 
 **August 4, 2026 · Zorderz Core theme 1.4.3 · Zorderz Apps bundle 1.4.3**
