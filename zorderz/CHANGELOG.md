@@ -1,3 +1,11 @@
+# Zorderz 1.4.2 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.4.2 · Zorderz Apps bundle 1.4.2**
+
+A completeness fix for Company Data Export/Import, found by an independent review of a live export: it now also carries Zorderz custom post types and taxonomies. The export previously handled custom tables, options, users and attachments - but item subtypes are stored as a taxonomy (`zdz_item_subtype`, with scope/priority/type term meta), and Installation Receipts and Bug Reports are custom post types, none of which were captured. Taxonomy terms and their term meta now travel with the bundle and restore through the term API (so the shared terms tables stay safe); Zorderz custom-post-type posts and their postmeta now travel and restore preserving ids. Both are discovered by name prefix, like the rest of the export. Standard WordPress content (generic posts, pages, comments, core categories/tags) stays out of scope by design - that is handled by WordPress' own Tools -> Export. Theme fix only; the apps bundle moves to 1.4.2 in lock-step. Internal app version this release: Estimates (ZEST) 1.25.5 (unchanged).
+
+---
+
 # Zorderz 1.4.1 (theme + apps)
 
 **August 4, 2026 · Zorderz Core theme 1.4.1 · Zorderz Apps bundle 1.4.1**
