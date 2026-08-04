@@ -1,3 +1,11 @@
+# Zorderz 1.4.1 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.4.1 · Zorderz Apps bundle 1.4.1**
+
+A correctness fix for the 1.4.0 Company Data Export, found by running it on real data. On some hosts (WP Engine included) get_users() does not return the password hash, so exported users carried an empty password and an import could leave the owner's admin account unable to log in. The export now reads user rows straight from the users table via $wpdb so hashes travel with the roster, and the import never writes an empty password: it keeps an existing account's password if one is already present (so the admin running the import cannot be locked out) and sets a strong random one for a brand-new account. Because password hashes now travel, treat the downloaded bundle as sensitive. Theme fix only; the apps bundle moves to 1.4.1 in lock-step. Internal app version this release: Estimates (ZEST) 1.25.5 (unchanged).
+
+---
+
 # Zorderz 1.4.0 (theme + apps)
 
 **August 4, 2026 · Zorderz Core theme 1.4.0 · Zorderz Apps bundle 1.4.0**

@@ -234,13 +234,22 @@ class ZDZ_Data_Portability {
 		return $out;
 	}
 
-	/** WordPress users with roles + meta (the Party roster). Includes pass hash. */
+	/**
+	 * WordPress users with roles + meta (the Party roster). Core fields are read
+	 * straight from the users table via $wpdb, because get_users() does NOT populate
+	 * user_pass on every host (verified empty on WP Engine) - and the password hash
+	 * is what lets logins survive the move. The bundle therefore contains password
+	 * hashes: it is admin-only, but treat the file as sensitive.
+	 */
 	private static function collect_users(): array {
+		global $wpdb;
 		$out  = array();
 		$skip = self::skip_user_meta();
-		$users = get_users( array( 'fields' => 'all' ) );
-		foreach ( $users as $u ) {
-			$meta_raw = get_user_meta( $u->ID );
+		$rows = $wpdb->get_results( "SELECT * FROM {$wpdb->users}", ARRAY_A );
+		foreach ( (array) $rows as $row ) {
+			$id       = (int) $row['ID'];
+			$wpu      = new WP_User( $id );
+			$meta_raw = get_user_meta( $id );
 			$meta     = array();
 			foreach ( (array) $meta_raw as $k => $vals ) {
 				if ( in_array( $k, $skip, true ) || self::is_secret( $k ) ) {
@@ -250,16 +259,18 @@ class ZDZ_Data_Portability {
 				$meta[ $k ] = array_map( 'maybe_unserialize', (array) $vals );
 			}
 			$out[] = array(
-				'ID'              => (int) $u->ID,
-				'user_login'      => $u->user_login,
-				'user_email'      => $u->user_email,
-				'user_pass'       => $u->user_pass, // already-hashed; lets logins survive the move
-				'user_nicename'   => $u->user_nicename,
-				'user_url'        => $u->user_url,
-				'display_name'    => $u->display_name,
-				'user_registered' => $u->user_registered,
-				'roles'           => array_values( (array) $u->roles ),
-				'meta'            => $meta,
+				'ID'                  => $id,
+				'user_login'          => $row['user_login'],
+				'user_pass'           => $row['user_pass'], // hash straight from the table; lets logins survive the move
+				'user_nicename'       => $row['user_nicename'],
+				'user_email'          => $row['user_email'],
+				'user_url'            => $row['user_url'],
+				'user_registered'     => $row['user_registered'],
+				'user_activation_key' => isset( $row['user_activation_key'] ) ? $row['user_activation_key'] : '',
+				'user_status'         => isset( $row['user_status'] ) ? $row['user_status'] : 0,
+				'display_name'        => $row['display_name'],
+				'roles'               => array_values( (array) $wpu->roles ),
+				'meta'                => $meta,
 			);
 		}
 		return $out;
@@ -456,6 +467,13 @@ class ZDZ_Data_Portability {
 					continue;
 				}
 				if ( ! $dry ) {
+					// Never write an empty password (which would lock the account out).
+					// Keep the existing hash if the row already exists (protects the
+					// admin running the import), else set a strong random one to reset.
+					if ( empty( $core['user_pass'] ) ) {
+						$existing = $wpdb->get_var( $wpdb->prepare( "SELECT user_pass FROM {$wpdb->users} WHERE ID = %d", (int) $core['ID'] ) );
+						$core['user_pass'] = $existing ? $existing : wp_hash_password( wp_generate_password( 24, true, true ) );
+					}
 					$ok = $wpdb->replace( $wpdb->users, $core );
 					if ( false === $ok ) {
 						$res['errors'][] = 'user ' . $u['user_login'] . ': ' . $wpdb->last_error;
@@ -559,7 +577,7 @@ class ZDZ_Data_Portability {
 
 		$total_tables = array_sum( $counts['tables'] );
 		echo '<div class="wrap"><h1>Zorderz Data Portability</h1>';
-		echo '<p>Export all of this business\'s Zorderz data to one portable file, or restore that file onto a fresh install. Connection credentials (Poe, FreshBooks, Nutshell, calendar OAuth) are never exported for security; re-connect them on the new install.</p>';
+		echo '<p>Export all of this business\'s Zorderz data to one portable file, or restore that file onto a fresh install. Connection credentials (Poe, FreshBooks, Nutshell, calendar OAuth) are never exported for security; re-connect them on the new install. The bundle DOES include user password hashes so logins carry over, so treat the downloaded file as sensitive.</p>';
 
 		if ( $notice ) {
 			echo '<div class="notice notice-' . esc_attr( $notice['type'] ) . ' is-dismissible"><p>' . esc_html( $notice['msg'] ) . '</p></div>';
