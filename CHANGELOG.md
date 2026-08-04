@@ -11,6 +11,26 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.3.4] - 2026-08-04
+
+An enhancement to the built-in estimates. The Ai-assisted estimate parse now runs as a
+background job the browser polls, instead of holding one request open, so a slow parse
+can no longer approach a managed host's gateway timeout and return a 502. This is the
+same async pattern the Chat assistant already uses; the synchronous parse remains as an
+automatic fallback if the enqueue fails. Theme and apps move together to 1.3.4.
+
+### Changed
+
+- **Estimate text parse is now asynchronous.** Typing or dictating an estimate and
+  pressing Parse now enqueues a background job and polls for the result (showing parse
+  progress), rather than running the parse inside one long request. A slow, catalog and
+  Ai-augmented parse can no longer hit the gateway timeout that produced a 502; it always
+  completes and shows the priced preview. The previous synchronous parse is kept as an
+  automatic fallback when the job cannot be enqueued, and the photo and PDF-import paths
+  (already asynchronous) are unchanged. Estimates app ZEST 1.25.3; no schema change.
+
+---
+
 ## [1.3.3] - 2026-08-03
 
 A correctness release for the built-in estimates. Estimates created by dictating or

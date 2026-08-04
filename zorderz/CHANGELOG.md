@@ -1,3 +1,11 @@
+# Zorderz 1.3.4 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.3.4 · Zorderz Apps bundle 1.3.4**
+
+An enhancement to the built-in estimates. The Ai-assisted estimate parse now runs as a background job the browser polls, so a slow parse can no longer hold one request open long enough to hit a managed host's gateway timeout and return a 502 (the same async pattern the Chat assistant already uses). Typing or dictating an estimate and pressing Parse enqueues a job and polls for the priced preview, showing progress as it goes; the synchronous parse is kept as an automatic fallback if the enqueue fails, and the photo and PDF-import paths (already asynchronous) are unchanged. Internal app version this release: Estimates (ZEST) 1.25.3.
+
+---
+
 # Zorderz 1.3.3 (theme + apps)
 
 **August 3, 2026 · Zorderz Core theme 1.3.3 · Zorderz Apps bundle 1.3.3**
