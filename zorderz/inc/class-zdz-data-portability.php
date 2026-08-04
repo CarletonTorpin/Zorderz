@@ -81,6 +81,28 @@ class ZDZ_Data_Portability {
 	}
 
 	/**
+	 * Name prefixes that identify a Zorderz-owned custom post type or taxonomy.
+	 * These live in WordPress' shared posts/terms tables (not our zXX_ tables), so
+	 * they are discovered by object name via get_post_types()/get_taxonomies() and
+	 * matched here - e.g. zrcpt_receipt (Receipts), zdz_bug_report, zdz_item_subtype.
+	 */
+	private static function object_prefixes(): array {
+		return (array) apply_filters( 'zdz_export_object_prefixes', array(
+			'zdz_', 'zrcpt_', 'zana_', 'zest_', 'zkv_', 'zim_', 'zsch_',
+			'zstock_', 'zcc_', 'zic_', 'zg_', 'zl_', 'zsv_', 'zjob_', 'zprep_', 'zorderz_',
+		) );
+	}
+
+	private static function is_zorderz_object( string $name ): bool {
+		foreach ( self::object_prefixes() as $p ) {
+			if ( 0 === strpos( $name, $p ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Case-insensitive substrings that mark an option name or a table column as a
 	 * secret. Anything matching is NEVER exported. Business data never contains
 	 * these tokens; connection credentials always do.
@@ -295,6 +317,88 @@ class ZDZ_Data_Portability {
 		return $out;
 	}
 
+	/** Zorderz-owned custom post types: posts + all postmeta, preserving ids. */
+	private static function collect_cpts(): array {
+		$out   = array();
+		$types = get_post_types( array( '_builtin' => false ), 'names' );
+		foreach ( (array) $types as $pt ) {
+			if ( 'attachment' === $pt || ! self::is_zorderz_object( $pt ) ) {
+				continue; // attachments are handled separately; skip non-Zorderz types
+			}
+			$rows  = array();
+			$posts = get_posts( array(
+				'post_type'   => $pt,
+				'post_status' => 'any',
+				'numberposts' => -1,
+				'orderby'     => 'ID',
+				'order'       => 'ASC',
+			) );
+			foreach ( (array) $posts as $p ) {
+				$meta_raw = get_post_meta( $p->ID );
+				$meta     = array();
+				foreach ( (array) $meta_raw as $k => $vals ) {
+					if ( self::is_secret( (string) $k ) ) {
+						continue;
+					}
+					$meta[ $k ] = array_map( 'maybe_unserialize', (array) $vals );
+				}
+				$rows[] = array(
+					'ID'            => (int) $p->ID,
+					'post_author'   => $p->post_author,
+					'post_date'     => $p->post_date,
+					'post_date_gmt' => $p->post_date_gmt,
+					'post_title'    => $p->post_title,
+					'post_content'  => $p->post_content,
+					'post_excerpt'  => $p->post_excerpt,
+					'post_status'   => $p->post_status,
+					'post_name'     => $p->post_name,
+					'post_parent'   => (int) $p->post_parent,
+					'menu_order'    => (int) $p->menu_order,
+					'post_type'     => $p->post_type,
+					'meta'          => $meta,
+				);
+			}
+			$out[ $pt ] = $rows;
+		}
+		return $out;
+	}
+
+	/** Zorderz-owned taxonomies: terms + term meta (e.g. item subtype scope/priority/type). */
+	private static function collect_taxonomies(): array {
+		$out   = array();
+		$taxes = get_taxonomies( array( '_builtin' => false ), 'names' );
+		foreach ( (array) $taxes as $tax ) {
+			if ( ! self::is_zorderz_object( $tax ) ) {
+				continue;
+			}
+			$terms = get_terms( array( 'taxonomy' => $tax, 'hide_empty' => false ) );
+			if ( is_wp_error( $terms ) ) {
+				continue;
+			}
+			$rows = array();
+			foreach ( (array) $terms as $t ) {
+				$meta_raw = get_term_meta( $t->term_id );
+				$meta     = array();
+				foreach ( (array) $meta_raw as $k => $vals ) {
+					if ( self::is_secret( (string) $k ) ) {
+						continue;
+					}
+					$meta[ $k ] = array_map( 'maybe_unserialize', (array) $vals );
+				}
+				$rows[] = array(
+					'term_id'     => (int) $t->term_id,
+					'name'        => $t->name,
+					'slug'        => $t->slug,
+					'description' => $t->description,
+					'parent'      => (int) $t->parent,
+					'meta'        => $meta,
+				);
+			}
+			$out[ $tax ] = $rows;
+		}
+		return $out;
+	}
+
 	/** Assemble the full export bundle with a manifest of counts. */
 	public static function build_bundle(): array {
 		global $wpdb;
@@ -303,10 +407,20 @@ class ZDZ_Data_Portability {
 		$tables   = self::collect_tables( $excluded );
 		$users    = self::collect_users();
 		$attach   = self::collect_attachments();
+		$cpts     = self::collect_cpts();
+		$taxes    = self::collect_taxonomies();
 
 		$table_counts = array();
 		foreach ( $tables as $name => $rows ) {
 			$table_counts[ $name ] = count( $rows );
+		}
+		$cpt_counts = array();
+		foreach ( $cpts as $pt => $rows ) {
+			$cpt_counts[ $pt ] = count( $rows );
+		}
+		$tax_counts = array();
+		foreach ( $taxes as $tx => $rows ) {
+			$tax_counts[ $tx ] = count( $rows );
 		}
 
 		return array(
@@ -323,11 +437,15 @@ class ZDZ_Data_Portability {
 				'tables'      => $table_counts,
 				'users'       => count( $users ),
 				'attachments' => count( $attach ),
+				'post_types'  => $cpt_counts,
+				'taxonomies'  => $tax_counts,
 			),
 			'options'     => $options,
 			'tables'      => $tables,
 			'users'       => $users,
 			'attachments' => $attach,
+			'post_types'  => $cpts,
+			'taxonomies'  => $taxes,
 			'excluded'    => array(
 				'reason' => 'Connection credentials and ephemeral/queue data are never exported. Re-connect services on the new install.',
 				'items'  => array_values( array_unique( $excluded ) ),
@@ -358,7 +476,22 @@ class ZDZ_Data_Portability {
 		}
 		$users  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->users}" );
 		$attach = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment'" );
-		return array( 'options' => $opt, 'tables' => $tables, 'users' => $users, 'attachments' => $attach );
+		$cpts = array();
+		foreach ( get_post_types( array( '_builtin' => false ), 'names' ) as $pt ) {
+			if ( 'attachment' === $pt || ! self::is_zorderz_object( $pt ) ) {
+				continue;
+			}
+			$cpts[ $pt ] = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status <> 'auto-draft'", $pt ) );
+		}
+		$taxes = array();
+		foreach ( get_taxonomies( array( '_builtin' => false ), 'names' ) as $tx ) {
+			if ( ! self::is_zorderz_object( $tx ) ) {
+				continue;
+			}
+			$c            = wp_count_terms( array( 'taxonomy' => $tx, 'hide_empty' => false ) );
+			$taxes[ $tx ] = is_wp_error( $c ) ? 0 : (int) $c;
+		}
+		return array( 'options' => $opt, 'tables' => $tables, 'users' => $users, 'attachments' => $attach, 'post_types' => $cpts, 'taxonomies' => $taxes );
 	}
 
 	/* ---------------------------------------------------------------------- */
@@ -381,6 +514,8 @@ class ZDZ_Data_Portability {
 			'tables'      => array(),
 			'users'       => 0,
 			'attachments' => 0,
+			'post_types'  => array(),
+			'taxonomies'  => array(),
 			'skipped'     => array(),
 			'errors'      => array(),
 		);
@@ -502,6 +637,82 @@ class ZDZ_Data_Portability {
 			}
 		}
 
+		// Custom post types (posts + postmeta), preserving ids into the fresh install.
+		if ( ! empty( $bundle['post_types'] ) && is_array( $bundle['post_types'] ) ) {
+			$post_cols = self::columns_for( $wpdb->posts );
+			foreach ( $bundle['post_types'] as $pt => $rows ) {
+				$n = 0;
+				foreach ( (array) $rows as $row ) {
+					$meta = isset( $row['meta'] ) ? (array) $row['meta'] : array();
+					unset( $row['meta'] );
+					$core = array_intersect_key( (array) $row, array_flip( $post_cols ) );
+					if ( empty( $core['ID'] ) ) {
+						continue;
+					}
+					if ( ! $dry ) {
+						$ok = $wpdb->replace( $wpdb->posts, $core );
+						if ( false === $ok ) {
+							$res['errors'][] = "post in {$pt}: " . $wpdb->last_error;
+							continue;
+						}
+						$id = (int) $core['ID'];
+						foreach ( $meta as $mk => $vals ) {
+							if ( self::is_secret( (string) $mk ) ) {
+								continue;
+							}
+							delete_post_meta( $id, $mk );
+							foreach ( (array) $vals as $v ) {
+								add_post_meta( $id, $mk, $v );
+							}
+						}
+					}
+					$n++;
+				}
+				$res['post_types'][ $pt ] = $n;
+			}
+		}
+
+		// Taxonomy terms + term meta, via the term API (safe on the shared terms tables).
+		if ( ! empty( $bundle['taxonomies'] ) && is_array( $bundle['taxonomies'] ) ) {
+			foreach ( $bundle['taxonomies'] as $tax => $terms ) {
+				if ( ! $dry && ! taxonomy_exists( $tax ) ) {
+					$res['skipped'][] = "taxonomy:{$tax} (not registered on target)";
+					continue;
+				}
+				$n = 0;
+				foreach ( (array) $terms as $t ) {
+					if ( empty( $t['slug'] ) ) {
+						continue;
+					}
+					if ( ! $dry ) {
+						$existing = get_term_by( 'slug', $t['slug'], $tax );
+						if ( $existing ) {
+							$term_id = (int) $existing->term_id;
+							wp_update_term( $term_id, $tax, array( 'name' => (string) $t['name'], 'description' => (string) ( isset( $t['description'] ) ? $t['description'] : '' ) ) );
+						} else {
+							$ins = wp_insert_term( (string) $t['name'], $tax, array( 'slug' => (string) $t['slug'], 'description' => (string) ( isset( $t['description'] ) ? $t['description'] : '' ) ) );
+							if ( is_wp_error( $ins ) ) {
+								$res['errors'][] = "term {$t['slug']}: " . $ins->get_error_message();
+								continue;
+							}
+							$term_id = (int) $ins['term_id'];
+						}
+						foreach ( (array) ( isset( $t['meta'] ) ? $t['meta'] : array() ) as $mk => $vals ) {
+							if ( self::is_secret( (string) $mk ) ) {
+								continue;
+							}
+							delete_term_meta( $term_id, $mk );
+							foreach ( (array) $vals as $v ) {
+								add_term_meta( $term_id, $mk, $v );
+							}
+						}
+					}
+					$n++;
+				}
+				$res['taxonomies'][ $tax ] = $n;
+			}
+		}
+
 		return $res;
 	}
 
@@ -585,7 +796,9 @@ class ZDZ_Data_Portability {
 		if ( is_array( $result ) ) {
 			echo '<div class="notice notice-info"><p><strong>' . ( $result['dry_run'] ? 'Would restore' : 'Restored' ) . ':</strong> '
 				. (int) $result['options'] . ' options, ' . array_sum( $result['tables'] ) . ' table rows, '
-				. (int) $result['users'] . ' users, ' . (int) $result['attachments'] . ' attachments.';
+				. (int) $result['users'] . ' users, ' . (int) $result['attachments'] . ' attachments, '
+				. array_sum( isset( $result['post_types'] ) ? $result['post_types'] : array() ) . ' post-type records, '
+				. array_sum( isset( $result['taxonomies'] ) ? $result['taxonomies'] : array() ) . ' taxonomy terms.';
 			if ( ! empty( $result['errors'] ) ) {
 				echo ' <span style="color:#a00">' . count( $result['errors'] ) . ' error(s).</span>';
 			}
@@ -598,6 +811,12 @@ class ZDZ_Data_Portability {
 		echo '<tr><td>Settings and profile (options)</td><td style="text-align:right">' . (int) $counts['options'] . '</td></tr>';
 		echo '<tr><td>Users (roster)</td><td style="text-align:right">' . (int) $counts['users'] . '</td></tr>';
 		echo '<tr><td>Media / attachments</td><td style="text-align:right">' . (int) $counts['attachments'] . '</td></tr>';
+		foreach ( ( isset( $counts['post_types'] ) ? $counts['post_types'] : array() ) as $pt => $n ) {
+			echo '<tr><td>Post type <code>' . esc_html( $pt ) . '</code></td><td style="text-align:right">' . (int) $n . '</td></tr>';
+		}
+		foreach ( ( isset( $counts['taxonomies'] ) ? $counts['taxonomies'] : array() ) as $tx => $n ) {
+			echo '<tr><td>Taxonomy <code>' . esc_html( $tx ) . '</code> (terms)</td><td style="text-align:right">' . (int) $n . '</td></tr>';
+		}
 		foreach ( $counts['tables'] as $bare => $n ) {
 			echo '<tr><td><code>' . esc_html( $bare ) . '</code></td><td style="text-align:right">' . (int) $n . '</td></tr>';
 		}

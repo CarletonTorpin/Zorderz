@@ -11,6 +11,36 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.4.2] - 2026-08-04
+
+A completeness fix for Company Data Export/Import, found by an independent review of a live
+export: it now also carries Zorderz **custom post types** and **taxonomies**. The export
+previously handled custom tables, options, users and attachments - but item subtypes are stored
+as a taxonomy (`zdz_item_subtype`, with scope/priority/type term meta), and Installation
+Receipts and Bug Reports are custom post types, none of which were captured. All are now
+discovered by name prefix, like the rest of the export, and restore with their metadata.
+
+### Fixed
+
+- **Taxonomies now export and import.** Zorderz taxonomy terms and their term meta travel with
+  the bundle (for example the item-subtype terms and their scope / priority / type), restored
+  through the term API so the shared terms tables stay safe. The item-to-subtype assignment
+  already survived on each item row, but the subtype definitions themselves did not until now.
+- **Custom post types now export and import.** Zorderz post types (Installation Receipts, Bug
+  Reports) and their postmeta travel with the bundle, restored preserving ids. Previously only
+  attachments were captured among post types, so a business that used Receipts would have lost
+  them on migration.
+
+### Notes
+
+- Standard WordPress content (generic posts, pages, comments, core categories and tags) stays
+  out of scope by design - that is stock WordPress content, handled by WordPress' own
+  Tools -> Export. This feature carries Zorderz-owned data: custom tables, options, users,
+  media, and Zorderz-registered post types and taxonomies. Theme fix only; the apps bundle
+  moves to 1.4.2 in lock-step. Estimates ZEST 1.25.5 unchanged.
+
+---
+
 ## [1.4.1] - 2026-08-04
 
 A correctness fix for 1.4.0's Company Data Export, found by running it on real data. On some
