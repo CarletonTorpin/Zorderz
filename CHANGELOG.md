@@ -11,6 +11,38 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.4.3] - 2026-08-04
+
+A security and housekeeping release addressing three issues an independent review of the
+staging install surfaced.
+
+### Security
+
+- **Credentials are no longer rendered in the clear in Core Settings.** The Poe API key, the
+  FreshBooks secret and tokens, the Nutshell key and the Review Bridge key were printed into
+  the Zorderz Core Settings form as plain-text input values, so the secrets sat in the page
+  HTML for anyone who could open that screen. Those fields are now masked: the form shows
+  "currently set (hidden)" with an empty password input, and a normal Save keeps the stored
+  value unless you type a new one, so the keys are never echoed back to the browser. (The
+  Knowledge Vault screen already showed only a masked hint and is unchanged.)
+
+### Fixed
+
+- **Stock admin Dashboard was unreachable.** Tools -> Stock -> Dashboard denied access ("you
+  are not allowed to access this page") and its menu link was malformed, because the Dashboard
+  submenu registered before its parent Stock menu existed and orphaned. The submenu now
+  registers after the parent (admin_menu priority), so the page loads. The front-end Stock
+  widget was unaffected either way.
+- **Scheduler connections endpoint returned 403 when the feature is off.** With Connected
+  Calendars disabled (the scheduler runs local-only until Mode A is configured),
+  `/scheduler/connections` denied even an administrator with a bare 403, which read like a bug.
+  It now returns a 404, matching the documented intent that these routes behave as if they do
+  not exist while the feature is off. No change when the feature is enabled.
+
+Theme and apps move together to 1.4.3. Estimates ZEST 1.25.5 unchanged.
+
+---
+
 ## [1.4.2] - 2026-08-04
 
 A completeness fix for Company Data Export/Import, found by an independent review of a live

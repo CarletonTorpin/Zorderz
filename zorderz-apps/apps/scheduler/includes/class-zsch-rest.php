@@ -222,9 +222,18 @@ class ZSCH_REST {
 	 * don't exist.
 	 */
 	public static function can_connect() {
-		return self::can_write()
-			&& class_exists( 'ZSCH_OAuth' )
-			&& ZSCH_OAuth::feature_enabled();
+		if ( self::can_write() && class_exists( 'ZSCH_OAuth' ) && ZSCH_OAuth::feature_enabled() ) {
+			return true;
+		}
+		// Connected Calendars is off (or the caller is read-only): behave as if these
+		// routes do not exist - return a 404, matching the documented intent above -
+		// rather than a bare 403, which reads as a bug to an admin when the feature is
+		// simply disabled (the scheduler runs local-only until Mode A is configured).
+		return new WP_Error(
+			'rest_no_route',
+			__( 'No route was found matching the URL and request method.', 'zorderz' ),
+			array( 'status' => 404 )
+		);
 	}
 
 	private static function hidden() {
