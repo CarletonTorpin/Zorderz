@@ -50,16 +50,16 @@ If any check fails, stop: this environment cannot run Zorderz yet.
 
 **Action:** Download both release zips to the host (or note their local paths).
 
-- `zorderz-theme-1.4.0.zip`: the theme (platform kernel + Core services)
-- `zorderz-apps-1.4.0.zip`: the apps bundle (18 apps)
+- `zorderz-theme-1.4.1.zip`: the theme (platform kernel + Core services)
+- `zorderz-apps-1.4.1.zip`: the apps bundle (18 apps)
 
 **Verify** each is an intact zip with the expected top-level folder:
 
 ```bash
-unzip -Z1 zorderz-theme-1.4.0.zip | head -1     # -> zorderz/
-unzip -Z1 zorderz-theme-1.4.0.zip | grep -m1 'zorderz/style.css'
-unzip -Z1 zorderz-apps-1.4.0.zip  | head -1     # -> zorderz-apps/
-unzip -Z1 zorderz-apps-1.4.0.zip  | grep -m1 'zorderz-apps/zorderz-apps.php'
+unzip -Z1 zorderz-theme-1.4.1.zip | head -1     # -> zorderz/
+unzip -Z1 zorderz-theme-1.4.1.zip | grep -m1 'zorderz/style.css'
+unzip -Z1 zorderz-apps-1.4.1.zip  | head -1     # -> zorderz-apps/
+unzip -Z1 zorderz-apps-1.4.1.zip  | grep -m1 'zorderz-apps/zorderz-apps.php'
 ```
 
 Theme slug is `zorderz`; plugin slug is `zorderz-apps`. Use those below.
@@ -94,7 +94,7 @@ The theme is the platform. It must be active before the plugin, because it defin
 **Action (WP-CLI):**
 
 ```bash
-wp theme install /path/to/zorderz-theme-1.4.0.zip --activate
+wp theme install /path/to/zorderz-theme-1.4.1.zip --activate
 ```
 
 **Action (wp-admin):** Appearance → Themes → Add New → Upload Theme → choose the theme zip → Install → **Activate**.
@@ -103,7 +103,7 @@ wp theme install /path/to/zorderz-theme-1.4.0.zip --activate
 
 ```bash
 wp theme list --status=active --field=name        # -> includes Zorderz
-wp theme get zorderz --field=version              # -> 1.4.0
+wp theme get zorderz --field=version              # -> 1.4.1
 ```
 
 Confirm the REST namespace now exists (it is registered by the theme):
@@ -121,7 +121,7 @@ If `zorderz/v1` is absent here, the theme is not active, do not continue.
 **Action (WP-CLI):**
 
 ```bash
-wp plugin install /path/to/zorderz-apps-1.4.0.zip --activate
+wp plugin install /path/to/zorderz-apps-1.4.1.zip --activate
 ```
 
 **Action (wp-admin):** Plugins → Add New → Upload Plugin → choose the apps zip → Install → **Activate**.
@@ -132,7 +132,7 @@ Activation runs each app's first-run work (table creation, scheduling) and flush
 
 ```bash
 wp plugin list --status=active --field=name       # -> includes zorderz-apps
-wp plugin get zorderz-apps --field=version        # -> 1.4.0
+wp plugin get zorderz-apps --field=version        # -> 1.4.1
 ```
 
 There must be **no** admin notice reading "Zorderz Apps needs the Zorderz theme to be active." If you see it, the theme is not active, return to step 4.
@@ -234,8 +234,8 @@ Connections are optional for a first boot, the apps stand alone and hook into ex
 
 The install is **done** when all of the following hold:
 
-- [ ] `wp theme get zorderz --field=version` → `1.4.0`, and the theme is active.
-- [ ] `wp plugin get zorderz-apps --field=version` → `1.4.0`, and the plugin is active.
+- [ ] `wp theme get zorderz --field=version` → `1.4.1`, and the theme is active.
+- [ ] `wp plugin get zorderz-apps --field=version` → `1.4.1`, and the plugin is active.
 - [ ] No admin notice about a missing theme or a failed app load.
 - [ ] `SITE/zdz-manifest.json` returns JSON (not HTML).
 - [ ] `SITE/wp-json/` lists `zorderz/v1`.
@@ -252,8 +252,8 @@ When every box is checked, stop. The site is a working Zorderz install.
 **Re-running is safe.** Updating in place:
 
 ```bash
-wp theme install /path/to/zorderz-theme-1.4.0.zip --force
-wp plugin install /path/to/zorderz-apps-1.4.0.zip --force
+wp theme install /path/to/zorderz-theme-1.4.1.zip --force
+wp plugin install /path/to/zorderz-apps-1.4.1.zip --force
 wp rewrite flush --hard
 ```
 

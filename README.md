@@ -26,8 +26,8 @@ An install is two files, in this order:
 
 | Artifact | Zip | What it is |
 |---|---|---|
-| **Theme** | `zorderz-theme-1.4.0.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
-| **Apps** | `zorderz-apps-1.4.0.zip` | The 18 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
+| **Theme** | `zorderz-theme-1.4.1.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
+| **Apps** | `zorderz-apps-1.4.1.zip` | The 18 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
 
 The theme is the platform; the plugin is the apps that plug into it. **The theme must be active first**: it defines the roles, the shared media store, the plugin registration API and the `zorderz/v1` REST namespace that every app builds on. Install the plugin first and the apps load but have nowhere to appear (you'll get a plain admin notice telling you so).
 
@@ -52,7 +52,7 @@ Everything below ships empty or neutral. A fresh install names no business anywh
 
 ## The 18 apps
 
-Bundled in `zorderz-apps-1.4.0.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
+Bundled in `zorderz-apps-1.4.1.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
 
 | App | What it does |
 |---|---|
@@ -101,13 +101,13 @@ WordPress defaults to plain permalinks, under which `/wp-json/` returns your hom
 
 ### 2. Install and activate the theme (first)
 
-**Appearance → Themes → Add New → Upload Theme**, choose `zorderz-theme-1.4.0.zip`, install, and **Activate**.
+**Appearance → Themes → Add New → Upload Theme**, choose `zorderz-theme-1.4.1.zip`, install, and **Activate**.
 
 This is the platform. Activating it registers the roles, the shared media store, the plugin API and the `zorderz/v1` REST namespace that the apps need.
 
 ### 3. Install and activate the apps plugin (second)
 
-**Plugins → Add New → Upload Plugin**, choose `zorderz-apps-1.4.0.zip`, install, and **Activate**.
+**Plugins → Add New → Upload Plugin**, choose `zorderz-apps-1.4.1.zip`, install, and **Activate**.
 
 Activation runs each app's first-run work (tables, scheduling) and flushes the rewrite rules. If the theme isn't active yet, the plugin will tell you so with an admin notice instead of failing silently. Activate the theme, and the apps appear.
 
