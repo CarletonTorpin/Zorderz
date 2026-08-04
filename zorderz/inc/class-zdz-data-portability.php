@@ -81,6 +81,22 @@ class ZDZ_Data_Portability {
 	}
 
 	/**
+	 * Portable WordPress-core settings that SHOULD travel with the business (so a
+	 * fresh install lands with the right identity and behaviour, not WP defaults):
+	 * site title, tagline, timezone, date/time/week, and the permalink structure.
+	 * Deliberately EXCLUDES install-specific options (siteurl, home, upload paths):
+	 * carrying those would point the new site at the old one and break it. The import
+	 * only applies names on this list, so the uploaded file cannot smuggle others in.
+	 */
+	private static function portable_wp_settings(): array {
+		return (array) apply_filters( 'zdz_export_wp_settings', array(
+			'blogname', 'blogdescription', 'timezone_string', 'gmt_offset',
+			'date_format', 'time_format', 'start_of_week', 'permalink_structure',
+			'WPLANG', 'blog_charset',
+		) );
+	}
+
+	/**
 	 * Name prefixes that identify a Zorderz-owned custom post type or taxonomy.
 	 * These live in WordPress' shared posts/terms tables (not our zXX_ tables), so
 	 * they are discovered by object name via get_post_types()/get_taxonomies() and
@@ -95,6 +111,16 @@ class ZDZ_Data_Portability {
 
 	private static function is_zorderz_object( string $name ): bool {
 		foreach ( self::object_prefixes() as $p ) {
+			if ( 0 === strpos( $name, $p ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** True if the option name carries a Zorderz prefix (mirrors the export discovery rule). */
+	private static function is_zorderz_option( string $name ): bool {
+		foreach ( self::option_prefixes() as $p ) {
 			if ( 0 === strpos( $name, $p ) ) {
 				return true;
 			}
@@ -197,6 +223,18 @@ class ZDZ_Data_Portability {
 	/* Collection (export)                                                     */
 	/* ---------------------------------------------------------------------- */
 
+	/** Skip-secret (and any extra skip keys) + unserialize a get_*_meta() result. */
+	private static function filter_meta( array $meta_raw, array $skip = array() ): array {
+		$meta = array();
+		foreach ( $meta_raw as $k => $vals ) {
+			if ( ( $skip && in_array( $k, $skip, true ) ) || self::is_secret( (string) $k ) ) {
+				continue;
+			}
+			$meta[ $k ] = array_map( 'maybe_unserialize', (array) $vals );
+		}
+		return $meta;
+	}
+
 	/** Zorderz options, unserialized, secrets removed. */
 	private static function collect_options( array &$excluded ): array {
 		global $wpdb;
@@ -271,15 +309,7 @@ class ZDZ_Data_Portability {
 		foreach ( (array) $rows as $row ) {
 			$id       = (int) $row['ID'];
 			$wpu      = new WP_User( $id );
-			$meta_raw = get_user_meta( $id );
-			$meta     = array();
-			foreach ( (array) $meta_raw as $k => $vals ) {
-				if ( in_array( $k, $skip, true ) || self::is_secret( $k ) ) {
-					continue;
-				}
-				// get_user_meta returns each value as an array of (usually one) serialized strings.
-				$meta[ $k ] = array_map( 'maybe_unserialize', (array) $vals );
-			}
+			$meta = self::filter_meta( (array) get_user_meta( $id ), $skip );
 			$out[] = array(
 				'ID'                  => $id,
 				'user_login'          => $row['user_login'],
@@ -317,6 +347,44 @@ class ZDZ_Data_Portability {
 		return $out;
 	}
 
+	/**
+	 * Map of uploads-relative path => absolute path for every file that backs an
+	 * attachment (the original plus each generated thumbnail size). The export adds
+	 * these to the zip so media resolves on the target with no manual copy of
+	 * wp-content/uploads.
+	 */
+	private static function attachment_files(): array {
+		$files = array();
+		$up    = wp_get_upload_dir();
+		$base  = trailingslashit( $up['basedir'] );
+		$ids   = get_posts( array( 'post_type' => 'attachment', 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) );
+		foreach ( (array) $ids as $id ) {
+			$rel = get_post_meta( (int) $id, '_wp_attached_file', true );
+			if ( ! $rel ) {
+				continue;
+			}
+			if ( is_file( $base . $rel ) ) {
+				$files[ $rel ] = $base . $rel;
+			}
+			$meta = wp_get_attachment_metadata( (int) $id );
+			if ( empty( $meta['sizes'] ) || ! is_array( $meta['sizes'] ) ) {
+				continue;
+			}
+			$dir = dirname( $rel );
+			$dir = ( '.' === $dir || '' === $dir ) ? '' : trailingslashit( $dir ); // '2026/08/' or '' for a root file
+			foreach ( $meta['sizes'] as $size ) {
+				if ( empty( $size['file'] ) ) {
+					continue;
+				}
+				$srel = $dir . $size['file'];
+				if ( is_file( $base . $srel ) ) {
+					$files[ $srel ] = $base . $srel;
+				}
+			}
+		}
+		return $files;
+	}
+
 	/** Zorderz-owned custom post types: posts + all postmeta, preserving ids. */
 	private static function collect_cpts(): array {
 		$out   = array();
@@ -334,14 +402,7 @@ class ZDZ_Data_Portability {
 				'order'       => 'ASC',
 			) );
 			foreach ( (array) $posts as $p ) {
-				$meta_raw = get_post_meta( $p->ID );
-				$meta     = array();
-				foreach ( (array) $meta_raw as $k => $vals ) {
-					if ( self::is_secret( (string) $k ) ) {
-						continue;
-					}
-					$meta[ $k ] = array_map( 'maybe_unserialize', (array) $vals );
-				}
+				$meta = self::filter_meta( (array) get_post_meta( $p->ID ) );
 				$rows[] = array(
 					'ID'            => (int) $p->ID,
 					'post_author'   => $p->post_author,
@@ -377,14 +438,7 @@ class ZDZ_Data_Portability {
 			}
 			$rows = array();
 			foreach ( (array) $terms as $t ) {
-				$meta_raw = get_term_meta( $t->term_id );
-				$meta     = array();
-				foreach ( (array) $meta_raw as $k => $vals ) {
-					if ( self::is_secret( (string) $k ) ) {
-						continue;
-					}
-					$meta[ $k ] = array_map( 'maybe_unserialize', (array) $vals );
-				}
+				$meta = self::filter_meta( (array) get_term_meta( $t->term_id ) );
 				$rows[] = array(
 					'term_id'     => (int) $t->term_id,
 					'name'        => $t->name,
@@ -409,6 +463,14 @@ class ZDZ_Data_Portability {
 		$attach   = self::collect_attachments();
 		$cpts     = self::collect_cpts();
 		$taxes    = self::collect_taxonomies();
+
+		$wp_settings = array();
+		foreach ( self::portable_wp_settings() as $name ) {
+			$val = get_option( $name, null );
+			if ( null !== $val ) {
+				$wp_settings[ $name ] = $val;
+			}
+		}
 
 		$table_counts = array();
 		foreach ( $tables as $name => $rows ) {
@@ -439,8 +501,10 @@ class ZDZ_Data_Portability {
 				'attachments' => count( $attach ),
 				'post_types'  => $cpt_counts,
 				'taxonomies'  => $tax_counts,
+				'wp_settings' => count( $wp_settings ),
 			),
 			'options'     => $options,
+			'wp_settings' => $wp_settings,
 			'tables'      => $tables,
 			'users'       => $users,
 			'attachments' => $attach,
@@ -491,12 +555,77 @@ class ZDZ_Data_Portability {
 			$c            = wp_count_terms( array( 'taxonomy' => $tx, 'hide_empty' => false ) );
 			$taxes[ $tx ] = is_wp_error( $c ) ? 0 : (int) $c;
 		}
-		return array( 'options' => $opt, 'tables' => $tables, 'users' => $users, 'attachments' => $attach, 'post_types' => $cpts, 'taxonomies' => $taxes );
+		$media       = count( self::attachment_files() );
+		$wp_settings = 0;
+		foreach ( self::portable_wp_settings() as $name ) {
+			if ( null !== get_option( $name, null ) ) {
+				$wp_settings++;
+			}
+		}
+		return array( 'options' => $opt, 'wp_settings' => $wp_settings, 'tables' => $tables, 'users' => $users, 'attachments' => $attach, 'media_files' => $media, 'post_types' => $cpts, 'taxonomies' => $taxes );
 	}
 
 	/* ---------------------------------------------------------------------- */
 	/* Import                                                                  */
 	/* ---------------------------------------------------------------------- */
+
+	/** A zip bundle begins with the local-file-header magic, or has a .zip name. */
+	private static function is_zip( string $tmp, string $orig ): bool {
+		if ( preg_match( '/\.zip$/i', $orig ) ) {
+			return true;
+		}
+		$sig = '';
+		$fh  = @fopen( $tmp, 'rb' );
+		if ( $fh ) {
+			$sig = (string) fread( $fh, 4 );
+			fclose( $fh );
+		}
+		return "PK\x03\x04" === $sig;
+	}
+
+	/** Write every uploads/* entry from the zip into wp-content/uploads. Returns the file count. */
+	private static function extract_uploads( ZipArchive $zip ): int {
+		$up   = wp_get_upload_dir();
+		$base = trailingslashit( $up['basedir'] );
+		$n    = 0;
+		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+			$name = (string) $zip->getNameIndex( $i );
+			if ( 0 !== strpos( $name, 'uploads/' ) || '/' === substr( $name, -1 ) ) {
+				continue;
+			}
+			$rel = str_replace( '\\', '/', substr( $name, strlen( 'uploads/' ) ) );
+			// Reject empty, path-traversal segments, and absolute/drive paths: only ever write
+			// under uploads. ('..' must be a whole segment, so 'report..final.jpg' still passes.)
+			if ( '' === $rel || in_array( '..', explode( '/', $rel ), true ) || preg_match( '#^([A-Za-z]:)?/#', $rel ) ) {
+				continue;
+			}
+			// Only write file types WordPress itself permits as uploads, never executables
+			// (.php/.phtml/.phar) or .htaccess, so a crafted zip cannot drop a webshell.
+			$ft = wp_check_filetype( $rel );
+			if ( empty( $ft['ext'] ) || empty( $ft['type'] ) ) {
+				continue;
+			}
+			$dest = $base . $rel;
+			wp_mkdir_p( dirname( $dest ) );
+			$data = $zip->getFromIndex( $i );
+			if ( false !== $data && false !== file_put_contents( $dest, $data ) ) {
+				$n++;
+			}
+		}
+		return $n;
+	}
+
+	/** Count uploads/* file entries in the zip (for the dry-run preview). */
+	private static function count_upload_entries( ZipArchive $zip ): int {
+		$n = 0;
+		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+			$name = (string) $zip->getNameIndex( $i );
+			if ( 0 === strpos( $name, 'uploads/' ) && '/' !== substr( $name, -1 ) ) {
+				$n++;
+			}
+		}
+		return $n;
+	}
 
 	/**
 	 * Restore a bundle. Returns a result manifest (restored counts) so the import
@@ -511,6 +640,7 @@ class ZDZ_Data_Portability {
 		$res = array(
 			'dry_run'     => $dry,
 			'options'     => 0,
+			'wp_settings' => 0,
 			'tables'      => array(),
 			'users'       => 0,
 			'attachments' => 0,
@@ -520,11 +650,17 @@ class ZDZ_Data_Portability {
 			'errors'      => array(),
 		);
 
-		// Options.
+		// Options. Restricted to Zorderz-owned names (the same rule the export uses), so a
+		// crafted bundle cannot set core options like siteurl, home, or default_role here.
+		// Portable WordPress-core settings travel in their own allowlisted section below.
 		if ( ! empty( $bundle['options'] ) && is_array( $bundle['options'] ) ) {
 			foreach ( $bundle['options'] as $name => $value ) {
 				if ( self::is_secret( (string) $name ) ) {
 					$res['skipped'][] = "option:{$name} (secret)";
+					continue;
+				}
+				if ( ! self::is_zorderz_option( (string) $name ) ) {
+					$res['skipped'][] = "option:{$name} (not a Zorderz option)";
 					continue;
 				}
 				if ( ! $dry ) {
@@ -534,10 +670,37 @@ class ZDZ_Data_Portability {
 			}
 		}
 
+		// Portable WordPress settings (title, tagline, timezone, permalinks, ...).
+		// Only allowlisted names are applied, so an uploaded bundle cannot set siteurl/home.
+		if ( ! empty( $bundle['wp_settings'] ) && is_array( $bundle['wp_settings'] ) ) {
+			$allow = array_flip( self::portable_wp_settings() );
+			foreach ( $bundle['wp_settings'] as $name => $value ) {
+				if ( ! isset( $allow[ $name ] ) ) {
+					$res['skipped'][] = "wp_setting:{$name} (not portable)";
+					continue;
+				}
+				if ( ! $dry ) {
+					update_option( $name, $value );
+				}
+				$res['wp_settings']++;
+			}
+			// Make the permalink change take effect now, so pretty URLs work without a
+			// manual visit to Settings > Permalinks. The in-memory structure was loaded at
+			// request start (the fresh install's default), so set it before flushing or the
+			// rules regenerate for the old structure and every pretty URL 404s.
+			if ( ! $dry && array_key_exists( 'permalink_structure', $bundle['wp_settings'] ) && isset( $GLOBALS['wp_rewrite'] ) ) {
+				$GLOBALS['wp_rewrite']->set_permalink_structure( (string) $bundle['wp_settings']['permalink_structure'] );
+				flush_rewrite_rules( false );
+			}
+		}
+
 		// Attachments (posts + meta), preserving ids.
 		if ( ! empty( $bundle['attachments'] ) && is_array( $bundle['attachments'] ) ) {
 			$post_cols = self::columns_for( $wpdb->posts );
 			foreach ( $bundle['attachments'] as $att ) {
+				if ( empty( $att['ID'] ) ) {
+					continue;
+				}
 				$meta = isset( $att['meta'] ) ? $att['meta'] : array();
 				unset( $att['meta'] );
 				$att['post_type'] = 'attachment';
@@ -737,12 +900,38 @@ class ZDZ_Data_Portability {
 		check_admin_referer( 'zdz_data_export' );
 		@set_time_limit( 0 );
 		@ini_set( 'memory_limit', '512M' );
+
 		$bundle = self::build_bundle();
 		$json   = wp_json_encode( $bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-		$fname  = 'zorderz-data-' . sanitize_title( wp_parse_url( home_url(), PHP_URL_HOST ) ) . '-' . gmdate( 'Ymd-His' ) . '.json';
+		$host   = sanitize_title( wp_parse_url( home_url(), PHP_URL_HOST ) );
+		$stamp  = gmdate( 'Ymd-His' );
+		$files  = self::attachment_files();
+
+		// With media present, ship one .zip carrying the JSON plus the uploads files, so the
+		// import resolves logos/photos with no separate copy of wp-content/uploads. Without
+		// media (or without ZipArchive) fall back to the plain .json bundle.
+		if ( $files && class_exists( 'ZipArchive' ) ) {
+			$tmp = wp_tempnam( 'zorderz-data-zip' );
+			$zip = new ZipArchive();
+			if ( true === $zip->open( $tmp, ZipArchive::OVERWRITE ) ) {
+				$zip->addFromString( 'zorderz-data.json', $json );
+				foreach ( $files as $rel => $abs ) {
+					$zip->addFile( $abs, 'uploads/' . $rel );
+				}
+				$zip->close();
+				nocache_headers();
+				header( 'Content-Type: application/zip' );
+				header( 'Content-Disposition: attachment; filename="zorderz-data-' . $host . '-' . $stamp . '.zip"' );
+				header( 'Content-Length: ' . filesize( $tmp ) );
+				readfile( $tmp ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				@unlink( $tmp );
+				exit;
+			}
+		}
+
 		nocache_headers();
 		header( 'Content-Type: application/json; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename="' . $fname . '"' );
+		header( 'Content-Disposition: attachment; filename="zorderz-data-' . $host . '-' . $stamp . '.json"' );
 		header( 'Content-Length: ' . strlen( $json ) );
 		echo $json; // phpcs:ignore WordPress.Security.EscapeOutput
 		exit;
@@ -756,20 +945,61 @@ class ZDZ_Data_Portability {
 		@set_time_limit( 0 );
 		@ini_set( 'memory_limit', '512M' );
 
+		$acting = get_current_user_id();
 		$notice = array( 'type' => 'error', 'msg' => 'No file uploaded.' );
+
 		if ( ! empty( $_FILES['zdz_bundle']['tmp_name'] ) && is_uploaded_file( $_FILES['zdz_bundle']['tmp_name'] ) ) {
-			$raw    = file_get_contents( $_FILES['zdz_bundle']['tmp_name'] ); // phpcs:ignore
-			$bundle = json_decode( (string) $raw, true );
-			if ( ! is_array( $bundle ) || empty( $bundle['zorderz_data_bundle'] ) ) {
-				$notice = array( 'type' => 'error', 'msg' => 'That file is not a valid Zorderz data bundle.' );
+			$tmp    = $_FILES['zdz_bundle']['tmp_name'];
+			$orig   = isset( $_FILES['zdz_bundle']['name'] ) ? sanitize_file_name( (string) $_FILES['zdz_bundle']['name'] ) : '';
+			$dry    = ! empty( $_POST['dry_run'] );
+			$bundle = null;
+			$media  = 0;
+
+			if ( self::is_zip( $tmp, $orig ) ) {
+				if ( ! class_exists( 'ZipArchive' ) ) {
+					$notice = array( 'type' => 'error', 'msg' => 'This bundle is a .zip but ZipArchive is unavailable on this server. Enable the PHP zip extension, or use a .json bundle.' );
+				} else {
+					$zip = new ZipArchive();
+					if ( true === $zip->open( $tmp ) ) {
+						$bundle = json_decode( (string) $zip->getFromName( 'zorderz-data.json' ), true );
+						if ( ! is_array( $bundle ) || empty( $bundle['zorderz_data_bundle'] ) ) {
+							$notice = array( 'type' => 'error', 'msg' => 'The .zip does not contain a valid zorderz-data.json bundle.' );
+							$bundle = null;
+						} elseif ( $dry ) {
+							$media = self::count_upload_entries( $zip );
+						} else {
+							$media = self::extract_uploads( $zip ); // only after the bundle validates
+						}
+						$zip->close();
+					} else {
+						$notice = array( 'type' => 'error', 'msg' => 'Could not open the .zip bundle.' );
+					}
+				}
 			} else {
-				$dry    = ! empty( $_POST['dry_run'] );
-				$result = self::import_bundle( $bundle, array( 'dry_run' => $dry ) );
-				set_transient( 'zdz_dp_result_' . get_current_user_id(), $result, 300 );
-				$notice = array( 'type' => 'success', 'msg' => $dry ? 'Dry run complete (nothing written).' : 'Import complete.' );
+				$bundle = json_decode( (string) file_get_contents( $tmp ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			}
+
+			if ( null !== $bundle ) {
+				if ( ! is_array( $bundle ) || empty( $bundle['zorderz_data_bundle'] ) ) {
+					$notice = array( 'type' => 'error', 'msg' => 'That file is not a valid Zorderz data bundle.' );
+				} else {
+					$result                = self::import_bundle( $bundle, array( 'dry_run' => $dry ) );
+					$result['media_files'] = $media;
+					set_transient( 'zdz_dp_result_' . $acting, $result, 300 );
+					$notice = array( 'type' => 'success', 'msg' => $dry ? 'Dry run complete (nothing written).' : 'Import complete.' );
+
+					// A real import may have replaced the acting admin's user row with the
+					// imported owner, invalidating the current auth cookie. Re-issue it for
+					// the same id so the session continues instead of bouncing the operator
+					// to a login screen mid-migration.
+					if ( ! $dry && $acting ) {
+						wp_set_auth_cookie( $acting, false, is_ssl() );
+					}
+				}
 			}
 		}
-		set_transient( 'zdz_dp_notice_' . get_current_user_id(), $notice, 300 );
+
+		set_transient( 'zdz_dp_notice_' . $acting, $notice, 300 );
 		wp_safe_redirect( admin_url( 'tools.php?page=' . self::SLUG ) );
 		exit;
 	}
@@ -788,15 +1018,18 @@ class ZDZ_Data_Portability {
 
 		$total_tables = array_sum( $counts['tables'] );
 		echo '<div class="wrap"><h1>Zorderz Data Portability</h1>';
-		echo '<p>Export all of this business\'s Zorderz data to one portable file, or restore that file onto a fresh install. Connection credentials (Poe, FreshBooks, Nutshell, calendar OAuth) are never exported for security; re-connect them on the new install. The bundle DOES include user password hashes so logins carry over, so treat the downloaded file as sensitive.</p>';
+		echo '<p>Export all of this business\'s Zorderz data to one portable file, then restore it onto a fresh install. The bundle carries settings, catalog, roster, estimates and invoices, media files (logos and photos), and the WordPress site title, tagline, timezone and permalink structure, so the new install lands ready to use. Connection credentials (Poe, FreshBooks, Nutshell, calendar OAuth) are never exported for security; re-connect them on the new install. The bundle includes user password hashes so logins carry over, so treat the downloaded file as sensitive.</p>';
 
 		if ( $notice ) {
 			echo '<div class="notice notice-' . esc_attr( $notice['type'] ) . ' is-dismissible"><p>' . esc_html( $notice['msg'] ) . '</p></div>';
 		}
 		if ( is_array( $result ) ) {
 			echo '<div class="notice notice-info"><p><strong>' . ( $result['dry_run'] ? 'Would restore' : 'Restored' ) . ':</strong> '
-				. (int) $result['options'] . ' options, ' . array_sum( $result['tables'] ) . ' table rows, '
+				. (int) $result['options'] . ' options, '
+				. (int) ( isset( $result['wp_settings'] ) ? $result['wp_settings'] : 0 ) . ' site settings, '
+				. array_sum( $result['tables'] ) . ' table rows, '
 				. (int) $result['users'] . ' users, ' . (int) $result['attachments'] . ' attachments, '
+				. (int) ( isset( $result['media_files'] ) ? $result['media_files'] : 0 ) . ' media files, '
 				. array_sum( isset( $result['post_types'] ) ? $result['post_types'] : array() ) . ' post-type records, '
 				. array_sum( isset( $result['taxonomies'] ) ? $result['taxonomies'] : array() ) . ' taxonomy terms.';
 			if ( ! empty( $result['errors'] ) ) {
@@ -809,8 +1042,10 @@ class ZDZ_Data_Portability {
 		echo '<h2 class="title">Export</h2>';
 		echo '<table class="widefat striped" style="max-width:640px"><thead><tr><th>Data area</th><th style="text-align:right">Records</th></tr></thead><tbody>';
 		echo '<tr><td>Settings and profile (options)</td><td style="text-align:right">' . (int) $counts['options'] . '</td></tr>';
+		echo '<tr><td>WordPress site settings (title, timezone, permalinks, ...)</td><td style="text-align:right">' . (int) ( isset( $counts['wp_settings'] ) ? $counts['wp_settings'] : 0 ) . '</td></tr>';
 		echo '<tr><td>Users (roster)</td><td style="text-align:right">' . (int) $counts['users'] . '</td></tr>';
 		echo '<tr><td>Media / attachments</td><td style="text-align:right">' . (int) $counts['attachments'] . '</td></tr>';
+		echo '<tr><td>Media files (originals + thumbnails, in the zip)</td><td style="text-align:right">' . (int) ( isset( $counts['media_files'] ) ? $counts['media_files'] : 0 ) . '</td></tr>';
 		foreach ( ( isset( $counts['post_types'] ) ? $counts['post_types'] : array() ) as $pt => $n ) {
 			echo '<tr><td>Post type <code>' . esc_html( $pt ) . '</code></td><td style="text-align:right">' . (int) $n . '</td></tr>';
 		}
@@ -822,15 +1057,15 @@ class ZDZ_Data_Portability {
 		}
 		echo '<tr><td><strong>Custom-table rows (total)</strong></td><td style="text-align:right"><strong>' . (int) $total_tables . '</strong></td></tr>';
 		echo '</tbody></table>';
-		echo '<p style="margin-top:12px"><a class="button button-primary button-hero" href="' . esc_url( $export_url ) . '">Download data bundle (.json)</a></p>';
+		echo '<p style="margin-top:12px"><a class="button button-primary button-hero" href="' . esc_url( $export_url ) . '">Download data bundle</a> <span class="description">(.zip when media is present, otherwise .json)</span></p>';
 
 		// Import card.
 		echo '<hr><h2 class="title">Import</h2>';
-		echo '<p><strong>Import onto a FRESH install.</strong> Records are restored with their original ids so all internal references stay valid; the default admin account may be replaced by the imported owner, so log in with your existing Zorderz credentials afterward. Run a dry run first to preview counts. Copy <code>wp-content/uploads</code> over separately so media files resolve.</p>';
+		echo '<p><strong>Import onto a FRESH install.</strong> Records are restored with their original ids so all internal references stay valid, and media files, the site title/tagline/timezone and the permalink structure are applied automatically. If the imported owner replaces the account you are using, your session is kept alive so you stay logged in. Run a dry run first to preview counts. Accepts a .zip bundle (with media) or a .json bundle.</p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" enctype="multipart/form-data">';
 		wp_nonce_field( 'zdz_data_import' );
 		echo '<input type="hidden" name="action" value="zdz_data_import">';
-		echo '<p><input type="file" name="zdz_bundle" accept="application/json,.json" required></p>';
+		echo '<p><input type="file" name="zdz_bundle" accept=".zip,.json,application/zip,application/json" required></p>';
 		echo '<p><label><input type="checkbox" name="dry_run" value="1" checked> Dry run (preview counts, write nothing)</label></p>';
 		echo '<p><button type="submit" class="button button-secondary">Import bundle</button></p>';
 		echo '</form>';

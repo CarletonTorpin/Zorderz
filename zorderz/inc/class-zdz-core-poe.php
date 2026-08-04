@@ -75,13 +75,37 @@ class ZDZ_Core_Poe {
 				$args['body']  = wp_json_encode( $body );
 				$response      = wp_remote_post( $this->endpoint, $args );
 				if ( ! is_wp_error( $response ) ) {
-					$raw = wp_remote_retrieve_body( $response );
+					$code = wp_remote_retrieve_response_code( $response );
+					$raw  = wp_remote_retrieve_body( $response );
 				}
 			}
 		}
 
-		$data = json_decode( $raw, true );
-		return $data['choices'][0]['message']['content'] ?? 'Error: No response content.';
+		$data    = json_decode( $raw, true );
+		$content = $data['choices'][0]['message']['content'] ?? '';
+		if ( '' !== $content ) {
+			return $content;
+		}
+
+		// No usable content: surface a diagnosable reason instead of a blank error,
+		// so an unset/invalid key or an unavailable model is obvious to the operator.
+		if ( '' === trim( $this->api_key ) ) {
+			return 'Error: No Poe API key is set (Settings, Zorderz Core).';
+		}
+		$api_msg = '';
+		if ( isset( $data['error'] ) ) {
+			$api_msg = is_array( $data['error'] ) ? (string) ( $data['error']['message'] ?? '' ) : (string) $data['error'];
+		}
+		if ( 401 === $code || 403 === $code ) {
+			return 'Error: Poe rejected the API key (HTTP ' . (int) $code . '). Check it under Settings, Zorderz Core.';
+		}
+		if ( $code >= 400 ) {
+			return 'Error: Poe returned HTTP ' . (int) $code . '. ' . ( '' !== $api_msg ? $api_msg : 'Confirm the model "' . $bot . '" is available on your Poe plan.' );
+		}
+		if ( '' !== $api_msg ) {
+			return 'Error: Poe: ' . $api_msg;
+		}
+		return 'Error: Empty response from model "' . $bot . '". Confirm the model name is available on your Poe plan.';
 	}
 
 	public function parse_llm_json( string $response ): ?array {
