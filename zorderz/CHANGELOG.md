@@ -1,3 +1,11 @@
+# Zorderz 1.3.5 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.3.5 · Zorderz Apps bundle 1.3.5**
+
+A correctness release for the built-in estimates. The asynchronous estimate text parse introduced in 1.3.4 returned an empty Ai response ("No response content.") on WP Engine, so typing or dictating an estimate produced a parse error instead of a priced preview. The text parse now runs synchronously again, the path that worked through 1.3.3: it completes in a few seconds and prices every line correctly, with the same input, model, and key that failed only inside the background worker. The genuinely slow paths, photo parse and PDF import, stay asynchronous and are confirmed working, so the async infrastructure stays where it is actually needed. A text estimate parse completes well under a managed host's gateway timeout, so the background job that 1.3.4 briefly routed it through was never necessary. Internal app version this release: Estimates (ZEST) 1.25.4.
+
+---
+
 # Zorderz 1.3.4 (theme + apps)
 
 **August 4, 2026 · Zorderz Core theme 1.3.4 · Zorderz Apps bundle 1.3.4**
