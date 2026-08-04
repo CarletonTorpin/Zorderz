@@ -153,17 +153,14 @@
 		var text = input ? input.value.trim() : '';
 		if ( ! text ) { return; }
 		setStatus( 'Reading…' );
-		// Async by default: enqueue a background job and poll, so a slow (Ai-augmented)
-		// parse cannot hold the request open long enough to hit a managed host's gateway
-		// timeout and 502 — the same pattern Chat uses. Fall back to the synchronous
-		// parse only if the enqueue itself fails.
-		post( 'zest_enqueue_parse', { text: text, images: [] } ).then( function ( res ) {
-			if ( res && res.success && res.data && res.data.job ) {
-				pollJob( res.data.job );
-				return;
-			}
-			parseSync( text );
-		} );
+		// Text parse runs SYNCHRONOUSLY. A text estimate parse completes in a few seconds —
+		// well under a managed host's gateway timeout — so it does not need the background
+		// job path. 1.3.4 routed it through zest_enqueue_parse, but on WP Engine that job
+		// consistently returned an empty Ai response ("No response content.") for the
+		// catalog-augmented text prompt, while the SAME input parsed correctly on the
+		// synchronous endpoint (identical model + key). Photos and PDF import stay async
+		// below (they are genuinely slow and their background jobs work). See 1.3.5 notes.
+		parseSync( text );
 	}
 
 	function parseSync( text ) {
