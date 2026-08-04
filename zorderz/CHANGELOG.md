@@ -1,3 +1,11 @@
+# Zorderz 1.4.3 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.4.3 · Zorderz Apps bundle 1.4.3**
+
+A security and housekeeping release addressing three issues an independent review of the staging install surfaced. Security: credentials are no longer rendered in the clear in Zorderz Core Settings - the Poe API key, FreshBooks secret/tokens, Nutshell key and Review Bridge key were printed into the settings form as plain-text values, sitting in the page HTML for anyone who could open that screen; those fields are now masked (empty password input, "currently set (hidden)"), and a normal Save keeps the stored value unless a new one is typed, so the keys are never echoed to the browser. Fixed: the Stock admin Dashboard (Tools -> Stock -> Dashboard) denied access and had a malformed link because its submenu registered before its parent menu and orphaned - it now registers after the parent and loads correctly (the front-end Stock widget was unaffected). Fixed: the scheduler `/connections` endpoint returned a bare 403 to an administrator when Connected Calendars is off; it now returns a 404, matching the documented intent that these routes behave as if they do not exist while the feature is disabled (no change when it is enabled). Theme and apps move together to 1.4.3. Internal app version this release: Estimates (ZEST) 1.25.5 (unchanged).
+
+---
+
 # Zorderz 1.4.2 (theme + apps)
 
 **August 4, 2026 · Zorderz Core theme 1.4.2 · Zorderz Apps bundle 1.4.2**

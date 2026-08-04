@@ -31,7 +31,12 @@ class ZSTOCK_Dashboard {
 	}
 
 	public static function init() {
-		add_action( 'admin_menu', array( __CLASS__, 'register_admin_page' ) );
+		// Priority 11: the parent menu (zstock-settings, registered by ZSTOCK_Admin at the
+		// default priority 10) must exist before this submenu is added. app.php inits this
+		// class before ZSTOCK_Admin, so at equal priority the submenu was registering first
+		// and orphaning - which made admin.php?page=zstock-dashboard deny access and produced
+		// a broken menu link. Running at 11 guarantees the parent is registered first.
+		add_action( 'admin_menu', array( __CLASS__, 'register_admin_page' ), 11 );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_admin_assets' ) );
 
 		$actions = array(

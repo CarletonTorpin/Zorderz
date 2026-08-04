@@ -33,6 +33,16 @@ class ZDZ_Core_Settings {
 		);
 	}
 
+	/**
+	 * Credential fields that hold secrets. These are rendered MASKED (never printed
+	 * into the settings form) and, when submitted blank, keep their stored value - so
+	 * a normal Save never wipes a key you did not retype, and the secret is never
+	 * echoed back to the browser in the clear.
+	 */
+	private static function secret_fields(): array {
+		return [ 'poe_api_key', 'fb_client_secret', 'fb_access_token', 'fb_refresh_token', 'ns_api_key', 'review_bridge_key' ];
+	}
+
 	public function register_settings() {
 		$fields = [
 			'poe_api_key', 'fb_client_id', 'fb_client_secret', 'fb_access_token',
@@ -40,11 +50,24 @@ class ZDZ_Core_Settings {
 			'review_bridge_url', 'review_bridge_key', // v2.14.5: Review Bridge
 		];
 
+		$secret_fields = self::secret_fields();
 		foreach ( $fields as $field ) {
-			register_setting( 'zdz_core_settings_group', self::OPTION_PREFIX . $field, [
-				'type' => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-			] );
+			$optname = self::OPTION_PREFIX . $field;
+			if ( in_array( $field, $secret_fields, true ) ) {
+				register_setting( 'zdz_core_settings_group', $optname, [
+					'type'              => 'string',
+					'sanitize_callback' => function ( $value ) use ( $optname ) {
+						$value = is_string( $value ) ? trim( $value ) : '';
+						// Blank submit = keep the existing secret (the field renders empty by design).
+						return ( '' === $value ) ? (string) get_option( $optname ) : sanitize_text_field( $value );
+					},
+				] );
+			} else {
+				register_setting( 'zdz_core_settings_group', $optname, [
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				] );
+			}
 		}
 
 		// v2.10.1: Admin-editable review counts (integer fields)
@@ -98,11 +121,24 @@ class ZDZ_Core_Settings {
 				];
 				?>
 				<table class="form-table">
-					<?php foreach ( $fields as $key => $label ) : ?>
+					<?php
+					$secret_fields = self::secret_fields();
+					foreach ( $fields as $key => $label ) :
+						$optname   = self::OPTION_PREFIX . $key;
+						$is_secret = in_array( $key, $secret_fields, true );
+						$current   = (string) get_option( $optname );
+						?>
 						<tr>
-							<th scope="row"><label for="<?php echo esc_attr( self::OPTION_PREFIX . $key ); ?>"><?php echo esc_html( $label ); ?></label></th>
+							<th scope="row"><label for="<?php echo esc_attr( $optname ); ?>"><?php echo esc_html( $label ); ?></label></th>
 							<td>
-								<input type="text" id="<?php echo esc_attr( self::OPTION_PREFIX . $key ); ?>" name="<?php echo esc_attr( self::OPTION_PREFIX . $key ); ?>" value="<?php echo esc_attr( get_option( self::OPTION_PREFIX . $key ) ); ?>" class="regular-text" />
+								<?php if ( $is_secret ) : ?>
+									<input type="password" id="<?php echo esc_attr( $optname ); ?>" name="<?php echo esc_attr( $optname ); ?>" value="" autocomplete="off" class="regular-text" placeholder="<?php echo '' !== $current ? esc_attr__( 'Enter a new value to replace', 'zorderz' ) : esc_attr__( 'Not set', 'zorderz' ); ?>" />
+									<?php if ( '' !== $current ) : ?>
+										<span class="description" style="margin-left:6px"><?php esc_html_e( 'Currently set (hidden). Leave blank to keep it.', 'zorderz' ); ?></span>
+									<?php endif; ?>
+								<?php else : ?>
+									<input type="text" id="<?php echo esc_attr( $optname ); ?>" name="<?php echo esc_attr( $optname ); ?>" value="<?php echo esc_attr( $current ); ?>" class="regular-text" />
+								<?php endif; ?>
 							</td>
 						</tr>
 					<?php endforeach; ?>
