@@ -11,6 +11,30 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.3.5] - 2026-08-04
+
+A correctness release for the built-in estimates. The asynchronous estimate text parse
+introduced in 1.3.4 returned an empty Ai response ("No response content.") on WP Engine,
+so typing or dictating an estimate produced a parse error instead of a priced preview. The
+text parse now runs synchronously again, the path that worked through 1.3.3: it completes
+in a few seconds and prices every line correctly. The genuinely slow paths, photo parse
+and PDF import, stay asynchronous and are verified working. Theme and apps move together to
+1.3.5.
+
+### Fixed
+
+- **Estimate text parse errored on WP Engine ("No response content.").** 1.3.4 routed the
+  text parse through a background job; on WP Engine that job's catalog-augmented Ai request
+  came back empty every time, while the same input parsed correctly on the synchronous
+  endpoint with the identical model and key. The text parse now calls the synchronous
+  endpoint directly, as it did through 1.3.3, so dictated or typed estimates return their
+  priced preview again. A text parse completes well under a managed host's gateway timeout,
+  so the background job it briefly used was never needed. The photo parse and PDF-import
+  paths remain asynchronous (they are slow and their background jobs are confirmed
+  working). Estimates app ZEST 1.25.4; no schema change.
+
+---
+
 ## [1.3.4] - 2026-08-04
 
 An enhancement to the built-in estimates. The Ai-assisted estimate parse now runs as a
