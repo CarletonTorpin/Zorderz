@@ -11,6 +11,25 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.3.6] - 2026-08-04
+
+A small cosmetic fix for the built-in estimates. After an estimate parse finished, the grey
+"Reading" status label stayed on screen above the priced preview instead of disappearing, so
+a completed parse could look like it was still working. The label now clears the moment the
+priced preview appears. Theme and apps move together to 1.3.6.
+
+### Fixed
+
+- **Estimate widget "Reading" label did not clear after a parse.** The status element is
+  hidden in JavaScript with the hidden attribute, but the widget stylesheet gave it an
+  explicit display that overrode the browser's built-in hidden rule, so clearing the status
+  left the label visible above the finished preview. A scoped rule now hides the status
+  element when it is marked hidden, so the label disappears as soon as the priced preview
+  renders. The parse itself was unaffected. Estimates app ZEST 1.25.5; front-end only, no
+  schema change.
+
+---
+
 ## [1.3.5] - 2026-08-04
 
 A correctness release for the built-in estimates. The asynchronous estimate text parse

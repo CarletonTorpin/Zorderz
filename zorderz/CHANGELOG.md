@@ -1,3 +1,11 @@
+# Zorderz 1.3.6 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.3.6 · Zorderz Apps bundle 1.3.6**
+
+A small cosmetic fix for the built-in estimates. After an estimate parse finished, the grey "Reading" status label stayed on screen above the priced preview instead of disappearing, so a completed parse could look like it was still working. The status element is hidden in JavaScript with the hidden attribute, but the widget stylesheet gave it an explicit display that overrode the browser's built-in hidden rule; a scoped rule now hides it on clear, so the label disappears as soon as the priced preview renders. The parse itself was unaffected. Internal app version this release: Estimates (ZEST) 1.25.5.
+
+---
+
 # Zorderz 1.3.5 (theme + apps)
 
 **August 4, 2026 · Zorderz Core theme 1.3.5 · Zorderz Apps bundle 1.3.5**
