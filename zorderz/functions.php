@@ -33,7 +33,7 @@
  * One constant now feeds all of them. Keep in lock-step with style.css.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '1.4.3' );
+	define( 'ZDZ_THEME_VER_FLOOR', '1.5.0' );
 }
 /**
  * The REST namespace, in exactly one place.

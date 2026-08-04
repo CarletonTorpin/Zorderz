@@ -11,6 +11,51 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.5.0] - 2026-08-04
+
+Comprehensive, frictionless data portability. A Company Data export now carries the media
+files and the WordPress site settings the previous bundle left behind, so restoring onto a
+fresh install lands ready to use instead of needing a manual cleanup pass.
+
+### Added
+
+- **Media travels with the bundle.** The export now includes the actual upload files (logos,
+  photos, and every generated thumbnail size), not just their database references. When media
+  is present the download is a single `.zip` (the JSON bundle plus an `uploads/` tree);
+  without media, or without ZipArchive on the server, it falls back to the plain `.json`. The
+  import accepts either, extracts the files into `wp-content/uploads`, and the references
+  resolve with no separate copy step. This closes the gap that left logos broken after a
+  migration.
+- **Portable WordPress settings.** The bundle now carries a safe allowlist of WordPress-core
+  settings (site title, tagline, timezone, date and time formats, week start, and the
+  permalink structure) and applies them on import, flushing rewrite rules so pretty URLs work
+  at once. Install-specific options (siteurl, home, upload paths) are deliberately excluded,
+  and the import only applies allowlisted names, so a bundle can never repoint the new site at
+  the old one. This removes the manual "set the title, timezone, and permalinks" steps.
+
+### Changed
+
+- **The import keeps you logged in.** Restoring the owner account replaces the acting admin's
+  user row, which used to invalidate the session and bounce you to a login screen mid-import.
+  The import now re-issues the auth cookie for the same account, so the session simply
+  continues.
+
+### Fixed
+
+- **The Ai client reports the real reason for a failed call.** A missing or invalid Poe key,
+  or an unavailable model, previously surfaced as a blank "No response content." The client
+  now distinguishes an unset key, a rejected key (HTTP 401 or 403), other HTTP errors, and a
+  genuinely empty model response, and it names the model, so a bad key is self-diagnosable.
+
+### Internal
+
+- Deduplicated the meta-filtering shared by the user, post-type, and taxonomy collectors into
+  one helper (fewer lines, one code path).
+
+Theme and apps move together to 1.5.0. Estimates ZEST 1.25.5 unchanged.
+
+---
+
 ## [1.4.3] - 2026-08-04
 
 A security and housekeeping release addressing three issues an independent review of the
