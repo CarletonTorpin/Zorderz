@@ -1,3 +1,11 @@
+# Zorderz 1.4.0 (theme + apps)
+
+**August 4, 2026 · Zorderz Core theme 1.4.0 · Zorderz Apps bundle 1.4.0**
+
+A new capability: Company Data Export and Import, at Tools -> Zorderz Data. A business can export all of its Zorderz data (settings and business profile, the Item Engine catalog, the user roster with roles, every app's custom tables, and media references) to one portable JSON bundle with a manifest of record counts, then restore that bundle on a fresh WordPress plus Zorderz install. It is the portability, backup, and migration path in one, and the manifest lets a migration be scored. Data moves through WordPress' own APIs (get_option/update_option and typed rows, never a raw SQL find-and-replace), tables are discovered by prefix so new apps are covered automatically, and rows keep their primary keys so internal references stay valid on a fresh target. Connection credentials (Poe, FreshBooks, Nutshell, calendar OAuth) are never exported, by denylist and by scrubbing secret-named columns, so the new install re-connects its own services. A dry run previews the restore before anything is written. This release adds no app-side changes; the apps bundle moves to 1.4.0 in lock-step. Internal app version this release: Estimates (ZEST) 1.25.5 (unchanged).
+
+---
+
 # Zorderz 1.3.6 (theme + apps)
 
 **August 4, 2026 · Zorderz Core theme 1.3.6 · Zorderz Apps bundle 1.3.6**
