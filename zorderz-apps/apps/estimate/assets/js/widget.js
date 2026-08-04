@@ -153,6 +153,20 @@
 		var text = input ? input.value.trim() : '';
 		if ( ! text ) { return; }
 		setStatus( 'Reading…' );
+		// Async by default: enqueue a background job and poll, so a slow (Ai-augmented)
+		// parse cannot hold the request open long enough to hit a managed host's gateway
+		// timeout and 502 — the same pattern Chat uses. Fall back to the synchronous
+		// parse only if the enqueue itself fails.
+		post( 'zest_enqueue_parse', { text: text, images: [] } ).then( function ( res ) {
+			if ( res && res.success && res.data && res.data.job ) {
+				pollJob( res.data.job );
+				return;
+			}
+			parseSync( text );
+		} );
+	}
+
+	function parseSync( text ) {
 		post( 'zest_parse', { text: text } ).then( function ( res ) {
 			setStatus( '' );
 			if ( ! res || ! res.success ) {
