@@ -33,7 +33,7 @@
  * One constant now feeds all of them. Keep in lock-step with style.css.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '1.5.0' );
+	define( 'ZDZ_THEME_VER_FLOOR', '1.6.0' );
 }
 /**
  * The REST namespace, in exactly one place.
@@ -169,6 +169,7 @@ require_once get_template_directory() . '/inc/class-zdz-media-exif-rest.php';  /
 require_once get_template_directory() . '/inc/class-zdz-magic-link-bridge.php'; // v2.18.0: PWA magic login bridge
 require_once get_template_directory() . '/inc/class-zdz-alert-router.php'; // v2.19.0: Cross-plugin alert routing + notification delivery
 require_once get_template_directory() . '/inc/class-zdz-data-portability.php'; // v1.4.0: Company Data Export / Import (portability, backup, migration) under Tools -> Zorderz Data
+require_once get_template_directory() . '/inc/class-zdz-apps-autoinstall.php'; // v1.6.0: one-upload onboarding — the active theme installs + activates the bundled apps plugin once, so a first install is a single upload
 require_once get_template_directory() . '/db/migrate-2.13.0.php';
 require_once get_template_directory() . '/db/migrate-2.17.1.php'; // v2.17.1: zdz_user_media table
 require_once get_template_directory() . '/db/migrate-alert-router.php'; // v2.19.0: zdz_notifications table
@@ -183,6 +184,9 @@ ZDZ_View_As::init();
 
 // v1.4.0: Company Data Export / Import (admin_menu + admin_post handlers)
 ZDZ_Data_Portability::init();
+
+// v1.6.0: one-upload onboarding — install + activate the bundled apps plugin once.
+ZDZ_Apps_AutoInstall::init();
 
 // Initialize Singleton Classes
 add_action( 'init', function() {
