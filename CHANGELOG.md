@@ -11,6 +11,37 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.6.0] - 2026-08-05
+
+One upload to get started. A first install used to be two artifacts, the theme and then the
+apps. The release theme now carries the apps bundle inside it and, once active, installs and
+activates them for you, so standing up a new Zorderz is a single upload.
+
+### Added
+
+- **One-upload onboarding.** The theme ships with the apps bundle vendored under
+  `zorderz/bundled/`, and a new `ZDZ_Apps_AutoInstall` (theme `inc/`) installs and activates the
+  `zorderz-apps` plugin the first time the theme is active. It acts once, never overwrites an
+  apps copy that is already present, and never re-activates apps an operator has deliberately
+  turned off. If the host will not let the theme write to `wp-content/plugins` it falls back to a
+  one line admin notice with the manual step, so nothing breaks, you just do the old
+  two-artifact install. The standalone `zorderz-apps-<version>.zip` still ships and remains both
+  the update path and that manual second artifact.
+- **Reproducible build.** `build.sh` reads the version from `style.css` and produces both release
+  zips, vendoring the apps into the theme for the one-upload artifact. The vendored copy is a
+  build product and is gitignored.
+
+### Changed
+
+- The agent install guide (`docs/INSTALL-FOR-AI.md`) now documents the one-upload flow and,
+  importantly, the Company Data import as the fast path to a populated install, with the real
+  operational notes: you stay logged in through an import even though it swaps in the imported
+  owner, the WordPress site settings and media files apply automatically, connection secrets are
+  never carried and must be reconnected, and a dry run previews counts before you commit. The
+  README gains a short zero to running quick start.
+
+---
+
 ## [1.5.0] - 2026-08-04
 
 Comprehensive, frictionless data portability. A Company Data export now carries the media

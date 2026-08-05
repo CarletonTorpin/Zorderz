@@ -13,3 +13,7 @@ node_modules/
 
 # Vendored dependencies
 /vendor/
+
+# Vendored apps bundle + build output (produced by build.sh, not tracked)
+/zorderz/bundled/zorderz-apps/
+/dist/

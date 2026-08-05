@@ -1,0 +1,3 @@
+# The apps bundle is vendored here at build time (see build.sh) so a release
+# theme is a one-upload install. The vendored copy is a build product and is
+# gitignored; this placeholder keeps the directory in the tree.
