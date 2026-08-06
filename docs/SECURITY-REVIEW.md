@@ -60,9 +60,10 @@ Every PR runs (see `.github/workflows/security.yml`):
    `__return_true` permission callbacks) and warns on the fuzzier ones. To consciously override a
    line, append `// sentinel:allow <reason>` — used rarely, and the reason shows up in review.
 2. **Unit tests** (`tests/unit`) — pin the security invariants that need no database: the export
-   never emits a credential (by name, suffix, or nested value), and the importer never writes
-   outside uploads. If one fails, a known vulnerability class has been re-opened. Fix the code,
-   not the test.
+   never emits a credential (by name, suffix, or nested value), the importer never writes outside
+   uploads, revenue is withheld from a non-privileged KPI view, and the share-link HMAC is
+   domain-separated, id-bound, and constant-time. If one fails, a known vulnerability class has
+   been re-opened. Fix the code, not the test.
 3. **PHP lint** and **PHP_CodeSniffer** (`WordPress.Security`, `WordPress.DB.PreparedSQL` as
    errors) — broad coverage for escaping, nonces, and SQL.
 4. **Integration tests** (`tests/integration`, WordPress harness) — the invariants that need
@@ -71,3 +72,9 @@ Every PR runs (see `.github/workflows/security.yml`):
 
 Branch protection on `main` should require at least the sentinel, unit, and lint checks, require
 a code-owner review, and disallow direct pushes.
+
+CI supply chain: the workflow runs with `permissions: contents: read` and checks out with
+`persist-credentials: false`, so a compromised build step cannot lift the workflow token. Before
+this repo takes wider outside contributions, pin the third-party actions (`actions/checkout`,
+`shivammathur/setup-php`) to a full commit SHA rather than a moving tag, so a hijacked action tag
+cannot run in CI.

@@ -19,6 +19,11 @@ if ( ! function_exists( 'apply_filters' ) ) {
 if ( ! function_exists( 'sanitize_text_field' ) ) {
 	function sanitize_text_field( $s ) { return is_string( $s ) ? trim( $s ) : ''; }
 }
+if ( ! function_exists( 'wp_salt' ) ) {
+	// Deterministic per-scheme secret so the HMAC share-link tests are stable; distinct per
+	// scheme so domain-separation assertions are meaningful. Never the real salt.
+	function wp_salt( $scheme = 'auth' ) { return 'zorderz-unit-test-salt::' . $scheme; }
+}
 
 /**
  * Minimal stand-in for the core settings class so ZDZ_Data_Portability::secret_option_names()
@@ -35,3 +40,4 @@ if ( ! class_exists( 'ZDZ_Core_Settings' ) ) {
 
 require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-data-portability.php';
 require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-kpi-metrics.php'; // for is_financial_metric()
+require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-share-link.php';  // HMAC share-link primitive
