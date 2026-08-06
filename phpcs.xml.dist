@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<ruleset name="Zorderz">
+    <description>Zorderz coding standards, weighted toward security and correctness.</description>
+
+    <file>zorderz</file>
+    <file>zorderz-apps</file>
+
+    <!-- Build products, tests, and dependencies are not scanned here. -->
+    <exclude-pattern>*/bundled/*</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/dist/*</exclude-pattern>
+    <exclude-pattern>*/tests/*</exclude-pattern>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <!-- Baseline WordPress standards. -->
+    <rule ref="WordPress-Extra"/>
+
+    <!-- Security and SQL are the point of this file: never let them be warnings. -->
+    <rule ref="WordPress.Security">
+        <type>error</type>
+    </rule>
+    <rule ref="WordPress.DB.PreparedSQL">
+        <type>error</type>
+    </rule>
+    <rule ref="WordPress.DB.PreparedSQLPlaceholders">
+        <type>error</type>
+    </rule>
+
+    <!-- Supported PHP range (see composer.json). -->
+    <config name="testVersion" value="7.4-"/>
+    <rule ref="PHPCompatibilityWP"/>
+
+    <!-- Zorderz uses tabs and a text-domain of 'zorderz'; keep the noise focused on substance. -->
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array" value="zorderz,default"/>
+        </properties>
+    </rule>
+</ruleset>

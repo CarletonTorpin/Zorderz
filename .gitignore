@@ -14,6 +14,13 @@ node_modules/
 # Vendored dependencies
 /vendor/
 
+# PHPUnit cache
+.phpunit.result.cache
+.phpunit.cache/
+
 # Vendored apps bundle + build output (produced by build.sh, not tracked)
 /zorderz/bundled/zorderz-apps/
 /dist/
+
+# Git bundles (produced for hand-off, not tracked)
+*.bundle
