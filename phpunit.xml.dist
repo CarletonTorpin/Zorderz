@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Zorderz test configuration.
+
+  The "unit" suite is dependency-light (no WordPress, no DB) and pins the security-critical
+  pure logic; it runs in CI in seconds. The "integration" suite exercises code that needs the
+  WordPress test harness (roles, options, $wpdb) and runs in the CI job that provisions it.
+-->
+<phpunit
+    bootstrap="tests/bootstrap-unit.php"
+    colors="true"
+    failOnWarning="true"
+    failOnRisky="true"
+    beStrictAboutOutputDuringTests="true"
+    cacheResult="false">
+    <testsuites>
+        <testsuite name="unit">
+            <directory>tests/unit</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
