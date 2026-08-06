@@ -87,6 +87,12 @@ printf '%s\n' "${DIFF}" | awk '
     if (!comment && f ~ /class-zdz-apps-autoinstall\.php$/ && line ~ /is_admin[ \t]*\(/)
       block("is_admin() in the auto-installer — must stay current_user_can(install/activate)")
 
+    # Login identity must never be sourced from a request in the magic-link bridge (audit H1).
+    if (!comment && f ~ /class-zdz-magic-link-bridge\.php$/ \
+                 && (line ~ /get_user_by[ \t]*\([^)]*(email|login)/ \
+                     || line ~ /get_param[ \t]*\([^)]*(user_id|email|login)/))
+      block("identity sourced from a request in the login bridge — the user id must come only from the server-side transient")
+
     # __return_true wired to a permission_callback.
     if (!comment && line ~ /permission_callback/ && line ~ /__return_true/)
       block("permission_callback => __return_true (open endpoint)")
@@ -104,6 +110,11 @@ printf '%s\n' "${DIFF}" | awk '
     # A new phpcs:ignore on a DB line silences the SQL scanner.
     if (!comment && line ~ /phpcs:ignore/ && (line ~ /\$wpdb/ || line ~ /PreparedSQL/))
       warn("new phpcs:ignore on a DB line — justify the raw query in review")
+
+    # Re-introducing raw inline serving in a knowledge route (audit H3): route through the
+    # zkv_serve_file_headers() helper (nosniff + safe disposition) instead.
+    if (!comment && f ~ /knowledge/ && line ~ /Content-Disposition:[ \t]*inline/)
+      warn("raw inline Content-Disposition in a knowledge route — use zkv_serve_file_headers()")
 
     next
   }
