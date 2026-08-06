@@ -371,12 +371,25 @@ class ZDZ_Kiosk_Demo {
 			return rest_ensure_response( [ 'success' => true, 'active' => false ] );
 		}
 
+		// Throttle PIN guessing: the exit PIN is short (4 to 10 digits), so without a limit a
+		// guest at the shared kiosk could brute-force back into the administrator's live session.
+		// Lock the exit endpoint for this record after a handful of wrong tries; a correct PIN
+		// clears the counter. Keyed on the admin whose kiosk this is (the target of the guessing).
+		$lock_key = 'zdz_kiosk_pin_fail_' . $admin_uid;
+		$fails    = (int) get_transient( $lock_key );
+		$max      = (int) apply_filters( 'zdz_kiosk_pin_max_attempts', 5 );
+		if ( $fails >= $max ) {
+			return new WP_Error( 'locked', 'Too many incorrect PIN attempts. Wait a minute and try again.', [ 'status' => 429 ] );
+		}
+
 		$pin = preg_replace( '/\D/', '', (string) $request->get_param( 'pin' ) );
 		if ( '' === $pin || ! wp_check_password( $pin, $state['pin_hash'] ?? '' ) ) {
-			// Do not reveal whether the PIN was close; just refuse.
+			// Count the miss (with a cooldown window), then refuse without revealing closeness.
+			set_transient( $lock_key, $fails + 1, (int) apply_filters( 'zdz_kiosk_pin_lockout_window', MINUTE_IN_SECONDS ) );
 			return new WP_Error( 'bad_pin', 'Incorrect PIN.', [ 'status' => 403 ] );
 		}
 
+		delete_transient( $lock_key ); // correct PIN: clear the throttle
 		delete_user_meta( $admin_uid, self::META_KEY );
 
 		// Mint a fresh admin-identity nonce for the SPA's next calls.

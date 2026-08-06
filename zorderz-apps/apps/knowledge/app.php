@@ -135,6 +135,33 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Safe response headers for serving a stored knowledge file (shared by both file-serve routes,
+ * so the allowlist cannot drift between two copies). Defense in depth so a future upload
+ * allowlist slip cannot become stored XSS: send X-Content-Type-Options: nosniff always, and
+ * Content-Disposition: inline ONLY for a small allowlist of types safe to render in the site's
+ * own origin (raster images, PDF, plain text). Everything else, including any scriptable type
+ * (SVG, HTML, XML), is sent as an attachment so the browser downloads it instead of executing
+ * it in-origin. This is a no-op for the file types the vault serves today; it only changes
+ * behavior if a scriptable type is ever allowed into the upload allowlist.
+ */
+if ( ! function_exists( 'zkv_safe_disposition' ) ) {
+	function zkv_safe_disposition( string $mime ): string {
+		$inline_ok = array(
+			'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff',
+			'application/pdf', 'text/plain',
+		);
+		return in_array( strtolower( trim( $mime ) ), $inline_ok, true ) ? 'inline' : 'attachment';
+	}
+}
+if ( ! function_exists( 'zkv_serve_file_headers' ) ) {
+	function zkv_serve_file_headers( string $mime, string $name ): void {
+		header( 'Content-Type: ' . $mime );
+		header( 'X-Content-Type-Options: nosniff' );
+		header( 'Content-Disposition: ' . zkv_safe_disposition( $mime ) . '; filename="' . sanitize_file_name( $name ) . '"' );
+	}
+}
+
 define( 'ZKV_VERSION', '1.7.2' );
 define( 'ZKV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZKV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -1530,8 +1557,7 @@ add_action( 'template_redirect', function () {
 
 	header( 'Cache-Control: private, no-cache, must-revalidate' );
 	header( 'X-Robots-Tag: noindex, nofollow' );
-	header( 'Content-Type: ' . $mime );
-	header( 'Content-Disposition: inline; filename="' . sanitize_file_name( $name ) . '"' );
+	zkv_serve_file_headers( $mime, $name ); // Content-Type + nosniff + safe Content-Disposition
 	header( 'Content-Length: ' . filesize( $real ) );
 	readfile( $real );
 	exit;
