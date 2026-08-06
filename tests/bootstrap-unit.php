@@ -34,3 +34,4 @@ if ( ! class_exists( 'ZDZ_Core_Settings' ) ) {
 }
 
 require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-data-portability.php';
+require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-kpi-metrics.php'; // for is_financial_metric()
