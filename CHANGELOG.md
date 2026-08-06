@@ -11,6 +11,29 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.6.1] - 2026-08-06
+
+Security hardening. A self-review of the data-portability and passwordless-login paths, plus
+new repository guardrails so that a change which looks like a bug fix cannot quietly weaken a
+security property. No credential was found exposed in any bundle produced during testing; the
+export gap below was latent (it would have leaked a key only once one was configured).
+
+### Security
+- Company Data export now excludes credentials by an authoritative, self-declaring list (sourced from each module) together with name-suffix and nested-value scanning, instead of a name-substring guess. This closes a gap where the Review Bridge key and a nested calendar OAuth token could travel inside an exported bundle. The same check gates import, so neither direction accepts a secret.
+- Passwordless login codes are now rate-limited on the true connecting address rather than a client-supplied forwarding header, with a site-wide backstop that counts wrong-code attempts and a six-digit shape check before lookup, so the code space cannot be swept. Login identity continues to come only from server-side state, never from a request parameter.
+- The zip-import path guard is now a pure, unit-tested function (`is_safe_upload_relpath`); both it and the executable-filetype block must survive any change to the extraction loop.
+- Company revenue is now withheld from users lacking `view_company_revenue` by a per-metric test (an explicit financial flag, a currency-valued display, or a money-named key) instead of a fixed two-item list, so a new dollar metric added later cannot slip past the shared-kiosk redaction.
+- Knowledge documents are now served with `X-Content-Type-Options: nosniff` and, through one shared helper, inline only for a safe allowlist of types (raster images, PDF, plain text) and as an attachment for everything else. This is a no-op for the types the vault serves today, but means a future upload-allowlist change (for example SVG or HTML) cannot become stored cross-site scripting.
+- The shared-kiosk exit PIN now throttles wrong attempts (a short lockout after several misses, cleared by a correct PIN), so the short PIN cannot be brute-forced back into the administrator's live session.
+
+### Added
+- Repository security guardrails: a hypocrite-commit sentinel that scans the added lines of every pull request (it blocks a request-sourced login identity in the magic-link bridge and unescaped shell calls, among others, and warns on riskier patterns), unit tests that pin the export, import, and revenue-redaction invariants, PHP_CodeSniffer with a security-only ruleset run on changed files (so it flags new risk without failing on pre-existing style), WordPress-harness integration tests, code owners on the crown-jewel files, a pull-request security checklist, a security policy (`SECURITY.md`), and a reviewer guide (`docs/SECURITY-REVIEW.md`).
+
+### Notes
+- The fixes are in the theme (Core). The apps bundle version moves in lockstep with no app-code change.
+
+---
+
 ## [1.6.0] - 2026-08-05
 
 One upload to get started. A first install used to be two artifacts, the theme and then the

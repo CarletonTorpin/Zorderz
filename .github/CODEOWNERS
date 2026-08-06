@@ -1,0 +1,38 @@
+# Zorderz code owners.
+#
+# Every file matched here requires review from the owner before it can be merged (enable
+# "Require review from Code Owners" in branch protection for main). These are the crown-jewel
+# files: a one-line change in any of them can switch off a security property while looking like
+# a bug fix. They do not get waved through, ever.
+
+# Fallback: the owner reviews anything not otherwise assigned.
+*                                                   @CarletonTorpin
+
+# --- Authentication and session establishment ---
+zorderz/inc/class-zdz-magic-link-bridge.php         @CarletonTorpin
+zorderz/inc/class-zdz-share-link.php                @CarletonTorpin
+zorderz/inc/class-zdz-token-service.php             @CarletonTorpin
+zorderz/inc/class-zdz-user-media.php                @CarletonTorpin
+
+# --- Authorization, roles, and the permission model ---
+zorderz/inc/class-zdz-rest-api.php                  @CarletonTorpin
+zorderz/inc/class-zdz-data-permissions.php          @CarletonTorpin
+zorderz/inc/class-zdz-user-roles.php                @CarletonTorpin
+zorderz/inc/class-zdz-hierarchy.php                 @CarletonTorpin
+zorderz/inc/class-zdz-view-as.php                   @CarletonTorpin
+zorderz/inc/class-zdz-alert-router.php              @CarletonTorpin
+zorderz/inc/class-zdz-kpi-metrics.php               @CarletonTorpin
+zorderz/inc/class-zdz-kiosk-demo.php                @CarletonTorpin
+
+# --- Data movement and code that writes/executes files (supply chain) ---
+zorderz/inc/class-zdz-data-portability.php          @CarletonTorpin
+zorderz/inc/class-zdz-apps-autoinstall.php          @CarletonTorpin
+build.sh                                            @CarletonTorpin
+
+# --- The guardrails themselves ---
+.github/                                            @CarletonTorpin
+phpcs.xml.dist                                      @CarletonTorpin
+phpunit.xml.dist                                    @CarletonTorpin
+tests/                                              @CarletonTorpin
+docs/SECURITY-REVIEW.md                             @CarletonTorpin
+SECURITY.md                                         @CarletonTorpin

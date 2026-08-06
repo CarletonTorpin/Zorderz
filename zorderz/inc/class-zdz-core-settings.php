@@ -39,7 +39,7 @@ class ZDZ_Core_Settings {
 	 * a normal Save never wipes a key you did not retype, and the secret is never
 	 * echoed back to the browser in the clear.
 	 */
-	private static function secret_fields(): array {
+	public static function secret_fields(): array { // public: single source of truth for the data-portability secret exclusion
 		return [ 'poe_api_key', 'fb_client_secret', 'fb_access_token', 'fb_refresh_token', 'ns_api_key', 'review_bridge_key' ];
 	}
 
