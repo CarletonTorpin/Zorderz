@@ -22,9 +22,10 @@ export gap below was latent (it would have leaked a key only once one was config
 - Company Data export now excludes credentials by an authoritative, self-declaring list (sourced from each module) together with name-suffix and nested-value scanning, instead of a name-substring guess. This closes a gap where the Review Bridge key and a nested calendar OAuth token could travel inside an exported bundle. The same check gates import, so neither direction accepts a secret.
 - Passwordless login codes are now rate-limited on the true connecting address rather than a client-supplied forwarding header, with a site-wide backstop that counts wrong-code attempts and a six-digit shape check before lookup, so the code space cannot be swept. Login identity continues to come only from server-side state, never from a request parameter.
 - The zip-import path guard is now a pure, unit-tested function (`is_safe_upload_relpath`); both it and the executable-filetype block must survive any change to the extraction loop.
+- Company revenue is now withheld from users lacking `view_company_revenue` by a per-metric test (an explicit financial flag, a currency-valued display, or a money-named key) instead of a fixed two-item list, so a new dollar metric added later cannot slip past the shared-kiosk redaction.
 
 ### Added
-- Repository security guardrails: a hypocrite-commit sentinel that scans the added lines of every pull request, unit tests that pin the export and import invariants, PHP_CodeSniffer configured with the WordPress security rules as errors, code owners on the crown-jewel files, a pull-request security checklist, a security policy (`SECURITY.md`), and a reviewer guide (`docs/SECURITY-REVIEW.md`).
+- Repository security guardrails: a hypocrite-commit sentinel that scans the added lines of every pull request, unit tests that pin the export, import, and revenue-redaction invariants, PHP_CodeSniffer with a security-only ruleset run on changed files (so it flags new risk without failing on pre-existing style), WordPress-harness integration tests, code owners on the crown-jewel files, a pull-request security checklist, a security policy (`SECURITY.md`), and a reviewer guide (`docs/SECURITY-REVIEW.md`).
 
 ### Notes
 - The fixes are in the theme (Core). The apps bundle version moves in lockstep with no app-code change.
