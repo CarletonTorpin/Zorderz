@@ -334,10 +334,27 @@ class ZDZ_Magic_Link_Bridge {
 	public function handle_code_claim( WP_REST_Request $request ) {
 		$code = $request->get_param( 'code' );
 
-		// Rate limit: max 10 code attempts per IP per 10 minutes
-		$ip_key = self::TRANSIENT_PREFIX . 'code_rate_' . md5( self::get_client_ip() );
-		$count  = (int) get_transient( $ip_key );
-		if ( $count >= 10 ) {
+		// Site-wide backstop against distributed or spoofed brute force: a global cap on
+		// WRONG-code attempts. Legit users paste a real code and almost never miss, so this
+		// trips on scanning, not on normal use. Per-IP key is handled just below.
+		$miss_key     = self::TRANSIENT_PREFIX . 'code_miss_global';
+		$miss_count   = (int) get_transient( $miss_key );
+		$miss_ceiling = (int) apply_filters( 'zdz_magic_link_global_miss_ceiling', 300 );
+		if ( $miss_count >= $miss_ceiling ) {
+			return new WP_Error(
+				'rate_limited',
+				'Too many attempts right now. Please request a new login link and try again shortly.',
+				[ 'status' => 429 ]
+			);
+		}
+
+		// Per-IP attempt cap, keyed on the UN-SPOOFABLE connecting address (REMOTE_ADDR), never a
+		// client-settable forwarded header. Trusting a forwarded header let an attacker land in a
+		// fresh bucket every request and defeat this limit entirely (security audit, Aug 2026).
+		$ip_key     = self::TRANSIENT_PREFIX . 'code_rate_' . md5( self::rate_limit_ip() );
+		$count      = (int) get_transient( $ip_key );
+		$ip_ceiling = (int) apply_filters( 'zdz_magic_link_ip_attempt_ceiling', 10 );
+		if ( $count >= $ip_ceiling ) {
 			return new WP_Error(
 				'rate_limited',
 				'Too many attempts. Please try again later.',
@@ -346,10 +363,16 @@ class ZDZ_Magic_Link_Bridge {
 		}
 		set_transient( $ip_key, $count + 1, self::CODE_TTL );
 
-		// Look up the code
-		$code_data = get_transient( self::TRANSIENT_PREFIX . 'code_' . $code );
+		// Shape-check before lookup: codes are exactly six digits, so anything else is a cheap
+		// miss and never reaches transient storage with an attacker-shaped key.
+		$code = preg_replace( '/\D/', '', (string) $code );
+
+		// Look up the code (single-use; deleted below on success).
+		$code_data = ( 6 === strlen( (string) $code ) ) ? get_transient( self::TRANSIENT_PREFIX . 'code_' . $code ) : false;
 
 		if ( ! $code_data || ! is_array( $code_data ) ) {
+			// Count the miss toward the global backstop, then refuse.
+			set_transient( $miss_key, $miss_count + 1, self::CODE_TTL );
 			return new WP_Error(
 				'invalid_code',
 				'Code is invalid or expired. Please request a new login link.',
@@ -552,7 +575,23 @@ class ZDZ_Magic_Link_Bridge {
 	}
 
 	/**
-	 * Get client IP address.
+	 * The address used for RATE LIMITING: the raw TCP peer (REMOTE_ADDR), which a client cannot
+	 * forge. Deliberately NOT a forwarded header (CF-Connecting-IP / X-Forwarded-For), which a
+	 * client can set at will and which made the OTP rate limit bypassable. A deployment behind a
+	 * trusted reverse proxy that terminates client connections may override this via the filter
+	 * with a value it has itself validated. Do not route a forwarded header in here by default.
+	 *
+	 * @return string
+	 */
+	private static function rate_limit_ip(): string {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+		$ip = (string) apply_filters( 'zdz_magic_link_rate_limit_ip', $ip );
+		return sanitize_text_field( $ip );
+	}
+
+	/**
+	 * Get client IP address (for logging/display only — never for a security decision; use
+	 * rate_limit_ip() for anything that gates access).
 	 *
 	 * @return string
 	 */
