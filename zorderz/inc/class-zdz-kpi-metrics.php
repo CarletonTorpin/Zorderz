@@ -190,13 +190,45 @@ class ZDZ_KPI_Metrics {
 			return $metrics;
 		}
 
-		// Revenue denied: remove every dollar-valued metric. Counts stay.
-		$financial_keys = [ 'ytd_revenue', 'mtd_revenue' ];
-		foreach ( $financial_keys as $k ) {
-			unset( $metrics[ $k ] );
+		// Revenue denied: drop every FINANCIAL metric, decided per metric rather than by a fixed
+		// denylist. is_financial_metric() catches a metric that declares itself financial, one
+		// whose displayed value carries a currency sigil, or one whose key names a money concept.
+		// So a NEW dollar metric added later (e.g. through the zdz_kpi_metrics filter) is stripped
+		// even if nobody remembered to add it to a list. Counts (value "12", no sigil) stay:
+		// counts-only when denied.
+		foreach ( array_keys( $metrics ) as $key ) {
+			if ( self::is_financial_metric( (string) $key, $metrics[ $key ] ) ) {
+				unset( $metrics[ $key ] );
+			}
 		}
 
 		return $metrics;
+	}
+
+	/**
+	 * True if a KPI metric is monetary and must be withheld from a revenue-denied user. PURE
+	 * (no WordPress) so it is unit-testable and cannot be quietly weakened without a failing
+	 * test. Three signals, any one is enough, erring toward withholding:
+	 *   1. an explicit flag: $data['financial'] === true (set where a money metric is built);
+	 *   2. the displayed value carries a currency sigil ($, EUR, GBP, JPY);
+	 *   3. the key names a money concept (revenue, receivable, outstanding, profit, ...).
+	 *
+	 * @param string $key  Metric key.
+	 * @param mixed  $data Metric descriptor (usually array with 'value').
+	 * @return bool
+	 */
+	public static function is_financial_metric( string $key, $data ): bool {
+		if ( is_array( $data ) && ! empty( $data['financial'] ) ) {
+			return true;
+		}
+		if ( is_array( $data ) && isset( $data['value'] ) && is_string( $data['value'] )
+			&& preg_match( '/[$\x{20AC}\x{00A3}\x{00A5}]/u', $data['value'] ) ) {
+			return true;
+		}
+		return (bool) preg_match(
+			'/(revenue|receivable|_ar$|outstanding|\bmrr\b|\barr\b|turnover|takings|gross_profit|net_profit|sales_amount|income)/i',
+			$key
+		);
 	}
 
 	/* ------------------------------------------------------------------ */
