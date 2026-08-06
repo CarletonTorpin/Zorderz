@@ -142,6 +142,55 @@ class ZDZ_Data_Portability {
 	}
 
 	/**
+	 * Name ENDINGS that mark a secret. Checked as suffixes (not substrings) so that
+	 * 'token_count' or 'monkey' never match, but 'zdz_core_review_bridge_key' and
+	 * 'zsch_graph_token' do. Closes the class of miss where a credential's option name
+	 * carries no obvious marker word (the review_bridge_key export leak, Aug 2026).
+	 */
+	private static function secret_suffixes(): array {
+		return (array) apply_filters( 'zdz_export_secret_suffixes', array(
+			'_key', '_token', '_secret', '_pass', '_password',
+		) );
+	}
+
+	/**
+	 * Authoritative EXACT option names known to hold secrets, self-declaring per module.
+	 * A new credential option is excluded the moment it is added to its owning module's
+	 * list. Core's list is the single source of truth in ZDZ_Core_Settings::secret_fields();
+	 * other modules add theirs via the filter. This is the allowlist-style defense the
+	 * security audit asked for: exclusion by declaration, not by guessing at names.
+	 */
+	private static function secret_option_names(): array {
+		$names = array();
+		if ( class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'secret_fields' ) ) {
+			foreach ( (array) ZDZ_Core_Settings::secret_fields() as $f ) {
+				$names[] = 'zdz_core_' . $f;
+			}
+		}
+		$names = array_merge( $names, array(
+			'zsch_graph_token',   // Microsoft Graph OAuth bundle (access/refresh token nested in value)
+			'zsch_google_token',  // Google OAuth bundle, if connected
+			'zkv_poe_api_key',    // Knowledge-vault Poe key (also encrypted at rest)
+			'zic_fb_oauth',       // FreshBooks OAuth store, if present
+		) );
+		$names = (array) apply_filters( 'zdz_export_secret_option_names', $names );
+		return array_map( 'strtolower', array_values( array_unique( array_filter( $names ) ) ) );
+	}
+
+	/**
+	 * Nested array KEYS that mark a secret leaf inside an option value, redacted wherever
+	 * they appear at any depth. Catches a credential nested in a value even when the option
+	 * NAME is not obviously a secret (e.g. an OAuth token bundle stored under one option).
+	 */
+	private static function secret_value_keys(): array {
+		return (array) apply_filters( 'zdz_export_secret_value_keys', array(
+			'access_token', 'refresh_token', 'client_secret', 'api_key', 'apikey',
+			'private_key', 'webhook_secret', 'bearer', 'oauth_token', 'password',
+			'client_id', 'secret',
+		) );
+	}
+
+	/**
 	 * Table name suffixes to skip: ephemeral queues, regenerable caches, and
 	 * credential stores. These are not company data and must not travel.
 	 */
@@ -208,15 +257,64 @@ class ZDZ_Data_Portability {
 		return (array) apply_filters( 'zdz_export_tables', $out );
 	}
 
-	/** True if the given option/column name looks like a secret. */
+	/**
+	 * True if the given option/column name looks like a secret. Three layers, any one is
+	 * sufficient: (1) an authoritative exact-name list declared by the owning module,
+	 * (2) case-insensitive substring markers, (3) name-ending suffixes. Layered so a new
+	 * credential is excluded by default rather than leaking until someone notices. Used by
+	 * BOTH export (never emit) and import (never write), so hardening here fixes both.
+	 */
 	private static function is_secret( string $name ): bool {
 		$lc = strtolower( $name );
+		if ( in_array( $lc, self::secret_option_names(), true ) ) {
+			return true;
+		}
 		foreach ( self::secret_markers() as $m ) {
-			if ( false !== strpos( $lc, $m ) ) {
+			if ( '' !== $m && false !== strpos( $lc, $m ) ) {
+				return true;
+			}
+		}
+		foreach ( self::secret_suffixes() as $s ) {
+			$len = strlen( $s );
+			if ( $len && strlen( $lc ) >= $len && substr( $lc, -$len ) === $s ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Recursively null any array leaf whose KEY looks like a secret, so a credential nested
+	 * inside an option value never travels even if the option name itself was not caught.
+	 * $hit is set true (by reference) when anything is redacted, for the excluded manifest.
+	 *
+	 * @param mixed $value
+	 * @param bool  $hit
+	 * @return mixed
+	 */
+	private static function redact_secret_values( $value, bool &$hit ) {
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		$markers = self::secret_value_keys();
+		$out     = array();
+		foreach ( $value as $k => $v ) {
+			$lc        = strtolower( (string) $k );
+			$is_secret = false;
+			foreach ( $markers as $m ) {
+				if ( '' !== $m && false !== strpos( $lc, $m ) ) {
+					$is_secret = true;
+					break;
+				}
+			}
+			if ( $is_secret ) {
+				$out[ $k ] = null;
+				$hit       = true;
+			} else {
+				$out[ $k ] = self::redact_secret_values( $v, $hit );
+			}
+		}
+		return $out;
 	}
 
 	/* ---------------------------------------------------------------------- */
@@ -253,7 +351,15 @@ class ZDZ_Data_Portability {
 				$excluded[] = $name;
 				continue;
 			}
-			$out[ $name ] = maybe_unserialize( $row['option_value'] );
+			// Even for a non-secret name, deep-redact any secret-keyed leaves in the value
+			// (e.g. an OAuth token bundle) so a credential nested in a value never travels.
+			$val = maybe_unserialize( $row['option_value'] );
+			$hit = false;
+			$val = self::redact_secret_values( $val, $hit );
+			if ( $hit ) {
+				$excluded[] = $name . ' (secret value redacted)';
+			}
+			$out[ $name ] = $val;
 		}
 		return $out;
 	}
@@ -583,6 +689,30 @@ class ZDZ_Data_Portability {
 		return "PK\x03\x04" === $sig;
 	}
 
+	/**
+	 * True if a bundle-relative uploads path is safe to write under wp-content/uploads:
+	 * non-empty, no '..' path segment, and not absolute or a drive path. PURE (no WordPress
+	 * calls) so it is unit-testable in isolation, and public so the test suite can pin it.
+	 * The executable-type rejection (wp_check_filetype) is applied separately by the caller;
+	 * BOTH guards must survive every change to the extraction loop (see the security audit).
+	 *
+	 * @param string $rel Path relative to the uploads base.
+	 * @return bool
+	 */
+	public static function is_safe_upload_relpath( string $rel ): bool {
+		$rel = str_replace( '\\', '/', $rel );
+		if ( '' === $rel ) {
+			return false;
+		}
+		if ( in_array( '..', explode( '/', $rel ), true ) ) {
+			return false;
+		}
+		if ( preg_match( '#^([A-Za-z]:)?/#', $rel ) ) {
+			return false;
+		}
+		return true;
+	}
+
 	/** Write every uploads/* entry from the zip into wp-content/uploads. Returns the file count. */
 	private static function extract_uploads( ZipArchive $zip ): int {
 		$up   = wp_get_upload_dir();
@@ -595,8 +725,8 @@ class ZDZ_Data_Portability {
 			}
 			$rel = str_replace( '\\', '/', substr( $name, strlen( 'uploads/' ) ) );
 			// Reject empty, path-traversal segments, and absolute/drive paths: only ever write
-			// under uploads. ('..' must be a whole segment, so 'report..final.jpg' still passes.)
-			if ( '' === $rel || in_array( '..', explode( '/', $rel ), true ) || preg_match( '#^([A-Za-z]:)?/#', $rel ) ) {
+			// under uploads. Logic is in the pure, unit-tested is_safe_upload_relpath() helper.
+			if ( ! self::is_safe_upload_relpath( $rel ) ) {
 				continue;
 			}
 			// Only write file types WordPress itself permits as uploads, never executables
