@@ -21,6 +21,7 @@
     "scripts": {
         "test": "phpunit -c phpunit.xml.dist",
         "lint": "phpcs -q --standard=phpcs.xml.dist",
+        "security-scan": "phpcs -q --standard=phpcs-security.xml.dist",
         "sentinel": "bash .github/scripts/security-sentinel.sh"
     }
 }

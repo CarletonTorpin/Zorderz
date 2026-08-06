@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  The BLOCKING coding-standards gate. Security and SQL correctness ONLY, so it stays green on a
+  clean PR and flags real new risk instead of drowning reviewers in pre-existing style findings
+  on a codebase that predates WPCS. The full, aspirational standard lives in phpcs.xml.dist for
+  gradual cleanup (composer lint). CI runs THIS one, on changed files only (see security.yml).
+-->
+<ruleset name="Zorderz-Security">
+    <description>Zorderz security gate: only sniffs that catch a real vulnerability.</description>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+    <!-- Only errors block; no style warnings to dilute the signal. -->
+    <arg name="warning-severity" value="0"/>
+
+    <rule ref="WordPress.Security"/>
+    <rule ref="WordPress.DB.PreparedSQL"/>
+    <rule ref="WordPress.DB.PreparedSQLPlaceholders"/>
+
+    <config name="testVersion" value="7.4-"/>
+    <rule ref="PHPCompatibilityWP"/>
+
+    <exclude-pattern>*/bundled/*</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/tests/*</exclude-pattern>
+    <exclude-pattern>*/dist/*</exclude-pattern>
+</ruleset>
