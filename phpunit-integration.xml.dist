@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Integration suite: security invariants that need the WordPress test harness (roles, users,
+  options, $wpdb). Run in the CI "integration" job after bin/install-wp-tests.sh provisions the
+  WordPress test library and a database.
+-->
+<phpunit
+    bootstrap="tests/bootstrap-integration.php"
+    colors="true"
+    failOnWarning="true"
+    failOnRisky="true"
+    cacheResult="false">
+    <testsuites>
+        <testsuite name="integration">
+            <directory>tests/integration</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

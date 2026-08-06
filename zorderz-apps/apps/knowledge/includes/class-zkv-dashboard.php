@@ -1815,9 +1815,8 @@ Respond with ONLY the JSON object.";
 		header( 'Expires: 0' );
 		header( 'X-Robots-Tag: noindex, nofollow' );
 
-		// Content headers.
-		header( 'Content-Type: ' . $mime );
-		header( 'Content-Disposition: inline; filename="' . sanitize_file_name( $name ) . '"' );
+		// Content headers (Content-Type + nosniff + safe Content-Disposition, shared helper).
+		zkv_serve_file_headers( $mime, $name );
 		header( 'Content-Length: ' . filesize( $real_path ) );
 
 		// Stream the file and exit.
