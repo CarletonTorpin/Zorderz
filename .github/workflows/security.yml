@@ -77,17 +77,20 @@ jobs:
           coverage: none
           tools: composer
       - run: composer install --no-interaction --prefer-dist
-      - name: PHP_CodeSniffer (security ruleset, changed PHP only)
-        # Scoped to changed files with the security-only ruleset so the gate stays green on a
-        # clean PR (the codebase predates WPCS; a full-tree style scan would be red forever and
-        # train everyone to ignore it). Full style cleanup is `composer lint` (phpcs.xml.dist).
+      - name: PHP_CodeSniffer (security ruleset, changed LINES only)
+        # Runs the security-only ruleset, then reports ONLY findings that land on the lines this
+        # change actually touched (.github/scripts/phpcs-changed-lines.py). The codebase predates
+        # WPCS, so a whole-file scan of any touched legacy file is red forever and trains everyone
+        # to ignore the gate; diff-line scoping keeps a contributor answerable for their own diff
+        # while still catching a real new vulnerability. Full cleanup is `composer lint`.
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
           [ -z "$base" ] && base="HEAD~1"
           changed="$(git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.php' | grep -vE '(^|/)(bundled|vendor|tests|dist)/' || true)"
           if [ -z "$changed" ]; then echo "no PHP changes to scan"; exit 0; fi
-          echo "Scanning:"; echo "$changed"
-          vendor/bin/phpcs -q --standard=phpcs-security.xml.dist --report=full $changed
+          echo "Scanning changed files (reporting only changed lines):"; echo "$changed"
+          vendor/bin/phpcs -q --standard=phpcs-security.xml.dist --report=json $changed > phpcs-report.json || true
+          python3 .github/scripts/phpcs-changed-lines.py "$base" HEAD phpcs-report.json
 
   integration:
     name: Integration tests (WordPress harness)
@@ -116,6 +119,11 @@ jobs:
           extensions: mysqli
           tools: composer
       - run: composer install --no-interaction --prefer-dist
+      - name: Install Subversion
+        # install-wp-tests.sh fetches the WordPress test suite over svn, which ubuntu-latest no
+        # longer ships by default (that was the exit 127 "command not found"). This job stays
+        # continue-on-error / advisory regardless.
+        run: sudo apt-get update && sudo apt-get install -y subversion
       - name: Install the WordPress test suite
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1:3306 latest
       - name: PHPUnit integration suite
