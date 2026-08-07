@@ -7,6 +7,17 @@
  * @package Zorderz\Tests
  */
 
+// Load Composer's autoloader so the Yoast PHPUnit Polyfills library (which the WordPress test
+// bootstrap requires) is available before we hand off to the WP Core bootstrap. Also point WP
+// at the Polyfills explicitly, so it is found whether or not autoloading has already run.
+$_zdz_autoload = dirname( __DIR__ ) . '/vendor/autoload.php';
+if ( file_exists( $_zdz_autoload ) ) {
+	require_once $_zdz_autoload;
+}
+if ( ! defined( 'WP_TESTS_PHPUNIT_POLYFILLS_PATH' ) ) {
+	define( 'WP_TESTS_PHPUNIT_POLYFILLS_PATH', dirname( __DIR__ ) . '/vendor/yoast/phpunit-polyfills' );
+}
+
 $_tests_dir = getenv( 'WP_TESTS_DIR' );
 if ( ! $_tests_dir ) {
 	$_tests_dir = rtrim( sys_get_temp_dir(), '/\\' ) . '/wordpress-tests-lib';
