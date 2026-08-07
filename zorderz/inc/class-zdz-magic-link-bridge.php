@@ -584,7 +584,7 @@ class ZDZ_Magic_Link_Bridge {
 	 * @return string
 	 */
 	private static function rate_limit_ip(): string {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '0.0.0.0';
 		$ip = (string) apply_filters( 'zdz_magic_link_rate_limit_ip', $ip );
 		return sanitize_text_field( $ip );
 	}
