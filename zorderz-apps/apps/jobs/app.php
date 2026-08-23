@@ -152,9 +152,11 @@ require_once ZJOB_DIR . 'includes/class-zjob-notes.php';
 // init() only registers filters/subscribers (guarded); it seeds nothing and is safe to
 // call at load, before after_setup_theme, so the flow definition/namespaces/derive-state
 // filters and the audit-seam subscriber are in place before any request touches Flow.
+require_once ZJOB_DIR . 'includes/class-zjob-project-signal.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-visibility.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-resolver.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-sweep.php';
 if ( class_exists( 'Zjob_Project' ) && method_exists( 'Zjob_Project', 'init' ) ) {
 	Zjob_Project::init();
 }
@@ -184,6 +186,7 @@ function zjob_activate() {
 function zjob_deactivate() {
 	wp_clear_scheduled_hook( 'zjob_heartbeat' );
 	wp_clear_scheduled_hook( 'zjob_close_sweep' );
+	wp_clear_scheduled_hook( 'zjob_project_sweep' );
 }
 
 /**
@@ -250,6 +253,12 @@ add_action( 'plugins_loaded', function () {
 		ZJOB_Photos::init();
 	}
 	ZJOB_AJAX::init();
+
+	// B4 — the budgeted "every estimate is a Project" sweep: registers its 15-min schedule +
+	// cron callback and self-heals the event if unscheduled. It NEVER unschedules itself.
+	if ( class_exists( 'Zjob_Project_Sweep' ) ) {
+		Zjob_Project_Sweep::init();
+	}
 
 	// Admin settings screen (Settings -> Zorderz Jobs), incl. the single-operator toggle.
 	// Admin requests only; hooks admin_menu/admin_init so it must register before those fire.
