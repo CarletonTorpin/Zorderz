@@ -54,6 +54,71 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
    approach gives users immediate visual feedback instead of a blank screen. */
 
 /* ================================================================
+   DESIGN-TOKEN ALIAS SUB-TIER (Tier-2b) — additive, presentational only
+   ----------------------------------------------------------------
+   Some ported apps still reference pre-rename / Material-style --sys-*
+   token names this theme no longer DEFINES (canonical names live in
+   style.css TIER-2). Left undefined, each such reference falls back to
+   whatever hardcoded literal the app supplied — a value frozen in one
+   mode that never follows the theme into dark / system / sunlight ("the
+   fallback IS the bug's disguise"). This single :root block maps every
+   such stale name onto its canonical token via var(), so the name
+   resolves — and reflows — across all four modes with ZERO edits in the
+   apps. Declared once; re-resolves in each element's cascade because CSS
+   custom properties substitute at use time (so ordering vs. style.css is
+   irrelevant).
+
+   EXCLUDED ON PURPOSE — aliasing these would STRIP intended branding or
+   is unnecessary:
+     • --sys-accent            (accent / ember — a brand colour)
+     • --sys-surface-2, --sys-surface-3  (the raised-amber vs neutral
+       conflict — no single neutral target is correct)
+     • --sys-tint-border       (already a canonical token in style.css)
+     • font-family tokens       (a font does not vary by theme, so its
+       fallback is not a disguised bug)
+   ================================================================ */
+:root{
+  /* text / ink */
+  --sys-on-surface: var(--sys-text);
+  --sys-color-on-surface: var(--sys-text);
+  --sys-color-on-surface-variant: var(--sys-text-sec);
+  --sys-text-muted: var(--sys-text-ter);
+  --sys-text-dim: var(--sys-text-ter);
+  --sys-on-primary: var(--sys-text-brand);
+  --sys-color-on-primary-container: var(--sys-text);
+  --sys-color-on-secondary-container: var(--sys-text);
+
+  /* brand / primary */
+  --sys-primary: var(--sys-brand);
+  --sys-color-primary: var(--sys-brand);
+  --sys-brand-active: var(--sys-brand-dark);
+  --sys-brand-soft: var(--sys-brand-light);
+  --sys-brand-faint: var(--sys-brand-light);
+  --sys-color-primary-container: var(--sys-brand-light);
+
+  /* borders / outlines */
+  --sys-outline: var(--sys-border);
+  --sys-outline-variant: var(--sys-border);
+  --sys-color-outline: var(--sys-border);
+
+  /* status */
+  --sys-danger: var(--sys-error);
+  --sys-color-error: var(--sys-error);
+  --sys-color-success: var(--sys-success);
+
+  /* surfaces / backgrounds */
+  --sys-bg-raised: var(--sys-surface-raised);
+  --sys-bg-hover: var(--sys-bg-alt);
+  --sys-surface-variant: var(--sys-surface-subtle);
+  --sys-color-surface-container: var(--sys-surface-raised);
+  --sys-color-secondary-container: var(--sys-surface-subtle);
+
+  /* status tints — the "danger" spelling of the canonical "error" pair */
+  --sys-tint-danger-bg: var(--sys-tint-error-bg);
+  --sys-tint-danger-fg: var(--sys-tint-error-fg);
+}
+
+/* ================================================================
    LAYOUT — Views
    ================================================================ */
 .view{display:none;width:100%;min-height:100vh;min-height:100dvh}

@@ -5,15 +5,17 @@
  * Pure CSS, no external dependencies. Designed for the WordPress admin context.
  *
  * Color palette
- *   Primary blue   : #2C5F8A
- *   Primary hover  : #234B6E
- *   Slate 900      : #1e293b
- *   Slate 600      : #475569
- *   Slate 400      : #94a3b8
- *   Slate 200      : #e2e8f0
- *   Slate 100      : #f1f5f9
- *   Slate 50       : #f8fafc
- *   White          : #ffffff
+ *   Brand colours are driven by the theme design tokens, so a white-label
+ *   business re-skins this dashboard just by setting its Business Profile
+ *   palette. The hexes below are only the SHIPPED FALLBACK (the default navy),
+ *   never a hardcoded brand literal:
+ *     Primary        : var(--sys-brand)        (fallback navy)
+ *     Primary hover  : var(--sys-brand-hover)  (fallback darker navy)
+ *     Primary active : var(--sys-brand-dark)   (fallback darkest navy)
+ *   Neutral greys are context chrome (not brand) and stay literal:
+ *     Slate 900 : #1e293b   Slate 600 : #475569   Slate 400 : #94a3b8
+ *     Slate 200 : #e2e8f0   Slate 100 : #f1f5f9   Slate 50  : #f8fafc
+ *     White     : #ffffff
  */
 
 /* =========================================================================
@@ -65,12 +67,12 @@
 }
 
 .zdz-tab:hover {
-  color: #2C5F8A;
+  color: var(--sys-brand, #2C5F8A);
 }
 
 .zdz-tab.active {
-  color: #2C5F8A;
-  border-bottom-color: #2C5F8A;
+  color: var(--sys-brand, #2C5F8A);
+  border-bottom-color: var(--sys-brand, #2C5F8A);
   font-weight: 600;
 }
 
@@ -167,8 +169,8 @@
 
 .zdz-toolbar input:focus,
 .zdz-toolbar select:focus {
-  border-color: #2C5F8A;
-  box-shadow: 0 0 0 3px rgba(44, 95, 138, 0.12);
+  border-color: var(--sys-brand, #2C5F8A);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-brand, #2C5F8A) 12%, transparent);
 }
 
 .zdz-toolbar select {
@@ -232,19 +234,19 @@
 
 .zdz-btn-primary {
   color: #ffffff;
-  background: #2C5F8A;
-  border-color: #2C5F8A;
+  background: var(--sys-brand, #2C5F8A);
+  border-color: var(--sys-brand, #2C5F8A);
 }
 
 .zdz-btn-primary:hover {
-  background: #234B6E;
-  border-color: #234B6E;
+  background: var(--sys-brand-hover, #234B6E);
+  border-color: var(--sys-brand-hover, #234B6E);
   color: #ffffff;
 }
 
 .zdz-btn-primary:active {
-  background: #1c3d58;
-  border-color: #1c3d58;
+  background: var(--sys-brand-dark, #1c3d58);
+  border-color: var(--sys-brand-dark, #1c3d58);
 }
 
 .zdz-btn:disabled,
@@ -500,8 +502,8 @@
 }
 
 .zdz-panel-tab.active {
-  color: #2C5F8A;
-  border-bottom-color: #2C5F8A;
+  color: var(--sys-brand, #2C5F8A);
+  border-bottom-color: var(--sys-brand, #2C5F8A);
   font-weight: 600;
 }
 
@@ -550,8 +552,8 @@
 .zdz-field-group input:focus,
 .zdz-field-group select:focus,
 .zdz-field-group textarea:focus {
-  border-color: #2C5F8A;
-  box-shadow: 0 0 0 3px rgba(44, 95, 138, 0.12);
+  border-color: var(--sys-brand, #2C5F8A);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-brand, #2C5F8A) 12%, transparent);
 }
 
 .zdz-field-group input:read-only {
@@ -573,7 +575,7 @@
 }
 
 .zdz-toggle-track.active {
-  background: #2C5F8A;
+  background: var(--sys-brand, #2C5F8A);
 }
 
 .zdz-toggle-thumb {
@@ -743,7 +745,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #2C5F8A;
+  background: var(--sys-brand, #2C5F8A);
   border: 3px solid #ffffff;
   box-shadow: 0 0 0 2px #e2e8f0;
   z-index: 1;
@@ -814,8 +816,8 @@
 }
 
 .zdz-pagination-btns button.active {
-  background: #2C5F8A;
-  border-color: #2C5F8A;
+  background: var(--sys-brand, #2C5F8A);
+  border-color: var(--sys-brand, #2C5F8A);
   color: #ffffff;
   font-weight: 600;
 }
@@ -853,7 +855,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid #e2e8f0;
-  border-top-color: #2C5F8A;
+  border-top-color: var(--sys-brand, #2C5F8A);
   border-radius: 50%;
   animation: zdz-spin 0.7s linear infinite;
 }

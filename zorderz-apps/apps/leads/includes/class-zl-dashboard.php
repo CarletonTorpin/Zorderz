@@ -10,7 +10,7 @@
  * BUSINESS CONTEXT:
  * Built for the business. Connects FreshBooks (invoices) to Nutshell CRM (leads).
  * Supports strict territory assignments (each salesperson owns one or more territory codes).
- * Uses Gemini-3.1-Pro (via Poe API) for 3-layer AI product filtering and description refinement.
+ * Uses the configured AI model (via the shared gateway) for 3-layer AI product filtering and description refinement.
  *
  * DATABASE USAGE:
  * - Reads/Writes: wp_zl_batches (Stores generation runs)
@@ -665,7 +665,12 @@ class ZL_Dashboard {
 				// It will NOT be loaded during enrichment (the chunked path is used instead).
 			}
 
-			$ai_model = get_option( 'zl_ai_model', 'Gemini-3.1-Pro' );
+			// Neutral default: resolve the display label from config (the model
+			// registry), never a hardcoded handle.
+			$ai_model = get_option( 'zl_ai_model', '' );
+			if ( '' === $ai_model && class_exists( 'ZDZ_Model_Registry' ) ) {
+				$ai_model = (string) ZDZ_Model_Registry::model_for( 'planner' );
+			}
 
 			// v1.5.3 — Surface fallback and diagnostic info from FreshBooks
 			$fb_fallback = ! empty( $result['_fallback_used'] );
@@ -698,10 +703,10 @@ class ZL_Dashboard {
 	 * causing the web server to kill the PHP process.
 	 *
 	 * Sends all unique line-item names from the already-fetched invoices to
-	 * Gemini-3.1-Pro to identify which items match the user's product filter.
+	 * the AI model to identify which items match the user's product filter.
 	 */
 	public function ajax_expand_filter() {
-		@set_time_limit( 300 ); // Allow up to 5 min for Gemini AI thinking (thinking_budget=32768)
+		@set_time_limit( 300 ); // Allow up to 5 min for AI thinking (thinking_budget models)
 		check_ajax_referer( 'zl_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'zdz_access_app' ) ) {
 			wp_send_json_error( 'Unauthorized' );
@@ -1238,11 +1243,11 @@ class ZL_Dashboard {
 
 	/**
 	 * Step 4.5: AI strict validation — verify each selected lead against the product filter.
-	 * Uses Gemini 3.1 Pro with high reasoning to reject false positives.
+	 * Uses the AI model with high reasoning to reject false positives.
 	 * This prevents sending irrelevant leads to Nutshell.
 	 */
 	public function ajax_ai_validate() {
-		@set_time_limit( 300 ); // Gemini strict validation per lead (AI calls)
+		@set_time_limit( 300 ); // AI strict validation per lead (AI calls)
 		check_ajax_referer( 'zl_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'zdz_access_app' ) ) {
 			wp_send_json_error( 'Unauthorized' );
@@ -1365,7 +1370,7 @@ class ZL_Dashboard {
 	 * Rewrites descriptions to be <101 characters to meet Nutshell API constraints.
 	 */
 	public function ajax_ai_refine() {
-		@set_time_limit( 300 ); // Gemini AI rewriting descriptions (<101 chars)
+		@set_time_limit( 300 ); // AI rewriting descriptions (<101 chars)
 		check_ajax_referer( 'zl_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'zdz_access_app' ) ) {
 			wp_send_json_error( 'Unauthorized' );
@@ -1569,7 +1574,7 @@ class ZL_Dashboard {
 	 * Generates a brief AI summary of the generated batch and marks it complete.
 	 */
 	public function ajax_finalize() {
-		@set_time_limit( 300 ); // Gemini AI batch summary generation
+		@set_time_limit( 300 ); // AI batch summary generation
 		check_ajax_referer( 'zl_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'zdz_access_app' ) ) {
 			wp_send_json_error( 'Unauthorized' );
@@ -3556,9 +3561,43 @@ class ZL_Dashboard {
 					'message' => 'Generation failed.', 'status' => 'error',
 				), $stall_info ) );
 			} elseif ( $batch && in_array( $batch['status'], array( 'generating', 'running' ), true ) ) {
-				// v2.0.0: Batch is still running but progress transient expired.
-				// This happens when the user returns after the 1-hour transient TTL.
-				// Tell the frontend it's still running so polling continues.
+				// Poller-side self-heal: the progress transient has expired AND the
+				// row still says generating/running. If nothing has touched the
+				// batch for 30+ minutes it is a zombie (its worker died mid-flight,
+				// so the cron reaper's heartbeat can never clear it and the widget
+				// would poll a corpse forever). Reap it in place so widget.js stops
+				// its timer.
+				//
+				// Age is computed IN SQL (a PHP strtotime vs time() would be off by
+				// the UTC offset): the rows are current_time('mysql', true) (UTC),
+				// so the comparison is TIMESTAMPDIFF(... COALESCE(updated_at,
+				// created_at), UTC_TIMESTAMP()) — one basis on both sides. The
+				// AND status IN (...) clause makes a second poll a no-op (idempotent).
+				$reaped = $wpdb->query( $wpdb->prepare(
+					"UPDATE {$wpdb->prefix}zl_batches
+					 SET status = 'failed',
+					     error_message = %s,
+					     updated_at = %s
+					 WHERE id = %d
+					   AND status IN ('generating', 'running')
+					   AND TIMESTAMPDIFF(MINUTE, COALESCE(updated_at, created_at), UTC_TIMESTAMP()) > 30",
+					'Timed out — no progress for 30+ minutes.',
+					current_time( 'mysql', true ),
+					$batch_id
+				) );
+
+				if ( $reaped ) {
+					if ( class_exists( 'ZL_Progress' ) ) {
+						ZL_Progress::fail( $batch_id, 'Timed out — no progress for 30+ minutes.' );
+					}
+					wp_send_json_success( array_merge( array(
+						'batch_id' => $batch_id, 'step' => 'error', 'pct' => 0,
+						'message' => 'Generation timed out — no progress for 30+ minutes.', 'status' => 'error',
+					), $stall_info ) );
+				}
+
+				// Not old enough to reap — still legitimately running. Tell the
+				// frontend to keep polling for the next heartbeat.
 				wp_send_json_success( array_merge( array(
 					'batch_id' => $batch_id, 'step' => 'running', 'pct' => 0,
 					'message' => 'Batch is running — progress data expired, waiting for next update...', 'status' => 'running',

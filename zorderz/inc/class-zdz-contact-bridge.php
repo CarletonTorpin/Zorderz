@@ -619,7 +619,7 @@ class ZDZ_Contact_Bridge {
 		if ( preg_match_all( '/\(\s*([A-Za-z][A-Za-z0-9 ,\/&+\.\-]*?)\s*\)/', $text, $groups ) ) {
 			$deny = array( 'TAX', 'INCL', 'EA', 'QTY', 'PER', 'NA', 'TBD', 'NEW', 'OLD', 'SEE', 'PO', 'CC' );
 			foreach ( $groups[1] as $inner ) {
-				// Split composite groups: "CT/FR", "CT, FR", "CT & FR", "CT and FR", "CT+FR".
+				// Split composite groups: "AB/CD", "AB, CD", "AB & CD", "AB and CD", "AB+CD".
 				$tokens = preg_split( '/\s*(?:\/|,|&|\+|\band\b)\s*/i', trim( $inner ) );
 				foreach ( $tokens as $tok ) {
 					$tok = strtoupper( trim( $tok ) );
@@ -721,9 +721,19 @@ class ZDZ_Contact_Bridge {
 		if ( in_array( $tier, array( 'kiosk', 'zdz_general', 'general' ), true ) ) {
 			return true;
 		}
-		$u = $uid > 0 ? get_userdata( $uid ) : null;
-		if ( $u && in_array( 'zdz_general', (array) $u->roles, true ) ) {
-			return true;
+		// Shared-device detection by TRAIT, not a bare role-slug match. Consult the
+		// canonical predicate when it is available; fall back to the raw slug only
+		// when it is not, keeping this most-restrictive-wins gate fail-closed either
+		// way (a miss never grants MORE disclosure).
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) ) {
+			if ( ZDZ_User_Roles::is_shared_device( $uid ) ) {
+				return true;
+			}
+		} else {
+			$u = $uid > 0 ? get_userdata( $uid ) : null;
+			if ( $u && in_array( 'zdz_general', (array) $u->roles, true ) ) {
+				return true;
+			}
 		}
 		return false;
 	}

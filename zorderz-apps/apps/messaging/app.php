@@ -105,7 +105,7 @@
  * ROLE: Bootstrap. Constants, schema activation, class loading, theme hook.
  *
  * BUSINESS CONTEXT:
- * Zorderz Company (TSC) needed internal team messaging that lives
+ * A business needs internal team messaging that lives
  * *inside* the Field OS rather than Slack/Teams. The MEP does one-to-one DMs
  * and department channels (#announcements, #sales, #ops, #mfg, #techs) with
  * @mentions, push notifications, and inline previews of FreshBooks references.

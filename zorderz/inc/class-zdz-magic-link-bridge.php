@@ -91,6 +91,13 @@ class ZDZ_Magic_Link_Bridge {
 		// user receives ONE email containing both the clickable link and a 6-digit
 		// code. This eliminates the separate "Send me a code" step entirely.
 		add_filter( 'wp_mail', [ $this, 'inject_otp_into_magic_login_email' ], 99 );
+
+		// Alias-tolerant login: rewrite a recognised login alias in the POST fields
+		// to the account's canonical user_email BEFORE the login plugin's own exact
+		// lookup runs. Registered unconditionally but self-gated on Magic-Login-Pro
+		// presence inside the handler (the OTP-path resolver works standalone, so
+		// Zorderz must not hard-assume that plugin). init:0 = earliest, before auth.
+		add_action( 'init', [ $this, 'premap_login_alias' ], 0 );
 	}
 
 	/**
@@ -199,8 +206,10 @@ class ZDZ_Magic_Link_Bridge {
 		$request_id = $request->get_param( 'request_id' );
 		$email      = $request->get_param( 'email' );
 
-		// Verify the email belongs to a valid user (don't reveal which)
-		$user = get_user_by( 'email', $email );
+		// Verify the email belongs to a valid user (don't reveal which). Resolves the
+		// account email OR an admin-configured login alias; returns null on a genuine
+		// miss, so the anti-enumeration no-op below is unchanged.
+		$user = self::resolve_login_user( $email );
 		if ( ! $user ) {
 			// Return success even for invalid emails to avoid user enumeration
 			return new WP_REST_Response( [ 'success' => true ], 200 );
@@ -644,8 +653,10 @@ class ZDZ_Magic_Link_Bridge {
 		}
 		set_transient( $ip_key, $count + 1, self::REQUEST_TTL );
 
-		// Verify the email belongs to a valid user (but don't reveal which)
-		$user = get_user_by( 'email', $email );
+		// Verify the email belongs to a valid user (but don't reveal which). Account
+		// email OR an admin-configured alias; null on a genuine miss preserves the
+		// anti-enumeration no-op below.
+		$user = self::resolve_login_user( $email );
 		if ( ! $user ) {
 			// Return success even for invalid emails to avoid user enumeration.
 			// We still delay the same amount so timing attacks don't work.
@@ -734,9 +745,11 @@ class ZDZ_Magic_Link_Bridge {
 			return $args;
 		}
 
-		// Determine which user this email is for
+		// Determine which user this email is for. The recipient may be an account
+		// email OR a configured login alias; resolve both. A genuine miss returns
+		// the mail untouched (unchanged behaviour).
 		$to   = is_array( $args['to'] ) ? $args['to'][0] : $args['to'];
-		$user = get_user_by( 'email', $to );
+		$user = self::resolve_login_user( $to );
 		if ( ! $user ) {
 			return $args;
 		}
@@ -902,5 +915,121 @@ class ZDZ_Magic_Link_Bridge {
 		// Delegate to the main bridge logic
 		error_log( 'ZDZ_Magic_Link_Bridge: wp_redirect fallback caught redirect for ' . $user->user_login );
 		return $this->filter_login_redirect( $location, $location, $user );
+	}
+
+	/**
+	 * Resolve a login identifier to a WP_User: the account's own user_email first,
+	 * then an admin-configured login alias. Returns null on a genuine miss so every
+	 * caller keeps its existing anti-enumeration behaviour (each already no-ops
+	 * silently on null and never reveals whether an address exists).
+	 *
+	 * Carries NO domain assumption — it is exact-match-then-alias, fully generic.
+	 * With no aliases configured anywhere, this is byte-identical to the previous
+	 * direct get_user_by('email', …) call.
+	 *
+	 * @param string $email
+	 * @return WP_User|null
+	 */
+	public static function resolve_login_user( $email ) {
+		$email = trim( (string) $email );
+		if ( '' === $email ) {
+			return null;
+		}
+		$user = get_user_by( 'email', $email );
+		if ( $user instanceof WP_User ) {
+			return $user;
+		}
+		return self::user_by_alias( $email );
+	}
+
+	/**
+	 * Find the user whose zdz_login_aliases meta contains this address. Bounded scan
+	 * (only users that actually carry the alias meta), lower-cased comparison, first
+	 * match wins. Returns null when nothing matches.
+	 *
+	 * @param string $email
+	 * @return WP_User|null
+	 */
+	public static function user_by_alias( $email ) {
+		$needle = strtolower( trim( (string) $email ) );
+		if ( '' === $needle || ! is_email( $needle ) ) {
+			return null;
+		}
+		$cap   = (int) apply_filters( 'zdz_login_alias_scan_cap', 500 );
+		$users = get_users( [
+			'meta_key' => 'zdz_login_aliases',
+			'number'   => $cap,
+			'fields'   => 'all',
+		] );
+		foreach ( $users as $user ) {
+			$aliases = get_user_meta( $user->ID, 'zdz_login_aliases', true );
+			if ( ! is_array( $aliases ) ) {
+				continue;
+			}
+			foreach ( $aliases as $alias ) {
+				if ( strtolower( trim( (string) $alias ) ) === $needle ) {
+					return $user;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * init:0 — rewrite a recognised login alias in the login POST fields to the
+	 * account's canonical user_email, BEFORE the login plugin's own exact lookup
+	 * runs. Only email-shaped values that are NOT already a real account email but
+	 * ARE a known alias are rewritten; everything else is left untouched.
+	 *
+	 * Gated on Magic-Login-Pro presence because this pre-map is coupled to that
+	 * plugin's POST field names — Zorderz must not hard-assume it. The OTP-code
+	 * resolver (resolve_login_user) works standalone and is unaffected by this gate.
+	 * The candidate-field list is filterable so a different login mechanism can
+	 * name its own fields.
+	 *
+	 * @return void
+	 */
+	public function premap_login_alias() {
+		if ( ! self::has_magic_login() ) {
+			return;
+		}
+		if ( empty( $_POST ) ) {
+			return;
+		}
+		$fields = (array) apply_filters( 'zdz_login_alias_fields', [ 'log', 'user_login', 'email' ] );
+		foreach ( $fields as $field ) {
+			if ( ! is_string( $field ) || empty( $_POST[ $field ] ) || ! is_string( $_POST[ $field ] ) ) {
+				continue;
+			}
+			$candidate = trim( wp_unslash( $_POST[ $field ] ) );
+			// Only email-shaped values can be an alias; a username login is left alone.
+			if ( '' === $candidate || ! is_email( $candidate ) ) {
+				continue;
+			}
+			// Already the canonical account email — nothing to rewrite.
+			if ( get_user_by( 'email', $candidate ) instanceof WP_User ) {
+				continue;
+			}
+			$user = self::user_by_alias( $candidate );
+			if ( $user instanceof WP_User ) {
+				$_POST[ $field ] = $user->user_email;
+			}
+		}
+	}
+
+	/**
+	 * Is Magic Login Pro present? Detected by its known class / function / constant
+	 * (front-end safe — does not depend on is_plugin_active(), which is admin-only).
+	 * Always passes through the zdz_has_magic_login filter so a site can force the
+	 * answer for a different but field-compatible login mechanism.
+	 *
+	 * @return bool
+	 */
+	private static function has_magic_login() {
+		$present = class_exists( 'Magic_Login_Pro' )
+			|| function_exists( 'magic_login_pro' )
+			|| defined( 'MAGIC_LOGIN_PRO_FILE' )
+			|| defined( 'MAGIC_LOGIN_VERSION' );
+		return (bool) apply_filters( 'zdz_has_magic_login', $present );
 	}
 }

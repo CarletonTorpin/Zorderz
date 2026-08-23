@@ -650,8 +650,8 @@ class ZEST_Estimate_Engine {
 		$p[] = "## Currency\n"
 			. "Return every money value as a number. When reading, strip \"\$\" and thousands commas, and treat wrapping parentheses \"(175.00)\" or a leading minus (\"-\" or the U+2212 \u{2212} sign) as NEGATIVE.";
 		$p[] = "## House-paperwork rules to encode (common FreshBooks exports)\n"
-			. "- A rep/initials code such as \"(GT)\" or a trailing \"- (AS)\" identifies the SALESPERSON: put the code (letters only, e.g. \"GT\" or \"AS\") in \"salesperson\". STILL keep the \"Location\" line itself as a kind:\"context\" line — do not delete it and do not move its text.\n"
-			. "- A line worded like \"per Geoff\" or \"per Dana\" is a manual DISCOUNT/credit: kind:\"discount\", negative line_total, and put the name (\"Geoff\"/\"Dana\") in \"attribution\".\n"
+			. "- A rep/initials code such as \"(AB)\" or a trailing \"- (CD)\" identifies the SALESPERSON: put the code (letters only, e.g. \"AB\" or \"CD\") in \"salesperson\". STILL keep the \"Location\" line itself as a kind:\"context\" line — do not delete it and do not move its text.\n"
+			. "- A line worded like \"per Alex\" or \"per Jordan\" is a manual DISCOUNT/credit: kind:\"discount\", negative line_total, and put the name (\"Alex\"/\"Jordan\") in \"attribution\".\n"
 			. "- A totals-section line like \"5% Discount\" is a HEADER discount, not an item: set discount_type:\"percent\" and discount_value:5 (the number only). A flat total-section discount like \"Discount -\$50\" → discount_type:\"amount\", discount_value:50. Do NOT also emit it as a line item.\n"
 			. "- A grouped/lot line like \"(4) ... Total for Lot\" is ONE item: kind:\"item\", is_lot:true, quantity 1, and line_total equal to the printed lot total (keep the \"(4)\" in the description).";
 		$p[] = "## Customer\n"

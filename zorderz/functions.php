@@ -120,6 +120,9 @@ require_once get_template_directory() . '/inc/class-zdz-compensation.php'; // v1
 require_once get_template_directory() . '/inc/class-zdz-answer-authority.php'; // v1.1.0: Answer Authority — confidence tier (confirmed>derived>inferred>unknown, propagates through arithmetic) + the SINGLE outbound gate (chat/email/push/digest/stream) enforcing INV-12. Ships neutral; self-boots.
 require_once get_template_directory() . '/inc/class-zdz-rule-governance.php'; // v1.1.0: Rule Governance — rules as typed parameterised objects; the prompt is a rendering of the rule set. A cited rule must exist (fails loudly); the safety floor is non-overridable. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-model-registry.php'; // v1.1.0: Model Registry — per-task model slots replacing hardcoded model names; capability/fallback/retired maps ship EMPTY; base model read from ZDZ_Core_Settings; Poe stays the v1 gateway. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-request-guard.php';   // Wave A: Zdz_Request_Guard — wall-clock request budget (reserve-next-call), per-cURL-handle timeout clamp, crash-safe global cron lock. Ends worker-exhaustion 502s. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-service-breaker.php'; // Wave A: Zdz_Service_Breaker — general per-service circuit breaker (3 fails → 15-min pause) + auth-wall. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-sweep.php';           // Wave A: Zdz_Sweep — budgeted wall-clock background sweep composing guard+breaker (cursor, lock, starved-pass logging). The shared sweep Plan 01/02 consume. Self-boots.
 
 require_once get_template_directory() . '/inc/class-zdz-core-poe.php';
 require_once get_template_directory() . '/inc/class-zdz-core-freshbooks.php';
