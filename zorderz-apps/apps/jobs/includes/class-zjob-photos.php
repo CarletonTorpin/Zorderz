@@ -295,4 +295,464 @@ class ZJOB_Photos {
 		}
 		return $out;
 	}
+
+	/* =======================================================================
+	 * DOSSIER: the confidence matcher (for_jobs)
+	 *
+	 * Surface the photos that belong to a set of jobs and RECORD HOW each one matched,
+	 * reading the Core media store (ZDZ_User_Media's table) — never re-implementing it.
+	 * Every returned URL is minted through the token proxy (ZDZ_User_Media::secure_url,
+	 * with this app's own token proxy as the only fallback): a geo-stamped photo never
+	 * leaves as a raw uploads URL.
+	 *
+	 * Five match kinds, ranked by confidence:
+	 *   asserted (confirmed) - the media was uploaded FOR this job (source_ref jobphoto:<id>)
+	 *   finish   (confirmed) - the media id is in the job's own finish_media_ids
+	 *   estimate (probable)  - the media points at the job's source estimate (source_ref estimate:<id>)
+	 *   schedule (probable)  - the job's people captured it inside the appointment window
+	 *   geo      (suggested) - the media's GPS fix is within the geo radius of the finish fix
+	 *
+	 * for_jobs() is CONFIRMED-ONLY by default; asking for a lower floor (min_confidence)
+	 * runs the extra matchers. A photo matched several ways keeps its STRONGEST kind.
+	 * ======================================================================= */
+
+	const MATCH_ASSERTED = 'asserted';
+	const MATCH_FINISH   = 'finish';
+	const MATCH_ESTIMATE = 'estimate';
+	const MATCH_SCHEDULE = 'schedule';
+	const MATCH_GEO      = 'geo';
+
+	const CONF_CONFIRMED = 'confirmed';
+	const CONF_PROBABLE  = 'probable';
+	const CONF_SUGGESTED = 'suggested';
+
+	/** Default geo-proximity radius (metres) for the suggested `geo` match. */
+	const GEO_RADIUS_M_DEFAULT   = 120;
+	/** Default +/- padding (minutes) around the appointment for the `schedule` match. */
+	const SCHEDULE_PAD_MIN_DEFAULT = 120;
+
+	/** In-request cache of raw media rows keyed by id (populated by every matcher). */
+	private static array $media_cache = [];
+
+	/** Filterable geo radius (metres). */
+	public static function geo_radius_m(): int {
+		return max( 1, (int) apply_filters( 'zdz_job_photo_geo_radius_m', self::GEO_RADIUS_M_DEFAULT ) );
+	}
+
+	/** Filterable appointment-window padding (minutes). */
+	public static function schedule_pad_min(): int {
+		return max( 0, (int) apply_filters( 'zdz_job_photo_schedule_pad_min', self::SCHEDULE_PAD_MIN_DEFAULT ) );
+	}
+
+	/**
+	 * Matched photos for a set of jobs, each tagged with how it matched + confidence.
+	 *
+	 * @param array $jobs Job rows (preferred) or job ids. A row carries id, estimate_id,
+	 *                    finish_media_ids, finish_gps_lat/lng, scheduled_start_utc/
+	 *                    scheduled_end_utc, assigned_user_id, created_by, scheduled_by.
+	 * @param array $opts { min_confidence:'confirmed'|'probable'|'suggested'='confirmed',
+	 *                      per_job_limit:int=60 }
+	 * @return array<int,array<int,array>> job_id => [ { media_id, match, confidence,
+	 *                    url, thumb_url, captured_at, gps_lat, gps_lng } ], strongest first.
+	 */
+	public static function for_jobs( array $jobs, array $opts = [] ): array {
+		$jobs = self::normalize_jobs( $jobs );
+		if ( empty( $jobs ) ) {
+			return [];
+		}
+
+		$want = self::confidences_at_least(
+			self::clamp_confidence( (string) ( $opts['min_confidence'] ?? self::CONF_CONFIRMED ) )
+		);
+		$per_job_limit = max( 1, min( 500, (int) ( $opts['per_job_limit'] ?? 60 ) ) );
+
+		// job_id => media_id => [ match, confidence, rank, spec ]
+		$hits          = [];
+		$need_media_ids = [];
+
+		// --- CONFIRMED: finish (the job's own finish_media_ids column) ---
+		foreach ( $jobs as $jid => $j ) {
+			foreach ( $j['finish_media_ids'] as $mid ) {
+				self::record_hit( $hits, $jid, $mid, self::MATCH_FINISH );
+				$need_media_ids[ $mid ] = $mid;
+			}
+		}
+
+		// --- CONFIRMED: asserted (media uploaded FOR the job: source_ref jobphoto:<id>) ---
+		$ref_map = [];
+		foreach ( $jobs as $jid => $j ) {
+			$ref_map[ 'jobphoto:' . $jid ] = $jid;
+		}
+		foreach ( self::media_rows_by_source_refs( array_keys( $ref_map ), self::SOURCE_APP ) as $row ) {
+			$jid = $ref_map[ (string) $row['source_ref'] ] ?? 0;
+			if ( $jid > 0 ) {
+				self::record_hit( $hits, $jid, (int) $row['id'], self::MATCH_ASSERTED );
+			}
+		}
+
+		// --- PROBABLE: estimate + schedule ---
+		if ( in_array( self::CONF_PROBABLE, $want, true ) ) {
+			// estimate: media whose source_ref is estimate:<estimate_id>.
+			$est_map = [];
+			foreach ( $jobs as $jid => $j ) {
+				if ( $j['estimate_id'] > 0 ) {
+					$est_map[ 'estimate:' . $j['estimate_id'] ][] = $jid;
+				}
+			}
+			if ( ! empty( $est_map ) ) {
+				foreach ( self::media_rows_by_source_refs( array_keys( $est_map ), '' ) as $row ) {
+					foreach ( (array) ( $est_map[ (string) $row['source_ref'] ] ?? [] ) as $jid ) {
+						self::record_hit( $hits, $jid, (int) $row['id'], self::MATCH_ESTIMATE );
+					}
+				}
+			}
+
+			// schedule: the job's people captured a photo inside the appointment window.
+			$pad = self::schedule_pad_min();
+			foreach ( $jobs as $jid => $j ) {
+				if ( '' === $j['start_utc'] || empty( $j['people'] ) ) {
+					continue;
+				}
+				$end = '' !== $j['end_utc'] ? $j['end_utc'] : $j['start_utc'];
+				foreach ( self::media_rows_in_window( $j['people'], $j['start_utc'], $end, $pad ) as $row ) {
+					self::record_hit( $hits, $jid, (int) $row['id'], self::MATCH_SCHEDULE );
+				}
+			}
+		}
+
+		// --- SUGGESTED: geo (within the radius of the finish fix) ---
+		if ( in_array( self::CONF_SUGGESTED, $want, true ) ) {
+			$radius = self::geo_radius_m();
+			foreach ( $jobs as $jid => $j ) {
+				if ( null === $j['gps_lat'] || null === $j['gps_lng'] ) {
+					continue;
+				}
+				foreach ( self::media_rows_near( $j['gps_lat'], $j['gps_lng'], $radius ) as $row ) {
+					self::record_hit( $hits, $jid, (int) $row['id'], self::MATCH_GEO );
+				}
+			}
+		}
+
+		// Load any finish-id rows the reference/geo/time queries did not already cache.
+		$missing = [];
+		foreach ( $need_media_ids as $mid ) {
+			if ( ! isset( self::$media_cache[ $mid ] ) ) {
+				$missing[] = $mid;
+			}
+		}
+		if ( ! empty( $missing ) ) {
+			self::media_rows_by_ids( $missing ); // populates the cache
+		}
+
+		// Build the output — filter to the requested confidences, mint secure URLs.
+		$out = array_fill_keys( array_keys( $jobs ), [] );
+		foreach ( $hits as $jid => $by_media ) {
+			$list = [];
+			foreach ( $by_media as $mid => $h ) {
+				if ( ! in_array( $h['confidence'], $want, true ) ) {
+					continue;
+				}
+				$row = self::$media_cache[ $mid ] ?? null;
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				[ $url, $thumb ] = self::secure_pair( $row );
+				if ( '' === $url ) {
+					continue; // never emit a raw/unproxied URL
+				}
+				$list[] = [
+					'media_id'    => $mid,
+					'match'       => $h['match'],
+					'confidence'  => $h['confidence'],
+					'rank'        => $h['rank'],
+					'spec'        => $h['spec'],
+					'url'         => $url,
+					'thumb_url'   => $thumb,
+					'captured_at' => (string) ( $row['captured_at'] ?? '' ),
+					'gps_lat'     => isset( $row['gps_lat'] ) && '' !== $row['gps_lat'] ? (float) $row['gps_lat'] : null,
+					'gps_lng'     => isset( $row['gps_lng'] ) && '' !== $row['gps_lng'] ? (float) $row['gps_lng'] : null,
+				];
+			}
+			// Strongest confidence first, then most-specific match, then newest id.
+			usort( $list, static function ( $a, $b ) {
+				return ( $b['rank'] <=> $a['rank'] )
+					?: ( $a['spec'] <=> $b['spec'] )
+					?: ( $b['media_id'] <=> $a['media_id'] );
+			} );
+			// Drop the internal sort keys before returning.
+			$out[ $jid ] = array_map( static function ( $m ) {
+				unset( $m['rank'], $m['spec'] );
+				return $m;
+			}, array_slice( $list, 0, $per_job_limit ) );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Per-job count of confirmed photo matches (spans the job regardless of who may
+	 * open it — a count discloses nothing). The Record panel uses this for an honest
+	 * "N photos" even when the visible strip is shorter.
+	 *
+	 * @param array $jobs Job rows or ids.
+	 * @return array<int,int> job_id => confirmed match count
+	 */
+	public static function counts_for( array $jobs ): array {
+		$matched = self::for_jobs( $jobs, [ 'min_confidence' => self::CONF_CONFIRMED, 'per_job_limit' => 500 ] );
+		$out     = [];
+		foreach ( $matched as $jid => $list ) {
+			$out[ (int) $jid ] = count( $list );
+		}
+		return $out;
+	}
+
+	/* =======================================================================
+	 * MATCHER INTERNALS
+	 * ======================================================================= */
+
+	/** Keep the strongest (job, media) hit: higher confidence wins; ties -> more specific. */
+	private static function record_hit( array &$hits, int $job_id, int $media_id, string $match ): void {
+		if ( $job_id <= 0 || $media_id <= 0 ) {
+			return;
+		}
+		$conf = self::confidence_for( $match );
+		$rank = self::confidence_rank( $conf );
+		$spec = self::match_specificity( $match );
+
+		$cur = $hits[ $job_id ][ $media_id ] ?? null;
+		if ( null === $cur
+			|| $rank > $cur['rank']
+			|| ( $rank === $cur['rank'] && $spec < $cur['spec'] ) ) {
+			$hits[ $job_id ][ $media_id ] = [
+				'match'      => $match,
+				'confidence' => $conf,
+				'rank'       => $rank,
+				'spec'       => $spec,
+			];
+		}
+	}
+
+	private static function confidence_for( string $match ): string {
+		switch ( $match ) {
+			case self::MATCH_ASSERTED:
+			case self::MATCH_FINISH:
+				return self::CONF_CONFIRMED;
+			case self::MATCH_ESTIMATE:
+			case self::MATCH_SCHEDULE:
+				return self::CONF_PROBABLE;
+			case self::MATCH_GEO:
+			default:
+				return self::CONF_SUGGESTED;
+		}
+	}
+
+	private static function confidence_rank( string $conf ): int {
+		$order = [ self::CONF_SUGGESTED => 0, self::CONF_PROBABLE => 1, self::CONF_CONFIRMED => 2 ];
+		return $order[ $conf ] ?? 0;
+	}
+
+	private static function match_specificity( string $match ): int {
+		$order = [
+			self::MATCH_ASSERTED => 0,
+			self::MATCH_FINISH   => 1,
+			self::MATCH_ESTIMATE => 2,
+			self::MATCH_SCHEDULE => 3,
+			self::MATCH_GEO      => 4,
+		];
+		return $order[ $match ] ?? 9;
+	}
+
+	private static function clamp_confidence( string $c ): string {
+		$c = sanitize_key( $c );
+		return in_array( $c, [ self::CONF_CONFIRMED, self::CONF_PROBABLE, self::CONF_SUGGESTED ], true )
+			? $c : self::CONF_CONFIRMED;
+	}
+
+	/** The confidence labels at or above a floor. */
+	private static function confidences_at_least( string $min ): array {
+		$min_rank = self::confidence_rank( $min );
+		$out      = [];
+		foreach ( [ self::CONF_SUGGESTED, self::CONF_PROBABLE, self::CONF_CONFIRMED ] as $c ) {
+			if ( self::confidence_rank( $c ) >= $min_rank ) {
+				$out[] = $c;
+			}
+		}
+		return $out;
+	}
+
+	/** Normalise mixed job input (rows or ids) to a keyed shape the matchers read. */
+	private static function normalize_jobs( array $jobs ): array {
+		$out = [];
+		foreach ( $jobs as $j ) {
+			if ( is_array( $j ) ) {
+				$id  = (int) ( $j['id'] ?? 0 );
+				$row = $j;
+			} else {
+				$id  = (int) $j;
+				$row = ( $id > 0 && class_exists( 'ZJOB_Jobs' ) ) ? ( ZJOB_Jobs::get( $id ) ?? [] ) : [];
+			}
+			if ( $id <= 0 ) {
+				continue;
+			}
+			$out[ $id ] = [
+				'id'               => $id,
+				'estimate_id'      => (int) ( $row['estimate_id'] ?? 0 ),
+				'finish_media_ids' => self::parse_media_ids( $row['finish_media_ids'] ?? '' ),
+				'gps_lat'          => ( isset( $row['finish_gps_lat'] ) && '' !== $row['finish_gps_lat'] && null !== $row['finish_gps_lat'] ) ? (float) $row['finish_gps_lat'] : null,
+				'gps_lng'          => ( isset( $row['finish_gps_lng'] ) && '' !== $row['finish_gps_lng'] && null !== $row['finish_gps_lng'] ) ? (float) $row['finish_gps_lng'] : null,
+				'start_utc'        => (string) ( $row['scheduled_start_utc'] ?? '' ),
+				'end_utc'          => (string) ( $row['scheduled_end_utc'] ?? '' ),
+				'people'           => array_values( array_unique( array_filter( array_map( 'intval', [
+					$row['assigned_user_id'] ?? 0,
+					$row['created_by'] ?? 0,
+					$row['scheduled_by'] ?? 0,
+				] ) ) ) ),
+			];
+		}
+		return $out;
+	}
+
+	/** finish_media_ids is stored as a JSON array; accept a CSV fallback defensively. */
+	private static function parse_media_ids( $raw ): array {
+		$raw = (string) $raw;
+		if ( '' === trim( $raw ) ) {
+			return [];
+		}
+		$ids = json_decode( $raw, true );
+		if ( ! is_array( $ids ) ) {
+			$ids = explode( ',', $raw );
+		}
+		$out = [];
+		foreach ( $ids as $id ) {
+			$id = (int) $id;
+			if ( $id > 0 ) {
+				$out[ $id ] = $id;
+			}
+		}
+		return array_values( $out );
+	}
+
+	/* ---- media-store readers (read Core's table; never duplicate its writers) ---- */
+
+	/** Fetch + cache media rows by id (one IN() query). Returns the rows. */
+	private static function media_rows_by_ids( array $ids ): array {
+		global $wpdb;
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+		if ( empty( $ids ) ) {
+			return [];
+		}
+		$mtable = self::media_table();
+		$ph     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$mtable} WHERE id IN ({$ph})", $ids ), ARRAY_A );
+		return self::cache_rows( $rows );
+	}
+
+	/** Fetch + cache media rows by source_ref (optionally scoped to a source_app). */
+	private static function media_rows_by_source_refs( array $refs, string $source_app ): array {
+		global $wpdb;
+		$refs = array_values( array_unique( array_filter( array_map( 'strval', $refs ) ) ) );
+		if ( empty( $refs ) ) {
+			return [];
+		}
+		$mtable = self::media_table();
+		$ph     = implode( ',', array_fill( 0, count( $refs ), '%s' ) );
+		$params = $refs;
+		$sql    = "SELECT * FROM {$mtable} WHERE source_ref IN ({$ph})";
+		if ( '' !== $source_app ) {
+			$sql     .= ' AND source_app = %s';
+			$params[] = $source_app;
+		}
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
+		return self::cache_rows( $rows );
+	}
+
+	/** Media captured by a set of users within [start-pad, end+pad]. */
+	private static function media_rows_in_window( array $user_ids, string $start_utc, string $end_utc, int $pad_min ): array {
+		global $wpdb;
+		$user_ids = array_values( array_unique( array_filter( array_map( 'intval', $user_ids ) ) ) );
+		if ( empty( $user_ids ) || '' === $start_utc ) {
+			return [];
+		}
+		$from = gmdate( 'Y-m-d H:i:s', strtotime( $start_utc ) - $pad_min * 60 );
+		$to   = gmdate( 'Y-m-d H:i:s', strtotime( '' !== $end_utc ? $end_utc : $start_utc ) + $pad_min * 60 );
+		$mtable = self::media_table();
+		$ph     = implode( ',', array_fill( 0, count( $user_ids ), '%d' ) );
+		$params = array_merge( $user_ids, [ $from, $to ] );
+		$sql    = "SELECT * FROM {$mtable}
+			WHERE user_id IN ({$ph}) AND captured_at IS NOT NULL AND captured_at BETWEEN %s AND %s";
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
+		return self::cache_rows( $rows );
+	}
+
+	/** Media whose GPS fix is within $radius_m of a point (bounding box + haversine). */
+	private static function media_rows_near( float $lat, float $lng, int $radius_m ): array {
+		global $wpdb;
+		$dlat = $radius_m / 111320.0;
+		$cos  = cos( deg2rad( $lat ) );
+		$dlng = $radius_m / ( 111320.0 * ( abs( $cos ) > 0.000001 ? $cos : 0.000001 ) );
+		$dlng = abs( $dlng );
+
+		$mtable = self::media_table();
+		$sql    = "SELECT * FROM {$mtable}
+			WHERE gps_lat IS NOT NULL AND gps_lng IS NOT NULL
+			  AND gps_lat BETWEEN %f AND %f AND gps_lng BETWEEN %f AND %f";
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			$sql, $lat - $dlat, $lat + $dlat, $lng - $dlng, $lng + $dlng
+		), ARRAY_A );
+
+		// Tighten the box to a true radius.
+		$near = [];
+		foreach ( (array) $rows as $row ) {
+			if ( self::haversine_m( $lat, $lng, (float) $row['gps_lat'], (float) $row['gps_lng'] ) <= $radius_m ) {
+				$near[] = $row;
+			}
+		}
+		return self::cache_rows( $near );
+	}
+
+	/** Store rows in the per-request cache keyed by id; return them. */
+	private static function cache_rows( $rows ): array {
+		$rows = is_array( $rows ) ? $rows : [];
+		foreach ( $rows as $row ) {
+			$id = (int) ( $row['id'] ?? 0 );
+			if ( $id > 0 ) {
+				self::$media_cache[ $id ] = $row;
+			}
+		}
+		return $rows;
+	}
+
+	/** Great-circle distance in metres. */
+	private static function haversine_m( float $lat1, float $lng1, float $lat2, float $lng2 ): float {
+		$r    = 6371000.0;
+		$dlat = deg2rad( $lat2 - $lat1 );
+		$dlng = deg2rad( $lng2 - $lng1 );
+		$a    = sin( $dlat / 2 ) ** 2 + cos( deg2rad( $lat1 ) ) * cos( deg2rad( $lat2 ) ) * sin( $dlng / 2 ) ** 2;
+		return $r * 2 * atan2( sqrt( $a ), sqrt( 1 - $a ) );
+	}
+
+	/**
+	 * A membership/privacy-gated [full, thumb] URL pair for a media row — the Core
+	 * token proxy first, this app's own token proxy as the only fallback. Never a raw
+	 * uploads URL (geo-stamped photos are geo-PII).
+	 *
+	 * @return array{0:string,1:string}
+	 */
+	private static function secure_pair( array $row ): array {
+		if ( class_exists( 'ZDZ_User_Media' ) && method_exists( 'ZDZ_User_Media', 'secure_url' ) ) {
+			return [ (string) ZDZ_User_Media::secure_url( $row, 'full' ), (string) ZDZ_User_Media::secure_url( $row, 'thumb' ) ];
+		}
+		// Fallback: our own login-free token proxy, but only for this app's own media.
+		if ( (string) ( $row['source_app'] ?? '' ) === self::SOURCE_APP ) {
+			$mid = (int) ( $row['id'] ?? 0 );
+			$tok = (string) ( $row['share_token'] ?? '' );
+			if ( '' === $tok && $mid > 0 ) {
+				$tok = self::token_for_media( $mid );
+			}
+			if ( $mid > 0 && '' !== $tok ) {
+				return [ self::public_url( $mid, $tok, 'full' ), self::public_url( $mid, $tok, 'thumb' ) ];
+			}
+		}
+		return [ '', '' ];
+	}
 }
