@@ -542,7 +542,12 @@ class ZSV_Survey_Manager {
 	 * Close a lead as Won with a recorded reason. Idempotent and NON-OVERRIDING: if
 	 * the lead is already in ANY terminal CRM state (won/lost/cancelled) locally, we
 	 * skip the API entirely — an automatic Won must never override an explicit
-	 * Lost/Cancelled. The "won" status value is a CRM Mapping, settings-driven.
+	 * Lost/Cancelled. Closes by setting the CRM OUTCOME (never a bare `status`, which
+	 * Nutshell 400s) and VERIFIES by re-reading: the local 'Won' stamp + note + success
+	 * log are written ONLY when the re-read confirms the lead actually closed; otherwise
+	 * the row is left untouched so the next sweep legitimately retries. Which outcome
+	 * means "done" is an Identity mapping (the `zsv_won_outcome_name` filter); Core
+	 * ships none, and refuses to close rather than mis-file a satisfied customer.
 	 *
 	 * @param int    $wp_lead_id  Local row id.
 	 * @param int    $crm_lead_id CRM lead id.
@@ -583,13 +588,56 @@ class ZSV_Survey_Manager {
 			$note .= ucwords( str_replace( '_', ' ', (string) $k ) ) . ': ' . $v . "\n";
 		}
 
+		// A too-old Core without the verify-by-re-read helper must NEVER fall back to the
+		// unverified `editLead {status}` write (the exact defect this fix closes): fail
+		// loudly and leave the row untouched.
+		if ( ! method_exists( $this->crm, 'resolve_won_outcome' ) || ! method_exists( $this->crm, 'close_lead_by_outcome' ) ) {
+			ZSV_DB::disposition( 'close_unverified', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'reason' => 'crm_helper_missing' ) );
+			return false;
+		}
+
+		// WHICH outcome means "closed as a sale" is an Identity mapping. If the account
+		// defines no won-type outcome we REFUSE (leave the lead OPEN for a later sweep,
+		// once an outcome is pinned) rather than mis-file a satisfied customer.
+		$outcome = $this->crm->resolve_won_outcome();
+		if ( empty( $outcome ) || empty( $outcome['id'] ) ) {
+			ZSV_DB::disposition( 'close_unverified', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'reason' => 'no_won_outcome' ) );
+			return false; // untouched row → a legitimate retry, never a false Won.
+		}
+
 		try {
-			$won_status = (int) get_option( 'zsv_crm_status_won', 1 ); // CRM Mapping.
-			$this->crm->rpc_call( 'editLead', array( 'leadId' => $crm_lead_id, 'lead' => array( 'status' => $won_status ) ) );
-			$this->crm->add_note( array( 'entity' => array( 'entityType' => 'leads', 'id' => $crm_lead_id ), 'note' => array( 'body' => $note ) ) );
+			// Close by OUTCOME + verify by re-read. Gate the CRM note on the verified
+			// result: pass '' here and add the note ourselves only once the close is
+			// confirmed, so a "closing as Won" note never lands on a lead that did not close.
+			$res = $this->crm->close_lead_by_outcome( $crm_lead_id, (int) $outcome['id'], '' );
 		} catch ( \Throwable $e ) {
 			ZSV_DB::disposition( 'close_failed', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'error' => $e->getMessage() ) );
 			return false;
+		}
+
+		if ( empty( $res['closed'] ) ) {
+			// The re-read did NOT confirm status != 0 — the close did not take. Leave the
+			// row untouched so the next sweep legitimately retries; never stamp a Won that
+			// did not happen.
+			ZSV_DB::disposition(
+				'close_unverified',
+				array(
+					'lead_id'     => $wp_lead_id,
+					'crm_lead_id' => $crm_lead_id,
+					'reason'      => empty( $res['verified'] ) ? 'reread_unavailable' : 'status_still_open',
+					'status'      => (int) ( $res['status'] ?? 0 ),
+					'outcome_id'  => (int) $outcome['id'],
+				)
+			);
+			return false;
+		}
+
+		// VERIFIED closed — and only now: write the CRM note, the local Won stamp and the
+		// success log. A failed note is non-fatal (the close already stands); it is logged.
+		try {
+			$this->crm->add_note( array( 'entity' => array( 'entityType' => 'leads', 'id' => $crm_lead_id ), 'note' => array( 'body' => $note ) ) );
+		} catch ( \Throwable $e ) {
+			ZSV_DB::disposition( 'close_note_failed', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'error' => $e->getMessage() ) );
 		}
 
 		if ( $wp_lead_id > 0 ) {
@@ -601,6 +649,13 @@ class ZSV_Survey_Manager {
 				array( '%d' )
 			);
 		}
+		error_log( sprintf(
+			'Zorderz Surveys: verified close as Won (lead_id=%d crm_lead_id=%d outcome=%s status=%d)',
+			$wp_lead_id,
+			$crm_lead_id,
+			(string) ( $outcome['name'] ?? '' ),
+			(int) ( $res['status'] ?? 0 )
+		) );
 		return true;
 	}
 
