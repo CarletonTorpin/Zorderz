@@ -423,6 +423,15 @@ class ZEST_Dashboard {
 			'status'          => 'created',
 			'created_by'      => $uid,
 		) );
+		$eid = (int) $wpdb->insert_id;
+		if ( $eid > 0 && function_exists( 'do_action' ) ) {
+			/**
+			 * An estimate was persisted (B4 seam). Downstream containers (Projects) mint UPSTREAM
+			 * from this so a quote alone becomes a Project. Fail-safe: a subscriber must never break
+			 * the save; the budgeted floor sweep is the converging backstop for any miss.
+			 */
+			do_action( 'zest_estimate_saved', $eid, array( 'source' => 'dashboard', 'created_by' => (int) $uid ) );
+		}
 	}
 
 	/* ---- widget support ---- */

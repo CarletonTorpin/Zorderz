@@ -147,6 +147,35 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 			return (string) ZDZ_User_Media::secure_url( $media_row, $size );
 		}
 
+		/**
+		 * THE PER-COMPONENT GATE (B5). Given the project's child job ROWS, return the ids of the jobs
+		 * this viewer could open in Jobs — nothing else may contribute assets to the Record. Runs
+		 * ZJOB_Jobs::actor_can_manage() per row BEFORE any asset read. This door and
+		 * Zjob_Project_Visibility::relationship() answer DIFFERENT questions (open THIS job vs. see the
+		 * project at all) over the SAME authority; they must never be allowed to diverge — a leak here
+		 * is exactly the disclosure the subsystem exists to prevent.
+		 *
+		 * @param array $jobs   job rows (each an assoc array with at least id).
+		 * @param int   $viewer WP user id.
+		 * @return int[] openable job ids.
+		 */
+		public static function openable_job_ids( array $jobs, int $viewer ): array {
+			if ( $viewer <= 0 || ! class_exists( 'ZJOB_Jobs' ) || ! method_exists( 'ZJOB_Jobs', 'actor_can_manage' ) ) {
+				return array();
+			}
+			$ids = array();
+			foreach ( $jobs as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$jid = (int) ( $row['id'] ?? 0 );
+				if ( $jid > 0 && ZJOB_Jobs::actor_can_manage( $viewer, $row ) ) {
+					$ids[] = $jid;
+				}
+			}
+			return $ids;
+		}
+
 		/* ===================================================================
 		 * SOURCES — built-in + the extension filter.
 		 * =================================================================== */
@@ -166,6 +195,7 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 				array( 'id' => 'billing_amount', 'class' => self::CLASS_MONEY, 'gather' => array( __CLASS__, 'src_billing_amount' ) ),
 				array( 'id' => 'schedule', 'class' => self::CLASS_WORK, 'gather' => array( __CLASS__, 'src_schedule' ) ),
 				array( 'id' => 'activity', 'class' => self::CLASS_WORK, 'gather' => array( __CLASS__, 'src_activity' ) ),
+				array( 'id' => 'record', 'class' => self::CLASS_WORK, 'gather' => array( __CLASS__, 'src_record' ) ),
 			);
 
 			/**
@@ -328,6 +358,104 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 				return array( 'state' => self::STATE_EMPTY, 'data' => array( 'jobs' => 0 ) );
 			}
 			return array( 'state' => self::STATE_OK, 'data' => array( 'jobs' => $total, 'by_status' => $counts ) );
+		}
+
+		/**
+		 * WORK: the RECORD — photos + notes under the per-component gate (B5). Counts span EVERY
+		 * component (a count discloses nothing); the visible photo strip and the notes come ONLY from
+		 * jobs this viewer could open in Jobs. INV-12: the panel states when it holds FEWER pictures
+		 * than the count — a short strip under a big number is a silent lie. Every media URL is a
+		 * secure token minted by ZJOB_Photos::for_jobs (never a raw uploads URL — geo-PII); notes are
+		 * top-level with NO include-internal flag anywhere. The MODEL never sees this panel — the model
+		 * path (Zjob_Project::summarize_project) is counts-only by an allow-list.
+		 */
+		public static function src_record( int $viewer, array $project, bool $see_money ): array {
+			unset( $see_money );
+			$pid = (string) ( $project['id'] ?? '' );
+			if ( '' === $pid || ! class_exists( 'Zjob_Project' ) ) {
+				return array( 'state' => self::STATE_UNAVAILABLE, 'data' => null );
+			}
+			$jobs = Zjob_Project::jobs_for( $pid );
+			if ( empty( $jobs ) ) {
+				return array( 'state' => self::STATE_EMPTY, 'data' => array( 'photo_count' => 0, 'note_count' => 0 ) );
+			}
+
+			// Counts span EVERY component regardless of who may open it (a count discloses nothing).
+			$all_ids = array();
+			foreach ( $jobs as $j ) {
+				$id = (int) ( $j['id'] ?? 0 );
+				if ( $id > 0 ) {
+					$all_ids[] = $id;
+				}
+			}
+			$photo_count = ( class_exists( 'ZJOB_Photos' ) && method_exists( 'ZJOB_Photos', 'counts_for' ) )
+				? (int) array_sum( ZJOB_Photos::counts_for( $jobs ) ) : 0;
+			$note_count  = ( class_exists( 'ZJOB_Notes' ) && method_exists( 'ZJOB_Notes', 'counts_for' ) )
+				? (int) array_sum( ZJOB_Notes::counts_for( $all_ids ) ) : 0;
+
+			// THE PER-COMPONENT GATE: assets come ONLY from jobs this viewer could open in Jobs.
+			$openable_ids  = self::openable_job_ids( $jobs, $viewer );
+			$openable_set  = array_fill_keys( $openable_ids, true );
+			$openable_jobs = array();
+			foreach ( $jobs as $j ) {
+				if ( isset( $openable_set[ (int) ( $j['id'] ?? 0 ) ] ) ) {
+					$openable_jobs[] = $j;
+				}
+			}
+
+			// Photos — confirmed-only, ONLY openable jobs; for_jobs already mints secure URLs.
+			$photos = array();
+			if ( ! empty( $openable_jobs ) && class_exists( 'ZJOB_Photos' ) && method_exists( 'ZJOB_Photos', 'for_jobs' ) ) {
+				foreach ( ZJOB_Photos::for_jobs( $openable_jobs, array( 'min_confidence' => 'confirmed' ) ) as $jid => $list ) {
+					foreach ( (array) $list as $m ) {
+						$url = (string) ( $m['url'] ?? '' );
+						if ( '' === $url ) {
+							continue; // never a raw fallback
+						}
+						$photos[] = array(
+							'job_id'      => (int) $jid,
+							'media_id'    => (int) ( $m['media_id'] ?? 0 ),
+							'url'         => $url,
+							'thumb_url'   => (string) ( $m['thumb_url'] ?? $url ),
+							'captured_at' => (string) ( $m['captured_at'] ?? '' ),
+							// geo coords deliberately dropped — the panel shows the image, not a map pin.
+						);
+					}
+				}
+			}
+
+			// Notes — top-level only, ONLY openable ids (there is NO include-internal flag anywhere).
+			$notes = array();
+			if ( ! empty( $openable_ids ) && class_exists( 'ZJOB_Notes' ) && method_exists( 'ZJOB_Notes', 'top_level_for_jobs' ) ) {
+				foreach ( ZJOB_Notes::top_level_for_jobs( $openable_ids ) as $n ) {
+					if ( ! is_array( $n ) ) {
+						continue;
+					}
+					$notes[] = array(
+						'id'         => (int) ( $n['id'] ?? 0 ),
+						'job_id'     => (int) ( $n['job_id'] ?? 0 ),
+						'author_id'  => (int) ( $n['author_id'] ?? 0 ),
+						'visibility' => (string) ( $n['visibility'] ?? '' ),
+						'body'       => (string) ( $n['body'] ?? '' ),
+						'created_at' => (string) ( $n['created_at'] ?? '' ),
+					);
+				}
+			}
+
+			$shown_photos = count( $photos );
+			return array(
+				'state' => self::STATE_OK,
+				'data'  => array(
+					'photo_count'    => $photo_count, // spans all components
+					'note_count'     => $note_count,  // spans all components
+					'photos'         => $photos,      // only openable, secure URLs
+					'notes'          => $notes,       // only openable, top-level
+					'shown_photos'   => $shown_photos,
+					'strip_is_short' => ( $shown_photos < $photo_count ), // INV-12: honest short strip
+					'openable_jobs'  => count( $openable_ids ),
+					'total_jobs'     => count( $all_ids ),
+				),
+			);
 		}
 
 		/* ===================================================================

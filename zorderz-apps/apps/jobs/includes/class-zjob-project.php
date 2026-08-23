@@ -108,6 +108,8 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 			if ( function_exists( 'add_action' ) ) {
 				add_action( 'zjob_handoff_created', array( __CLASS__, 'on_job_changed' ), 10, 1 );
 				add_action( 'zjob_job_audited', array( __CLASS__, 'on_job_changed' ), 10, 1 );
+				// B4 — the estimate is the upstream mint trigger (a quote alone becomes a Project).
+				add_action( 'zest_estimate_saved', array( __CLASS__, 'on_estimate_saved' ), 10, 2 );
 			}
 		}
 
@@ -557,8 +559,20 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 			}
 
 			$limit = isset( $args['limit'] ) ? max( 1, min( 500, (int) $args['limit'] ) ) : 200;
-			$sql   = "SELECT wi.* FROM {$wi} wi WHERE " . implode( ' AND ', $where ) . ' ORDER BY wi.created_at DESC LIMIT ' . $limit;
-			$rows  = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
+			$sort  = isset( $args['sort'] ) ? sanitize_key( (string) $args['sort'] ) : 'recent';
+
+			// Two lists over ONE query: QUEUE (sort=signal, "needs a look") LEFT JOINs the cached
+			// facet and orders by the ranking signal; BOOK (default) orders by recency. The facet is
+			// a separate table so a missing/never-computed signal COALESCEs to 0 (never hides a row).
+			if ( 'signal' === $sort && class_exists( 'Zjob_Project_Signal' ) ) {
+				$sig = Zjob_Project_Signal::table();
+				$sql = "SELECT wi.* FROM {$wi} wi LEFT JOIN {$sig} sig ON sig.project_id = wi.id WHERE "
+					. implode( ' AND ', $where )
+					. ' ORDER BY COALESCE(sig.signal, 0) DESC, wi.created_at DESC LIMIT ' . $limit;
+			} else {
+				$sql = "SELECT wi.* FROM {$wi} wi WHERE " . implode( ' AND ', $where ) . ' ORDER BY wi.created_at DESC LIMIT ' . $limit;
+			}
+			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
 			return $rows ?: array();
 		}
 
@@ -609,13 +623,9 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 				if ( $estimate_id <= 0 ) {
 					return; // B2 attaches estimate-linked jobs; other origins land in later units.
 				}
-				$pid = self::ensure(
-					array(
-						'origin_system' => 'estimate',
-						'origin_id'     => $estimate_id,
-						'created_by'    => (int) ( $job['created_by'] ?? 0 ),
-					)
-				);
+				// ONE mint door: estimate-keyed minting always routes through ensure_for_estimate
+				// (advisory lock over the DB-resolved retreat + created_by carry), never a bare ensure().
+				$pid = self::ensure_for_estimate( $estimate_id );
 				if ( '' === $pid ) {
 					return;
 				}
@@ -625,6 +635,592 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 				// bookkeeping does not get to break the work.
 				return;
 			}
+		}
+
+		/* ===================================================================
+		 * B4 — EVERY ESTIMATE IS A PROJECT (upstream mint + floor + signal).
+		 * The estimate is the mint trigger: a quote alone becomes a Project
+		 * (usually zero jobs), so Projects is a pre-sale holistic view. ONE mint
+		 * door, an advisory lock OVER the DB-resolved retreat (the ref UNIQUE is
+		 * the real guarantee), a converging floor drained by a budgeted sweep,
+		 * and a ranking signal cached on its OWN clock. No external/CRM call ever
+		 * touches this path — crm_linked is a deferred, always-0 term.
+		 * =================================================================== */
+
+		/** Option holding the estimate id floor (id >= floor is a mint candidate forever). */
+		const FLOOR_OPTION = 'zdz_project_est_floor';
+
+		/** Seed window: the floor is the id of the Nth-most-recent estimate at seed time. */
+		const FLOOR_SEED_WINDOW = 50;
+
+		/**
+		 * THE ONE ESTIMATE MINT DOOR. Find-or-create the Project for an estimate, carrying the
+		 * quote author's id so the writer gets the same REL_RELATED tie a job assignee gets.
+		 * Idempotent and race-safe: an advisory lock narrows the window; the ref UNIQUE +
+		 * Zdz_Flow_Ref_Conflict retreat inside ensure() is the ACTUAL guarantee (two minters
+		 * yield one Project; the loser adopts the winner's id). No sp_code is carried — a 4-letter
+		 * first name is not an initials code (the "DAVE" false-match), so created_by only.
+		 *
+		 * @param int $estimate_id
+		 * @return string project id, or '' on invalid input / write failure.
+		 */
+		public static function ensure_for_estimate( int $estimate_id ): string {
+			$estimate_id = (int) $estimate_id;
+			if ( $estimate_id <= 0 ) {
+				return '';
+			}
+			$entity = self::entity_for( 'estimate' );
+
+			// Fast idempotent path: an existing origin ref already names the project (no lock needed).
+			if ( class_exists( 'Zdz_Flow_Refs' ) ) {
+				$existing = Zdz_Flow_Refs::get( 'estimate', $entity, (string) $estimate_id );
+				if ( null !== $existing ) {
+					return (string) $existing;
+				}
+			}
+			$created_by = self::estimate_created_by( $estimate_id );
+
+			// Advisory lock over the mint window — a courtesy that reduces wasted inserts; the ref
+			// UNIQUE is what actually prevents a duplicate. Proceed even if the lock is unavailable.
+			$lock = 'zjobprj:estimate:' . $estimate_id;
+			$held = self::mint_lock( $lock );
+			try {
+				// Re-check under the lock (another worker may have minted while we waited).
+				if ( $held && class_exists( 'Zdz_Flow_Refs' ) ) {
+					$again = Zdz_Flow_Refs::get( 'estimate', $entity, (string) $estimate_id );
+					if ( null !== $again ) {
+						return (string) $again;
+					}
+				}
+				return self::ensure(
+					array(
+						'origin_system' => 'estimate',
+						'origin_id'     => $estimate_id,
+						'created_by'    => $created_by,
+					)
+				);
+			} finally {
+				if ( $held ) {
+					self::mint_unlock( $lock );
+				}
+			}
+		}
+
+		/**
+		 * The audit-seam subscriber for a saved estimate (the S3-08/B4 seam the estimate app fires).
+		 * Swallows its own errors: minting a Project must never break the estimate save.
+		 *
+		 * @param int|array $estimate_id an estimate id, or a context array carrying id/estimate_id.
+		 * @param array     $context     unused; present for the 2-arg action signature.
+		 */
+		public static function on_estimate_saved( $estimate_id, $context = array() ): void {
+			unset( $context );
+			try {
+				$eid = is_array( $estimate_id )
+					? (int) ( $estimate_id['id'] ?? $estimate_id['estimate_id'] ?? 0 )
+					: (int) $estimate_id;
+				if ( $eid <= 0 ) {
+					return;
+				}
+				self::ensure_for_estimate( $eid );
+			} catch ( \Throwable $e ) {
+				return;
+			}
+		}
+
+		/* ------------------------------------------------------------------ *
+		 * FLOOR + CANDIDATE SOURCE (drained by the budgeted sweep).
+		 * ------------------------------------------------------------------ */
+
+		/**
+		 * Seed the estimate floor ONCE: the id of the Nth-most-recent estimate at seed time. Every
+		 * estimate with id >= floor is a mint candidate FOREVER (the sweep converges over it); older
+		 * estimates are intentionally out of scope (a FLOOR, not an unbounded backfill). Idempotent.
+		 *
+		 * @return int the floor.
+		 */
+		public static function seed_estimate_floor(): int {
+			$existing = get_option( self::FLOOR_OPTION, null );
+			if ( null !== $existing && '' !== $existing ) {
+				return max( 1, (int) $existing );
+			}
+			global $wpdb;
+			$floor = 0;
+			if ( isset( $wpdb ) && class_exists( 'ZEST_DB' ) && method_exists( 'ZEST_DB', 'estimates_table' ) ) {
+				$table = ZEST_DB::estimates_table();
+				// The id of the Nth-most-recent estimate = MIN(id) over the N newest.
+				$floor = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT MIN(id) FROM ( SELECT id FROM {$table} ORDER BY id DESC LIMIT %d ) t",
+						self::FLOOR_SEED_WINDOW
+					)
+				);
+			}
+			if ( $floor < 1 ) {
+				$floor = 1; // an empty table floors at 1 — every future estimate qualifies.
+			}
+			add_option( self::FLOOR_OPTION, (string) $floor, '', 'no' );
+			return $floor;
+		}
+
+		/** The current floor (seeds on first read). */
+		public static function estimate_floor(): int {
+			$v = get_option( self::FLOOR_OPTION, null );
+			if ( null === $v || '' === $v ) {
+				return self::seed_estimate_floor();
+			}
+			return max( 1, (int) $v );
+		}
+
+		/**
+		 * The mint-candidate estimate ids: id >= floor AND no project ref yet. Uses NOT EXISTS so an
+		 * already-minted estimate LEAVES the candidate set — the batch limit bounds CANDIDATES, not
+		 * scanned rows, so the sweep never starves behind a page of already-done estimates (the exact
+		 * starvation bug that froze Projects for six releases).
+		 *
+		 * @param int $limit
+		 * @return int[] estimate ids needing a project.
+		 */
+		public static function unminted_estimate_ids( int $limit ): array {
+			global $wpdb;
+			$limit = max( 1, min( 500, (int) $limit ) );
+			if ( ! isset( $wpdb ) || ! class_exists( 'ZEST_DB' ) || ! class_exists( 'Zdz_Flow_DB' )
+				|| ! method_exists( 'ZEST_DB', 'estimates_table' ) ) {
+				return array();
+			}
+			$est   = ZEST_DB::estimates_table();
+			$refs  = Zdz_Flow_DB::refs();
+			$floor = self::estimate_floor();
+			$ent   = self::entity_for( 'estimate' );
+			$ids   = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT e.id FROM {$est} e
+					 WHERE e.id >= %d
+					   AND NOT EXISTS (
+					       SELECT 1 FROM {$refs} r
+					       WHERE r.`system` = 'estimate' AND r.entity = %s AND r.external_id = CAST(e.id AS CHAR)
+					   )
+					 ORDER BY e.id ASC
+					 LIMIT %d",
+					$floor,
+					$ent,
+					$limit
+				)
+			);
+			return array_map( 'intval', (array) $ids );
+		}
+
+		/* ------------------------------------------------------------------ *
+		 * ADVISORY MINT LOCK (over the DB-resolved retreat).
+		 * ------------------------------------------------------------------ */
+
+		/**
+		 * Acquire an advisory mint lock (MySQL GET_LOCK). Returns true ONLY when acquired. A false is
+		 * not a failure — the caller proceeds and relies on the ref UNIQUE + conflict retreat.
+		 */
+		private static function mint_lock( string $key ): bool {
+			global $wpdb;
+			if ( ! isset( $wpdb ) ) {
+				return false;
+			}
+			$name = substr( 'zjobprj_' . md5( $key ), 0, 64 ); // GET_LOCK names cap at 64 chars.
+			$got  = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 2 ) );
+			return '1' === (string) $got;
+		}
+
+		/** Release the advisory mint lock. Idempotent / harmless if not held. */
+		private static function mint_unlock( string $key ): void {
+			global $wpdb;
+			if ( ! isset( $wpdb ) ) {
+				return;
+			}
+			$name = substr( 'zjobprj_' . md5( $key ), 0, 64 );
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+		}
+
+		/* ------------------------------------------------------------------ *
+		 * THE RANKING SIGNAL — derived + cached, on its OWN clock.
+		 * ------------------------------------------------------------------ */
+
+		/**
+		 * The [CORE]-default ranking weights ([IDENTITY→flows] tunable via `zdz_project_signal_weights`).
+		 * Each term ships its LABEL — a term with no label is a rank with no explanation. `weight` is
+		 * per-unit; `cap` bounds a count term's contribution; a boolean term has cap = weight. All int
+		 * (no injection, no overflow). `crm_linked` is DEFERRED: its runtime count is always 0 until a
+		 * budgeted CRM mirror exists — a CRM call must NEVER touch a compute/render path.
+		 *
+		 * @return array<string,array{weight:int,cap:int,label:string}>
+		 */
+		public static function signal_weights(): array {
+			$defaults = array(
+				'has_work'        => array( 'weight' => 40, 'cap' => 40, 'label' => 'Has active work' ),
+				'scheduled'       => array( 'weight' => 25, 'cap' => 25, 'label' => 'Scheduled' ),
+				'in_progress'     => array( 'weight' => 20, 'cap' => 40, 'label' => 'Work in progress' ),
+				'pending_close'   => array( 'weight' => 18, 'cap' => 36, 'label' => 'Awaiting close sign-off' ),
+				'stalled'         => array( 'weight' => 16, 'cap' => 16, 'label' => 'Open but stalled' ),
+				'accepted'        => array( 'weight' => 15, 'cap' => 15, 'label' => 'Quote accepted' ),
+				'invoiced'        => array( 'weight' => 12, 'cap' => 12, 'label' => 'Invoiced' ),
+				'recent_activity' => array( 'weight' => 10, 'cap' => 10, 'label' => 'Touched recently' ),
+				'open_work'       => array( 'weight' => 8,  'cap' => 24, 'label' => 'Open work items' ),
+				'crm_linked'      => array( 'weight' => 8,  'cap' => 8,  'label' => 'Linked to CRM' ),
+				'has_customer'    => array( 'weight' => 6,  'cap' => 6,  'label' => 'Customer on file' ),
+				'photos'          => array( 'weight' => 3,  'cap' => 30, 'label' => 'Field photos on file' ),
+				'notes'           => array( 'weight' => 2,  'cap' => 12, 'label' => 'Notes on file' ),
+			);
+			$w = apply_filters( 'zdz_project_signal_weights', $defaults );
+			return is_array( $w ) ? $w : $defaults;
+		}
+
+		/**
+		 * COMPUTE (never write) the ranking signal: a sum of capped integer terms, each labeled.
+		 * Pure internal reads only — no external/CRM call (crm_linked contributes 0 here). Fail-safe:
+		 * a missing subsystem contributes 0, never an error. Photos/notes are only counted when the
+		 * project has jobs (the common quote-only project stays cheap).
+		 *
+		 * @param string $project_id
+		 * @return array{signal:int,reasons:array<int,array{key:string,label:string,points:int}>}
+		 */
+		public static function compute_signal( string $project_id ): array {
+			$reasons = array();
+			$weights = self::signal_weights();
+			$counts  = self::counts_for( $project_id );
+
+			$has_work = ( (int) $counts['open'] + (int) $counts['in_progress'] + (int) $counts['pending_close'] + (int) $counts['done'] ) > 0;
+			$bill     = self::billing_flags( $project_id );
+
+			$facts = array(
+				'has_work'        => $has_work ? 1 : 0,
+				'scheduled'       => self::count_scheduled_jobs( $project_id ),
+				'in_progress'     => (int) $counts['in_progress'],
+				'pending_close'   => (int) $counts['pending_close'],
+				'stalled'         => self::is_stalled( $project_id, $counts ) ? 1 : 0,
+				'accepted'        => ! empty( $bill['accepted'] ) ? 1 : 0,
+				'invoiced'        => ! empty( $bill['invoiced'] ) ? 1 : 0,
+				'recent_activity' => self::touched_recently( $project_id ) ? 1 : 0,
+				'open_work'       => (int) $counts['open'],
+				'crm_linked'      => 0, // DEFERRED — no CRM call on a compute path.
+				'has_customer'    => self::has_customer_block( $project_id ) ? 1 : 0,
+				'photos'          => $has_work ? self::count_project_photos( $project_id ) : 0,
+				'notes'           => $has_work ? self::count_project_notes( $project_id ) : 0,
+			);
+
+			$total = 0;
+			foreach ( $weights as $key => $spec ) {
+				if ( ! is_array( $spec ) ) {
+					continue;
+				}
+				$weight = (int) ( $spec['weight'] ?? 0 );
+				$cap    = (int) ( $spec['cap'] ?? $weight );
+				$label  = (string) ( $spec['label'] ?? $key );
+				$count  = (int) ( $facts[ $key ] ?? 0 );
+				if ( $count <= 0 || $weight <= 0 ) {
+					continue;
+				}
+				$points = min( $count * $weight, max( $weight, $cap ) );
+				if ( $points <= 0 ) {
+					continue;
+				}
+				$total    += $points;
+				$reasons[] = array( 'key' => (string) $key, 'label' => $label, 'points' => (int) $points );
+			}
+			// Descending by contribution so the reasons read as "why it ranks".
+			usort(
+				$reasons,
+				static function ( $a, $b ) {
+					return (int) $b['points'] <=> (int) $a['points'];
+				}
+			);
+			return array( 'signal' => (int) $total, 'reasons' => $reasons );
+		}
+
+		/**
+		 * Recompute AND cache the signal, stamping the signal's OWN clock (never the work item's).
+		 * Returns the new signal. This is the only writer of the signal facet.
+		 *
+		 * @param string $project_id
+		 * @return int
+		 */
+		public static function refresh_signal( string $project_id ): int {
+			if ( ! class_exists( 'Zjob_Project_Signal' ) ) {
+				return 0;
+			}
+			$item = self::get_raw( $project_id );
+			if ( ! is_array( $item ) || ( $item['work_type'] ?? '' ) !== self::WORK_TYPE ) {
+				return 0;
+			}
+			$c = self::compute_signal( $project_id );
+			Zjob_Project_Signal::put( $project_id, (int) $c['signal'], (array) $c['reasons'] );
+			return (int) $c['signal'];
+		}
+
+		/**
+		 * The labeled breakdown behind a project's cached rank (for a "why is this near the top?" UI).
+		 *
+		 * @param string $project_id
+		 * @return array<int,array{key:string,label:string,points:int}>
+		 */
+		public static function signal_reasons( string $project_id ): array {
+			if ( ! class_exists( 'Zjob_Project_Signal' ) ) {
+				return array();
+			}
+			$f = Zjob_Project_Signal::get( $project_id );
+			return is_array( $f ) ? (array) ( $f['reasons'] ?? array() ) : array();
+		}
+
+		/**
+		 * Map the billing/estimate enum for a JOB-LESS project (0 = Quoted, the honest unknown …
+		 * 6 = Invoiced). [IDENTITY→mappings] via `zdz_project_quoted_status_map`; Core ships a
+		 * neutral default. Reads the estimate's own row (internal join) — never a payment provider.
+		 *
+		 * @param string $project_id
+		 * @return array{code:int,label:string}
+		 */
+		public static function quoted_status( string $project_id ): array {
+			$map = apply_filters(
+				'zdz_project_quoted_status_map',
+				array(
+					0 => 'Quoted',
+					1 => 'Sent',
+					2 => 'Viewed',
+					3 => 'Accepted',
+					4 => 'Scheduled',
+					5 => 'In progress',
+					6 => 'Invoiced',
+				)
+			);
+			$eid = self::origin_estimate_id( $project_id );
+			$code = 0;
+			if ( $eid > 0 ) {
+				$flags = self::billing_flags( $project_id );
+				if ( ! empty( $flags['invoiced'] ) ) {
+					$code = 6;
+				} elseif ( ! empty( $flags['accepted'] ) ) {
+					$code = 3;
+				}
+			}
+			$label = ( is_array( $map ) && isset( $map[ $code ] ) ) ? (string) $map[ $code ] : 'Quoted';
+			return array( 'code' => (int) $code, 'label' => $label );
+		}
+
+		/* ------------------------------------------------------------------ *
+		 * SIGNAL FACT READERS — all cheap, all fail-safe (missing subsystem => 0).
+		 * ------------------------------------------------------------------ */
+
+		/** Child jobs with a scheduled appointment. */
+		private static function count_scheduled_jobs( string $project_id ): int {
+			global $wpdb;
+			$cw = self::child_where( $project_id );
+			if ( null === $cw || ! isset( $wpdb ) || ! class_exists( 'ZJOB_DB' ) ) {
+				return 0;
+			}
+			$n = $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM ' . ZJOB_DB::table() . ' WHERE ' . $cw[0] . ' AND scheduled_appt_id > 0',
+					$cw[1]
+				)
+			);
+			return (int) $n;
+		}
+
+		/** Total notes across the project's child jobs (all tiers; a count discloses nothing). */
+		private static function count_project_notes( string $project_id ): int {
+			if ( ! class_exists( 'ZJOB_Notes' ) || ! method_exists( 'ZJOB_Notes', 'counts_for' ) ) {
+				return 0;
+			}
+			$ids = self::child_job_ids( $project_id );
+			if ( empty( $ids ) ) {
+				return 0;
+			}
+			return (int) array_sum( ZJOB_Notes::counts_for( $ids ) );
+		}
+
+		/** Total confirmed photos across the project's child jobs. */
+		private static function count_project_photos( string $project_id ): int {
+			if ( ! class_exists( 'ZJOB_Photos' ) || ! method_exists( 'ZJOB_Photos', 'counts_for' ) ) {
+				return 0;
+			}
+			$jobs = self::jobs_for( $project_id );
+			if ( empty( $jobs ) ) {
+				return 0;
+			}
+			return (int) array_sum( ZJOB_Photos::counts_for( $jobs ) );
+		}
+
+		/** The project's child job ids (ints). */
+		private static function child_job_ids( string $project_id ): array {
+			$ids = array();
+			foreach ( (array) self::jobs_for( $project_id ) as $j ) {
+				$id = (int) ( $j['id'] ?? 0 );
+				if ( $id > 0 ) {
+					$ids[] = $id;
+				}
+			}
+			return $ids;
+		}
+
+		/** True when the project's state changed within the last 7 days (recency, not creation). */
+		private static function touched_recently( string $project_id ): bool {
+			$item = self::get_raw( $project_id );
+			if ( ! is_array( $item ) ) {
+				return false;
+			}
+			$ts   = strtotime( (string) ( $item['state_since'] ?? $item['created_at'] ?? '' ) );
+			$week = defined( 'DAY_IN_SECONDS' ) ? 7 * DAY_IN_SECONDS : 604800;
+			return $ts > 0 && ( time() - $ts ) <= $week;
+		}
+
+		/** True when the project has open work but has not moved in 14 days (needs a look). */
+		private static function is_stalled( string $project_id, array $counts ): bool {
+			$open = (int) $counts['open'] + (int) $counts['in_progress'] + (int) $counts['pending_close'];
+			if ( $open <= 0 ) {
+				return false;
+			}
+			$item = self::get_raw( $project_id );
+			if ( ! is_array( $item ) ) {
+				return false;
+			}
+			$ts    = strtotime( (string) ( $item['state_since'] ?? '' ) );
+			$two_w = defined( 'DAY_IN_SECONDS' ) ? 14 * DAY_IN_SECONDS : 1209600;
+			return $ts > 0 && ( time() - $ts ) > $two_w;
+		}
+
+		/** True when a customer display block resolves for the project. */
+		private static function has_customer_block( string $project_id ): bool {
+			$block = self::customer_block( $project_id );
+			return is_array( $block ) && ! empty( $block );
+		}
+
+		/** The estimate id that originated this project (0 if none). Internal ref read. */
+		private static function origin_estimate_id( string $project_id ): int {
+			if ( ! class_exists( 'Zdz_Flow_Refs' ) || ! method_exists( 'Zdz_Flow_Refs', 'for' ) ) {
+				return 0;
+			}
+			foreach ( (array) Zdz_Flow_Refs::for( $project_id, 'estimate' ) as $r ) {
+				$ext = (int) ( $r['external_id'] ?? 0 );
+				if ( $ext > 0 ) {
+					return $ext;
+				}
+			}
+			return 0;
+		}
+
+		/** Cheap accepted/invoiced booleans from the estimate's OWN row (internal join; fail-safe). */
+		private static function billing_flags( string $project_id ): array {
+			$out = array( 'accepted' => false, 'invoiced' => false );
+			$eid = self::origin_estimate_id( $project_id );
+			if ( $eid <= 0 ) {
+				return $out;
+			}
+			global $wpdb;
+			if ( ! isset( $wpdb ) || ! class_exists( 'ZEST_DB' ) || ! method_exists( 'ZEST_DB', 'estimates_table' ) ) {
+				return $out;
+			}
+			$t   = ZEST_DB::estimates_table();
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT status, converted_invoice_id FROM {$t} WHERE id = %d", $eid ), ARRAY_A );
+			if ( ! is_array( $row ) ) {
+				return $out;
+			}
+			$status          = strtolower( (string) ( $row['status'] ?? '' ) );
+			$out['invoiced'] = ( (int) ( $row['converted_invoice_id'] ?? 0 ) ) > 0;
+			$out['accepted'] = $out['invoiced'] || in_array( $status, array( 'accepted', 'won', 'converted', 'approved' ), true );
+			return $out;
+		}
+
+		/* ===================================================================
+		 * B5 — THE MODEL BOUNDARY + FILTERED LAUNCH.
+		 * =================================================================== */
+
+		/**
+		 * The ALLOW-LIST of fact keys that may reach the model. It is a BOUNDARY, not a prompt: a field
+		 * a source grows later is NOT auto-admitted (a wholesale copy is a standing subscription to every
+		 * field its source will ever grow — the HIGH finding was note bodies reaching the model). Counts
+		 * and states only; never a note body, never raw customer PII.
+		 */
+		const MODEL_ALLOW = array(
+			'human_code'    => true,
+			'status'        => true,
+			'job_count'     => true,
+			'open'          => true,
+			'in_progress'   => true,
+			'pending_close' => true,
+			'done'          => true,
+			'cancelled'     => true,
+			'photo_count'   => true,
+			'note_count'    => true,
+			'scheduled'     => true,
+			'signal'        => true,
+			'quoted_status' => true,
+		);
+
+		/**
+		 * A MODEL-SAFE project summary: COUNTS ONLY, passed through the allow-list boundary. The full
+		 * fact bag is assembled, then `array_intersect_key`-clamped so nothing outside MODEL_ALLOW can
+		 * leak — no note body, no raw customer field — even if a future edit widens the bag.
+		 *
+		 * @param string $project_id
+		 * @return array<string,mixed> allow-listed facts (empty if the project is missing).
+		 */
+		public static function summarize_project( string $project_id ): array {
+			$project = self::get_raw( $project_id );
+			if ( ! is_array( $project ) || ( $project['work_type'] ?? '' ) !== self::WORK_TYPE ) {
+				return array();
+			}
+			$counts = self::counts_for( $project_id );
+			$ids    = self::child_job_ids( $project_id );
+			$jobs   = self::jobs_for( $project_id );
+
+			$photo_count = ( class_exists( 'ZJOB_Photos' ) && method_exists( 'ZJOB_Photos', 'counts_for' ) )
+				? (int) array_sum( ZJOB_Photos::counts_for( $jobs ) ) : 0;
+			$note_count  = ( class_exists( 'ZJOB_Notes' ) && method_exists( 'ZJOB_Notes', 'counts_for' ) )
+				? (int) array_sum( ZJOB_Notes::counts_for( $ids ) ) : 0;
+
+			$q   = self::quoted_status( $project_id );
+			$sig = class_exists( 'Zjob_Project_Signal' ) ? Zjob_Project_Signal::get( $project_id ) : null;
+
+			// The FULL fact bag — a deliberate superset. Some of it must NEVER reach the model, which
+			// is precisely why the return is intersected against MODEL_ALLOW rather than returned raw.
+			$facts = array(
+				'human_code'    => (string) ( $project['human_code'] ?? '' ),
+				'status'        => (string) ( $project['state'] ?? '' ),
+				'job_count'     => count( $ids ),
+				'open'          => (int) $counts['open'],
+				'in_progress'   => (int) $counts['in_progress'],
+				'pending_close' => (int) $counts['pending_close'],
+				'done'          => (int) $counts['done'],
+				'cancelled'     => (int) $counts['cancelled'],
+				'photo_count'   => $photo_count,
+				'note_count'    => $note_count,
+				'scheduled'     => self::count_scheduled_jobs( $project_id ) > 0,
+				'signal'        => is_array( $sig ) ? (int) ( $sig['signal'] ?? 0 ) : 0,
+				'quoted_status' => (string) ( $q['label'] ?? '' ),
+			);
+
+			return array_intersect_key( $facts, self::MODEL_ALLOW );
+		}
+
+		/**
+		 * The openable child job ROWS for a filtered "Open in Jobs" launch — ask the project, then
+		 * scope PER ROW (via the resolver's per-component gate). NEVER filter list_for()'s capped
+		 * result: a cap applied before the filter silently drops rows the viewer was entitled to.
+		 *
+		 * @param int    $viewer
+		 * @param string $project_id
+		 * @return array<int,array> openable job rows.
+		 */
+		public static function project_rows_for( int $viewer, string $project_id ): array {
+			$jobs = self::jobs_for( $project_id );
+			if ( empty( $jobs ) || ! class_exists( 'Zjob_Project_Resolver' )
+				|| ! method_exists( 'Zjob_Project_Resolver', 'openable_job_ids' ) ) {
+				return array();
+			}
+			$openable = array_fill_keys( Zjob_Project_Resolver::openable_job_ids( $jobs, $viewer ), true );
+			$out      = array();
+			foreach ( $jobs as $j ) {
+				if ( isset( $openable[ (int) ( $j['id'] ?? 0 ) ] ) ) {
+					$out[] = $j;
+				}
+			}
+			return $out;
 		}
 
 		/* ===================================================================
