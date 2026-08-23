@@ -122,6 +122,7 @@ function zest_markers(): array {
 /* ── Load classes with no theme-interface dependency ─────────────────── */
 require_once ZEST_DIR . 'includes/interface-zest-ai-provider.php';
 require_once ZEST_DIR . 'includes/class-zest-db.php';
+require_once ZEST_DIR . 'includes/class-zest-billing.php';
 require_once ZEST_DIR . 'includes/class-zest-catalog.php';
 require_once ZEST_DIR . 'includes/class-zest-poe-client.php';
 require_once ZEST_DIR . 'includes/class-zest-freshbooks.php';

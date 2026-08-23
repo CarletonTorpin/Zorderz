@@ -138,6 +138,16 @@ require_once ZJOB_DIR . 'includes/class-zjob-ajax.php';
 require_once ZJOB_DIR . 'includes/class-zjob-chat-bridge.php';
 require_once ZJOB_DIR . 'includes/class-zjob-admin.php';
 
+// Wave B — the Flow substrate (app-local but Flow-shaped; promotable to a Core class-zdz-flow.php).
+require_once ZJOB_DIR . 'includes/flow/class-zdz-ulid.php';
+require_once ZJOB_DIR . 'includes/flow/class-zdz-flow-db.php';
+require_once ZJOB_DIR . 'includes/flow/class-zdz-flow-refs.php';
+require_once ZJOB_DIR . 'includes/flow/class-zdz-flow.php';
+// Wave B — the Job Dossier substrate (events/notes/scope; self-booting schema).
+require_once ZJOB_DIR . 'includes/class-zjob-scope.php';
+require_once ZJOB_DIR . 'includes/class-zjob-events.php';
+require_once ZJOB_DIR . 'includes/class-zjob-notes.php';
+
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
  * Creates/upgrades the tables and grants the tile to eligible users.
