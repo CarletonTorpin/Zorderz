@@ -2,27 +2,34 @@
 /**
  * FILE: class-zl-poe-client.php
  * MODULE: Zorderz Leads
- * 
+ *
  * ARCHITECTURE ROLE:
- * This file contains the Poe AI API client. It acts as the bridge between the core 
- * lead generation engine (class-zl-leads.php) and the Poe API, utilizing 
- * their OpenAI-compatible endpoint.
- * 
- * BUSINESS CONTEXT:
- * the business uses this to connect to Gemini-3.1-Pro for AI-driven 
- * lead qualification and enrichment. The AI handles a 3-layer product filtering 
- * process (expansion -> keyword match -> strict validation) and rewrites purchase 
- * descriptions to fit within Nutshell CRM's strict <101 character limit.
- * 
- * KEY FEATURES:
- * - OpenAI-compatible payload structure.
- * - Supports bot-specific parameters like `thinking_budget=32768` and `web_search=true` 
- *   required for Gemini-3.1-Pro.
- * - Robust error handling: Automatically retries on 502/503/504 Gateway errors 
- *   (introduced in v1.2.0, critical for the v1.2.1 AJAX split fix) with exponential backoff.
- * - Fallback SSE (Server-Sent Events) parsing in case the API ignores `stream=false`.
- * 
- * CALLERS:
+ * A thin, leads-shaped ADAPTER over the shared platform AI gateway
+ * (ZDZ_Core_Poe). It preserves the leads-specific call surface — a string-prompt
+ * query() and a parallel query_parallel() — and the leads message-assembly
+ * conventions (system + user roles, deterministic temperature), while routing
+ * every request through the ONE choke: the private provider endpoint POST, the
+ * retired hardcoded model handle, the in-request sleep()/backoff and the SSE
+ * fallback all live in the gateway now, not here.
+ *
+ * WHY (INV-4 / one-choke): every AI call on the platform must leave through a
+ * single repaired client so stream:false, the per-family reasoning knob, the
+ * no-sleep retry, the registry remap and the WP_Error+status contract are applied
+ * uniformly. This adapter keeps leads' callers unchanged while making that real.
+ *
+ * The concrete model is resolved from config (the zl_ai_model option / the model
+ * registry) with a NEUTRAL, empty default — a business's model comes from its
+ * connections pack; Core ships no dead handle. The credential is read by the
+ * gateway from Core settings (plugins never pass a key — INV-4).
+ *
+ * Reliability: each call is routed past Zdz_Service_Breaker (a sick upstream is
+ * short-circuited; three consecutive 401s hit the auth wall WITHOUT tripping the
+ * breaker, because a 401 is our config, not a sick upstream) and its cost is
+ * observed for Zdz_Request_Guard's adaptive reservation, so a slow AI batch can't
+ * exhaust workers. The cURL clamp applies automatically whenever an enclosing
+ * sweep has a budget open (and no-ops otherwise, keeping interactive patience).
+ *
+ * CALLERS (contract unchanged):
  * - ZL_Lead_Generator::expand_filter_with_ai()
  * - ZL_Lead_Generator::validate_lead_with_ai()
  * - ZL_Lead_Generator::refine_lead_description()
@@ -35,349 +42,253 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZL_Poe_Client {
 
-    /** 
-     * @var string 
-     * Poe API key (Bearer token). Falls back to WP options if not set.
+    /**
+     * @var string
+     * Retained for constructor-signature back-compat only. The gateway reads the
+     * single platform credential from Core settings (INV-4); this is not sent.
      */
     private $api_key;
 
-    /** 
-     * @var string 
-     * Default bot name for LLM tasks. Usually 'Gemini-3.1-Pro'.
+    /**
+     * @var string
+     * Default model handle for this client. May be '' (neutral) — resolved from
+     * the registry / zl_ai_model option at call time. No vendor literal here.
      */
     private $default_bot;
 
-    /** 
-     * @var string 
-     * Poe's OpenAI-compatible chat completions endpoint.
-     */
-    private $api_endpoint = 'https://api.poe.com/v1/chat/completions';
-
-    /** 
-     * @var int 
-     * Max retries for gateway errors (502, 503, 504) or connection timeouts.
-     */
-    private $max_retries = 3;
+    /** @var ZDZ_Core_Poe|null Lazily-built shared gateway, reused across calls. */
+    private $gateway = null;
 
     /**
      * Constructor.
-     * 
-     * Initializes the client with credentials and the target AI model.
      *
-     * @param string $api_key     Poe API key (Bearer token).
-     * @param string $default_bot Default bot name for LLM tasks (Business default: Gemini-3.1-Pro).
+     * @param string $api_key     Ignored for the request (kept for back-compat).
+     * @param string $default_bot Default model handle; '' resolves from config.
      */
-    public function __construct( $api_key, $default_bot = 'Gemini-3.1-Pro' ) {
+    public function __construct( $api_key = '', $default_bot = '' ) {
         $this->api_key     = $api_key;
-        $this->default_bot = $default_bot;
+        $this->default_bot = (string) $default_bot;
+    }
+
+    /** The neutral, filterable service key for the breaker/guard (never a brand). */
+    private function service() {
+        return (string) apply_filters( 'zl_ai_service', 'leads_ai' );
+    }
+
+    /** Build (once) and return the shared gateway. */
+    private function gateway() {
+        if ( $this->gateway instanceof ZDZ_Core_Poe ) {
+            return $this->gateway;
+        }
+        // No api_key argument: the gateway owns the single credential (INV-4).
+        $this->gateway = new ZDZ_Core_Poe();
+        return $this->gateway;
     }
 
     /**
-     * Query a Poe bot and return the full text response.
+     * Resolve a concrete model handle from an explicit request, then the client
+     * default, then the registry — with a neutral empty default. An empty result
+     * is passed through to the gateway, which surfaces a diagnosable "no model
+     * configured" error rather than a dead hardcoded handle.
+     */
+    private function resolve_model( $requested ) {
+        $model = $requested ? (string) $requested : $this->default_bot;
+        if ( '' === $model && class_exists( 'ZDZ_Model_Registry' ) ) {
+            // The leads planner/enrichment slot; config-driven, ships empty.
+            $model = (string) ZDZ_Model_Registry::model_for( 'planner' );
+        }
+        return $model;
+    }
+
+    /**
+     * Query the AI and return the full text response.
      *
-     * PURPOSE:
-     * Sends a synchronous chat completion request to the Poe API. Includes robust 
-     * exponential backoff for transient network and gateway errors to ensure the 
-     * 8-step generation pipeline doesn't crash mid-batch.
+     * Preserves the leads call surface: a string prompt + optional system prompt
+     * assembled into role messages, deterministic temperature by default, and
+     * bot-specific extras (e.g. thinking_budget / web_search) passed through for
+     * the gateway's reasoning-family translation. Throws on error, exactly as the
+     * previous private client did, so callers that catch Throwable are unchanged.
      *
-     * SIDE EFFECTS:
-     * - Makes external HTTP requests (blocks execution, hence 120s timeout).
-     * - Logs retry attempts and errors to the WordPress debug log.
-     *
-     * @param string      $prompt        The user prompt (e.g., product descriptions, validation rules).
-     * @param string|null $bot_name      Optional bot name (defaults to constructor value).
-     * @param string      $system_prompt Optional system instructions (e.g., "You are a strict data formatter").
-     * @param float|null  $temperature   Optional temperature (0.0 = deterministic, 2.0 = max creativity). Null = bot default.
-     * @param array       $extra_params  Optional bot-specific parameters (e.g. thinking_budget, web_search).
-     * @return string The complete text response from the AI.
-     * @throws Exception On API errors (after all retries exhausted).
+     * @param string      $prompt        The user prompt.
+     * @param string|null $bot_name      Optional model handle (defaults to config).
+     * @param string      $system_prompt Optional system instructions.
+     * @param float|null  $temperature   Optional temperature (null → 0.0 default).
+     * @param array       $extra_params  Optional extras (thinking_budget, web_search…).
+     * @return string The assistant text.
+     * @throws Exception On any gateway error (after the gateway's own no-sleep retry).
      */
     public function query( $prompt, $bot_name = null, $system_prompt = '', $temperature = null, $extra_params = array() ) {
-        $bot_name = $bot_name ? $bot_name : $this->default_bot;
+        if ( ! class_exists( 'ZDZ_Core_Poe' ) ) {
+            throw new Exception( 'AI gateway (ZDZ_Core_Poe) is unavailable.' );
+        }
 
-        // Build the OpenAI-compatible messages array
+        $service = $this->service();
+
+        // Short-circuit a sick upstream: don't hold a worker on a service that is
+        // already paused by the breaker.
+        if ( class_exists( 'Zdz_Service_Breaker' ) && Zdz_Service_Breaker::is_open( $service ) ) {
+            throw new Exception( 'AI service temporarily paused (circuit breaker open).' );
+        }
+
+        $model = $this->resolve_model( $bot_name );
+
+        // Leads-specific message assembly (system + user).
         $messages = array();
         if ( ! empty( $system_prompt ) ) {
             $messages[] = array( 'role' => 'system', 'content' => $system_prompt );
         }
-        $messages[] = array( 'role' => 'user', 'content' => $prompt );
+        $messages[] = array( 'role' => 'user', 'content' => (string) $prompt );
 
-        // Base request payload
-        $body = array(
-            'model'    => $bot_name,
-            'messages' => $messages,
-            'stream'   => false,
-        );
+        $temp  = ( null !== $temperature ) ? (float) $temperature : 0.0;
+        $extra = is_array( $extra_params ) ? $extra_params : array();
 
-        // Set temperature when explicitly provided (0 = deterministic, no creativity)
-        // Crucial for the strict <101 char rewriting and boolean validation steps.
-        if ( $temperature !== null ) {
-            $body['temperature'] = (float) $temperature;
+        $t      = microtime( true );
+        $result = $this->gateway()->query( $messages, $temp, $extra, $model );
+        $cost   = microtime( true ) - $t;
+
+        // Feed the enclosing sweep's adaptive reservation (no-op if no budget open).
+        if ( class_exists( 'Zdz_Request_Guard' ) ) {
+            Zdz_Request_Guard::observe( $service, $cost );
         }
 
-        // Merge bot-specific parameters (e.g. thinking_budget, web_search) into request body
-        // This allows Gemini-3.1-Pro to use extended reasoning and live search for commercial entity checks.
-        if ( ! empty( $extra_params ) && is_array( $extra_params ) ) {
-            foreach ( $extra_params as $key => $value ) {
-                $body[ $key ] = $value;
-            }
+        // Error paths — support both the gateway's WP_Error return and the legacy
+        // 'Error: …' string sentinel, converting either to a thrown Exception.
+        if ( is_wp_error( $result ) ) {
+            $data    = $result->get_error_data();
+            $status  = ( is_array( $data ) && isset( $data['status'] ) ) ? (int) $data['status'] : 0;
+            $message = $result->get_error_message();
+            $this->note_failure( $service, $status, $message );
+            throw new Exception( 'AI error: ' . $message );
         }
 
-        $delay          = 3; // Initial retry delay in seconds
-        $last_exception = null;
-
-        // Retry loop for transient errors
-        for ( $attempt = 1; $attempt <= $this->max_retries; $attempt++ ) {
-            error_log( 'ZL Poe: Querying bot=' . $bot_name . ' attempt=' . $attempt . '/' . $this->max_retries . ' params=' . wp_json_encode( $extra_params ) );
-
-            // Execute the remote POST request with a long timeout (180s) to accommodate AI thinking time.
-            // The AI filter expansion prompt (500+ line items with thinking_budget=32768) can exceed 2 min.
-            $response = wp_remote_post( $this->api_endpoint, array(
-                'headers' => array(
-                    'Authorization' => 'Bearer ' . $this->api_key,
-                    'Content-Type'  => 'application/json',
-                ),
-                'body'    => wp_json_encode( $body ),
-                'timeout' => 180,
-            ) );
-
-            // Connection-level error (e.g., DNS failure, cURL timeout) — retry
-            if ( is_wp_error( $response ) ) {
-                $last_exception = new Exception( 'Poe API request failed: ' . $response->get_error_message() );
-                if ( $attempt < $this->max_retries ) {
-                    error_log( "ZL Poe: Connection error on attempt {$attempt}, retrying in {$delay}s..." );
-                    sleep( $delay );
-                    $delay *= 2;
-                    continue;
-                }
-                throw $last_exception;
-            }
-
-            $code = wp_remote_retrieve_response_code( $response );
-            $raw  = wp_remote_retrieve_body( $response );
-
-            // Gateway errors (502, 503, 504) — retry with backoff
-            // This specifically addresses the v1.2.1 fix where Poe's API occasionally drops connections
-            if ( in_array( (int) $code, array( 502, 503, 504 ), true ) && $attempt < $this->max_retries ) {
-                error_log( "ZL Poe: HTTP {$code} on attempt {$attempt}/{$this->max_retries}, retrying in {$delay}s..." );
-                sleep( $delay );
-                $delay *= 2;
-                continue;
-            }
-
-            // Non-200, non-retryable error (e.g., 400 Bad Request, 401 Unauthorized)
-            if ( 200 !== (int) $code ) {
-                $err = json_decode( $raw, true );
-                $msg = isset( $err['error']['message'] ) ? $err['error']['message'] : substr( $raw, 0, 500 );
-                throw new Exception( "Poe API error ({$code}): {$msg}" );
-            }
-
-            // ── Success: parse response ──
-            $data = json_decode( $raw, true );
-            if ( isset( $data['choices'][0]['message']['content'] ) ) {
-                return $data['choices'][0]['message']['content'];
-            }
-
-            // Fallback: try SSE parsing in case API streamed despite stream=false
-            // Some API endpoints occasionally ignore the stream flag and return chunked SSE anyway.
-            if ( strpos( $raw, 'data: ' ) !== false ) {
-                return $this->parse_sse( $raw );
-            }
-
-            // If we reach here, the response format was completely unexpected
-            throw new Exception( 'Unexpected Poe API response: ' . substr( $raw, 0, 500 ) );
+        $text = (string) $result;
+        if ( 0 === strncmp( $text, 'Error: ', 7 ) ) {
+            $this->note_failure( $service, $this->sniff_status( $text ), $text );
+            throw new Exception( $text );
         }
 
-        // Exhausted all retries
-        throw $last_exception ?: new Exception( 'Poe API failed after ' . $this->max_retries . ' retries' );
+        if ( class_exists( 'Zdz_Service_Breaker' ) ) {
+            Zdz_Service_Breaker::record_success( $service );
+        }
+        return $text;
     }
 
     /**
-     * v1.8.0 — Dispatch many Poe queries in parallel via ZL_Parallel_Dispatch.
+     * Route a failure to the breaker: an auth failure (401/403) hits the AUTH
+     * WALL — counted, aborts after the threshold, but does NOT trip the breaker
+     * (a 401 is our config, not a sick upstream). Anything else is a hard failure.
+     */
+    private function note_failure( $service, $status, $message ) {
+        if ( ! class_exists( 'Zdz_Service_Breaker' ) ) {
+            return;
+        }
+        $is_auth = in_array( (int) $status, array( 401, 403 ), true )
+            || false !== stripos( (string) $message, 'rejected the API key' )
+            || false !== stripos( (string) $message, 'No Poe API key' );
+        if ( $is_auth ) {
+            Zdz_Service_Breaker::record_auth_failure( $service );
+        } else {
+            Zdz_Service_Breaker::record_failure( $service );
+        }
+    }
+
+    /** Best-effort HTTP status sniff from a legacy 'Error: …' string. */
+    private function sniff_status( $text ) {
+        if ( preg_match( '/HTTP\s+(\d{3})/', (string) $text, $m ) ) {
+            return (int) $m[1];
+        }
+        return 0;
+    }
+
+    /**
+     * Dispatch many AI queries in parallel through the shared gateway.
      *
-     * Primary consumer: {@see ZL_Lead_Generator::ai_refine_descriptions()},
-     * which pre-v1.8.0 issued N sequential HTTP round-trips. At N=5 chunks
-     * that's 5×~6s = ~30s; with cap=4 in parallel it finishes in ~8s.
+     * Preserves the leads item shape and the result contract
+     * ( id => { text, error, status, was_429 } ) the batch refiner consumes. When
+     * the gateway exposes query_many() the whole fan-out (and the SSE decode) is
+     * the gateway's; otherwise this falls back to a serial loop that still routes
+     * every call through the gateway via query(). Either way there is no private
+     * provider request here.
      *
-     * ──────────────────────────────────────────────────────────────────────
-     * IMPROVEMENT C — PARALLEL AI CLASSIFICATION
-     * ──────────────────────────────────────────────────────────────────────
-     * TRAP 1 (bounded concurrency): cap is caller-supplied; we clamp it
-     * between 1 and 16 via ZL_Parallel_Dispatch.
-     *
-     * TRAP 3 (heartbeat promise): a progress callback fires after every
-     * completed request (not every N) so upstream watchdogs never go
-     * >30s without a heartbeat.
-     *
-     * Rate-limit handling (429): on a 429 the caller is expected to halve
-     * its concurrency cap via ZL_Lead_Generator::halve_poe_cap() for the
-     * REST OF THE BATCH, not forever. This method does not auto-retry 429s
-     * — it reports the status back and lets the caller decide.
-     *
-     * @param array[]   $items  Each: { 'id' => string, 'prompt' => string, 'system' => '',
-     *                                  'temperature' => float|null, 'extra_params' => array,
-     *                                  'bot' => string|null }
-     * @param int       $cap    Concurrency cap (1–16; default 4).
-     * @param callable|null $on_progress  fn(id, result_arr, done, total).
-     * @return array    Map id → { 'text' => string, 'error' => string, 'status' => int, 'was_429' => bool }
-     * @since 1.8.0
+     * @param array[]        $items       Each: { id, prompt, system, temperature, extra_params, bot }.
+     * @param int            $cap         Concurrency cap (gateway clamps).
+     * @param callable|null  $on_progress fn(id, result_arr, done, total).
+     * @return array id => { text:string, error:string, status:int, was_429:bool }
      */
     public function query_parallel( array $items, $cap = 4, $on_progress = null ) {
         if ( empty( $items ) ) {
             return array();
         }
-        if ( ! class_exists( 'ZL_Parallel_Dispatch' ) ) {
-            // Serial fallback — still returns the right shape. Slow but correct.
+
+        $service = $this->service();
+
+        // If the upstream is already paused, degrade to the safe "no refinement"
+        // shape rather than starting a parallel batch against a sick service.
+        if ( class_exists( 'Zdz_Service_Breaker' ) && Zdz_Service_Breaker::is_open( $service ) ) {
             $out = array();
-            $total = count( $items );
-            $done  = 0;
-            foreach ( $items as $it ) {
-                $id = $it['id'] ?? ('i' . $done);
-                try {
-                    $text = $this->query(
-                        $it['prompt'] ?? '',
-                        $it['bot']    ?? null,
-                        $it['system'] ?? '',
-                        $it['temperature'] ?? null,
-                        $it['extra_params'] ?? array()
-                    );
-                    $out[ $id ] = array( 'text' => $text, 'error' => '', 'status' => 200, 'was_429' => false );
-                } catch ( \Throwable $e ) {
-                    $msg = $e->getMessage();
-                    $was_429 = ( strpos( $msg, '429' ) !== false );
-                    $out[ $id ] = array( 'text' => '', 'error' => $msg, 'status' => $was_429 ? 429 : 0, 'was_429' => $was_429 );
-                }
-                $done++;
-                if ( is_callable( $on_progress ) ) {
-                    try { call_user_func( $on_progress, $id, $out[ $id ], $done, $total ); }
-                    catch ( \Throwable $e ) { /* noop */ }
-                }
+            foreach ( $items as $i => $it ) {
+                $id = (string) ( $it['id'] ?? ( 'i' . $i ) );
+                $out[ $id ] = array( 'text' => '', 'error' => 'breaker_open', 'status' => 0, 'was_429' => false );
             }
             return $out;
         }
 
-        // Build parallel requests — each mirrors the headers/body the
-        // serial query() path uses, so upstream behavior is identical.
-        $requests = array();
-        foreach ( $items as $it ) {
-            $id = (string) ( $it['id'] ?? spl_object_hash( (object) $it ) );
-            $bot_name = ! empty( $it['bot'] ) ? $it['bot'] : $this->default_bot;
-
-            $messages = array();
-            if ( ! empty( $it['system'] ) ) {
-                $messages[] = array( 'role' => 'system', 'content' => $it['system'] );
-            }
-            $messages[] = array( 'role' => 'user', 'content' => $it['prompt'] ?? '' );
-
-            $body = array(
-                'model'    => $bot_name,
-                'messages' => $messages,
-                'stream'   => false,
-            );
-            if ( isset( $it['temperature'] ) && $it['temperature'] !== null ) {
-                $body['temperature'] = (float) $it['temperature'];
-            }
-            if ( ! empty( $it['extra_params'] ) && is_array( $it['extra_params'] ) ) {
-                foreach ( $it['extra_params'] as $k => $v ) {
-                    $body[ $k ] = $v;
+        // Preferred path: the shared gateway's parallel dispatch.
+        if ( class_exists( 'ZDZ_Core_Poe' ) && method_exists( 'ZDZ_Core_Poe', 'query_many' ) ) {
+            $requests = array();
+            foreach ( $items as $i => $it ) {
+                $id       = (string) ( $it['id'] ?? ( 'i' . $i ) );
+                $messages = array();
+                if ( ! empty( $it['system'] ) ) {
+                    $messages[] = array( 'role' => 'system', 'content' => $it['system'] );
                 }
-            }
+                $messages[] = array( 'role' => 'user', 'content' => (string) ( $it['prompt'] ?? '' ) );
 
-            $requests[] = array(
-                'id'      => $id,
-                'url'     => $this->api_endpoint,
-                'method'  => 'POST',
-                'headers' => array(
-                    'Authorization' => 'Bearer ' . $this->api_key,
-                    'Content-Type'  => 'application/json',
-                ),
-                'body'    => wp_json_encode( $body ),
-                'timeout' => 180, // match serial query() — long for thinking_budget models
-            );
+                $temp = ( isset( $it['temperature'] ) && $it['temperature'] !== null ) ? (float) $it['temperature'] : 0.0;
+
+                $requests[] = array(
+                    'id'           => $id,
+                    'messages'     => $messages,
+                    'temperature'  => $temp,
+                    'extra_params' => ( isset( $it['extra_params'] ) && is_array( $it['extra_params'] ) ) ? $it['extra_params'] : array(),
+                    'model'        => $this->resolve_model( $it['bot'] ?? '' ),
+                );
+            }
+            return $this->gateway()->query_many( $requests, max( 1, (int) $cap ), $on_progress );
         }
 
-        $raw_results = ZL_Parallel_Dispatch::run( $requests, max( 1, (int) $cap ), $on_progress );
+        // Serial fallback (gateway lacks query_many): still routes through the
+        // gateway via query(), preserving the exact return shape.
+        return $this->serial_fallback( $items, $on_progress );
+    }
 
-        // Decode each response.
-        $out = array();
-        foreach ( $requests as $req ) {
-            $id  = $req['id'];
-            $r   = $raw_results[ $id ] ?? null;
-            if ( ! is_array( $r ) ) {
-                $out[ $id ] = array( 'text' => '', 'error' => 'No result', 'status' => 0, 'was_429' => false );
-                continue;
+    /** Serial equivalent of query_parallel — same result contract, via query(). */
+    private function serial_fallback( array $items, $on_progress = null ) {
+        $out   = array();
+        $total = count( $items );
+        $done  = 0;
+        foreach ( $items as $i => $it ) {
+            $id = (string) ( $it['id'] ?? ( 'i' . $i ) );
+            try {
+                $text = $this->query(
+                    $it['prompt']      ?? '',
+                    $it['bot']         ?? null,
+                    $it['system']      ?? '',
+                    $it['temperature'] ?? null,
+                    $it['extra_params'] ?? array()
+                );
+                $out[ $id ] = array( 'text' => $text, 'error' => '', 'status' => 200, 'was_429' => false );
+            } catch ( \Throwable $e ) {
+                $msg     = $e->getMessage();
+                $was_429 = ( false !== strpos( $msg, '429' ) );
+                $out[ $id ] = array( 'text' => '', 'error' => $msg, 'status' => $was_429 ? 429 : 0, 'was_429' => $was_429 );
             }
-
-            $status = (int) ( $r['status'] ?? 0 );
-            $body   = (string) ( $r['body'] ?? '' );
-            $err    = (string) ( $r['error'] ?? '' );
-
-            if ( $status === 429 ) {
-                $out[ $id ] = array( 'text' => '', 'error' => 'Rate limited (429)', 'status' => 429, 'was_429' => true );
-                continue;
-            }
-            if ( $err !== '' ) {
-                $out[ $id ] = array( 'text' => '', 'error' => $err, 'status' => $status, 'was_429' => false );
-                continue;
-            }
-            if ( $status < 200 || $status >= 300 ) {
-                $dec = json_decode( $body, true );
-                $msg = isset( $dec['error']['message'] ) ? $dec['error']['message'] : substr( $body, 0, 300 );
-                $out[ $id ] = array( 'text' => '', 'error' => "HTTP {$status}: {$msg}", 'status' => $status, 'was_429' => false );
-                continue;
-            }
-
-            $data = json_decode( $body, true );
-            if ( isset( $data['choices'][0]['message']['content'] ) ) {
-                $out[ $id ] = array( 'text' => (string) $data['choices'][0]['message']['content'], 'error' => '', 'status' => 200, 'was_429' => false );
-            } elseif ( strpos( $body, 'data: ' ) !== false ) {
-                $out[ $id ] = array( 'text' => $this->parse_sse( $body ), 'error' => '', 'status' => 200, 'was_429' => false );
-            } else {
-                $out[ $id ] = array( 'text' => '', 'error' => 'Unexpected response format', 'status' => $status, 'was_429' => false );
+            $done++;
+            if ( is_callable( $on_progress ) ) {
+                try { call_user_func( $on_progress, $id, $out[ $id ], $done, $total ); }
+                catch ( \Throwable $e ) { /* noop */ }
             }
         }
         return $out;
-    }
-
-    /**
-     * Parse SSE (Server-Sent Events) response in OpenAI streaming format.
-     *
-     * PURPOSE:
-     * Acts as a fallback parser if the Poe API returns a streaming response 
-     * instead of a standard JSON object. It aggregates the 'content' deltas 
-     * into a single string.
-     *
-     * @param string $raw_body The raw response body containing SSE data lines.
-     * @return string Aggregated text content from all SSE chunks.
-     */
-    private function parse_sse( $raw_body ) {
-        $text  = '';
-        $lines = explode( "\n", $raw_body );
-
-        foreach ( $lines as $line ) {
-            $line = trim( $line );
-
-            // Ignore empty lines or lines that don't start with the SSE data prefix
-            if ( empty( $line ) || strpos( $line, 'data: ' ) !== 0 ) {
-                continue;
-            }
-
-            // Extract the JSON payload after "data: "
-            $json_str = substr( $line, 6 );
-
-            // Stop processing when the stream completion marker is reached
-            if ( '[DONE]' === $json_str ) {
-                break;
-            }
-
-            $data = json_decode( $json_str, true );
-
-            // Append the delta content to the aggregated text
-            if ( isset( $data['choices'][0]['delta']['content'] ) ) {
-                $text .= $data['choices'][0]['delta']['content'];
-            }
-        }
-
-        return $text;
     }
 }
