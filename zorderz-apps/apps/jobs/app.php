@@ -148,6 +148,17 @@ require_once ZJOB_DIR . 'includes/class-zjob-scope.php';
 require_once ZJOB_DIR . 'includes/class-zjob-events.php';
 require_once ZJOB_DIR . 'includes/class-zjob-notes.php';
 
+// Wave B — Projects (the estimate-shaped container over the Flow substrate; app-local).
+// init() only registers filters/subscribers (guarded); it seeds nothing and is safe to
+// call at load, before after_setup_theme, so the flow definition/namespaces/derive-state
+// filters and the audit-seam subscriber are in place before any request touches Flow.
+require_once ZJOB_DIR . 'includes/class-zjob-project.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-visibility.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-resolver.php';
+if ( class_exists( 'Zjob_Project' ) && method_exists( 'Zjob_Project', 'init' ) ) {
+	Zjob_Project::init();
+}
+
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
  * Creates/upgrades the tables and grants the tile to eligible users.

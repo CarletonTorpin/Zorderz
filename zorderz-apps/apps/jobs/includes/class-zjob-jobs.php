@@ -1123,6 +1123,16 @@ class ZJOB_Jobs {
 		if ( class_exists( 'ZJOB_User_Log' ) && method_exists( 'ZJOB_User_Log', 'log' ) ) {
 			ZJOB_User_Log::log( $actor_id, $action, $message, 'jobs', $context );
 		}
+		/**
+		 * The audit seam (S3-07). Every audited Job change re-broadcasts its context
+		 * (which carries 'job_id') so a downstream container can keep its own derived
+		 * state fresh. The jobs model never learns who — if anyone — is listening; a
+		 * subscriber that throws must never break the Job (subscribers swallow their own
+		 * errors). Fires late, after the change is already logged.
+		 */
+		if ( function_exists( 'do_action' ) ) {
+			do_action( 'zjob_job_audited', $context );
+		}
 	}
 
 	/**
