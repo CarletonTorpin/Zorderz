@@ -256,8 +256,134 @@ class ZDZ_Business_Profile_Admin {
 			);
 			return;
 		}
+		// Brand-contrast guard: a swapped brand colour must not silently ship below
+		// WCAG AA. We WARN (never silently rewrite a value the tenant explicitly set,
+		// and never block the save) — the accessibility half of white-labelling.
+		self::warn_low_contrast_brand( $values, $defaults );
+
 		ZDZ_Business_Profile::set( $values, 'manual' );
 		self::notice( __( 'Palette saved. Reload the app to see it.', 'zorderz' ), 'success' );
+	}
+
+	/**
+	 * Emit an admin WARNING notice when the effective brand-500 fails WCAG AA
+	 * against the app surface or against on-brand ink. Advisory only: it never
+	 * blocks the save and never rewrites the chosen colour ("nothing silent") — it
+	 * tells the tenant so a low-contrast brand can't ship unnoticed. This is the
+	 * accessibility half of white-label rebranding.
+	 *
+	 * @param array $values   The values about to be persisted (may hold brand.ramp.500).
+	 * @param array $defaults The shipped brand defaults.
+	 * @return void
+	 */
+	private static function warn_low_contrast_brand( array $values, array $defaults ) {
+		$brand500 = $values['brand']['ramp']['500']
+			?? (string) ZDZ_Business_Profile::get( 'brand.ramp.500', $defaults['ramp']['500'] );
+		if ( ! preg_match( '/^#([A-Fa-f0-9]{3}){1,2}$/', (string) $brand500 ) ) {
+			return;
+		}
+
+		// Defaults describe the shipped LIGHT theme, where brand chrome is most
+		// exposed: surface is white and on-brand ink is white. All filterable so an
+		// install with a different surface/ink or threshold can retune the guard.
+		$surface  = (string) apply_filters( 'zdz_brand_contrast_surface', '#FFFFFF' );
+		$ink      = (string) apply_filters( 'zdz_brand_contrast_ink', '#FFFFFF' );
+		$min_text = (float) apply_filters( 'zdz_brand_contrast_min', 4.5 );   // text
+		$min_ui   = (float) apply_filters( 'zdz_brand_contrast_min_ui', 3.0 ); // large / UI
+
+		$ink_ratio     = self::contrast_ratio( $ink, $brand500 );     // on-brand text over the fill
+		$surface_ratio = self::contrast_ratio( $brand500, $surface ); // brand accent over the surface
+
+		$problems = [];
+		if ( $ink_ratio < $min_text ) {
+			$problems[] = sprintf(
+				/* translators: 1: measured ratio, 2: required ratio */
+				__( 'on-brand text is %1$s:1 (needs %2$s:1 to stay readable)', 'zorderz' ),
+				number_format( $ink_ratio, 2 ),
+				number_format( $min_text, 1 )
+			);
+		}
+		if ( $surface_ratio < $min_ui ) {
+			$problems[] = sprintf(
+				/* translators: 1: measured ratio, 2: required ratio */
+				__( 'brand-on-surface is %1$s:1 (needs %2$s:1 for buttons, icons and borders)', 'zorderz' ),
+				number_format( $surface_ratio, 2 ),
+				number_format( $min_ui, 1 )
+			);
+		}
+		if ( ! $problems ) {
+			return;
+		}
+
+		self::notice(
+			sprintf(
+				/* translators: 1: brand hex code, 2: semicolon-separated list of contrast problems */
+				__( 'Heads up: brand colour %1$s may be hard to read — %2$s. It was saved as chosen; a darker or lighter shade would clear AA.', 'zorderz' ),
+				'<code>' . esc_html( strtoupper( (string) $brand500 ) ) . '</code>',
+				esc_html( implode( '; ', $problems ) )
+			),
+			'warning'
+		);
+	}
+
+	/**
+	 * WCAG contrast ratio between two hex colours — (Lighter + 0.05) / (Darker +
+	 * 0.05), pure relative-luminance math, no dependency. Returns 0.0 when either
+	 * colour cannot be parsed (so a malformed value trips the low-contrast warning
+	 * rather than passing silently).
+	 *
+	 * @param string $hex_a
+	 * @param string $hex_b
+	 * @return float
+	 */
+	public static function contrast_ratio( $hex_a, $hex_b ) {
+		$a = self::hex_to_rgb( $hex_a );
+		$b = self::hex_to_rgb( $hex_b );
+		if ( null === $a || null === $b ) {
+			return 0.0;
+		}
+		$la = self::relative_luminance( $a );
+		$lb = self::relative_luminance( $b );
+		$hi = max( $la, $lb );
+		$lo = min( $la, $lb );
+		return ( $hi + 0.05 ) / ( $lo + 0.05 );
+	}
+
+	/**
+	 * Parse a #RGB or #RRGGBB hex string into an [r, g, b] array (0–255), or null
+	 * when it is not a valid hex colour.
+	 *
+	 * @param string $hex
+	 * @return array|null
+	 */
+	private static function hex_to_rgb( $hex ) {
+		$hex = ltrim( trim( (string) $hex ), '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		}
+		if ( ! preg_match( '/^[0-9A-Fa-f]{6}$/', $hex ) ) {
+			return null;
+		}
+		return [
+			hexdec( substr( $hex, 0, 2 ) ),
+			hexdec( substr( $hex, 2, 2 ) ),
+			hexdec( substr( $hex, 4, 2 ) ),
+		];
+	}
+
+	/**
+	 * WCAG relative luminance of an [r, g, b] colour (sRGB channels, 0–255).
+	 *
+	 * @param array $rgb
+	 * @return float
+	 */
+	private static function relative_luminance( array $rgb ) {
+		$lin = [];
+		foreach ( $rgb as $c ) {
+			$c     = $c / 255;
+			$lin[] = ( $c <= 0.03928 ) ? ( $c / 12.92 ) : pow( ( $c + 0.055 ) / 1.055, 2.4 );
+		}
+		return 0.2126 * $lin[0] + 0.7152 * $lin[1] + 0.0722 * $lin[2];
 	}
 
 	private static function apply_pack() {
