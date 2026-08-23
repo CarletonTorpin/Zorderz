@@ -162,7 +162,8 @@ class ZSV_DB {
 	 * A legacy install upgraded to Zorderz has its `ts_survey_leads` table renamed to
 	 * `zdz_survey_leads` by the platform ZDZ_Rename_Migration, but the COLUMNS keep
 	 * their legacy names — two of them named after the single baked-in survey operator
-	 * (`kathie_notes` / `kathie_status`, the deprecated aliases). This renames them to
+	 * (those legacy column names arrive from a private migration pack via the
+	 * `zsv_legacy_operator_column_renames` filter — Core names no person). This renames them to
 	 * the schema-neutral `operator_notes` / `operator_status`, preserving data, and
 	 * also folds the even-older provider-named `nutshell_*` columns to `crm_*`.
 	 *
@@ -184,10 +185,11 @@ class ZSV_DB {
 			return;
 		}
 
-		// Map of legacy column => neutral column + its definition.
+		// Map of legacy column => neutral column + its definition. Core names no person:
+		// the neutral operator_* columns are the migration TARGET (install() already creates
+		// them); a tenant's person-named legacy operator columns arrive from the private
+		// migration pack via the filter below, shaped exactly like these entries.
 		$renames = array(
-			'kathie_notes'    => array( 'to' => 'operator_notes',  'def' => 'TEXT DEFAULT NULL' ),
-			'kathie_status'   => array( 'to' => 'operator_status', 'def' => "VARCHAR(100) DEFAULT NULL" ),
 			'nutshell_lead_id'    => array( 'to' => 'crm_lead_id',    'def' => "VARCHAR(100) DEFAULT NULL" ),
 			'nutshell_contact_id' => array( 'to' => 'crm_contact_id', 'def' => "VARCHAR(100) DEFAULT NULL" ),
 			'nutshell_status'     => array( 'to' => 'crm_status',     'def' => "VARCHAR(100) DEFAULT NULL" ),
@@ -196,7 +198,26 @@ class ZSV_DB {
 			'salesperson_initials' => array( 'to' => 'salesperson_code', 'def' => "VARCHAR(16) DEFAULT NULL" ),
 		);
 
+		/**
+		 * Tenant-supplied legacy operator-column renames (Business Identity). A tenant
+		 * upgrading from the pre-generalization schema may hold operator columns named
+		 * after a specific person; its private pack registers them here. Every target is
+		 * still a neutral column, so no person-named column survives. Core ships none.
+		 * Shape: array( 'legacy_col' => array( 'to' => 'neutral_col', 'def' => '<column def>' ) ).
+		 */
+		$tenant_renames = apply_filters( 'zsv_legacy_operator_column_renames', array() );
+		if ( is_array( $tenant_renames ) && ! empty( $tenant_renames ) ) {
+			$renames = array_merge( $renames, $tenant_renames );
+		}
+
 		foreach ( $renames as $old => $spec ) {
+			// Defence-in-depth: column names interpolate into DDL, so admit only valid
+			// identifiers and well-formed specs (a malformed filter entry is skipped, not run).
+			if ( ! is_array( $spec ) || empty( $spec['to'] ) || empty( $spec['def'] )
+				|| ! preg_match( '/^[A-Za-z0-9_]+$/', (string) $old )
+				|| ! preg_match( '/^[A-Za-z0-9_]+$/', (string) $spec['to'] ) ) {
+				continue;
+			}
 			$new     = $spec['to'];
 			$has_old = ! empty( $wpdb->get_results( "SHOW COLUMNS FROM {$leads} LIKE '{$old}'" ) );
 			$has_new = ! empty( $wpdb->get_results( "SHOW COLUMNS FROM {$leads} LIKE '{$new}'" ) );
