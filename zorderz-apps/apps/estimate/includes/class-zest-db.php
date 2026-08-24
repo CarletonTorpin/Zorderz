@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZEST_DB {
 
-	const DB_VERSION = '1.23.0';
+	const DB_VERSION = '1.24.0';
 
 	/** doc_type discriminator values — this row models an estimate or an invoice document. */
 	const DOC_TYPE_ESTIMATE = 'estimate';
@@ -145,6 +145,7 @@ class ZEST_DB {
 			converted_invoice_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			doc_type        VARCHAR(20)  NOT NULL DEFAULT 'estimate',
 			invoice_checked_at DATETIME  NULL DEFAULT NULL,
+			updated_at      DATETIME     NULL DEFAULT NULL,
 			sent_at         DATETIME     NULL DEFAULT NULL,
 			accepted_at     DATETIME     NULL DEFAULT NULL,
 			accepted_by     BIGINT UNSIGNED NOT NULL DEFAULT 0,

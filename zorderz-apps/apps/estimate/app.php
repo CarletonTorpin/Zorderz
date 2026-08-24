@@ -68,6 +68,7 @@ define( 'ZEST_APP_ID', 'estimate-creator' );
  */
 if ( ! defined( 'ZEST_MARKER_CREATE' ) ) {
 	define( 'ZEST_MARKER_CREATE', '[ZDZ_EST_CREATE]' );
+	define( 'ZEST_MARKER_UPDATE', '[ZDZ_EST_UPDATE]' );
 	define( 'ZEST_MARKER_SEND', '[ZDZ_EST_SEND]' );
 	define( 'ZEST_MARKER_STUB', '[ZDZ_EST_STUB]' );
 	define( 'ZEST_MARKER_LOOKUP', '[ZDZ_EST_LOOKUP]' );
@@ -109,6 +110,7 @@ function zest_ai_model( string $role ): string {
 function zest_markers(): array {
 	return array(
 		'estimate.create'       => array( 'token' => ZEST_MARKER_CREATE, 'deprecated' => array( '[TSEC_CREATE]' ) ),
+		'estimate.modify'       => array( 'token' => ZEST_MARKER_UPDATE, 'deprecated' => array( '[TSEC_UPDATE]' ) ),
 		'estimate.send'         => array( 'token' => ZEST_MARKER_SEND, 'deprecated' => array( '[TSEC_SEND]' ) ),
 		'estimate.stub'         => array( 'token' => ZEST_MARKER_STUB, 'deprecated' => array( '[TSEC_STUB]' ) ),
 		'estimate.lookup'       => array( 'token' => ZEST_MARKER_LOOKUP, 'deprecated' => array( '[TSEC_LOOKUP]' ) ),
@@ -228,6 +230,7 @@ add_action( 'plugins_loaded', function () {
 		}
 		foreach ( array(
 			'estimate.create' => 'create_from_chat',
+			'estimate.modify' => 'update_from_chat',
 			'estimate.send'   => 'send_from_chat',
 			'estimate.lookup' => 'lookup_for_chat',
 			'estimate.stub'   => 'stub_from_lead',
@@ -524,5 +527,65 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 	$map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array(
 		'estimate-creator' => ZEST_APP_ID, // id unchanged; recorded for completeness
 	) );
+	return $map;
+} );
+
+/* ── Estimate lifecycle expressed as Flow states (Plan 02 E8 — expression only) ─────
+ * No migration this release: the live `status` column keeps its current handling (the
+ * provider-signal map stays authoritative). We DECLARE the documented state set and the
+ * namespaced refs so the later migration onto the Zorderz Flow substrate is a mechanical
+ * rename. accepted ≠ invoiced ≠ paid are three DISTINCT states (the §65 CH19 lesson: two
+ * answers that scored 100% were the two worst — "accepted" presented as invoiced). Keys are
+ * (system, entity, external_id) — never a bare document number (estimate#5982 ≠ invoice#5982).
+ */
+add_filter( 'zdz_work_item_ref_namespaces', function ( $list ) {
+	$list = is_array( $list ) ? $list : array();
+	// system => entity; the substrate keys on (system, entity, external_id).
+	foreach ( array( 'estimate' => 'document', 'fb_estimate' => 'document', 'fb_invoice' => 'document' ) as $system => $entity ) {
+		$list[] = $system . '/' . $entity;
+	}
+	return $list;
+} );
+
+add_filter( 'zdz_flow_definitions', function ( $registry ) {
+	$registry = is_array( $registry ) ? $registry : array();
+	if ( isset( $registry['estimate'] ) ) {
+		return $registry; // a tenant override wins
+	}
+	$registry['estimate'] = array(
+		'work_type'   => 'estimate',
+		'version'     => 1,
+		'states'      => array(
+			array( 'id' => 'draft', 'initial' => true ),
+			array( 'id' => 'sent' ),
+			array( 'id' => 'accepted' ),
+			array( 'id' => 'declined' ),
+			array( 'id' => 'invoiced' ),
+			array( 'id' => 'paid' ),
+			array( 'id' => 'void' ),
+		),
+		'transitions' => array(
+			array( 'id' => 'send',    'from' => 'draft',    'to' => 'sent' ),
+			array( 'id' => 'accept',  'from' => 'sent',     'to' => 'accepted' ),
+			array( 'id' => 'decline', 'from' => 'sent',     'to' => 'declined' ),
+			array( 'id' => 'invoice', 'from' => 'accepted', 'to' => 'invoiced' ),
+			array( 'id' => 'pay',     'from' => 'invoiced', 'to' => 'paid' ),
+			array( 'id' => 'void',    'to' => 'void' ), // *→void — legal from any state
+		),
+	);
+	return $registry;
+} );
+
+/**
+ * Estimate status vocabulary (Plan 02 E8 / S2-10). The accepted→invoiced→paid DISTINCTION
+ * is [CORE] Flow semantics; the acceptance synonym set is a neutral English default a tenant
+ * extends via the `knowledge` pack. "The provider has no 'signed' status (signature capture
+ * is external)" is [IDENTITY→knowledge] and is not asserted here.
+ */
+add_filter( 'zdz_estimate_status_synonyms', function ( $map ) {
+	$map  = is_array( $map ) ? $map : array();
+	$syns = array( 'accepted', 'signed', 'approved', 'okayed', 'greenlit' );
+	$existing      = isset( $map['accepted'] ) && is_array( $map['accepted'] ) ? $map['accepted'] : array();
+	$map['accepted'] = array_values( array_unique( array_merge( $existing, $syns ) ) );
 	return $map;
 } );
