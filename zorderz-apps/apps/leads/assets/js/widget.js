@@ -792,11 +792,15 @@
             pending:     'zl-w-status-generating',
             failed:      'zl-w-status-failed',
             error:       'zl-w-status-failed',
+            no_matches:  'zl-w-status-nomatch',
             test:        'zl-w-badge-test'
         };
+        // D-04: an empty result is neutral, not red — and reads 'No matches'.
+        var labelMap = { no_matches: 'No matches' };
         var cls = statusMap[status] || '';
+        var label = labelMap[status] || ucfirst(status);
         return '<span class="zl-w-batch-status' + (cls ? ' ' + cls : '') + '">' +
-               escHtml(ucfirst(status)) + '</span>';
+               escHtml(label) + '</span>';
     }
 
     /**
@@ -1193,6 +1197,15 @@
                  '" data-batch-id="' + escHtml(batchId) + '">Undo Skip</button>';
         }
 
+        // D-03: recover a lead that failed to reach the CRM — one click, duplicate-safe.
+        // Shown only on the failed-CRM state (server-computed crm_recoverable) with the
+        // CRM-sync permission.
+        var recoverable = (lead.crm_recoverable === 1 || lead.crm_recoverable === '1' || lead.crm_recoverable === true);
+        if (recoverable && hasPerm('can_sync_nutshell')) {
+            h += '<button class="zl-lc-btn zl-lc-recover zl-btn-recover" data-lead-id="' + escHtml(leadId) +
+                 '" data-batch-id="' + escHtml(batchId) + '" title="This lead never reached the CRM. Create it now (safe to retry).">\u21bb Create Now</button>';
+        }
+
         h += '</div>';
 
         /* ─── PURCHASE HISTORY (pretty formatted) ──────────────── */
@@ -1377,7 +1390,52 @@
      * Bind lead-level event handlers (Contacted, Skip, collapsible toggles).
      * @param {HTMLElement} container
      */
+    /**
+     * D-03: post a duplicate-safe, CRM-only retry for one failed lead. A failed retry
+     * is a real, human-labelled response (retryable or not), never a crash.
+     * @param {string} leadId
+     * @param {string} batchId
+     * @param {HTMLElement} btn
+     */
+    function recoverLead(leadId, batchId, btn) {
+        if (!leadId) { return; }
+        if (btn) { btn.disabled = true; btn.textContent = '\u21bb Creating\u2026'; }
+        ajaxPost('zl_retry_lead', { lead_id: leadId })
+            .then(function (resp) {
+                var d = (resp && resp.data) ? resp.data : {};
+                if (resp && resp.success) {
+                    if (btn) {
+                        btn.textContent = (d.action === 'adopted') ? '\u2713 Re-linked' : '\u2713 Created';
+                        btn.classList.add('zl-lc-recover-done');
+                    }
+                    logMsg('Recovered lead ' + leadId + ': ' + (d.label || 'created in CRM.'));
+                    setTimeout(function () { reloadBatchLeads(batchId); }, 800);
+                } else {
+                    var label = (d && d.label) ? d.label : (extractMsg(resp) || 'Retry failed.');
+                    var retryable = !(d && d.retryable === false);
+                    if (btn) {
+                        btn.disabled = !retryable; // lock out only a non-retryable (config) failure
+                        btn.textContent = retryable ? '\u21bb Try again' : ('\u2715 ' + label);
+                    }
+                    logMsg('Recover lead ' + leadId + ' failed: ' + label);
+                }
+            })
+            .catch(function (err) {
+                if (btn) { btn.disabled = false; btn.textContent = '\u21bb Try again'; }
+                logMsg('Recover network error: ' + err.message);
+            });
+    }
+
     function bindLeadEvents(container) {
+
+        /* D-03: recover-a-failed-lead */
+        var rBtns = container.querySelectorAll('.zl-btn-recover');
+        for (var ri = 0; ri < rBtns.length; ri++) {
+            rBtns[ri].addEventListener('click', function (e) {
+                e.stopPropagation();
+                recoverLead(this.getAttribute('data-lead-id'), this.getAttribute('data-batch-id'), this);
+            });
+        }
 
         /* Contacted */
         var cBtns = container.querySelectorAll('.zl-btn-contacted');
@@ -2021,6 +2079,12 @@
                         pollTimerId = null;
                         clearStallBanner();
                         generationComplete(batchId);
+                    } else if (status === 'no_matches') {
+                        // D-04: a definite empty result — terminal, but NOT an error.
+                        clearInterval(pollTimerId);
+                        pollTimerId = null;
+                        clearStallBanner();
+                        generationNoMatches(batchId, message);
                     } else if (status === 'error') {
                         clearInterval(pollTimerId);
                         pollTimerId = null;
@@ -2246,6 +2310,12 @@
                 }
                 // v1.6.0 — Fixed: field names now match the PHP response exactly.
                 var d          = resp.data || {};
+                if (d.no_matches) {
+                    // D-04: a definite empty result on the legacy path — stop cleanly,
+                    // show the neutral no-match state, do NOT proceed to later steps.
+                    generationNoMatches(batchId, d.message);
+                    return;
+                }
                 var leadCount  = d.lead_count || 0;
                 var candidates = d.total_candidates || 0;
                 logMsg('Selected ' + leadCount + ' leads from ' + candidates + ' candidates.');
@@ -2418,6 +2488,26 @@
         }
         showProgress('Generation complete!', 100);
         logMsg('Generation complete for batch ' + batchId + '.');
+        isRunning      = false;
+        currentBatchId = null;
+        enableActions();
+        loadStats();
+        loadBatches();
+    }
+
+    /**
+     * D-04: a batch that ran cleanly and matched nothing. Neutral, 100%, legible —
+     * the message names the gate that emptied it. Terminal, but never the red error
+     * path (red text that isn't an error trains you to ignore red text).
+     */
+    function generationNoMatches(batchId, message) {
+        if (pollTimerId) {
+            clearInterval(pollTimerId);
+            pollTimerId = null;
+        }
+        var msg = message || 'No matches — every candidate was accounted for; none met the filters.';
+        showProgress(msg, 100);
+        logMsg('No matches: ' + msg);
         isRunning      = false;
         currentBatchId = null;
         enableActions();

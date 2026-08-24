@@ -12,7 +12,7 @@
  * 
  * BUSINESS CONTEXT:
  * Built for the business. Manages settings to connect their FreshBooks invoicing
- * to their Nutshell CRM pipeline, using Poe AI (Gemini-3.1-Pro) for data enrichment.
+ * to their Nutshell CRM pipeline, using the shared AI gateway for data enrichment.
  * 
  * CREDENTIAL SHARING:
  * To prevent duplicate data entry, this plugin attempts to read API credentials from the
@@ -818,23 +818,34 @@ class ZL_Admin {
                     <tr>
                         <th>AI Model</th>
                         <td>
-                            <select name="zl_ai_model">
-                                <?php
-                                $current_model = get_option( 'zl_ai_model', 'Gemini-3.1-Pro' );
-                                $models = array(
-                                // Gemini-3.1-Pro is the recommended model for the business's setup
-                                // Uses thinking_budget=32768 and web_search=true via the Poe API client
-                                    'Gemini-3.1-Pro'              => 'Gemini 3.1 Pro — High Reasoning + Web (Recommended)',
-                                    'Gemini-3-Flash'              => 'Gemini 3 Flash (Fast & Affordable)',
-                                    'GPT-5.2'                     => 'GPT 5.2 (Versatile)',
-                                    'Claude-Sonnet-4.5'           => 'Claude Sonnet 4.5 (Quality)',
-                                    'Grok-4.1-Fast-Non-Reasoning' => 'Grok 4.1 Fast (Very Fast)',
-                                );
-                                foreach ( $models as $val => $label ) {
+                            <?php
+                            // Choices come from config (the model registry / connections
+                            // pack), never a hardcoded roster. When none are registered,
+                            // fall back to a free-text field so an operator on any gateway
+                            // can enter the handle their pack uses. The stored value is
+                            // always preserved so a save never loses it.
+                            $current_model = get_option( 'zl_ai_model', '' );
+                            $choices = ( class_exists( 'ZDZ_Model_Registry' ) && method_exists( 'ZDZ_Model_Registry', 'choices' ) )
+                                ? (array) ZDZ_Model_Registry::choices()
+                                : array();
+                            if ( ! empty( $choices ) ) {
+                                if ( '' !== $current_model && ! isset( $choices[ $current_model ] ) ) {
+                                    $choices[ $current_model ] = $current_model; // never drop a saved value
+                                }
+                                echo '<select name="zl_ai_model">';
+                                foreach ( $choices as $val => $label ) {
                                     printf( '<option value="%s" %s>%s</option>', esc_attr( $val ), selected( $current_model, $val, false ), esc_html( $label ) );
                                 }
-                                ?>
-                            </select>
+                                echo '</select>';
+                            } else {
+                                printf(
+                                    '<input type="text" name="zl_ai_model" value="%s" class="regular-text" placeholder="%s" />',
+                                    esc_attr( $current_model ),
+                                    esc_attr__( 'Model handle from your connections pack', 'zorderz' )
+                                );
+                            }
+                            ?>
+                            <p class="description">The AI model is provided by your connections pack; leave blank to use the platform default.</p>
                         </td>
                     </tr>
                 </table>

@@ -8,7 +8,7 @@ name: security
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [ main, wave-a ]
 
 permissions:
   contents: read
@@ -40,7 +40,8 @@ jobs:
       - name: php -l on changed PHP files
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          [ -z "$base" ] && base="HEAD~1"
+          # New-branch pushes report the null SHA as `before`; fall back to a resolvable base.
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then base="HEAD~1"; fi
           changed="$(git diff --name-only "$base"...HEAD -- '*.php' || true)"
           [ -z "$changed" ] && echo "no PHP changes" && exit 0
           rc=0
@@ -77,20 +78,26 @@ jobs:
           coverage: none
           tools: composer
       - run: composer install --no-interaction --prefer-dist
-      - name: PHP_CodeSniffer (security ruleset, changed LINES only)
-        # Runs the security-only ruleset, then reports ONLY findings that land on the lines this
-        # change actually touched (.github/scripts/phpcs-changed-lines.py). The codebase predates
-        # WPCS, so a whole-file scan of any touched legacy file is red forever and trains everyone
-        # to ignore the gate; diff-line scoping keeps a contributor answerable for their own diff
-        # while still catching a real new vulnerability. Full cleanup is `composer lint`.
+      - name: PHP_CodeSniffer (security ruleset, changed lines only, import-baselined)
+        # Runs the security-only ruleset on changed files, subtracts the accepted extraction
+        # baseline (.github/phpcs-security-baseline.json — grandfathers the one-time pre-WPCS
+        # import), then reports ONLY findings on lines this change actually touched
+        # (phpcs-changed-lines.py). Diff-line scoping keeps a contributor answerable for their own
+        # diff while still catching a real new vulnerability; the baseline stops the initial
+        # extraction merge from lighting up hundreds of inherited (mostly false-positive) findings.
+        # See docs/SECURITY-REVIEW.md and claude/ts-delta-analysis/phpcs-security-gate-findings.md.
+        # Full style cleanup remains `composer lint` (phpcs.xml.dist).
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          [ -z "$base" ] && base="HEAD~1"
-          changed="$(git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.php' | grep -vE '(^|/)(bundled|vendor|tests|dist)/' || true)"
+          # A new-branch push reports the null SHA as `before`; fall back to a resolvable base so
+          # the branch's own commits are actually scanned instead of vacuously passing.
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then base="HEAD~1"; fi
+          changed="$(git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.php' | grep -vE '(^|/)(bundled|vendor|tests|dist|\.github)/' || true)"
           if [ -z "$changed" ]; then echo "no PHP changes to scan"; exit 0; fi
-          echo "Scanning changed files (reporting only changed lines):"; echo "$changed"
+          echo "Scanning changed files (baseline-subtracted, reporting only changed lines):"; echo "$changed"
           vendor/bin/phpcs -q --standard=phpcs-security.xml.dist --report=json $changed > phpcs-report.json || true
-          python3 .github/scripts/phpcs-changed-lines.py "$base" HEAD phpcs-report.json
+          python3 .github/scripts/phpcs-baseline.py filter phpcs-report.json .github/phpcs-security-baseline.json > phpcs-report.filtered.json
+          python3 .github/scripts/phpcs-changed-lines.py "$base" HEAD phpcs-report.filtered.json
 
   integration:
     name: Integration tests (WordPress harness)
@@ -128,3 +135,41 @@ jobs:
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1:3306 latest
       - name: PHPUnit integration suite
         run: vendor/bin/phpunit -c phpunit-integration.xml.dist
+
+  build-gate:
+    name: Build + packaging gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: Build both zips (runs the completeness/packaging gate)
+        run: bash build.sh
+      - name: php -l across the built tree
+        run: |
+          rc=0
+          while IFS= read -r f; do php -l "$f" >/dev/null || rc=1; done \
+            < <(find zorderz zorderz-apps -name '*.php')
+          exit $rc
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zorderz-zips
+          path: dist/*.zip
+          if-no-files-found: error
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The PII / tenant-data scan gate is deliberately NOT a CI job.
+#
+# The confidential wordlist (company + roster + product + customer terms) must
+# NEVER be handed to this repository — not committed, and NOT stored as a GitHub
+# Actions secret (a repo secret is still "handed to the repo"). The authoritative
+# gate therefore runs PRIVATELY before each release: `.github/scripts/pii-gate.sh`
+# is run against the built zips in a private environment where the wordlist is
+# supplied out-of-band via ZDZ_PII_WORDLIST and never persisted. The script itself
+# holds no terms, so it is safe in the repo; only the wordlist stays out.
+# ─────────────────────────────────────────────────────────────────────────────

@@ -177,6 +177,12 @@ function zdz_apps_manifest() {
 			'activate'   => 'zana_activate',
 			'deactivate' => 'zana_deactivate',
 		],
+		'dotplot' => [
+			'label'      => 'Dot Plot',
+			'file'       => 'apps/dotplot/app.php',
+			'activate'   => 'zdp_activate',
+			'deactivate' => 'zdp_deactivate',
+		],
 	];
 }
 

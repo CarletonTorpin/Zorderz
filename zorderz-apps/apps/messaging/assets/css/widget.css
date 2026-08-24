@@ -1636,3 +1636,82 @@
 	background: #B91C1C;
 }
 .zim-w-swipe-zone svg { flex-shrink: 0; }
+
+/* ── v1.1.4: Vimeo chapter embed (distilled, origin-fixed) ─────────────────
+ * Mapped onto the messenger's theme tokens (surface / border / text / brand)
+ * so it re-skins with the brand ramp and reads correctly in every mode. No
+ * hardcoded brand colour; #000 is only the video letterbox. */
+.zim-w-msg-text .zim-video-embed { margin: 6px 0 2px; max-width: 100%; }
+.zim-w-msg-text .zim-video-embed__frame {
+	position: relative;
+	padding-top: 56.25%; /* 16:9 */
+	background: #000;
+	border-radius: var(--ref-radius-md, 8px);
+	overflow: hidden;
+}
+.zim-w-msg-text .zim-video-embed__frame iframe {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border: 0;
+}
+.zim-w-msg-text .zim-video-embed__chapters { margin-top: 8px; }
+.zim-w-msg-text .zim-video-embed__heading {
+	margin: 0 0 4px;
+	font-size: var(--ref-font-sm, 0.8125rem);
+	font-weight: var(--sys-font-wt-sb, 600);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--sys-text-sec);
+}
+.zim-w-msg-text .zim-video-embed__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	border-top: 1px solid var(--sys-border);
+}
+.zim-w-msg-text .zim-video-embed__list li { border-bottom: 1px solid var(--sys-border); }
+.zim-w-msg-text .zim-video-embed__ch {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 6px;
+	text-decoration: none;
+	color: var(--sys-text);
+	cursor: pointer;
+	border-left: 3px solid transparent;
+	transition: background-color 0.15s var(--ref-ease, ease), border-color 0.15s var(--ref-ease, ease);
+}
+.zim-w-msg-text .zim-video-embed__ch:hover,
+.zim-w-msg-text .zim-video-embed__ch:focus-visible {
+	background: var(--sys-surface);
+	border-left-color: var(--sys-brand);
+	text-decoration: none;
+}
+.zim-w-msg-text .zim-video-embed__ch:focus-visible {
+	outline: 2px solid var(--sys-brand);
+	outline-offset: -2px;
+}
+.zim-w-msg-text .zim-video-embed__num {
+	flex: 0 0 auto;
+	width: 1.6em;
+	height: 1.6em;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: var(--sys-brand);
+	color: var(--sys-text-inv, #fff);
+	font-size: 0.72em;
+	font-weight: 700;
+	line-height: 1;
+}
+.zim-w-msg-text .zim-video-embed__time {
+	flex: 0 0 auto;
+	min-width: 3.2em;
+	font-variant-numeric: tabular-nums;
+	font-size: 0.85em;
+	color: var(--sys-text-sec);
+}
+.zim-w-msg-text .zim-video-embed__title { flex: 1 1 auto; line-height: 1.35; }

@@ -13,7 +13,7 @@ Zorderz is a field service management platform: a mobile-first dashboard, roles 
 The fastest path from a blank WordPress site to a working Zorderz:
 
 1. **Set permalinks to Post name.** Settings → Permalinks → Post name → Save. (An import sets this for you, but doing it first avoids a confusing "it's not working" that isn't actually a bug.)
-2. **Upload the theme.** Appearance → Themes → Add New → Upload Theme → `zorderz-theme-1.6.0.zip` → Install → **Activate**. That is the only upload you need: the theme installs and activates the apps for you. (If your host blocks the theme from writing to the plugins folder, a notice tells you to upload `zorderz-apps-1.6.0.zip` under Plugins → Add New; everything else is the same.)
+2. **Upload the theme.** Appearance → Themes → Add New → Upload Theme → `zorderz-theme-1.7.0.zip` → Install → **Activate**. That is the only upload you need: the theme installs and activates the apps for you. (If your host blocks the theme from writing to the plugins folder, a notice tells you to upload `zorderz-apps-1.7.0.zip` under Plugins → Add New; everything else is the same.)
 3. **Get your data in, one of two ways.**
    - *Have a Company Data bundle?* **Tools → Zorderz Data**, and import it. A whole business (catalog, roster, estimates, orders, chats, knowledge base, media, even the site title and timezone) lands ready to use, and you stay logged in through it. Run the dry run first to preview counts.
    - *Starting fresh?* **Zorderz → Business Profile** to name the business, then **Item Engine** for your catalog. Nothing is seeded; you add what is yours.
@@ -41,8 +41,8 @@ A release is two files. The theme carries a copy of the apps, so a **first insta
 
 | Artifact | Zip | What it is |
 |---|---|---|
-| **Theme** | `zorderz-theme-1.6.0.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
-| **Apps** | `zorderz-apps-1.6.0.zip` | The 18 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
+| **Theme** | `zorderz-theme-1.7.0.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
+| **Apps** | `zorderz-apps-1.7.0.zip` | The 19 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
 
 The theme is the platform; the plugin is the apps that plug into it. **The theme must be active first**: it defines the roles, the shared media store, the plugin registration API and the `zorderz/v1` REST namespace that every app builds on. Install the plugin first and the apps load but have nowhere to appear (you'll get a plain admin notice telling you so).
 
@@ -65,9 +65,9 @@ Everything below ships empty or neutral. A fresh install names no business anywh
 
 ---
 
-## The 18 apps
+## The 19 apps
 
-Bundled in `zorderz-apps-1.6.0.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
+Bundled in `zorderz-apps-1.7.0.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
 
 | App | What it does |
 |---|---|
@@ -89,6 +89,7 @@ Bundled in `zorderz-apps-1.6.0.zip`. An app whose dependencies aren't present de
 | **Estimates** | Build estimates from the catalog and price book. With no billing provider connected, it also generates basic invoices: estimates convert to trackable invoices and payments are recorded through to paid, and you can import an existing business's PDF estimates and invoices. Documents and payment tracking only. |
 | **Commission** | Compensation and commission calculation. Ships no pay data. |
 | **Chat** | The Ai assistant, gated by Answer Authority and grounded in the Business Profile, catalog, roster and rule set. |
+| **Dot Plot** | Plots work-item history from the Flow event log, behind a report-spec validator and an Answer-Authority entitlement gate. Renders whatever sources a business registers; ships with none. |
 
 ---
 
@@ -116,13 +117,13 @@ WordPress defaults to plain permalinks, under which `/wp-json/` returns your hom
 
 ### 2. Install and activate the theme (first)
 
-**Appearance → Themes → Add New → Upload Theme**, choose `zorderz-theme-1.6.0.zip`, install, and **Activate**.
+**Appearance → Themes → Add New → Upload Theme**, choose `zorderz-theme-1.7.0.zip`, install, and **Activate**.
 
 This is the platform. Activating it registers the roles, the shared media store, the plugin API and the `zorderz/v1` REST namespace that the apps need. Activating it also installs and activates the apps for you (next step), so on most hosts this one upload is all you do.
 
 ### 3. The apps plugin (usually automatic)
 
-On most hosts there is nothing to do here: activating the theme in step 2 already installed and activated the apps. Do this by hand only if a notice told you the theme could not write to the plugins folder, in which case: **Plugins → Add New → Upload Plugin**, choose `zorderz-apps-1.6.0.zip`, install, and **Activate**.
+On most hosts there is nothing to do here: activating the theme in step 2 already installed and activated the apps. Do this by hand only if a notice told you the theme could not write to the plugins folder, in which case: **Plugins → Add New → Upload Plugin**, choose `zorderz-apps-1.7.0.zip`, install, and **Activate**.
 
 Either way, activation runs each app's first-run work (tables, scheduling) and flushes the rewrite rules. The apps register against the theme, so the theme must be active first, and it is, since it is what installed them. If you ever see a "needs the Zorderz theme" notice, activate the theme.
 

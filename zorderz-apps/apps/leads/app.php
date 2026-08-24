@@ -8,7 +8,7 @@
  *   configures it, the roster resolves through ZDZ_Party, product vocabulary binds through
  *   a filter with a neutral fallback, and the outbound email voice is a neutral default.
  *   Consumes Business Profile, Party, Core settings and the theme geocoder.
- * Version:     2.7.0
+ * Version:     2.8.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -156,7 +156,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants for versioning and path resolution
-define( 'ZL_VERSION', '2.7.0' );
+// v2.8.0 (Wave D) — recover-a-failed-lead (duplicate-safe, CRM-only, read-only resolve)
+//   + leads legibility: "no matches is a result" and per-batch rejection accounting so
+//   the funnel balances (matched + Σ rejections == scanned). Legibility only — NO count
+//   moves, no new money/count authority; territory names in messages come from config.
+define( 'ZL_VERSION', '2.8.0' );
 define( 'ZL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -276,6 +280,26 @@ function zl_territory_for_postal( $postal ): string {
 /** Is a service-area coverage map configured?  An empty map == allow-all (no gating). */
 function zl_coverage_configured(): bool {
 	return ! empty( zl_zip_territories() );
+}
+
+/**
+ * Territory CODE → display NAME map (Identity binding, for legible messages).
+ *
+ * Used only to make an empty-result message read well ("Candidates were in <name> …").
+ * Ships EMPTY: with nothing configured, the legibility layer shows the territory CODE
+ * itself — which is already tenant config (from the coverage map / roster), never a
+ * hardcoded place literal. A tenant supplies friendlier names via the filter; the
+ * territories Identity Pack is the canonical home. NO place name is ever compiled in.
+ *
+ * @return array<string,string> territory_code => display_name   (empty = show codes)
+ */
+function zl_territory_names(): array {
+	$raw = get_option( 'zl_territory_names', '' );
+	$map = ( is_string( $raw ) && $raw !== '' ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : array() );
+	if ( ! is_array( $map ) ) {
+		$map = array();
+	}
+	return (array) apply_filters( 'zl_territory_names', $map );
 }
 
 /**
@@ -774,6 +798,13 @@ add_action( 'plugins_loaded', 'zl_load_includes' );
  */
 function zl_load_includes() {
     $dir = ZL_PLUGIN_DIR . 'includes/';
+    // Load the CRM-port interface FIRST: the includes glob is alphabetical, so the
+    // nutshell-crm-port class (which implements it) would otherwise load before the
+    // interface file. The guarded pre-load below makes the later glob pass a no-op.
+    $iface = $dir . 'interface-zl-crm-port.php';
+    if ( is_file( $iface ) ) {
+        require_once $iface;
+    }
     foreach ( glob( $dir . '*.php' ) as $file ) {
         require_once $file;
     }
@@ -787,6 +818,12 @@ function zl_load_includes() {
     // item into the theme's unified action-items queue (and rep-mode helpers).
     if ( class_exists( 'ZL_Dashboard_Tile' ) ) {
         ZL_Dashboard_Tile::init();
+    }
+
+    // v2.8.0 (Wave D / D-03): register the recover-a-failed-lead AJAX endpoint
+    // (wp_ajax_zl_retry_lead). Duplicate-safe, CRM-only, read-only contact resolve.
+    if ( class_exists( 'ZL_Lead_Recovery' ) ) {
+        ZL_Lead_Recovery::init();
     }
 }
 

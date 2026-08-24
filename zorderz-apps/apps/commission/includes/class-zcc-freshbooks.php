@@ -139,6 +139,14 @@ class ZCC_FreshBooks {
 			'reference'       => $ref,
 			'lines'           => $lines,
 			'salesperson_codes' => self::harvest_codes( $ref . ' ' . $notes . ' ' . implode( ' ', array_column( $lines, 'description' ) ) ),
+			// Tier-2 SHADOW annotation — a second attribution opinion computed in
+			// parallel for A/B comparison. IN-MEMORY ONLY: never persisted, never
+			// merged into salesperson_codes, never surfaced off the admin screen,
+			// and never paid while zcc_t2_live is 'no' (the shipped default). It is
+			// a guarded no-op — a bare-initials, roster-guarded read that touches no
+			// pay figure — so the money engine and the ledger are byte-for-byte
+			// unchanged whether it finds a candidate or not.
+			't2_shadow'         => self::t2_shadow_for( $ref . ' ' . $notes . ' ' . implode( ' ', array_column( $lines, 'description' ) ) ),
 			'discount_amount' => round( (float) ( $raw['discount_total']['amount'] ?? $raw['discount_amount'] ?? 0 ), 2 ),
 			'cc_fee'          => 0.0, // resolved from a line by the calc engine's ledger-kind pass
 			'outstanding'     => (float) ( $raw['outstanding']['amount'] ?? $raw['outstanding'] ?? 0 ),
@@ -169,6 +177,142 @@ class ZCC_FreshBooks {
 			}
 		}
 		return $codes;
+	}
+
+	/* ==================================================================
+	 * TIER-2 BARE-INITIALS ATTRIBUTION — SHADOW (ships OFF)
+	 *
+	 * Tier-1 is the parenthesised document code harvested above. Tier-2 is a
+	 * roster-guarded second opinion on BARE initials in the free text
+	 * ("… <initials> - Scheduled"). It ships in SHADOW: it records what it WOULD
+	 * attribute and never pays it. The single, reversible, nonce-guarded toggle
+	 * `zcc_t2_live` (default 'no') is the only thing that could ever let it feed a
+	 * pay path, and the plugin NEVER flips itself — going live is a human,
+	 * pay-affecting decision. While OFF the shadow performs ZERO writes: the scan
+	 * is pure, the annotation is in-memory only, and salesperson_codes is untouched.
+	 * ================================================================== */
+
+	/** Is Tier-2 attribution LIVE (allowed to feed pay)? Ships OFF; Zorderz never flips it. */
+	public static function is_t2_live(): bool {
+		return function_exists( 'get_option' ) && get_option( 'zcc_t2_live', 'no' ) === 'yes';
+	}
+
+	/**
+	 * The roster allow-list: uppercased `initials` from ZDZ_Party — the ONLY
+	 * tokens a shadow match may hit. Memoised per request; returns [] when the
+	 * roster service is absent or empty (a fresh install ⇒ the shadow is inert).
+	 * This is the only I/O the shadow touches, and it is a READ.
+	 *
+	 * @return string[]
+	 */
+	public static function t2_roster(): array {
+		if ( isset( self::$memo['t2_roster'] ) ) {
+			return self::$memo['t2_roster'];
+		}
+		$initials = [];
+		if ( class_exists( 'ZDZ_Party' ) && method_exists( 'ZDZ_Party', 'selectable_people' ) ) {
+			try {
+				foreach ( (array) ZDZ_Party::selectable_people() as $p ) {
+					$i = strtoupper( trim( (string) ( $p['initials'] ?? '' ) ) );
+					if ( $i !== '' && ! in_array( $i, $initials, true ) ) {
+						$initials[] = $i;
+					}
+				}
+			} catch ( \Throwable $e ) {
+				$initials = [];
+			}
+		}
+		self::$memo['t2_roster'] = $initials;
+		return $initials;
+	}
+
+	/**
+	 * Assemble the Tier-2 shadow annotation for one invoice's free text, reading
+	 * the live roster + the Compensation attribution contract (reserved tokens +
+	 * code format). A thin wrapper over the PURE t2_shadow_scan(); performs NO
+	 * writes and returns in-memory data only.
+	 *
+	 * @return array See t2_shadow_scan().
+	 */
+	public static function t2_shadow_for( string $text ): array {
+		$contract = class_exists( 'ZDZ_Compensation' ) ? ZDZ_Compensation::attribution() : [];
+		$reserved = is_array( $contract['reserved_tokens'] ?? null ) ? (array) $contract['reserved_tokens'] : [];
+		$format   = (string) ( $contract['code_format'] ?? '/^[A-Z]{2,4}$/' );
+		return self::t2_shadow_scan( $text, self::t2_roster(), $reserved, $format );
+	}
+
+	/**
+	 * PURE Tier-2 bare-initials shadow scan. No I/O, no globals, no writes, no side
+	 * effects — same inputs ⇒ same output. It records what Tier-2 WOULD attribute;
+	 * nothing it returns ever reaches a pay path on its own.
+	 *
+	 * Rules (Core mechanism; roster + tokens are Identity, injected):
+	 *  - Parenthesised codes are Tier-1's — strip them; Tier-2 sees BARE text only.
+	 *  - A candidate token must match the attribution `code_format` AND be a roster
+	 *    initial. A token that is NOT on the roster is NEVER a candidate — so an
+	 *    unconfigured / hallucinated code can never match.
+	 *  - A reserved / stopword token (a caps-prose word like "AS", or a place /
+	 *    source code) is rejected, never guessed.
+	 *  - Two or more DISTINCT roster hits ⇒ AMBIGUOUS ⇒ no guess (a review flag).
+	 *
+	 * @param string   $text        Invoice free text.
+	 * @param string[] $roster      Allow-list of initials (Identity; injected).
+	 * @param string[] $reserved    Reserved/stopword tokens (Identity; injected).
+	 * @param string   $code_format Anchored regex a token must match to be a code.
+	 * @return array{ scanned:bool, candidate:string, matched:bool, ambiguous:bool, rejected:string[], reason:string }
+	 */
+	public static function t2_shadow_scan( string $text, array $roster, array $reserved, string $code_format = '/^[A-Z]{2,4}$/' ): array {
+		$roster_u = [];
+		foreach ( $roster as $r ) {
+			$ru = strtoupper( trim( (string) $r ) );
+			if ( $ru !== '' ) {
+				$roster_u[ $ru ] = true;
+			}
+		}
+		if ( empty( $roster_u ) ) {
+			// No roster configured ⇒ the shadow is a total no-op.
+			return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => false, 'rejected' => [], 'reason' => 'no roster configured — shadow inert' ];
+		}
+
+		$reserved_u = [];
+		foreach ( $reserved as $r ) {
+			$ru = strtoupper( trim( (string) $r ) );
+			if ( $ru !== '' ) {
+				$reserved_u[ $ru ] = true;
+			}
+		}
+
+		// Strip parenthesised groups — those belong to Tier-1 harvest_codes().
+		$bare = preg_replace( '/\([^)]*\)/', ' ', $text );
+		if ( ! is_string( $bare ) ) {
+			$bare = $text;
+		}
+
+		$hits     = [];
+		$rejected = [];
+		foreach ( (array) preg_split( '/[^A-Za-z]+/', $bare, -1, PREG_SPLIT_NO_EMPTY ) as $tok ) {
+			$t = strtoupper( (string) $tok );
+			if ( @preg_match( $code_format, $t ) !== 1 ) {
+				continue; // not a code shape
+			}
+			if ( isset( $reserved_u[ $t ] ) ) {
+				if ( ! in_array( $t, $rejected, true ) ) {
+					$rejected[] = $t; // reserved place/source/stopword — never a person
+				}
+				continue;
+			}
+			if ( isset( $roster_u[ $t ] ) && ! in_array( $t, $hits, true ) ) {
+				$hits[] = $t; // roster-guarded: only configured initials count
+			}
+		}
+
+		if ( count( $hits ) === 1 ) {
+			return [ 'scanned' => true, 'candidate' => $hits[0], 'matched' => true, 'ambiguous' => false, 'rejected' => $rejected, 'reason' => 'single roster match — shadow only, not paid' ];
+		}
+		if ( count( $hits ) >= 2 ) {
+			return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => true, 'rejected' => $rejected, 'reason' => 'ambiguous: ' . count( $hits ) . ' roster matches — no guess' ];
+		}
+		return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => false, 'rejected' => $rejected, 'reason' => $rejected ? 'only reserved/stopword tokens — rejected' : 'no roster match' ];
 	}
 
 	/**

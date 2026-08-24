@@ -127,6 +127,7 @@ class ZDZ_Item_Engine {
 		add_filter( 'zdz_item_get', [ __CLASS__, 'filter_get' ], 10, 2 );
 		add_filter( 'zdz_pricing_resolve', [ __CLASS__, 'filter_pricing_resolve' ], 10, 3 );
 		add_filter( 'zdz_item_engine_version', [ __CLASS__, 'filter_version' ], 10, 1 );
+		add_filter( 'zdz_item_detect_conflicts', [ __CLASS__, 'filter_detect_conflicts' ], 10, 3 );
 
 		add_action( 'rest_api_init', [ __CLASS__, 'register_rest' ] );
 	}
@@ -463,6 +464,156 @@ class ZDZ_Item_Engine {
 	public static function classify( $text ) {
 		$item = self::match( $text );
 		return $item ? $item['id'] : null;
+	}
+
+	/* ============================================================== *
+	 *  CONFLICT DETECTION  (§77 Fix A — mutually-exclusive trait pairs)
+	 * ============================================================== */
+
+	/**
+	 * Deterministic contradiction detector. Scans for mutually-exclusive TRAIT PAIRS
+	 * within a small token window in ONE stream (the raw input, and separately each single
+	 * line item — never across items, which fragment-splits and both mis-flags and misses).
+	 * Proximity, not "both words present". The engine is the authority; a caller sets
+	 * needs_review and neutralises the reference on a hit (INV-12).
+	 *
+	 * CORE MECHANISM, NAMES NOTHING. The trait pairs come from `zdz_item_conflict_pairs`
+	 * (ships EMPTY) — each pair `{ a:[token-prefix…], b:[token-prefix…], reason }`. A
+	 * token matches a prefix by str-starts-with (a trailing "*" is optional and stripped),
+	 * so "retract*" matches "retractable". The per-item stream also folds in the item's
+	 * declared trait tokens (the material-class attribute), so a contradiction can be
+	 * caught from the catalog's own attributes, not only from words — the ONE
+	 * implementation the estimate parser and the receipt builder both call.
+	 *
+	 * @param string $text  the raw combined input (one stream).
+	 * @param array  $items line items (each scanned as its own stream).
+	 * @return array{ conflicts:array<int,array{trait_a:string,trait_b:string,span:int,reason:string}>, needs_review:bool }
+	 */
+	public static function detect_conflicts( $text, array $items = array() ) {
+		$out   = array( 'conflicts' => array(), 'needs_review' => false );
+		$pairs = apply_filters( 'zdz_item_conflict_pairs', array() );
+		if ( ! is_array( $pairs ) || empty( $pairs ) ) {
+			return $out; // ships EMPTY — a fresh install flags nothing, Core names no product.
+		}
+
+		$window  = (int) apply_filters( 'zdz_item_conflict_window', 5 );
+		$window  = $window > 0 ? $window : 5;
+		$streams = array();
+
+		$t = trim( (string) $text );
+		if ( '' !== $t ) {
+			$streams[] = self::conflict_tokens( $t );
+		}
+		foreach ( $items as $li ) {
+			if ( ! is_array( $li ) ) {
+				continue;
+			}
+			$s = (string) ( $li['description'] ?? '' ) . ' ' . (string) ( $li['sub_description'] ?? '' );
+			foreach ( self::item_trait_tokens( $li ) as $tok ) {
+				$s .= ' ' . $tok;
+			}
+			$s = trim( $s );
+			if ( '' !== $s ) {
+				$streams[] = self::conflict_tokens( $s );
+			}
+		}
+
+		foreach ( $streams as $tokens ) {
+			foreach ( $pairs as $pair ) {
+				if ( ! is_array( $pair ) ) {
+					continue;
+				}
+				$a = array_values( array_filter( array_map( 'strval', (array) ( $pair['a'] ?? array() ) ) ) );
+				$b = array_values( array_filter( array_map( 'strval', (array) ( $pair['b'] ?? array() ) ) ) );
+				if ( empty( $a ) || empty( $b ) ) {
+					continue;
+				}
+				$hit = self::conflict_proximity_hit( $tokens, $a, $b, $window );
+				if ( null !== $hit ) {
+					$out['conflicts'][] = array(
+						'trait_a' => $hit['a'],
+						'trait_b' => $hit['b'],
+						'span'    => $hit['span'],
+						'reason'  => (string) ( $pair['reason'] ?? '' ),
+					);
+					$out['needs_review'] = true;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** Lowercase, split a stream into alphanumeric tokens (index-addressable). */
+	private static function conflict_tokens( $text ) {
+		$parts = preg_split( '/[^a-z0-9]+/', strtolower( (string) $text ) );
+		return array_values( array_filter( (array) $parts, 'strlen' ) );
+	}
+
+	/** The declared trait tokens of an item (the material-class attribute), if any. */
+	private static function item_trait_tokens( array $li ) {
+		$key    = (string) apply_filters( 'zdz_item_conflict_attribute', 'traits' );
+		$tokens = array();
+		$src    = array();
+		if ( isset( $li['traits'] ) ) {
+			$src = array_merge( $src, (array) $li['traits'] );
+		}
+		if ( isset( $li['attributes'] ) && is_array( $li['attributes'] ) && isset( $li['attributes'][ $key ] ) ) {
+			$src = array_merge( $src, (array) $li['attributes'][ $key ] );
+		}
+		if ( isset( $li['material_class'] ) ) {
+			$src = array_merge( $src, (array) $li['material_class'] );
+		}
+		foreach ( $src as $v ) {
+			$v = trim( (string) $v );
+			if ( '' !== $v ) {
+				$tokens[] = $v;
+			}
+		}
+		return $tokens;
+	}
+
+	/** True when $token starts with $prefix (a trailing "*" on the prefix is optional). */
+	private static function conflict_token_has_prefix( $token, $prefix ) {
+		$prefix = rtrim( strtolower( (string) $prefix ), '*' );
+		if ( '' === $prefix ) {
+			return false;
+		}
+		return 0 === strpos( (string) $token, $prefix );
+	}
+
+	/**
+	 * Find an A-trait within $window tokens of a B-trait in one stream. Returns the
+	 * matched tokens + span, or null. Checks ALL positions (not just the first), so a
+	 * distant A + a near A both get their chance — proximity, not fragment-split.
+	 */
+	private static function conflict_proximity_hit( array $tokens, array $a_prefixes, array $b_prefixes, $window ) {
+		$a_pos = array();
+		$b_pos = array();
+		foreach ( $tokens as $i => $tok ) {
+			foreach ( $a_prefixes as $p ) {
+				if ( self::conflict_token_has_prefix( $tok, $p ) ) {
+					$a_pos[ $i ] = $tok;
+					break;
+				}
+			}
+			foreach ( $b_prefixes as $p ) {
+				if ( self::conflict_token_has_prefix( $tok, $p ) ) {
+					$b_pos[ $i ] = $tok;
+					break;
+				}
+			}
+		}
+		if ( empty( $a_pos ) || empty( $b_pos ) ) {
+			return null;
+		}
+		foreach ( $a_pos as $ia => $ta ) {
+			foreach ( $b_pos as $ib => $tb ) {
+				if ( $ia !== $ib && abs( $ia - $ib ) <= $window ) {
+					return array( 'a' => $ta, 'b' => $tb, 'span' => abs( $ia - $ib ) );
+				}
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -1460,6 +1611,9 @@ class ZDZ_Item_Engine {
 	}
 	public static function filter_version( $pre ) {
 		return self::version();
+	}
+	public static function filter_detect_conflicts( $pre, $text, $items = [] ) {
+		return ( is_array( $pre ) && ! empty( $pre ) ) ? $pre : self::detect_conflicts( (string) $text, is_array( $items ) ? $items : [] );
 	}
 
 	// ───────────────────────────────────────────────────────── REST (publishes the vocabulary)

@@ -6,7 +6,7 @@
  * This is the central engine of the Zorderz Leads module. It orchestrates
  * the 8-step lead generation pipeline called by AJAX handlers in class-zl-dashboard.php.
  * It interacts with FreshBooks (for invoice data), Nutshell CRM (for enrichment and lead creation),
- * and Poe AI/Gemini (for filtering, validation, and summarization).
+ * and the shared AI gateway (for filtering, validation, and summarization).
  *
  * BUSINESS CONTEXT:
  * Built for the business.
@@ -20,7 +20,7 @@
  * KEY APIS:
  * - ZL_FreshBooks: Fetches paid invoices and client details.
  * - ZL_Nutshell: Searches contacts, extracts custom fields, creates leads/notes.
- * - ZL_Poe_Client: Calls Gemini-3.1-Pro (thinking_budget=32768, web_search=true for complex tasks; lightweight for refinement).
+ * - ZL_Poe_Client: Calls the configured AI model (thinking_budget/web_search extras for complex tasks; lightweight for refinement).
  *
  * @since 1.0.0
  * @since 1.2.0 Added city/zip, spend, demographic filters; comprehensive lead notes;
@@ -50,7 +50,7 @@ class ZL_Lead_Generator {
 
 	/** 
 	 * @var ZL_Poe_Client|null 
-	 * Client for Poe AI API (OpenAI-compatible). Used for Gemini-3.1-Pro AI features.
+	 * Client for the shared AI gateway (OpenAI-compatible). Used for the AI features.
 	 */
 	private $poe;
 
@@ -170,7 +170,11 @@ class ZL_Lead_Generator {
 			'cooldown_days'      => (int) get_option( 'zl_cooldown_days', 90 ),
 			'salespeople'        => $sp,
 			'excluded_companies' => $excluded,
-			'ai_model'           => get_option( 'zl_ai_model', 'Gemini-3.1-Pro' ),
+			// Neutral, empty default: the model is resolved from config (the
+			// connections pack / model registry) by the gateway. Core ships no
+			// dead handle. An empty value flows to ZL_Poe_Client, which resolves
+			// it via ZDZ_Model_Registry.
+			'ai_model'           => get_option( 'zl_ai_model', '' ),
 		);
 	}
 
@@ -1168,7 +1172,7 @@ class ZL_Lead_Generator {
 	/**
 	 * AI-expand a product filter into actual matching line item names.
 	 *
-	 * Extracts all unique line-item names from invoices, sends them to Gemini
+	 * Extracts all unique line-item names from invoices, sends them to the AI model
 	 * along with the user's filter query, and asks AI to identify which line
 	 * items match. Returns an array of lowercase matching terms.
 	 *
@@ -1233,7 +1237,7 @@ class ZL_Lead_Generator {
 			);
 		}
 
-		// Send to Gemini: ask which line items relate to the filter
+		// Send to the AI model: ask which line items relate to the filter
 		$names_list = implode( "\n", array_map( function( $n, $i ) {
 			return ( $i + 1 ) . '. ' . $n;
 		}, array_slice( $unique_names, 0, 500 ), array_keys( array_slice( $unique_names, 0, 500 ) ) ) );
@@ -1788,7 +1792,7 @@ class ZL_Lead_Generator {
 	}
 
 	/**
-	 * Classify an array of first names by gender using Gemini-3.1-Pro.
+	 * Classify an array of first names by gender using the AI model.
 	 *
 	 * Sends a batch prompt to the AI asking it to classify each name as
 	 * M (male), F (female), or U (unknown/unisex). Returns an associative
@@ -1925,7 +1929,7 @@ class ZL_Lead_Generator {
 	/**
 	 * Refine purchase descriptions using AI.
 	 * 
-	 * Nutshell lead descriptions must be <101 characters. This step asks Gemini
+	 * Nutshell lead descriptions must be <101 characters. This step asks the AI model
 	 * to rewrite raw invoice summaries into concise 5-8 word descriptions.
 	 *
 	 * @param array $leads Array of leads with 'purchase_summary' keys.
@@ -2079,7 +2083,7 @@ class ZL_Lead_Generator {
 	// ═══════════════════════════════════════════════════════════════════
 
 	/**
-	 * AI strict validation — use Gemini 3.1 Pro to verify each lead's purchase
+	 * AI strict validation — use the AI model to verify each lead's purchase
 	 * history ACTUALLY matches the product filter. This is the precision layer
 	 * after the broad keyword/AI expansion filtering.
 	 *

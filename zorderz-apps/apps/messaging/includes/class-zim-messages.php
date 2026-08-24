@@ -49,6 +49,13 @@ class ZIM_Messages {
 		$conversation_id = (int) $conversation_id;
 		$author_user_id  = (int) $author_user_id;
 		$body            = wp_unslash( (string) $body ); // Gotcha #6: undo magic quotes.
+		// v1.1.4 (Vimeo chapter embed): distill a TRUSTED-ORIGIN Vimeo player embed to a
+		// plain-text [zdz-video] token BEFORE sanitization. The seeking markup no longer
+		// depends on <iframe>/<script> surviving kses (they don't) — the token carries
+		// only the numeric video id + chapter list and passes wp_kses_post() untouched.
+		// Any non-Vimeo / arbitrary iframe is NOT recognized and falls through to the kses
+		// call below, which strips it. This runs AHEAD of kses and does not relax it.
+		$body            = self::extract_video_embeds( $body );
 		// v1.0.27 (security): server-side sanitize at the single write chokepoint so the
 		// AJAX path matches the REST /post path (which already wp_kses_post's the body).
 		// Client-side DOMPurify (loaded from a CDN) is no longer the ONLY XSS guard —
@@ -182,6 +189,13 @@ class ZIM_Messages {
 		global $wpdb;
 
 		$new_body = wp_unslash( (string) $new_body );
+		// v1.1.4: the edit path is a write chokepoint too. Distil a trusted Vimeo embed
+		// to a token, then server-side sanitize — mirroring post(). This also closes a
+		// pre-existing gap: edited bodies were previously stored WITHOUT a server-side
+		// kses pass (client DOMPurify was the only guard on the edit path). Markdown and
+		// safe formatting survive kses; injected <script>/on*-handlers do not.
+		$new_body = self::extract_video_embeds( $new_body );
+		$new_body = wp_kses_post( $new_body );
 
 		$row = $wpdb->get_row( $wpdb->prepare(
 			"SELECT id, conversation_id, author_user_id, created_at, deleted_at
@@ -442,5 +456,290 @@ class ZIM_Messages {
 
 	private static function iso_from_ts( $ts ) {
 		return $ts ? gmdate( 'c', $ts ) : null;
+	}
+
+	/* ═════════════════════════════════════════════════════════════════════
+	 * Vimeo chapter embed (v1.1.4) — trusted-origin distillation.
+	 *
+	 * A first-party training-video embed (a Vimeo player + a clickable chapter
+	 * list, as produced by the `text-to-vid` workflow) cannot survive the write
+	 * chokepoint: wp_kses_post() strips <iframe>/<script>/<style> and the client
+	 * DOMPurify re-strips on render, so the seeking script never runs and the raw
+	 * chapter links fall through as blocked popups. Rather than WEAKEN either
+	 * sanitizer, we recognize ONLY a trusted-origin Vimeo player embed and distil
+	 * it — BEFORE kses — to a plain-text token:
+	 *
+	 *     [zdz-video]<hex>[/zdz-video]
+	 *
+	 * where <hex> is bin2hex(JSON) carrying ONLY the numeric video id, an optional
+	 * alphanumeric privacy hash, and the chapter list (seconds + label). The token
+	 * is plain text: it passes wp_kses_post() untouched and is rebuilt on the
+	 * client by wireVideoEmbeds() with the iframe origin FIXED to player.vimeo.com.
+	 *
+	 * SECURITY POSTURE (preserved, not relaxed):
+	 *   - Runs strictly AHEAD of wp_kses_post(); the kses call is unchanged.
+	 *   - An iframe whose origin is NOT on the trusted allow-list is left in place
+	 *     and stripped by kses. Never an arbitrary iframe src.
+	 *   - The video id is validated numeric; the hash alphanumeric. No customer,
+	 *     employee, price or place value is ever read — mechanism only.
+	 *   - The trusted-origin allow-list is a Core-safe constant (Vimeo) exposed via
+	 *     the `zim_video_embed_hosts` filter so a business on a different first-party
+	 *     video host can add one WITHOUT hardcoding an origin (default: Vimeo only).
+	 * ═════════════════════════════════════════════════════════════════════ */
+
+	/**
+	 * Distil trusted-origin Vimeo embeds in a raw body to [zdz-video] tokens.
+	 *
+	 * @param string $body  raw message body (pre-sanitization)
+	 * @return string       body with trusted Vimeo embeds replaced by tokens
+	 */
+	public static function extract_video_embeds( $body ) {
+		$body = (string) $body;
+		// Fast path: no iframe means nothing to distil; the body is unchanged and
+		// kses handles it exactly as before (posture preserved for normal messages).
+		if ( '' === $body || false === stripos( $body, '<iframe' ) ) {
+			return $body;
+		}
+		$hosts = self::trusted_video_hosts();
+		if ( empty( $hosts ) ) {
+			return $body;
+		}
+
+		$tokenized = false;
+		// Bounded loop: each successful pass removes one embed, so it converges.
+		for ( $i = 0; $i < 8; $i++ ) {
+			list( $body, $did ) = self::tokenize_one_video( $body, $hosts );
+			if ( ! $did ) {
+				break;
+			}
+			$tokenized = true;
+		}
+
+		if ( $tokenized ) {
+			// A chat message that pasted a video embed carries no legitimate
+			// <script>/<style>; drop them (content included) so the distilled
+			// message is clean. kses would neutralize the tags regardless — this
+			// just avoids leaving the embed's inert script/style source as text.
+			$body = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', $body );
+			$body = preg_replace( '#<script\b[^>]*/\s*>#i', '', $body );
+			$body = preg_replace( '#<style\b[^>]*>.*?</style>#is', '', $body );
+			// Strip any stray producer scaffolding not absorbed with a container.
+			$body = preg_replace( '#<a\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-ch\b[^"\']*\1[^>]*>.*?</a>#is', '', $body );
+			$body = preg_replace( '#<p\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-heading\b[^"\']*\1[^>]*>.*?</p>#is', '', $body );
+		}
+
+		return $body;
+	}
+
+	/**
+	 * Trusted first-party video embed origins. Core default: Vimeo only.
+	 *
+	 * A business on a different first-party host adds it via the filter (mechanism,
+	 * no origin buried in logic). The client rebuild is Vimeo-origin-fixed, so
+	 * adding a host also needs a client player adapter — the default stays safe.
+	 *
+	 * @return string[] lowercase hostnames
+	 */
+	private static function trusted_video_hosts() {
+		$hosts = apply_filters( 'zim_video_embed_hosts', array( 'player.vimeo.com' ) );
+		$out   = array();
+		foreach ( (array) $hosts as $h ) {
+			$h = strtolower( trim( (string) $h ) );
+			if ( '' !== $h ) {
+				$out[] = $h;
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Tokenize the first trusted Vimeo embed found. Prefers a full ttv-embed
+	 * container (player + chapters); otherwise a bare trusted iframe.
+	 *
+	 * @return array{0:string,1:bool}  [ new body, whether an embed was tokenized ]
+	 */
+	private static function tokenize_one_video( $body, array $hosts ) {
+		// 1) A full ttv-embed container (player + chapter list together).
+		if ( preg_match(
+			'/<div\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-embed\b[^"\']*\1[^>]*>/i',
+			$body, $m, PREG_OFFSET_CAPTURE
+		) ) {
+			$open_start = (int) $m[0][1];
+			$end        = self::match_div_container_end( $body, $open_start );
+			if ( false !== $end ) {
+				$container = substr( $body, $open_start, $end - $open_start );
+				$token     = self::build_token_from_html( $container, $hosts );
+				if ( null !== $token ) {
+					// Absorb trailing whitespace + the producer's <style>/<script>
+					// blocks (and HTML comments) that follow the container.
+					$tail = substr( $body, $end );
+					if ( preg_match(
+						'/^(?:\s*(?:<style\b[^>]*>.*?<\/style>|<script\b[^>]*>.*?<\/script>|<script\b[^>]*\/\s*>|<!--.*?-->))*\s*/is',
+						$tail, $tm
+					) ) {
+						$end += strlen( $tm[0] );
+					}
+					$body = substr( $body, 0, $open_start ) . $token . substr( $body, $end );
+					return array( $body, true );
+				}
+			}
+		}
+
+		// 2) A bare trusted iframe (e.g. Vimeo's own share embed, no chapters).
+		if ( preg_match_all( '/<iframe\b[^>]*>(?:.*?<\/iframe>)?/is', $body, $mm, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $mm[0] as $frame ) {
+				$frame_html = $frame[0];
+				$frame_off  = (int) $frame[1];
+				$parsed     = self::parse_video_iframe( $frame_html, $hosts );
+				if ( null !== $parsed ) {
+					$token = self::build_token( $parsed['id'], $parsed['hash'], self::collect_chapters( $body ) );
+					$body  = substr( $body, 0, $frame_off ) . $token . substr( $body, $frame_off + strlen( $frame_html ) );
+					return array( $body, true );
+				}
+			}
+		}
+
+		return array( $body, false );
+	}
+
+	/**
+	 * Walk <div>/</div> tags from an opening <div> offset and return the byte
+	 * offset just past its matching </div>. Regex cannot balance nesting on its
+	 * own; this small depth counter does. Returns false if unbalanced.
+	 */
+	private static function match_div_container_end( $html, $open_start ) {
+		if ( ! preg_match_all( '/<(\/?)div\b[^>]*>/i', $html, $tags, PREG_OFFSET_CAPTURE, $open_start ) ) {
+			return false;
+		}
+		$depth = 0;
+		foreach ( $tags[0] as $idx => $tag ) {
+			$is_close = ( '/' === $tags[1][ $idx ][0] );
+			$depth   += $is_close ? -1 : 1;
+			if ( 0 === $depth ) {
+				return (int) $tag[1] + strlen( $tag[0] );
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Build a token from a chunk of HTML that contains a trusted iframe and,
+	 * optionally, ttv-ch chapter anchors. Returns null when no trusted iframe.
+	 */
+	private static function build_token_from_html( $html, array $hosts ) {
+		if ( ! preg_match( '/<iframe\b[^>]*>/i', $html, $fm ) ) {
+			return null;
+		}
+		$parsed = self::parse_video_iframe( $fm[0], $hosts );
+		if ( null === $parsed ) {
+			return null;
+		}
+		return self::build_token( $parsed['id'], $parsed['hash'], self::collect_chapters( $html ) );
+	}
+
+	/**
+	 * Validate an <iframe> tag's origin against the trusted allow-list and pull
+	 * the numeric video id + optional alphanumeric privacy hash. The origin check
+	 * is host-equality on a parsed URL — immune to `player.vimeo.com.evil.com` and
+	 * `evil.com/player.vimeo.com/...`. Returns null for anything untrusted.
+	 *
+	 * @return array{id:string,hash:string}|null
+	 */
+	private static function parse_video_iframe( $iframe_tag, array $hosts ) {
+		if ( ! preg_match( '/\bsrc\s*=\s*("|\')(.*?)\1/i', $iframe_tag, $sm ) ) {
+			return null;
+		}
+		$src   = html_entity_decode( $sm[2], ENT_QUOTES );
+		$parts = wp_parse_url( $src );
+		if ( ! is_array( $parts ) ) {
+			return null;
+		}
+		$scheme = isset( $parts['scheme'] ) ? strtolower( (string) $parts['scheme'] ) : '';
+		$host   = isset( $parts['host'] ) ? strtolower( (string) $parts['host'] ) : '';
+		$path   = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+		// Trusted origin only — never an arbitrary iframe src.
+		if ( 'https' !== $scheme || ! in_array( $host, $hosts, true ) ) {
+			return null;
+		}
+		if ( ! preg_match( '#^/video/(\d+)#', $path, $pm ) ) {
+			return null;
+		}
+		$hash = '';
+		if ( ! empty( $parts['query'] ) ) {
+			$q = array();
+			parse_str( (string) $parts['query'], $q );
+			if ( isset( $q['h'] ) && preg_match( '/^[0-9A-Za-z]+$/', (string) $q['h'] ) ) {
+				$hash = (string) $q['h'];
+			}
+		}
+		return array( 'id' => $pm[1], 'hash' => $hash );
+	}
+
+	/**
+	 * Collect chapter markers from ttv-ch anchors: floored seconds + plain-text
+	 * label. Labels are tag-stripped here and re-inserted via textContent on the
+	 * client, so a hostile label can carry no markup through either layer.
+	 *
+	 * @return array<int,array{0:int,1:string}>
+	 */
+	private static function collect_chapters( $html ) {
+		$chapters = array();
+		if ( preg_match_all(
+			'/<a\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-ch\b[^"\']*\1[^>]*>(.*?)<\/a>/is',
+			$html, $am, PREG_SET_ORDER
+		) ) {
+			foreach ( $am as $a ) {
+				$tag   = $a[0];
+				$inner = $a[2];
+				if ( ! preg_match( '/\bdata-t\s*=\s*("|\')\s*(\d+(?:\.\d+)?)\s*\1/i', $tag, $dm ) ) {
+					continue;
+				}
+				$sec = (int) floor( (float) $dm[2] );
+				if ( $sec < 0 ) {
+					$sec = 0;
+				}
+				if ( preg_match( '/<span\b[^>]*\bttv-title\b[^>]*>(.*?)<\/span>/is', $inner, $ttl ) ) {
+					$label = $ttl[1];
+				} else {
+					$label = $inner;
+				}
+				$label = trim( html_entity_decode( wp_strip_all_tags( $label ), ENT_QUOTES ) );
+				if ( '' === $label ) {
+					$label = self::clock_label( $sec );
+				}
+				$chapters[] = array( $sec, $label );
+			}
+		}
+		return $chapters;
+	}
+
+	/**
+	 * Assemble the [zdz-video] token. Payload keys are terse (v/h/c) to keep the
+	 * hex small; the client mirrors them.
+	 */
+	private static function build_token( $id, $hash, array $chapters ) {
+		$payload = array(
+			'v' => (string) $id,
+			'h' => (string) $hash,
+			'c' => array_values( $chapters ),
+		);
+		$json = wp_json_encode( $payload );
+		if ( ! is_string( $json ) ) {
+			return '';
+		}
+		// Hex is the safest inert carrier: [0-9a-f] survives kses, markdown,
+		// DOMPurify and every regex untouched.
+		return '[zdz-video]' . bin2hex( $json ) . '[/zdz-video]';
+	}
+
+	/** m:ss / h:mm:ss label for a chapter with no title text. */
+	private static function clock_label( $sec ) {
+		$sec = max( 0, (int) $sec );
+		$h   = intdiv( $sec, 3600 );
+		$m   = intdiv( $sec % 3600, 60 );
+		$s   = $sec % 60;
+		return $h > 0
+			? sprintf( '%d:%02d:%02d', $h, $m, $s )
+			: sprintf( '%d:%02d', $m, $s );
 	}
 }
