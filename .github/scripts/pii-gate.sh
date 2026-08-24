@@ -27,8 +27,10 @@ set -uo pipefail
 
 if [ -z "${ZDZ_PII_WORDLIST:-}" ]; then
   echo "PII gate: ZDZ_PII_WORDLIST is not set." >&2
-  echo "  Wire the confidential wordlist in as a repository secret and pass it into this" >&2
-  echo "  step's env. Refusing to report a gate as passed when it never actually ran." >&2
+  echo "  Supply the confidential wordlist OUT-OF-BAND from a local file — never commit it and" >&2
+  echo "  never store it as a repo / GitHub Actions secret (see the header). For example:" >&2
+  echo "    ZDZ_PII_WORDLIST=\"\$(cat /path/to/wordlist.txt)\" bash \$0 dist" >&2
+  echo "  Refusing to report a gate as passed when it never actually ran." >&2
   exit 2
 fi
 
@@ -47,8 +49,11 @@ for z in "${zips[@]}"; do
   unzip -q -o "$z" -d "$work/$(basename "$z" .zip)"
 done
 
-# One fixed-string term per line; drop blanks. (Fixed strings, case-insensitive —
-# no regex, so tenant terms with punctuation are matched literally.)
+# One fixed-string term per line; drop blanks. (Fixed strings, case-insensitive, matched on
+# WORD BOUNDARIES via grep -F -w: a real token — a name like "Geoff" or a code like "EM" — is
+# caught as a whole word, but NOT as a substring inside ordinary code such as "destroy",
+# "system", or "ImageOffset". Dash-/space-separated tokens like "92119-EM" still match, since
+# the separators are themselves word boundaries.)
 pat="$work/.patterns"
 printf '%s\n' "$ZDZ_PII_WORDLIST" | sed '/^[[:space:]]*$/d' > "$pat"
 terms="$(wc -l < "$pat" | tr -d ' ')"
@@ -56,7 +61,7 @@ echo "PII gate: scanning ${#zips[@]} artifact(s) against ${terms} confidential t
 
 fail=0
 while IFS= read -r f; do
-  n="$(grep -F -i -c -f "$pat" "$f" 2>/dev/null || true)"
+  n="$(grep -F -w -i -c -f "$pat" "$f" 2>/dev/null || true)"
   if [ "${n:-0}" -gt 0 ]; then
     echo "  LEAK: $(printf '%s' "$f" | sed "s#${work}/##")  (${n} match(es); term redacted)"
     fail=1
