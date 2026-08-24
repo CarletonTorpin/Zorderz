@@ -261,6 +261,44 @@ class ZDZ_Rule_Governance {
 				'enforced_by' => '(advisory)',
 				'directive'   => 'Mirror how {business_name} actually prices and operates from its own data. Offer advice only when explicitly asked, keep it conservative, and disclose when you are reasoning from general knowledge rather than the business\'s own records.',
 			),
+
+			/* ── Phrase-carrier rules (intent vocabularies, no prompt render) ──
+			 * These carry a typed `phrases` list keyed by `intent`, read server-side by
+			 * consumers (e.g. the document preservation lock) through phrases($intent).
+			 * They ship a NEUTRAL ENGLISH default — generic preserve / line-edit verbs,
+			 * naming no trade, product, person or place. A tenant ADDS trade vocabulary
+			 * by registering its OWN rule with the same `intent` via the `zdz_rules`
+			 * filter (phrases() unions across every rule of that intent), so the Core
+			 * neutral floor is never lost. They carry no `triggers`, so they are never
+			 * selected into a prompt — matching is a server-side membership test, never
+			 * a model directive and never a regex. */
+
+			'doc-preservation-arm' => array(
+				'title'    => 'Words that ask to leave a priced document as-is',
+				'tier'     => self::TIER_ADVISORY,
+				'triggers' => array(),
+				'intent'   => 'doc_preserve',
+				'phrases'  => array(
+					'leave it', 'leave as is', 'as-is', 'as is', 'keep it as',
+					'don\'t change the pricing', 'do not change the pricing',
+					'keep the prices', 'keep the pricing', 'keep pricing',
+					'just add', 'only add', 'without changing', 'don\'t touch the pricing',
+					'leave the pricing', 'leave the estimate', 'no price changes',
+				),
+			),
+
+			'doc-line-edit-standdown' => array(
+				'title'    => 'Words that name an explicit line edit (stand the lock down)',
+				'tier'     => self::TIER_ADVISORY,
+				'triggers' => array(),
+				'intent'   => 'doc_line_edit',
+				'phrases'  => array(
+					'add a line', 'change the price', 'change the pricing to',
+					'remove the', 'delete the', 'swap', 'replace the', 're-price',
+					'reprice', 'update the price', 'set the price', 'change it to',
+					'drop the', 'take off the', 'increase the', 'decrease the',
+				),
+			),
 		);
 	}
 
@@ -325,7 +363,57 @@ class ZDZ_Rule_Governance {
 			'triggers'    => array_values( array_filter( array_map( 'strval', (array) ( $r['triggers'] ?? array() ) ) ) ),
 			'enforced_by' => (string) ( $r['enforced_by'] ?? '(advisory)' ),
 			'directive'   => (string) ( $r['directive'] ?? '' ),
+			// Typed phrase registry (optional): an intent tag + a casefold-normalized
+			// phrase list. Consumers read these through phrases($intent) for a
+			// server-side membership test — they never render into a prompt.
+			'intent'      => sanitize_key( (string) ( $r['intent'] ?? '' ) ),
+			'phrases'     => self::normalize_phrase_list( (array) ( $r['phrases'] ?? array() ) ),
 		);
+	}
+
+	/** Lowercase, trim and de-duplicate a phrase list; drop empties. */
+	private static function normalize_phrase_list( array $phrases ): array {
+		$out = array();
+		foreach ( $phrases as $p ) {
+			$p = trim( strtolower( (string) $p ) );
+			$p = preg_replace( '/\s+/', ' ', $p );
+			if ( '' !== $p ) {
+				$out[ $p ] = true;
+			}
+		}
+		return array_keys( $out );
+	}
+
+	/**
+	 * The merged, casefold-normalized phrase list for an intent — unioned across EVERY
+	 * rule (Core + tenant) whose `intent` matches. A tenant adds vocabulary by
+	 * registering its own rule with the same intent through `zdz_rules`; the Core
+	 * neutral floor is never dropped. Returns [] for an unknown intent.
+	 *
+	 * Matching against these phrases is the consumer's job and is a membership test on
+	 * a normalized token stream — NEVER a regex over free text (the English-only
+	 * regex identity surface the §61 lock replaced).
+	 *
+	 * @param string $intent e.g. 'doc_preserve', 'doc_line_edit'.
+	 * @return string[]
+	 */
+	public static function phrases( string $intent ): array {
+		$intent = sanitize_key( trim( $intent ) );
+		if ( '' === $intent ) {
+			return array();
+		}
+		$seen = array();
+		foreach ( self::all() as $r ) {
+			if ( ( $r['intent'] ?? '' ) !== $intent ) {
+				continue;
+			}
+			foreach ( (array) ( $r['phrases'] ?? array() ) as $p ) {
+				if ( '' !== (string) $p ) {
+					$seen[ (string) $p ] = true;
+				}
+			}
+		}
+		return array_keys( $seen );
 	}
 
 	public static function exists( string $id ): bool {

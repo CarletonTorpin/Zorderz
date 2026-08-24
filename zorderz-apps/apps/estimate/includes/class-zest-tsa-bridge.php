@@ -189,6 +189,55 @@ class ZEST_TSA_Bridge {
 	}
 
 	/**
+	 * Modify an existing estimate from chat (Plan 02 E1/E6). Two-phase: with NO confirm_hash
+	 * it returns a PREVIEW + a content hash and writes nothing; with a confirm_hash + the
+	 * echoed doc it confirms and writes once. Kiosk hard-refused; ownership + guards are
+	 * re-verified server-side by the dashboard shared cores (the model is never trusted).
+	 *
+	 * @param array $payload { estimate_number|estimate_id, instruction, image_urls, confirm_hash, doc, requesting_user_id }
+	 */
+	public static function update_from_chat( array $payload ): array {
+		$uid = (int) ( $payload['requesting_user_id'] ?? get_current_user_id() );
+		if ( self::is_kiosk( $uid ) ) {
+			return self::refuse( 'This action is not available on the shared device.' );
+		}
+		if ( ! class_exists( 'ZEST_Dashboard' ) ) {
+			return self::refuse( 'Estimate updates are unavailable.' );
+		}
+		$args = array(
+			'estimate_number' => (string) ( $payload['estimate_number'] ?? '' ),
+			'estimate_id'     => (int) ( $payload['estimate_id'] ?? 0 ),
+			'instruction'     => (string) ( $payload['instruction'] ?? '' ),
+			'image_urls'      => array_values( array_filter( array_map( 'strval', (array) ( $payload['image_urls'] ?? array() ) ) ) ),
+			'confirm_hash'    => (string) ( $payload['confirm_hash'] ?? '' ),
+			'doc'             => is_array( $payload['doc'] ?? null ) ? $payload['doc'] : null,
+		);
+
+		if ( '' === $args['confirm_hash'] ) {
+			// Phase 1 — preview only. Writes nothing; returns a confirm_hash to echo back.
+			$res = ZEST_Dashboard::compute_update_preview( $args, $uid );
+			if ( empty( $res['ok'] ) ) {
+				return self::refuse( $res['error'] ?: 'Could not preview the update.' );
+			}
+			return array(
+				'ok'           => true,
+				'preview'      => $res['preview'],
+				'confirm_verb' => 'estimate.modify',
+				'confirm_hash' => $res['confirm_hash'],
+				'warnings'     => (array) ( $res['warnings'] ?? array() ),
+				'needs_review' => ! empty( $res['needs_review'] ),
+			);
+		}
+
+		// Phase 2 — confirm + write (content-hash approval + server re-verify in the core).
+		$res = ZEST_Dashboard::commit_update( $args, $uid );
+		if ( empty( $res['ok'] ) ) {
+			return self::refuse( $res['error'] ?: 'Update failed.' );
+		}
+		return array( 'ok' => true, 'number' => $res['number'], 'id' => $res['id'] );
+	}
+
+	/**
 	 * Attach an email to an existing estimate so it becomes sendable. Kiosk-refused,
 	 * ownership-checked, previewed → confirmed.
 	 */
