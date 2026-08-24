@@ -11,6 +11,32 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.7.0] - 2026-08-24
+
+The workflow release. Ported the delta between the source app's V9.15 and V9.25.14 as four build waves, generalizing every tenant-specific value as it went so Core still names no business. Adds a workflow spine and the apps that ride on it, an update path for estimates, a schedule-inference service and a visualization app — plus the reliability fix that ends the worker-exhaustion 502s.
+
+### Added
+- **Flow substrate + Projects.** A workflow spine (`Zdz_Flow`) with a single state-writer, keyed references, logged dispositions and an event outbox. Every estimate becomes a trackable Project with a Record panel; a fresh install ships with no Projects data.
+- **Dot Plot** (19th app) — plots work-item history from the Flow outbox, behind a report-spec validator and an Answer-Authority entitlement gate. Renders whatever sources a business registers; ships with none.
+- **Update an existing estimate** — a two-phase preview→commit path with document-preservation, zero-regression and conflict guards, plus vision-on-update. With no billing provider connected, estimates still convert to trackable invoices.
+- **Schedule inference + handoff** — an install-date resolver, a Schedule-Job intake, real participants from the Party roster and a CRON inference service that reads without writing.
+- **Geo/media location** — a forward geocoder and a media-location classifier that expose only a categorical status to the client; coordinates never leave the server, and media serves through a token proxy.
+- **Reliability substrate** — a request guard, service breaker and budgeted sweep that end the worker-exhaustion 502s; alias-tolerant passwordless login; one-click recovery of a lead that failed to reach the CRM; and a Vimeo chapter embed in messaging with the player origin hard-fixed.
+
+### Changed
+- The AI client is repaired and routed through the Model Registry (no vendor name in Core); every app now calls the one shared gateway instead of its own model client.
+- Map links, address linkifying and the commission-coverage view are unified behind shared, generalized helpers.
+
+### Fixed
+- **Leads privacy gate.** A generalization rename left a permission check pointing at a class that no longer exists, so it defaulted open — any viewer could see others' lead data and revenue in the dashboard. Corrected to the real permissions class.
+- **Activity telemetry (`/track`) returned 401.** The front-end used `navigator.sendBeacon`, which cannot carry the REST nonce, so events were rejected. It now uses `fetch({keepalive:true})` with the nonce and records correctly.
+
+### Notes
+- Every value the waves touched is generalized: Core ships each one empty, and a business supplies its own through the Business Profile or an Identity Pack. Most new surfaces stay inert until configured.
+- Theme and apps bundle move to 1.7.0 in lockstep.
+
+---
+
 ## [1.6.1] - 2026-08-06
 
 Security hardening. A self-review of the data-portability and passwordless-login paths, plus

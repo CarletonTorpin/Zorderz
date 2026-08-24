@@ -69,24 +69,19 @@ function _tsFlushTrack() {
   if (!_tsTrackQueue.length) return;
   var batch = _tsTrackQueue.splice(0, 20);
   try {
-    // Use sendBeacon for reliability (survives page close), fall back to fetch
+    // v1.6.1 fix: navigator.sendBeacon() cannot set the X-WP-Nonce header, so the
+    // REST cookie-auth treated the /track POST as logged-out and rejected it with 401
+    // (the fetch fallback never ran because sendBeacon "succeeds" at queuing). Use
+    // fetch({keepalive:true}) instead — it survives page close like sendBeacon AND
+    // carries the nonce, so the request authenticates and records correctly.
     var payload = JSON.stringify({ events: batch });
     var url = zdzData.apiUrl + 'track';
-    if (navigator.sendBeacon) {
-      var blob = new Blob([payload], { type: 'application/json' });
-      if (!navigator.sendBeacon(url, blob)) {
-        // sendBeacon failed (quota), try fetch
-        fetch(url, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
-          body: payload, keepalive: true
-        }).catch(function(){});
-      }
-    } else {
-      fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
-        body: payload, keepalive: true
-      }).catch(function(){});
-    }
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
+      body: payload,
+      keepalive: true
+    }).catch(function(){});
   } catch(e) {}
 }
 // Flush on page hide (tab close, navigate away)
