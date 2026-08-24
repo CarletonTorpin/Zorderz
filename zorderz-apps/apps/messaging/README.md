@@ -120,6 +120,7 @@ In order, with the line these live at in the prompt spec:
 - Output uses `esc_html`/`esc_attr`/`esc_url` at the boundary; client-side, `DOMPurify` sanitizes the marked.js HTML before insertion.
 - Upload path uses `wp_handle_upload` + explicit MIME whitelist + size check.
 - Push payloads are E2E encrypted per RFC 8291 (aes128gcm + ECDH). VAPID ES256 signatures are raw-R||S (not DER) per RFC 8292.
+- **Vimeo chapter embed (v1.1.4).** A first-party training-video embed is never passed through the sanitizers. `ZIM_Messages::extract_video_embeds()` runs *before* `wp_kses_post()` in `post()`/`edit()`, recognizes **only** a trusted-origin `player.vimeo.com` player (origin checked on a parsed URL; id validated numeric), and distills it to a plain-text `[zdz-video]<hex>[/zdz-video]` token that survives kses untouched. Client `wireVideoEmbeds()` rebuilds the player with the iframe origin **hard-fixed** to `player.vimeo.com` and inserts chapter labels via `textContent` — a forged token can never point the iframe off Vimeo. The trusted-origin list is a Core default (Vimeo) exposed via the `zim_video_embed_hosts` filter. This is the **consumer** of the project's `text-to-vid` skill (the **producer** that emits the numeric-id + `#t=` chapter embed); keep the token's `id + chapter-seconds` shape in sync with that skill so the two don't drift.
 
 ---
 
