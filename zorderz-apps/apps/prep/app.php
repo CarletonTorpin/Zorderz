@@ -128,6 +128,7 @@ function zprep_asset_ver( $rel ) {
 // class-zprep-app.php implements the theme interface and is required later, inside
 // after_setup_theme, once \Zorderz\Widget_App_Interface exists.
 require_once ZPREP_DIR . 'includes/class-zprep-settings.php';
+require_once ZPREP_DIR . 'includes/class-zprep-install-date.php';
 require_once ZPREP_DIR . 'includes/class-zprep-leftovers.php';
 require_once ZPREP_DIR . 'includes/class-zprep-nesting.php';
 require_once ZPREP_DIR . 'includes/class-zprep-engine.php';
