@@ -135,6 +135,7 @@ require_once get_template_directory() . '/inc/class-zdz-contact-bridge.php'; // 
 require_once get_template_directory() . '/inc/class-zdz-orchestrator.php'; // v2.22.0: deterministic Poe-free dashboard intent classifier (/zorderz/v1/orchestrate)
 require_once get_template_directory() . '/inc/class-zdz-plugin-api.php';
 require_once get_template_directory() . '/inc/class-zdz-share-link.php'; // v2.35.0: reusable secret share-link primitives (ZDZ_Share_Link)
+require_once get_template_directory() . '/inc/class-zdz-maps.php'; // Wave D (D-01): ZDZ_Maps — map-provider seam (zdz_maps_providers filter, Core default) + client config emitter for the shared zdzMapsUrl() helper. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-rest-api.php';
 require_once get_template_directory() . '/inc/class-zdz-user-roles.php';
 

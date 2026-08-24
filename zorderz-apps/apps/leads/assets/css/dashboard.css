@@ -256,6 +256,20 @@
     color: #991b1b;
 }
 
+/* D-04: 'no matches' — a definite, NEUTRAL outcome (slate, not red). */
+.zl-status-no_matches {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+/* D-03: recover-a-failed-lead button (amber attention, not error red). */
+.zl-recover-lead {
+    background: #b45309 !important;
+    color: #fff !important;
+    border-color: #b45309 !important;
+}
+.zl-recover-lead:hover { background: #92400e !important; border-color: #92400e !important; }
+
 /* ── Lead cards ────────────────────────────────────────────────────── */
 /* Expanded row container for displaying the leads within a specific batch */
 .zl-leads-row td {

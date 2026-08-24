@@ -205,6 +205,10 @@
       msg.appendChild(h('span', 'zana-verdict zana-verdict-' + meta.verdict, esc(meta.verdict)));
     }
     box.appendChild(msg);
+    // v1.6.2 (D-01): linkify addresses in the ANSWER, LAST — after the body text
+    // and any verdict chip are in place. Assistant answers only; a user echo is
+    // left untouched. Draft/preview subtrees are skipped inside linkifyAddresses.
+    if (role === 'assistant') { try { linkifyAddresses(msg); } catch (e) {} }
     box.scrollTop = box.scrollHeight;
     return msg;
   }
@@ -213,6 +217,163 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+
+  // ── Address linkifier (Wave D / D-01) ────────────────────────────────────
+  // A DOM post-processor that turns address-shaped text in a chat ANSWER into a
+  // device-appropriate map link, via the ONE shared helper window.zdzMapsUrl().
+  //
+  // Runs LAST in the append path, over the rendered node — a two-pass TreeWalker
+  // on TEXT NODES ONLY (never a regex on an HTML string, which would corrupt any
+  // existing <a>/attributes). Precision over recall: a house number is always
+  // required, street types split into strong (abbrev, may end bare), weak (full
+  // word, needs a corroborating tail), and Spanish-prefix tiers.
+  //
+  // DRAFT-CARD-SAFE — the load-bearing property: the walker skips A/CODE/PRE/…
+  // AND any draft/preview subtree, so a live <a> can NEVER be baked into the body
+  // of an unsent estimate/quote/message/email draft that a later turn might POST
+  // verbatim. A draft renderer marks its subtree with one of DRAFT_SEL (Zorderz
+  // naming; the generic [data-no-linkify] is the escape hatch for any new card).
+  //
+  // XSS: the href is the shared helper's output (hardcoded https + encodeURIComponent);
+  // the visible text is set via textContent — no markup is ever parsed from the match.
+  //
+  // GENERALIZATION: the street grammar ships a US + common-Spanish default and is
+  // extendable per-locale via window.zdzStreetGrammar (an Identity `territories`
+  // extension). The addresses themselves are runtime data, never shipped.
+  var SKIP_TAGS = { A: 1, CODE: 1, PRE: 1, SCRIPT: 1, STYLE: 1, TEXTAREA: 1, BUTTON: 1, KBD: 1, SAMP: 1, SVG: 1 };
+  var DRAFT_SEL = '.zana-draft-card, .zana-zim-draft-card, .zana-email-draft-card, .zdz-draft-card, [data-draft], [data-draft-card], [data-no-linkify]';
+
+  var ADDR_RE = (function () {
+    var G = (typeof window !== 'undefined' && window.zdzStreetGrammar) || {};
+    function esc1(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function alt(a) { return a.map(esc1).join('|'); }
+    // Strong: USPS-style abbreviations that may legitimately END an address bare.
+    var STRONG = G.strong || ['St', 'Ave', 'Av', 'Blvd', 'Rd', 'Dr', 'Ln', 'Ct', 'Pl', 'Ter', 'Cir', 'Hwy', 'Pkwy', 'Pky', 'Trl', 'Sq', 'Wy', 'Xing', 'Cv', 'Pt'];
+    // Weak: full words — need a corroborating tail (direction / unit / ,City ZIP).
+    var WEAK = G.weak || ['Street', 'Avenue', 'Boulevard', 'Road', 'Drive', 'Lane', 'Court', 'Place', 'Terrace', 'Circle', 'Highway', 'Parkway', 'Trail', 'Square', 'Way', 'Crossing', 'Cove', 'Point'];
+    // Spanish-prefix streets (type PRECEDES the name); US-Southwest common set.
+    var SPAN = G.spanish || ['Via', 'Calle', 'Camino', 'Avenida', 'Paseo', 'Plaza', 'Rancho', 'Corte', 'Vista'];
+    var DIR = '(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West|Northeast|Northwest|Southeast|Southwest)';
+    var UNIT = '(?:#\\s?[0-9A-Za-z\\-]+|(?:Apt|Ste|Suite|Unit|Bldg|Fl|Floor|Rm|No)\\.?\\s?[0-9A-Za-z\\-]+)';
+    var CITYZIP = ',\\s?[A-Za-z][A-Za-z.\'\\- ]{1,38}?(?:\\s+[A-Z]{2})?\\s+\\d{5}(?:-\\d{4})?';
+    var HOUSE = '\\d{1,6}(?:[\\-\\u2013]\\d{1,4})?[A-Za-z]?';
+    var TOK = '(?:[A-Z][A-Za-z.\'\\-]*|\\d{1,3}(?:st|nd|rd|th))';
+    var NAME = TOK + '(?:\\s+' + TOK + '){0,3}';
+    // (?![A-Za-z]) so a type never matches as a PREFIX of a longer word
+    // ("St" must not fire inside "Street", "Way" not inside "Wayne").
+    var STRONG_RE = '(?:' + alt(STRONG) + ')(?![A-Za-z])\\.?';
+    var WEAK_RE = '(?:' + alt(WEAK) + ')(?![A-Za-z])';
+    var SPAN_RE = '(?:' + alt(SPAN) + ')(?![A-Za-z])';
+    var TAIL = '(?:\\s+' + DIR + '\\b|\\s+' + UNIT + '|\\s*' + CITYZIP + ')';
+    var pat =
+      '\\b(?:' +
+        // Spanish-prefix: HOUSE SPAN NAME [dir] [tail]
+        '(?:' + HOUSE + '\\s+' + SPAN_RE + '\\s+' + NAME + '(?:\\s+' + DIR + '\\b)?(?:' + TAIL + ')?)' +
+        '|' +
+        // Strong: HOUSE [dir] NAME STRONG [dir] [tail]
+        '(?:' + HOUSE + '\\s+(?:' + DIR + '\\s+)?' + NAME + '\\s+' + STRONG_RE + '(?:\\s+' + DIR + '\\b)?(?:' + TAIL + ')?)' +
+        '|' +
+        // Weak: HOUSE [dir] NAME WEAK TAIL(required — precision guard, kills "3 First Place")
+        '(?:' + HOUSE + '\\s+(?:' + DIR + '\\s+)?' + NAME + '\\s+' + WEAK_RE + TAIL + ')' +
+      ')';
+    return new RegExp(pat, 'g');
+  })();
+
+  // Adversarial guards (F1–F6): reject runaway captures and the count-phrase
+  // false positive ("3 First Place"/"1 Second Prize" — a ranking, not an address).
+  function passesGuards(s) {
+    if (!s || s.length > 140) { return false; }
+    if (!/\d/.test(s)) { return false; }
+    if (/^\d+\s+(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth)\s+(Place|Pl|Prize)\b/i.test(s) && !/\d{5}/.test(s)) {
+      return false;
+    }
+    return true;
+  }
+
+  // Build a map URL through the shared helper; fall back to the same rule inline
+  // if the theme helper is not on the page (keeps the surface self-sufficient).
+  function addrUrl(addr) {
+    if (typeof window !== 'undefined' && typeof window.zdzMapsUrl === 'function') {
+      return window.zdzMapsUrl(addr);
+    }
+    var q = encodeURIComponent(String(addr == null ? '' : addr).trim());
+    if (!q) { return ''; }
+    var ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+    return /iPhone|iPad|iPod|Macintosh/i.test(ua)
+      ? 'https://maps.apple.com/?q=' + q
+      : 'https://www.google.com/maps/search/?api=1&query=' + q;
+  }
+
+  // Run the address regex over a string, applying the guards; call cb(match, index).
+  function eachAddressMatch(text, cb) {
+    ADDR_RE.lastIndex = 0;
+    var m;
+    while ((m = ADDR_RE.exec(text))) {
+      if (m[0] === '') { ADDR_RE.lastIndex++; continue; }
+      if (passesGuards(m[0])) { cb(m[0], m.index); }
+    }
+  }
+
+  // Pure helper (also a test seam): the address strings a given text yields.
+  function matchAddresses(text) {
+    var out = [];
+    eachAddressMatch(String(text == null ? '' : text), function (s) { out.push(s); });
+    return out;
+  }
+
+  // Is this text node inside a subtree we must not touch (a skip tag or a draft card)?
+  function inSkippedSubtree(node, root) {
+    for (var el = node.parentNode; el && el.nodeType === 1; el = el.parentNode) {
+      var tn = el.tagName ? String(el.tagName).toUpperCase() : '';
+      if (SKIP_TAGS[tn]) { return true; }
+      if (el.matches && el.matches(DRAFT_SEL)) { return true; }
+      if (el === root) { break; }
+    }
+    return false;
+  }
+
+  function linkifyTextNode(node) {
+    var text = node.nodeValue;
+    var frag = null, last = 0;
+    eachAddressMatch(text, function (matched, index) {
+      var url = addrUrl(matched.replace(/\s+/g, ' ').trim());
+      if (!url) { return; }
+      if (!frag) { frag = document.createDocumentFragment(); }
+      if (index > last) { frag.appendChild(document.createTextNode(text.slice(last, index))); }
+      var a = document.createElement('a');
+      a.setAttribute('href', url);            // helper output: https + encodeURIComponent
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener');
+      a.className = 'zana-addr-link';
+      a.textContent = matched;                // textContent — never innerHTML
+      frag.appendChild(a);
+      last = index + matched.length;
+    });
+    if (frag) {
+      if (last < text.length) { frag.appendChild(document.createTextNode(text.slice(last))); }
+      if (node.parentNode) { node.parentNode.replaceChild(frag, node); }
+    }
+  }
+
+  function linkifyAddresses(root) {
+    if (!root || typeof document === 'undefined' || !document.createTreeWalker) { return; }
+    // If the whole node is (inside) a draft/preview card, do nothing at all.
+    if (root.nodeType === 1 && root.closest && root.closest(DRAFT_SEL)) { return; }
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        if (!n.nodeValue) { return NodeFilter.FILTER_REJECT; }
+        ADDR_RE.lastIndex = 0;
+        if (!ADDR_RE.test(n.nodeValue)) { return NodeFilter.FILTER_REJECT; }
+        if (inSkippedSubtree(n, root)) { return NodeFilter.FILTER_REJECT; }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    // Pass 1: collect (splitting mutates the tree, so never split mid-walk).
+    var targets = [], t;
+    while ((t = walker.nextNode())) { targets.push(t); }
+    // Pass 2: split + wrap.
+    for (var i = 0; i < targets.length; i++) { linkifyTextNode(targets[i]); }
   }
 
   function init() {
@@ -226,6 +387,11 @@
   }
 
   window.ZanaChat = { open: open, showChat: showChat };
+  // Reusable/testable address helpers (pure matcher + DOM linkifier). Exposed so
+  // the harness can prove the draft-safe + precision + XSS invariants against the
+  // shipped code, and so another surface could reuse the matcher if needed.
+  window.ZanaChat.matchAddresses = matchAddresses;
+  window.ZanaChat.linkifyAddresses = linkifyAddresses;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

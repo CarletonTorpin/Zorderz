@@ -1636,6 +1636,49 @@ function escapeHtml(str) {
   });
 }
 
+// v1.6.2 (Wave D / D-01): zdzMapsUrl — the ONE shared map-URL builder for the
+// whole platform. Replaces the drifting per-surface copies (this theme's
+// quick-info card, the analytics chat address linkifier, the jobs dossier).
+// Exposed as window.zdzMapsUrl so the app scripts reuse it instead of forking.
+//
+// Builds a device-appropriate deep link from a free-text address: an Apple UA
+// (iPhone/iPad/iPod/Mac) opens Apple Maps, everyone else opens Google Maps.
+//
+//   opts.directions === true  -> a turn-by-turn route link (daddr / dir)
+//   otherwise                 -> a search/pin link (q / search)
+//
+// SECURITY: the scheme is ALWAYS a hardcoded 'https://' baked into the provider
+// bases, and the address is ALWAYS encodeURIComponent()-escaped — no prose
+// scanning of the field, no way to inject a javascript:/data: scheme or break
+// out of the query via a crafted address string. Callers still esc() the
+// returned URL before putting it in an href.
+//
+// GENERALIZATION: the maps PROVIDER/base-URLs are Identity-configurable — a
+// business may run a different maps service — via the PHP filter
+// `zdz_maps_providers` (ZDZ_Maps::providers()), surfaced to the client as
+// window.zdzMapsProviders. Core ships a generic default per device family +
+// intent, present right here so the helper works even if the config is absent.
+function zdzMapsUrl(addr, opts) {
+  var q = encodeURIComponent(String(addr == null ? '' : addr).trim());
+  if (!q) { return ''; }
+  opts = opts || {};
+  var directions = !!opts.directions;
+  var cfg = (typeof window !== 'undefined' && window.zdzMapsProviders) || {};
+  var ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  var isApple = /iPhone|iPad|iPod|Macintosh/i.test(ua);
+  var base;
+  if (isApple) {
+    base = directions
+      ? (cfg.appleDirections  || 'https://maps.apple.com/?daddr=')
+      : (cfg.appleSearch      || 'https://maps.apple.com/?q=');
+  } else {
+    base = directions
+      ? (cfg.googleDirections || 'https://www.google.com/maps/dir/?api=1&destination=')
+      : (cfg.googleSearch     || 'https://www.google.com/maps/search/?api=1&query=');
+  }
+  return base + q;
+}
+
 // v2.11.0: Start the FreshBooks OAuth flow from the front-end.
 function startFreshBooksAuthorize() {
   const btn = document.getElementById('zdz-authorize-fb-btn');
@@ -3489,10 +3532,17 @@ function renderInlineContact(mount, res, route) {
   if (c.email) {
     rows += '<a class="zdz-inline-row" href="mailto:' + esc(c.email) + '"><span class="zdz-inline-ic">✉️</span>' + esc(c.email) + '</a>';
   }
-  if (c.address) {
-    rows += '<div class="zdz-inline-row"><span class="zdz-inline-ic">📍</span>' + esc(c.address) + '</div>';
-  } else if (c.city) {
-    rows += '<div class="zdz-inline-row"><span class="zdz-inline-ic">📍</span>' + esc(c.city) + '</div>';
+  // v1.6.2 (D-01): the address / city-fallback row becomes a device-appropriate
+  // map link (matching the phone tel: and email mailto: rows above) — but ONLY
+  // when non-empty; an empty/whitespace value stays a static <div> with no dead
+  // link. Href built by the shared zdzMapsUrl() (hardcoded https + encodeURIComponent),
+  // then esc()'d into the attribute; the visible text is esc()'d as before.
+  var locText = String((c.address != null ? c.address : (c.city != null ? c.city : ''))).trim();
+  if (locText) {
+    var mapUrl = zdzMapsUrl(locText);
+    rows += mapUrl
+      ? '<a class="zdz-inline-row" href="' + esc(mapUrl) + '" target="_blank" rel="noopener"><span class="zdz-inline-ic">📍</span>' + esc(locText) + '</a>'
+      : '<div class="zdz-inline-row"><span class="zdz-inline-ic">📍</span>' + esc(locText) + '</div>';
   }
 
   var header = esc(c.name || 'Contact');
@@ -3716,6 +3766,7 @@ window.showToast     = showToast;
 window.applyTheme    = applyTheme;
 window.zdzRunInline    = zdzRunInline;     // v2.21.5: inline orchestrator answer
 window.zdzInlineHandoff = zdzInlineHandoff;
+window.zdzMapsUrl       = zdzMapsUrl;       // v1.6.2 (D-01): shared map-URL helper, reused by chat + jobs surfaces
 
 // ---- INIT ----
 
