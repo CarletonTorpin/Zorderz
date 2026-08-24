@@ -7,7 +7,7 @@
  *   scheduler knows when they are busy; an optional org-wide Microsoft 365 app
  *   ("Mode A") can additionally two-way sync every mailbox. Dashboard tile +
  *   dictation-friendly availability ("mark me open these dates").
- * Version:     1.7.1
+ * Version:     1.9.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -17,6 +17,30 @@
  * This is a bundled app module (loaded by zorderz-apps.php), not a standalone
  * plugin. It registers with the theme through the `zdz_register_apps` filter on
  * after_setup_theme and declines cleanly when the theme is absent.
+ *
+ * v1.9.0 (SCHEDULE-JOB HANDOFF + PARTICIPANTS + WRITE-BACK PHASE 2 [OFF], Wave C).
+ *   Three additions, all Core-clean (names nothing; seeds nothing):
+ *   - HANDOFF (intake/suggest/token/lifecycle). Any surface adds one attribute
+ *     `data-zdz-schedule data-ns data-ref`; a single delegated listener
+ *     (assets/js/schedule-button.js) POSTs {ns,ref_id} to the new
+ *     POST zorderz/v1/scheduler/intake. Zsch_Intake fires
+ *     apply_filters('zdz_compose_context', …) (a contributor prefills), SANITIZES
+ *     every field, asks Zsch_Suggest for free slots (LOCAL reads only), and stashes
+ *     the origin under a 32-char, single-user, single-use, 2h-TTL token —
+ *     SERVER-SIDE. The origin never rides the URL/body (INV-1); on save the create
+ *     route claims the token and hands the origin to the model. ZSCH_Appointments
+ *     now fires zsch_appointment_created/_updated/_deleted from create/update/
+ *     delete AND the Graph puller (ends calendar↔job drift), and PUBLISHES
+ *     can_modify() (Zjob_Appointment_Link double-gates through it).
+ *   - PARTICIPANTS. NEW wp_zsch_participants — an event carries a real ZDZ_Party
+ *     (picker = ZDZ_Party::selectable_people(); kiosk is never a party). A
+ *     participant SEES the event (query() fold-in, gated as an edit) and COUNTS AS
+ *     BUSY (open_slots). Own rate bucket; IDOR re-gate per object.
+ *   - WRITE-BACK (Phase 2) SHIPS OFF (`zsch_writeback_enabled` default 'no'): a
+ *     guarded no-op until a tenant enables it. targets_for()/INV-Loop guard/brand
+ *     category (from ZDZ_Business_Profile) are pre-placed; money never on a copy;
+ *     no attendees[] on a delegated write. NEW wp_zsch_writeback_map ships now so
+ *     Phase 2 needs no migration. Migration db/migrate-1.9.0.php (additive).
  *
  * v1.7.1 (CONNECTED CALENDARS — SC1.1 SETTINGS ENTRY POINT, 2026-07-31).
  *   Surfaces the per-user connect flow in profile → Settings → App
@@ -485,7 +509,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZSCH_VERSION', '1.7.1' );
+define( 'ZSCH_VERSION', '1.9.0' );
 define( 'ZSCH_PLUGIN_FILE', __FILE__ );
 define( 'ZSCH_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZSCH_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -587,6 +611,9 @@ function zsch_activate() {
 	// v1.6.0 — Connected Calendars tables (additive, idempotent).
 	require_once ZSCH_PLUGIN_DIR . 'db/migrate-1.6.0.php';
 	ZSCH_Migrate_1_6_0::run();
+	// v1.9.0 — Participants + Write-back map (additive, idempotent).
+	require_once ZSCH_PLUGIN_DIR . 'db/migrate-1.9.0.php';
+	ZSCH_Migrate_1_9_0::run();
 
 	// Make the tile visible to every eligible user on first install. The theme
 	// gates tile visibility behind per-user `zdz_allowed_apps` meta for
@@ -702,6 +729,9 @@ function zsch_maybe_upgrade() {
 		// v1.6.0 — Connected Calendars tables ride the same self-heal.
 		require_once ZSCH_PLUGIN_DIR . 'db/migrate-1.6.0.php';
 		ZSCH_Migrate_1_6_0::run();
+		// v1.9.0 — Participants + Write-back map ride the same self-heal.
+		require_once ZSCH_PLUGIN_DIR . 'db/migrate-1.9.0.php';
+		ZSCH_Migrate_1_9_0::run();
 		update_option( 'zsch_db_version', ZSCH_VERSION );
 
 		if ( $needs_tables && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -725,6 +755,9 @@ function zsch_tables_exist() {
 		$wpdb->prefix . 'zsch_calendar_accounts',
 		$wpdb->prefix . 'zsch_calendar_feeds',
 		$wpdb->prefix . 'zsch_external_events',
+		// v1.9.0 — Participants + Write-back map.
+		$wpdb->prefix . 'zsch_participants',
+		$wpdb->prefix . 'zsch_writeback_map',
 	);
 	foreach ( $need as $t ) {
 		// $wpdb->get_var with SHOW TABLES LIKE returns the table name if present.
@@ -780,6 +813,23 @@ function zsch_load_includes() {
 
 	// Wire the sync cron callback once classes are loaded.
 	add_action( 'zsch_cron_sync', array( 'ZSCH_Graph', 'cron_sync_all' ) );
+
+	// v1.9.0 — Write-back (Phase 2) subscribes the appointment lifecycle so it is
+	// WIRED but OFF: every handler is a guarded no-op until `zsch_writeback_enabled`
+	// flips to 'yes' (default 'no'). `created` reads the ARRAY payload (arg 1);
+	// `updated`/`deleted` read the INT id (arg 1) + the payload (arg 2) — matching
+	// the two fired shapes exactly.
+	if ( class_exists( 'ZSCH_Writeback' ) ) {
+		add_action( 'zsch_appointment_created', array( 'ZSCH_Writeback', 'on_created' ), 20, 1 );
+		add_action( 'zsch_appointment_updated', array( 'ZSCH_Writeback', 'on_updated' ), 20, 2 );
+		add_action( 'zsch_appointment_deleted', array( 'ZSCH_Writeback', 'on_deleted' ), 20, 2 );
+	}
+
+	// v1.9.0 — the Schedule-Job launch listener. ONE document-level delegated
+	// listener powers the `data-zdz-schedule` attribute anywhere on the front end
+	// for a write-capable user (kiosk excluded). It carries context, never
+	// authority; the server re-derives the gate.
+	add_action( 'wp_enqueue_scripts', 'zsch_enqueue_schedule_button' );
 
 	// v1.7.0 — Connected Calendars Phase 1: pull each user's external conflict
 	// feeds into the busy mirror on the SAME 5-minute tick. Self-gated by
@@ -871,6 +921,36 @@ function zsch_mark_no_optimize( $tag, $handle ) {
 		$tag = preg_replace( '/<script\s+/', '<script ' . $attrs, $tag, 1 );
 	}
 	return $tag;
+}
+
+/**
+ * Enqueue the Schedule-Job launch listener (v1.9.0). Loaded for a logged-in,
+ * write-capable user who has scheduler access (the kiosk is read-only → excluded,
+ * INV-Kiosk), so any surface can host a `data-zdz-schedule` button. Localized with
+ * the intake base URL + a REST nonce; degrades cleanly when the theme (owner of
+ * ZDZ_REST_NS) is absent (empty base → the listener no-ops).
+ */
+function zsch_enqueue_schedule_button() {
+	if ( is_admin() || ! is_user_logged_in() ) {
+		return;
+	}
+	if ( ! function_exists( 'zsch_user_has_access' ) || ! zsch_user_has_access() ) {
+		return;
+	}
+	if ( function_exists( 'zsch_user_is_read_only' ) && zsch_user_is_read_only() ) {
+		return; // a device is never a scheduler — and never launches a handoff.
+	}
+	wp_enqueue_script(
+		'zsch-schedule-button',
+		ZSCH_PLUGIN_URL . 'assets/js/schedule-button.js',
+		array(),
+		ZSCH_VERSION,
+		true
+	);
+	wp_localize_script( 'zsch-schedule-button', 'zschSchedule', array(
+		'base'  => class_exists( 'ZSCH_REST' ) ? ZSCH_REST::base_url() : '',
+		'nonce' => wp_create_nonce( 'wp_rest' ),
+	) );
 }
 
 function zsch_enqueue_nav_inject() {
@@ -1107,6 +1187,9 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 		'tssch_calendar_accounts' => 'zsch_calendar_accounts',
 		'tssch_calendar_feeds'    => 'zsch_calendar_feeds',
 		'tssch_external_events'   => 'zsch_external_events',
+		// v1.9.0 — Participants + Write-back map.
+		'tssch_participants'      => 'zsch_participants',
+		'tssch_writeback_map'     => 'zsch_writeback_map',
 	) );
 	$map['options'] = array_merge( $map['options'] ?? array(), array(
 		'tssch_db_version'          => 'zsch_db_version',
@@ -1118,6 +1201,7 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 		'tssch_ms_delegated_secret' => 'zsch_ms_delegated_secret',
 		'tssch_connected_cals'      => 'zsch_connected_cals',
 		'tssch_views_v2'            => 'zsch_views_v2',
+		'tssch_writeback_enabled'   => 'zsch_writeback_enabled',
 	) );
 	$map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
 		'tssch_mailbox' => 'zsch_mailbox',

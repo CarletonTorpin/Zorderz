@@ -185,7 +185,14 @@ final class ZRCPT_Receipt {
     public static function generate_share_token( int $words = 4 ): string {
         $words = max( 4, $words );
         $list  = self::share_wordlist();
-        $n     = count( $list );
+        // C-12 — CONSOLIDATE onto the Core primitive: ZDZ_Share_Link::mint_words()
+        // owns the CSPRNG draw and the ≥1000-word entropy floor (refuses below it).
+        // Keeps the 4-word human-typeable default receipts print/forward. Local
+        // fallback preserved for an older theme without the primitive.
+        if ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'mint_words' ) ) {
+            return ZDZ_Share_Link::mint_words( $list, $words );
+        }
+        $n = count( $list );
         if ( $n < 1000 ) {
             return '';
         }
@@ -196,14 +203,42 @@ final class ZRCPT_Receipt {
         return implode( '-', $picked );
     }
 
-    /** Normalize an incoming token for lookup: lowercase, ws/underscore->hyphen,
-     *  keep a-z + hyphen, collapse repeats. Forgiving of copy/paste. */
+    /** Normalize an incoming token for lookup. Delegates to the Core primitive
+     *  (ZDZ_Share_Link::normalize) so every consumer canonicalizes identically;
+     *  the Core form additionally tolerates digits, a harmless superset for the
+     *  letter-only word tokens, so existing stored tokens still resolve. */
     public static function normalize_share_token( string $t ): string {
+        if ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'normalize' ) ) {
+            return ZDZ_Share_Link::normalize( $t );
+        }
         $t = strtolower( trim( $t ) );
         $t = preg_replace( '/[\s_]+/', '-', $t );
         $t = preg_replace( '/[^a-z-]/', '', (string) $t );
         $t = preg_replace( '/-+/', '-', (string) $t );
         return trim( (string) $t, '-' );
+    }
+
+    /** C-12 — resolve the OPT-IN receipt share-link TTL in days (default 0 = OFF,
+     *  so forwarded-to-insurer links never break). Delegates to the Core policy
+     *  (ZDZ_Share_Link::ttl_days('receipt')), which reads the Business Profile
+     *  opt-in and the zdz_share_link_ttl_days filter. 0 when the primitive absent. */
+    public static function share_ttl_days(): int {
+        if ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'ttl_days' ) ) {
+            return (int) ZDZ_Share_Link::ttl_days( 'receipt' );
+        }
+        return 0;
+    }
+
+    /** C-12 — stamp the immutable expiry companion on a FRESH mint only. Computed
+     *  ONCE from the TTL-at-mint; never recomputed, so a later TTL change can't
+     *  move (or create) the deadline of an already-issued link. TTL off => 0
+     *  (never expires); we still write 0 so the field is explicit. */
+    private static function stamp_share_expiry( int $post_id ): void {
+        $ttl = self::share_ttl_days();
+        $expires_at = ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'expires_at_for' ) )
+            ? (int) ZDZ_Share_Link::expires_at_for( $ttl )
+            : 0;
+        update_post_meta( (int) $post_id, '_share_expires_at', $expires_at );
     }
 
     /** Ensure a receipt has a share token; mint once and reuse across regenerates
@@ -231,6 +266,10 @@ final class ZRCPT_Receipt {
             return '';
         }
         update_post_meta( $post_id, '_share_token', $token );
+        // C-12 — stamp the opt-in expiry ONCE, at mint. The early-return above
+        // (an already-issued token) never reaches here, so a live link's expiry
+        // is never re-stamped or created by a later config change.
+        self::stamp_share_expiry( $post_id );
         return $token;
     }
 
@@ -259,6 +298,9 @@ final class ZRCPT_Receipt {
             return '';
         }
         update_post_meta( (int) $post_id, '_share_token', $token );
+        // C-12 — a deliberate revoke mints a NEW link, so it gets a NEW expiry
+        // computed from the current TTL (fresh link, fresh clock).
+        self::stamp_share_expiry( (int) $post_id );
         return $token;
     }
 
@@ -382,6 +424,13 @@ final class ZRCPT_Receipt {
         if ( $limit <= 0 ) {
             return true;
         }
+        // C-12 — delegate to the Core per-IP limiter (namespaced 'receipt', so it
+        // never shares a budget with another app), passing the receipts filter's
+        // limit. Fail-open behaviour and the transient store are identical; the
+        // local implementation stays as a fallback for an older theme.
+        if ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'rate_ok' ) ) {
+            return ZDZ_Share_Link::rate_ok( 'receipt', $limit, MINUTE_IN_SECONDS );
+        }
         $ip = $this->client_ip();
         if ( $ip === '' ) {
             return true;
@@ -395,8 +444,14 @@ final class ZRCPT_Receipt {
         return true;
     }
 
-    /** 404 that never confirms a receipt exists (don't leak existence). */
+    /** 404 that never confirms a receipt exists (don't leak existence). Delegates
+     *  to the Core primitive's not_found() (a real 404 + noindex + theme 404),
+     *  with the local implementation kept as a fallback. */
     private function receipt_404() {
+        if ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'not_found' ) ) {
+            nocache_headers();
+            ZDZ_Share_Link::not_found();
+        }
         status_header( 404 );
         nocache_headers();
         header( 'X-Robots-Tag: noindex', true );
@@ -1033,6 +1088,16 @@ final class ZRCPT_Receipt {
             $this->receipt_404();
         }
 
+        // C-12 — OPT-IN link expiry. A link past its stamped deadline resolves to
+        // a 404 (never a distinguishable "expired" response, so it stays non-
+        // enumerable). Absent/0 means "never expires" — the default-off posture,
+        // and the reason a TTL change can't invalidate an already-issued link.
+        $expires_at = (int) get_post_meta( $post_id, '_share_expires_at', true );
+        if ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'is_expired' )
+            && ZDZ_Share_Link::is_expired( $expires_at ) ) {
+            $this->receipt_404();
+        }
+
         $html = (string) get_post_meta( $post_id, '_receipt_html', true );
         if ( $html === '' ) {
             $this->receipt_404();
@@ -1044,10 +1109,16 @@ final class ZRCPT_Receipt {
 
         status_header( 200 );
         header( 'Content-Type: text/html; charset=utf-8' );
-        // Layered de-index + capability-URL hygiene (see design doc):
-        header( 'X-Robots-Tag: noindex, nofollow', true );
-        header( 'Referrer-Policy: no-referrer', true );
-        header( 'Cache-Control: private, no-store, max-age=0', true );
+        // Layered de-index + capability-URL hygiene, via the Core primitive when
+        // present (X-Robots-Tag noindex/nofollow, Referrer-Policy, nosniff,
+        // private no-store) — one source for the private-artifact header set.
+        if ( class_exists( 'ZDZ_Share_Link' ) && method_exists( 'ZDZ_Share_Link', 'send_private_headers' ) ) {
+            ZDZ_Share_Link::send_private_headers();
+        } else {
+            header( 'X-Robots-Tag: noindex, nofollow', true );
+            header( 'Referrer-Policy: no-referrer', true );
+            header( 'Cache-Control: private, no-store, max-age=0', true );
+        }
         nocache_headers();
         echo $html;
         exit;
@@ -1914,12 +1985,23 @@ final class ZRCPT_Receipt {
         $photo_ids     = [];   // uploaded photos (safe to re-parent to the receipt)
         $library_ids   = [];   // library photos (must NOT be re-parented)
 
+        // S5-08 — re-enforce one-time-use SERVER-SIDE: a library photo already on
+        // another published receipt is refused here even if a stale client offers
+        // it. The current job's OWN receipt is excluded (a redo keeps its photos).
+        $used_index    = self::get_used_media_index( $source_invoice_numbers );
+        $used_rejected = 0;
+
         foreach ( $photo_items as $item ) {
             $url = '';
 
             // Prefer server-side lookup by attachment ID (most reliable)
             if ( ! empty( $item['id'] ) ) {
                 $att_id = (int) $item['id'];
+                // A used LIBRARY photo can't land on a second receipt — drop it.
+                if ( ! empty( $item['library'] ) && $att_id > 0 && isset( $used_index[ $att_id ] ) ) {
+                    $used_rejected++;
+                    continue;
+                }
                 $file   = get_post_meta( $att_id, '_wp_attached_file', true );
                 if ( $file ) {
                     $uploads = wp_upload_dir();
@@ -1953,6 +2035,15 @@ final class ZRCPT_Receipt {
             $url = preg_replace( '/^http:\/\//', 'https://', $url );
 
             $photo_urls[] = $url;
+        }
+
+        // S5-08 — if every offered photo was rejected as already-used, say so
+        // plainly (a used install photo belongs to the receipt it first went on).
+        if ( empty( $photo_urls ) && $used_rejected > 0 ) {
+            wp_send_json_error(
+                'Those photos are already on another receipt and can’t be reused. '
+                . 'Capture or upload photos for THIS job, then generate.'
+            );
         }
 
         if ( empty( $photo_urls ) ) {
@@ -2114,6 +2205,10 @@ final class ZRCPT_Receipt {
         // its number) so a combo receipt can resolve a customer share link for
         // each and link the receipt back onto all of them — not just the primary.
         $invoice_ids = []; // number(string) => fb invoice id(int)
+        // S5-02 — capture the per-source PAYMENT FACTS (provider status + amounts)
+        // for the paid-panel honesty gate. SoR-derived, server-side, never trusted
+        // from the client. Only invoices contribute a payment source.
+        $payment_sources = [];
         foreach ( $source_invoice_numbers as $inv_no ) {
             $found = $this->fb_find_document( $inv_no );
             if ( $found && ! empty( $found['doc'] ) ) {
@@ -2121,6 +2216,9 @@ final class ZRCPT_Receipt {
                 if ( $this_id > 0 ) { $invoice_ids[ (string) $inv_no ] = $this_id; }
                 if ( ! $primary_invoice_id ) {
                     $primary_invoice_id = $this_id;
+                }
+                if ( ( $found['type'] ?? '' ) === 'invoice' ) {
+                    $payment_sources[] = $this->fb_payment_source( (array) $found['doc'], $inv_no );
                 }
                 if ( ! empty( $found['doc']['lines'] ) && is_array( $found['doc']['lines'] ) ) {
                     foreach ( $found['doc']['lines'] as $ln ) {
@@ -2145,6 +2243,9 @@ final class ZRCPT_Receipt {
                 if ( $found && ! empty( $found['doc'] ) ) {
                     $primary_invoice_id = (int) ( $found['doc']['invoiceid'] ?? $found['doc']['id'] ?? 0 );
                     if ( $primary_invoice_id > 0 ) { $invoice_ids[ (string) $fallback_no ] = $primary_invoice_id; }
+                    if ( empty( $payment_sources ) && ( $found['type'] ?? '' ) === 'invoice' ) {
+                        $payment_sources[] = $this->fb_payment_source( (array) $found['doc'], $fallback_no );
+                    }
                     if ( empty( $authoritative_lines ) && ! empty( $found['doc']['lines'] ) && is_array( $found['doc']['lines'] ) ) {
                         $authoritative_lines = $found['doc']['lines'];
                     }
@@ -2424,6 +2525,32 @@ final class ZRCPT_Receipt {
                 $receipt['vent_summary'] ?? '', $authoritative_count
             );
             // Re-encode so the stored _receipt_html matches the corrected HTML.
+            $receipt['html_base64'] = base64_encode( $html );
+        }
+
+        // S5-01 / S5-02 — FINALIZE: append the print/email-durable full-size photo
+        // gallery and the proof-of-payment panel via the idempotent sentinel
+        // pipeline. The gallery uses the receipt's OWN rendered photo order (so it
+        // matches the inline strip exactly); the paid panel asserts "Payment in
+        // Full" ONLY when the payment-claim gate confirms it from the SoR facts.
+        // Runs on $html (the exact bytes create_receipt_page stores and the
+        // approval hash later binds), so the appended sections are covered by both.
+        if ( class_exists( 'ZRCPT_Finalize' ) ) {
+            $gallery_urls = $this->extract_receipt_photos( $html );
+            if ( empty( $gallery_urls ) ) { $gallery_urls = $photo_urls; }
+            $html = ZRCPT_Finalize::finalize_html( $html, [
+                'photo_urls'      => $gallery_urls,
+                'invoice_url'     => $invoice_url,
+                'invoice_numbers' => $source_invoice_numbers,
+                'payment_sources' => $payment_sources,
+            ] );
+            // S5-14 — SANITIZE AT GENERATE too, not only at approve. The receipt is
+            // published (token-reachable) the instant it is created, and the
+            // reviewer previews the STORED HTML in a same-origin iframe — both
+            // before any approval. Storing only sanitized HTML closes the stored-
+            // XSS window on the preview and the public URL; the approve-time pass
+            // then re-verifies and binds the hash (idempotent on clean HTML).
+            $html = ZRCPT_Finalize::sanitize( $html );
             $receipt['html_base64'] = base64_encode( $html );
         }
 
@@ -2794,6 +2921,25 @@ final class ZRCPT_Receipt {
      */
     private function compute_vent_count( $lines ): int {
         if ( ! is_array( $lines ) ) { return 0; }
+
+        // S5-03 (§76 3.11.3–3.11.6) — DOCUMENT-TOTAL rule. When a unit line states
+        // the count in PROSE ("…Total of 33 ember screens…") at Qty 1, that stated
+        // total OVERRIDES the per-line sum (deliberately override, NOT max — a
+        // summary line plus its itemised lines must not double-count). Gated so a
+        // discount line ("total of 99") and a non-unit noun ("total of 250 linear
+        // feet") never trip it. The noun is catalog-driven (COUNTS CONTRACT).
+        $exclusions = (array) apply_filters( 'zrcpt_noncount_line_tokens', [
+            'discount', 'refund', 'credit', 'fee', 'tip', 'gratuity',
+            'receipt', 'location', 'tax', 'installation included',
+            'installation of', 'install of', 'labor', 'labour',
+        ] );
+        $doc_total = self::detect_document_total(
+            $lines, zrcpt_unit_noun( false ), zrcpt_unit_noun( true ), $exclusions
+        );
+        if ( $doc_total > 0 ) {
+            return $doc_total;
+        }
+
         $total = 0;
         foreach ( $lines as $ln ) {
             if ( ! is_array( $ln ) ) { continue; }
@@ -2808,6 +2954,64 @@ final class ZRCPT_Receipt {
             $total += $this->line_effective_count( $name, $desc, $qty );
         }
         return $total;
+    }
+
+    /**
+     * S5-03 — detect a stated DOCUMENT TOTAL in a unit line's prose:
+     * "total of N <noun>", where N is followed WITHIN ≤2 WORDS by the unit noun
+     * (so "total of 250 linear feet" ≠ 250 unless "feet" is the unit noun). The
+     * candidate line must pass the unit-line filter (the $noncount_tokens), so a
+     * "discount — total of 99" line can never be read as a unit count. Pure and
+     * WP-free (the noun is passed in) so it can be harnessed directly. Returns the
+     * largest stated total found, or 0 when none.
+     *
+     * @param array    $lines           Billing line items (arrays or strings).
+     * @param string   $unit_singular   The item's unit noun, singular.
+     * @param string   $unit_plural     The item's unit noun, plural.
+     * @param string[] $noncount_tokens Substrings that disqualify a line.
+     * @return int
+     */
+    public static function detect_document_total( array $lines, string $unit_singular, string $unit_plural, array $noncount_tokens = [] ): int {
+        $stem  = preg_quote( rtrim( $unit_plural, 's' ), '/' );
+        $forms = array_values( array_unique( array_filter( [
+            preg_quote( $unit_plural, '/' ),
+            preg_quote( $unit_singular, '/' ),
+            $stem !== '' ? $stem . 's?' : '',
+        ] ) ) );
+        if ( empty( $forms ) ) { return 0; }
+        $noun = '(?:' . implode( '|', $forms ) . ')';
+
+        $best = 0;
+        foreach ( $lines as $ln ) {
+            if ( is_array( $ln ) ) {
+                $name = trim( (string) ( $ln['name'] ?? '' ) );
+                $desc = trim( (string) ( $ln['description'] ?? '' ) );
+                if ( $name !== '' && $desc !== '' && $desc !== $name ) {
+                    $label = $name . ' — ' . $desc;
+                } else {
+                    $label = ( $name !== '' ) ? $name : $desc;
+                }
+            } else {
+                $label = trim( (string) $ln );
+            }
+            if ( $label === '' ) { continue; }
+            $hay = strtolower( $label );
+
+            // The candidate must not be a metadata / adjustment / labor line.
+            $skip = false;
+            foreach ( $noncount_tokens as $tok ) {
+                $tok = strtolower( (string) $tok );
+                if ( $tok !== '' && strpos( $hay, $tok ) !== false ) { $skip = true; break; }
+            }
+            if ( $skip ) { continue; }
+
+            // "total of N [one optional word] <noun>" — noun within ≤2 words of N.
+            if ( preg_match( '/\btotal\s+of\s+(\d{1,4})\s+(?:[a-z0-9\-]+\s+){0,1}' . $noun . '\b/i', $hay, $m ) ) {
+                $n = (int) $m[1];
+                if ( $n > $best ) { $best = $n; }
+            }
+        }
+        return $best;
     }
 
     /**
@@ -3666,6 +3870,32 @@ final class ZRCPT_Receipt {
     }
 
     /**
+     * S5-02 — normalize a FreshBooks invoice doc to the payment-source shape the
+     * paid-panel honesty gate consumes: the provider status string plus the SoR
+     * amounts. The gate (ZRCPT_Finalize::resolve_payment + ZDZ_Answer_Authority)
+     * decides paid/void/partial from these; this only extracts the facts. The
+     * status STRINGS are provider vocabulary (mapping); nothing here asserts paid.
+     *
+     * @param array      $doc    A FreshBooks invoice document.
+     * @param int|string $number The invoice number (for the panel display).
+     * @return array{status:string,number:string,amount?:float,outstanding?:float,paid?:float}
+     */
+    private function fb_payment_source( array $doc, $number ): array {
+        $status = strtolower( trim( (string) ( $doc['v3_status'] ?? $doc['display_status'] ?? '' ) ) );
+        $total  = isset( $doc['amount']['amount'] ) ? (float) $doc['amount']['amount']
+                : ( isset( $doc['total']['amount'] ) ? (float) $doc['total']['amount'] : null );
+        $out    = isset( $doc['outstanding']['amount'] ) ? (float) $doc['outstanding']['amount'] : null;
+        $paid   = isset( $doc['paid']['amount'] ) ? (float) $doc['paid']['amount']
+                : ( ( $total !== null && $out !== null ) ? max( 0.0, $total - $out ) : null );
+
+        $src = [ 'status' => $status, 'number' => (string) $number ];
+        if ( $total !== null ) { $src['amount']      = $total; }
+        if ( $out   !== null ) { $src['outstanding'] = $out; }
+        if ( $paid  !== null ) { $src['paid']        = $paid; }
+        return $src;
+    }
+
+    /**
      * Build the customer-facing FreshBooks share URL from a doc's direct_links.
      * `https://my.freshbooks.com/#/link/{token}` opens for a logged-out viewer
      * (the homeowner) — unlike `#/invoice/{id}`, which is the internal view.
@@ -4506,17 +4736,113 @@ final class ZRCPT_Receipt {
         $result = ZRCPT_Media::get_sessions_for_user( $user_id, $opts );
 
         // Suggested install date = newest session's capture date (editable client-side).
+        // Read BEFORE we sanitize (date_input is preserved through sanitization).
         $suggested_date = '';
         if ( ! empty( $result['sessions'][0]['date_input'] ) ) {
             $suggested_date = $result['sessions'][0]['date_input'];
         }
 
+        // S5-07 — LOCATION INTEGRITY (geo-PII boundary). Classify each set
+        // server-side and hand the client ONLY a categorical loc_status; strip
+        // every coordinate (session centroid + per-photo GPS). The anchor
+        // (customer coordinates) is used only to classify and never emitted.
+        $anchor = null;
+        if ( is_numeric( $near_lat ) && is_numeric( $near_lng ) && ( $near_lat || $near_lng ) ) {
+            $anchor = [ 'lat' => (float) $near_lat, 'lng' => (float) $near_lng ];
+        }
+        $sessions = ZRCPT_Media::sanitize_sessions_for_client(
+            (array) ( $result['sessions'] ?? [] ),
+            $anchor,
+            'self'
+        );
+
+        // S5-08 — ONE-TIME-USE PHOTOS. Mark photos already on a PUBLISHED receipt
+        // as locked in the picker (server re-enforces at generate regardless).
+        // Exclude the current job's own receipt so a redo keeps its photos.
+        $exclude_numbers = [];
+        $lk_json = stripslashes( $_POST['invoice_numbers'] ?? '' );
+        $lk      = $lk_json ? json_decode( $lk_json, true ) : [];
+        if ( is_array( $lk ) ) {
+            foreach ( $lk as $n ) {
+                $d = preg_replace( '/[^0-9]/', '', is_array( $n ) ? (string) ( $n['number'] ?? '' ) : (string) $n );
+                if ( $d !== '' ) { $exclude_numbers[] = $d; }
+            }
+        }
+        $used = self::get_used_media_index( $exclude_numbers );
+        if ( ! empty( $used ) ) {
+            foreach ( $sessions as &$s ) {
+                if ( empty( $s['photos'] ) || ! is_array( $s['photos'] ) ) { continue; }
+                $all_used = true;
+                foreach ( $s['photos'] as &$p ) {
+                    $aid = (int) ( $p['attachment_id'] ?? 0 );
+                    $p['used'] = ( $aid > 0 && isset( $used[ $aid ] ) );
+                    if ( ! $p['used'] ) { $all_used = false; }
+                }
+                unset( $p );
+                // A set whose every photo is already used can't be combined.
+                if ( $all_used ) { $s['selectable'] = false; }
+                $s['has_used'] = $all_used;
+            }
+            unset( $s );
+        }
+
         wp_send_json_success( [
             'available'      => $result['available'],
-            'sessions'       => $result['sessions'],
+            'sessions'       => $sessions,
             'total_photos'   => $result['total_photos'],
             'suggested_date' => $suggested_date,
         ] );
+    }
+
+    /**
+     * S5-08 — the cross-receipt USED-PHOTO index: the union of _source_media_ids
+     * (WP attachment ids) across every PUBLISHED receipt, so an install photo
+     * already on one customer's receipt can't land on another's. Only
+     * post_status=publish counts (trashing a receipt frees its photos). The
+     * current job's OWN receipt is excluded by invoice number so a redo keeps
+     * its photos. No new schema — a post-meta union.
+     *
+     * @param string[] $exclude_invoice_numbers Digit invoice numbers of the job
+     *                 being (re)built; receipts referencing any are skipped.
+     * @return array<int,bool> Set of used attachment ids (id => true).
+     */
+    public static function get_used_media_index( array $exclude_invoice_numbers = [] ): array {
+        $exclude = [];
+        foreach ( $exclude_invoice_numbers as $n ) {
+            $d = preg_replace( '/[^0-9]/', '', (string) $n );
+            if ( $d !== '' ) { $exclude[ $d ] = true; }
+        }
+
+        $q = new WP_Query( [
+            'post_type'      => self::POST_TYPE,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'no_found_rows'  => true,
+            'fields'         => 'ids',
+            'meta_key'       => '_source_media_ids',
+        ] );
+
+        $used = [];
+        foreach ( (array) $q->posts as $pid ) {
+            $pid = (int) $pid;
+            // Skip the current job's own receipt(s) so a redo keeps its photos.
+            if ( ! empty( $exclude ) ) {
+                $own = (array) get_post_meta( $pid, '_fb_doc_numbers', false );
+                $is_own = false;
+                foreach ( $own as $num ) {
+                    $d = preg_replace( '/[^0-9]/', '', (string) $num );
+                    if ( $d !== '' && isset( $exclude[ $d ] ) ) { $is_own = true; break; }
+                }
+                if ( $is_own ) { continue; }
+            }
+            $ids = get_post_meta( $pid, '_source_media_ids', true );
+            if ( ! is_array( $ids ) ) { continue; }
+            foreach ( $ids as $mid ) {
+                $mid = (int) $mid;
+                if ( $mid > 0 ) { $used[ $mid ] = true; }
+            }
+        }
+        return $used;
     }
 
     /**
@@ -4644,9 +4970,14 @@ final class ZRCPT_Receipt {
                     . 'single flat-price "installation"/labor line also appears, it is the '
                     . 'whole-job labor line — do not add it to the count.';
             }
-            // Expose the computed total so ajax_generate can log it (the headline count the bot
-            // prints should equal this).
-            $this->last_vent_count = $vent_qty_total;
+            // S5-03 — SINGLE SOURCE OF TRUTH. The authoritative headline count is
+            // compute_vent_count() (which honours the document-total rule), NOT a
+            // parallel local sum. In the common no-document-total case this is
+            // byte-identical to $vent_qty_total (same line filter + effective
+            // count), so parity is preserved; when a "Total of N" prose line is
+            // present it wins, and a future count fix can never again land on the
+            // un-preferred counter. ajax_generate prefers this value.
+            $this->last_vent_count = $this->compute_vent_count( $lines );
         }
 
         if ( ! empty( $install_notes ) ) {
@@ -4691,36 +5022,43 @@ final class ZRCPT_Receipt {
      * result on an empty catalog / absent engine. NO brand or product word is
      * hardcoded here — the vocabulary lives in the catalog.
      *
-     * @param string $haystack Combined job text (line items + install/lead notes).
-     * @return array{items:array<int,array>,tags:string[]} matched items + human labels.
+     * S5-09 (§78 D2) — installed products are what the job BILLED (line items),
+     * never what a note merely mentions. So a product is EVIDENCED only by the
+     * line-item text; the note text may ONLY enrich the display brand of an item
+     * the lines already show (e.g. lines say "circular terra-cotta vent", a note
+     * names a specific branded "4-inch" child of it). A catalog item named solely in a
+     * note is NOT emitted (the D2 defect).
+     *
+     * @param string $line_text Billing line-item text (the evidence).
+     * @param string $note_text Install / lead note text (enrichment only).
+     * @return array{items:array<int,array>,tags:string[],knowledge:bool}
      */
-    private function detect_supplemental_materials( string $haystack ): array {
-        $haystack = trim( $haystack );
-        if ( $haystack === '' ) {
-            return [ 'items' => [], 'tags' => [] ];
+    private function detect_supplemental_materials( string $line_text, string $note_text = '' ): array {
+        $line_text = trim( $line_text );
+        if ( $line_text === '' ) {
+            return [ 'items' => [], 'tags' => [], 'knowledge' => false ];
         }
         // The primary item this receipt is about — its own lines are the base
         // product, never a "supplemental" material.
         $primary = zrcpt_receipt_item_tag();
 
-        // The Item Engine is the ONLY source of what counts as a known item. No
-        // mirrored filter exists for match_all(), so use the static API when
-        // available; otherwise there is no catalog to match against → neutral.
-        $matched = [];
-        if ( class_exists( 'ZDZ_Item_Engine' ) && method_exists( 'ZDZ_Item_Engine', 'match_all' ) ) {
-            $found = ZDZ_Item_Engine::match_all( $haystack );
-            if ( is_array( $found ) ) {
-                $matched = $found;
-            }
-        }
-        if ( empty( $matched ) ) {
-            return [ 'items' => [], 'tags' => [] ];
+        $have_engine = class_exists( 'ZDZ_Item_Engine' ) && method_exists( 'ZDZ_Item_Engine', 'match_all' );
+        // D2: line items are the ONLY thing that can EVIDENCE an installed product.
+        $line_matches = $have_engine ? (array) ZDZ_Item_Engine::match_all( $line_text ) : [];
+        // Notes may only ENRICH — never introduce — a product.
+        $note_matches = ( $have_engine && trim( $note_text ) !== '' )
+            ? (array) ZDZ_Item_Engine::match_all( $note_text )
+            : [];
+
+        if ( empty( $line_matches ) ) {
+            return [ 'items' => [], 'tags' => [], 'knowledge' => false ];
         }
 
         $items = [];
         $tags  = [];
         $seen  = [];
-        foreach ( $matched as $item ) {
+        $knowledge = false;
+        foreach ( $line_matches as $item ) {
             if ( ! is_array( $item ) ) {
                 continue;
             }
@@ -4736,16 +5074,72 @@ final class ZRCPT_Receipt {
                     continue;
                 }
             }
-            $label = (string) ( $item['display_name'] ?? ( $item['subtype'] ?? $id ) );
+            // Enrich: if a NOTE names a MORE-SPECIFIC child of this line item
+            // (its id starts with this id), use the note item's richer label/
+            // attributes — but only ever as an enrichment of a line-evidenced item.
+            $emit = $item;
+            foreach ( $note_matches as $nm ) {
+                if ( ! is_array( $nm ) ) { continue; }
+                $nid = (string) ( $nm['id'] ?? '' );
+                if ( $nid !== '' && $nid !== $id && strpos( $nid, $id ) === 0 ) {
+                    $emit = $nm; // the child enriches the parent the lines evidenced
+                    break;
+                }
+            }
+            $label = (string) ( $emit['display_name'] ?? ( $emit['subtype'] ?? ( $emit['id'] ?? $id ) ) );
             if ( $label === '' ) {
                 continue;
             }
             $seen[ $id ] = true;
-            $items[]     = $item;
+            $items[]     = $emit;
             $tags[]      = $label;
+            if ( $this->material_documents_from_knowledge( $emit ) ) {
+                $knowledge = true;
+            }
         }
 
-        return [ 'items' => $items, 'tags' => array_values( array_unique( $tags ) ) ];
+        return [
+            'items'     => $items,
+            'tags'      => array_values( array_unique( $tags ) ),
+            'knowledge' => $knowledge,
+        ];
+    }
+
+    /**
+     * S5-09 (§78 D1) — does this material class DOCUMENT ITSELF FROM external spec
+     * knowledge (a vent, which pulls an approved-product spec), or is it SELF-
+     * DOCUMENTED (a caulk / sealant, which is described from a fixed instruction
+     * with no knowledge pull)? Reads the Item Engine `documents_from` attribute
+     * (C3) defensively, then a mirrored filter, then a receipts-local override.
+     *
+     * Core default when the class is UNKNOWN (empty catalog / attribute unset):
+     * FALSE — do NOT pull external knowledge. This is the fail-safe that fixes D1:
+     * the server never renders an unbacked manufacturer spec for a class it can't
+     * confirm should pull one (the sealant↔branded-product pairing that made D1 possible
+     * is a tenant KNOWLEDGE property, declared via the attribute, not assumed by Core).
+     *
+     * @param array $item An Item Engine match row.
+     * @return bool
+     */
+    private function material_documents_from_knowledge( array $item ): bool {
+        $id = (string) ( $item['id'] ?? '' );
+        // 1) Item Engine attribute (C3), read straight off the match row.
+        $attrs = $item['attributes'] ?? [];
+        if ( is_array( $attrs ) && array_key_exists( 'documents_from', $attrs ) ) {
+            return strtolower( (string) $attrs['documents_from'] ) === 'knowledge';
+        }
+        // 2) Mirrored filter — a catalog/knowledge module may answer for an id.
+        $v = apply_filters( 'zdz_item_documents_from', null, $id, $item );
+        if ( is_string( $v ) && $v !== '' ) {
+            return strtolower( $v ) === 'knowledge';
+        }
+        // 3) Receipts-local override (bool) for tenants without the C3 attribute.
+        $v2 = apply_filters( 'zrcpt_material_documents_from_knowledge', null, $id, $item );
+        if ( is_bool( $v2 ) ) {
+            return $v2;
+        }
+        // Fail-safe default: self-documented (no knowledge pull).
+        return false;
     }
 
     /**
@@ -4779,46 +5173,64 @@ final class ZRCPT_Receipt {
      * @param string $extra_text    Any extra text (reference, description).
      */
     private function build_supplemental_materials_block( array $lines, array $install_notes = [], string $extra_text = '' ): string {
-        // Assemble the haystack from line items + notes + extra text.
-        $parts = [ $extra_text ];
+        // S5-09 (D2) — keep LINE-ITEM text and NOTE text SEPARATE. Line items are
+        // the evidence for what was installed; notes/reference/description may only
+        // enrich a line-evidenced item, never introduce one.
+        $line_parts = [];
         foreach ( $lines as $ln ) {
             if ( is_array( $ln ) ) {
-                $parts[] = (string) ( $ln['name'] ?? '' ) . ' ' . (string) ( $ln['description'] ?? '' );
+                $line_parts[] = (string) ( $ln['name'] ?? '' ) . ' ' . (string) ( $ln['description'] ?? '' );
             } else {
-                $parts[] = (string) $ln;
+                $line_parts[] = (string) $ln;
             }
         }
+        $note_parts = [ $extra_text ];
         foreach ( $install_notes as $n ) {
-            $parts[] = is_array( $n ) ? (string) ( $n['content'] ?? '' ) : (string) $n;
+            $note_parts[] = is_array( $n ) ? (string) ( $n['content'] ?? '' ) : (string) $n;
         }
-        $haystack = trim( implode( ' ', array_filter( $parts ) ) );
-        if ( $haystack === '' ) {
+        $line_text = trim( implode( ' ', array_filter( $line_parts ) ) );
+        $note_text = trim( implode( ' ', array_filter( $note_parts ) ) );
+        if ( $line_text === '' ) {
             return '';
         }
 
-        $detected = $this->detect_supplemental_materials( $haystack );
+        $detected = $this->detect_supplemental_materials( $line_text, $note_text );
         if ( empty( $detected['tags'] ) ) {
+            // S5-09 diagnostic — makes a wrong/absent render diagnosable from the log.
+            error_log( 'ZRCPT materials: keys=[] line_evidenced=no knowledge=no' );
             return '';
         }
 
         // Explicit, machine-readable allowlist of what to document (catalog ids).
         $material_keys = $this->canonical_material_keys( $detected );
 
-        // Pull authoritative spec text from a knowledge source. Neutral, documented
-        // seam: ships returning '' (feature degrades to a generic mention); a
-        // knowledge module registers on the filter. NO provider/plugin name here.
-        // Cache keyed on the query, like the other lookups, so re-generating a
-        // receipt doesn't re-score the same knowledge on every request.
-        $query = 'Supplemental materials specification: ' . implode( ', ', $detected['tags'] )
-               . ' approved product specification and applicable standard.';
-        $cache_key = 'zrcpt_matctx_' . md5( $query );
-        $context   = get_transient( $cache_key );
-        if ( ! is_string( $context ) || $context === '' ) {
-            $context = (string) apply_filters( 'zrcpt_materials_context', '', $query, $detected );
-            if ( $context !== '' ) {
-                set_transient( $cache_key, $context, HOUR_IN_SECONDS );
+        // S5-09 (D1) — pull external spec knowledge ONLY for a class that DOCUMENTS
+        // FROM knowledge (a vent). A self-documented class (caulk/sealant) never
+        // triggers a knowledge query, so a caulk tag can't drag in a vent
+        // manufacturer's guideline. When nothing is knowledge-documented the
+        // context stays '' and the bot documents the item(s) generically.
+        $context = '';
+        if ( ! empty( $detected['knowledge'] ) ) {
+            $query = 'Supplemental materials specification: ' . implode( ', ', $detected['tags'] )
+                   . ' approved product specification and applicable standard.';
+            $cache_key = 'zrcpt_matctx_' . md5( $query );
+            $context   = get_transient( $cache_key );
+            if ( ! is_string( $context ) || $context === '' ) {
+                $context = (string) apply_filters( 'zrcpt_materials_context', '', $query, $detected );
+                if ( $context !== '' ) {
+                    set_transient( $cache_key, $context, HOUR_IN_SECONDS );
+                }
             }
         }
+
+        // S5-09 diagnostic (§78): keys / whether knowledge was pulled / tags.
+        error_log( sprintf(
+            'ZRCPT materials: keys=[%s] line_evidenced=yes knowledge=%s vault=%s tags=[%s]',
+            implode( ',', $material_keys ),
+            ! empty( $detected['knowledge'] ) ? 'Y' : 'N',
+            ( $context !== '' ) ? 'Y' : 'N',
+            implode( ',', $detected['tags'] )
+        ) );
 
         // Build the block. Even without a knowledge source we still tell the bot
         // WHAT was detected so it can note it conservatively.
@@ -5167,6 +5579,12 @@ final class ZRCPT_Receipt {
             wp_send_json_error( [ 'message' => 'Could not update the receipt photos. Please regenerate the receipt.' ] );
         }
 
+        // S5-01 — keep the appended full-size gallery in sync with the removal
+        // (the paid panel and everything else are left untouched). Idempotent.
+        if ( class_exists( 'ZRCPT_Finalize' ) ) {
+            $new_html = ZRCPT_Finalize::refresh_fullsize_gallery( $new_html, $kept );
+        }
+
         update_post_meta( $post_id, '_receipt_html', $new_html );
 
         // Keep _source_media_ids consistent: drop the rows whose file_url was
@@ -5263,6 +5681,11 @@ final class ZRCPT_Receipt {
         $new_html = $this->rewrite_receipt_photos( $html, $order );
         if ( $new_html === null || $new_html === $html ) {
             wp_send_json_error( [ 'message' => 'Could not reorder the receipt photos. Please regenerate the receipt.' ] );
+        }
+
+        // S5-01 — re-order the appended full-size gallery to match (idempotent).
+        if ( class_exists( 'ZRCPT_Finalize' ) ) {
+            $new_html = ZRCPT_Finalize::refresh_fullsize_gallery( $new_html, $order );
         }
 
         update_post_meta( $post_id, '_receipt_html', $new_html );
@@ -5461,6 +5884,25 @@ final class ZRCPT_Receipt {
         if ( $client_hash === '' || ! hash_equals( $server_hash, strtolower( $client_hash ) ) ) {
             wp_send_json_error( [ 'message' => 'The receipt changed since you opened it. Please re-open and review it again.' ] );
         }
+
+        // S5-14 — wp_kses AT APPROVE (defense-in-depth for model-authored public
+        // HTML). The reviewer's echo-back was validated against exactly what they
+        // saw ($server_hash) above. Now strip any active content from the STORED,
+        // publicly-served HTML through the curated receipt allowlist, and RE-BIND
+        // the approval hash to the SANITIZED artifact — so even a prompt-injected
+        // <script>/on*= payload a reviewer clicked through can never become active
+        // content on the public receipt URL. A clean receipt is unchanged (the
+        // hash and stored bytes are identical), so this is a no-op in the normal
+        // case and never surprises a legitimate gallery/paid-panel receipt.
+        $clean = class_exists( 'ZRCPT_Finalize' ) ? ZRCPT_Finalize::sanitize( $html ) : $html;
+        if ( $clean !== $html ) {
+            update_post_meta( $post_id, '_receipt_html', $clean );
+            error_log( 'ZRCPT APPROVE: kses stripped active content from stored HTML for post ' . $post_id );
+            $html = $clean;
+        }
+        // Bind the approval to what is actually SERVED (the sanitized HTML), so the
+        // send-time re-check compares like-for-like.
+        $server_hash = hash( 'sha256', $html );
 
         $user = get_userdata( $uid );
         $name = $user ? ( $user->display_name ?: $user->user_login ) : ( 'User #' . $uid );

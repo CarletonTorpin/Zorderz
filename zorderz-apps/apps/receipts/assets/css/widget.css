@@ -3155,3 +3155,32 @@ body.zrcpt-w-modal-open {
   flex-direction: column;
   align-items: stretch;
 }
+
+/* ── S5-06/07/08 — multi-set inclusion checkbox, blocked & used states ── */
+.zrcpt-w-sess-cb {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  cursor: pointer;
+  accent-color: var(--sys-brand, #1E4D6E);
+}
+.zrcpt-w-sess-cb:disabled { cursor: not-allowed; opacity: .5; }
+
+/* An included set gets the same brand emphasis the old active radio implied. */
+.zrcpt-w-sess-included {
+  border-color: var(--sys-brand, #1E4D6E);
+}
+
+/* A blocked (off-site) or fully-used set is dimmed and non-combinable. */
+.zrcpt-w-sess-blocked-card {
+  opacity: .62;
+  background: var(--sys-bg-alt, #F1F5F9);
+}
+.zrcpt-w-sess-blocked {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--sys-text-muted, #64748B);
+}
