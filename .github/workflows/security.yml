@@ -147,24 +147,14 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
-  pii-gate:
-    name: PII / tenant-data scan gate
-    # Blocking gate for a PUBLIC release: fails if any confidential term reaches the zips.
-    # Requires the ZDZ_PII_WORDLIST repository secret (newline-separated confidential terms).
-    # Until that secret is set this job FAILS BY DESIGN — a gate that never ran must not pass.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          coverage: none
-      - name: Build both zips
-        run: bash build.sh
-      - name: Scan built artifacts against the confidential wordlist
-        # The gate never prints the wordlist or the matched text, so this public log cannot leak it.
-        env:
-          ZDZ_PII_WORDLIST: ${{ secrets.ZDZ_PII_WORDLIST }}
-        run: bash .github/scripts/pii-gate.sh dist
+# ─────────────────────────────────────────────────────────────────────────────
+# The PII / tenant-data scan gate is deliberately NOT a CI job.
+#
+# The confidential wordlist (company + roster + product + customer terms) must
+# NEVER be handed to this repository — not committed, and NOT stored as a GitHub
+# Actions secret (a repo secret is still "handed to the repo"). The authoritative
+# gate therefore runs PRIVATELY before each release: `.github/scripts/pii-gate.sh`
+# is run against the built zips in a private environment where the wordlist is
+# supplied out-of-band via ZDZ_PII_WORDLIST and never persisted. The script itself
+# holds no terms, so it is safe in the repo; only the wordlist stays out.
+# ─────────────────────────────────────────────────────────────────────────────
