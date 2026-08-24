@@ -157,8 +157,18 @@ require_once ZJOB_DIR . 'includes/class-zjob-project.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-visibility.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-resolver.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-sweep.php';
+// Wave C (C-01) — install-date resolver + INV-8 published boundary + compose_context handoff.
+require_once ZJOB_DIR . 'includes/class-zjob-install-date.php';
+require_once ZJOB_DIR . 'includes/class-zjob-appointment-link.php';
+require_once ZJOB_DIR . 'includes/class-zjob-schedule-context.php';
 if ( class_exists( 'Zjob_Project' ) && method_exists( 'Zjob_Project', 'init' ) ) {
 	Zjob_Project::init();
+}
+if ( class_exists( 'Zjob_Install_Date' ) && method_exists( 'Zjob_Install_Date', 'init' ) ) {
+	Zjob_Install_Date::init();
+}
+if ( class_exists( 'Zjob_Schedule_Context' ) && method_exists( 'Zjob_Schedule_Context', 'init' ) ) {
+	Zjob_Schedule_Context::init();
 }
 
 /**
