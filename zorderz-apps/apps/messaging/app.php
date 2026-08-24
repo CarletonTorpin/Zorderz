@@ -3,11 +3,35 @@
  * Plugin Name: Zorderz Messaging
  * Plugin URI:  https://zorderz.org
  * Description: One-to-one DMs and department channels inside the Zorderz Field OS. @mentions, push notifications, inline FreshBooks preview cards. Minimum Effective Product.
- * Version:     1.1.3
+ * Version:     1.1.8
  * Author:      Zorderz
  * Text Domain: zdz-internal-messaging
  * Requires PHP: 8.0
  *
+ * v1.1.8 (asset cache-bust): No functional delta found for 1.1.5–1.1.8 in the
+ *   S8 analysis (S8-06) — these releases have no dedicated Bible section and the
+ *   folded plugin README covers 1.1.0–1.1.3 only. Per the DEVICE-DIFF / DON'T-
+ *   INVENT rule, the constant is advanced to the current-on-disk target and the
+ *   version bump busts the JS/CSS asset cache. No behaviour change; no DB change.
+ * v1.1.5–1.1.7: version-only (see v1.1.8) — no documented functional delta.
+ * v1.1.4 (Vimeo chapter embed inside the messenger): A first-party training-video
+ *   embed (a Vimeo player + clickable chapter list, as produced by the project's
+ *   `text-to-vid` workflow) now renders inside a message WITHOUT weakening either
+ *   sanitizer. The two layers each do their job — the server strips <iframe>/
+ *   <script>/<style> at the write chokepoint (wp_kses_post, v1.0.27) and the
+ *   client re-strips on render (DOMPurify) — so a passed-through embed's seeking
+ *   script never runs. Instead, ZIM_Messages::extract_video_embeds() runs FIRST
+ *   in post()/edit(), recognizing ONLY a TRUSTED-ORIGIN player.vimeo.com embed
+ *   and distilling it to a plain-text [zdz-video]<hex>[/zdz-video] token carrying
+ *   only the numeric video id + chapter list (which survives kses untouched);
+ *   client wireVideoEmbeds() rebuilds the player with the iframe origin FIXED to
+ *   player.vimeo.com and seeks host-side via the Vimeo postMessage API (with a
+ *   #t= reload fallback); chapter clicks preventDefault() so they never navigate.
+ *   The trusted-origin allow-list is a Core constant (Vimeo) exposed via the
+ *   `zim_video_embed_hosts` filter. Also hardened: edit() now runs the same
+ *   extract + wp_kses_post() the post() path does, closing a pre-existing gap
+ *   where edited bodies were stored without a server-side kses pass. No DB
+ *   migration; security posture unchanged (id validated numeric, origin fixed).
  * v1.1.3 (DM-email cooldown — testable + resettable): The v1.1.2 diagnostics
  *   proved the DM→email path works; test DMs simply landed inside the 30-min
  *   per-conversation cooldown (working as designed) and were correctly held back.
@@ -148,7 +172,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIM_VERSION', '1.1.3' );
+define( 'ZIM_VERSION', '1.1.8' );
 define( 'ZIM_PLUGIN_FILE', __FILE__ );
 define( 'ZIM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
