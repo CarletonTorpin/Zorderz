@@ -290,7 +290,7 @@ add_action( 'template_redirect', function () {
 		wp_die( 'Document not found.' );
 	}
 	header( 'Content-Type: text/html; charset=utf-8' );
-	echo $html; // phpcs:ignore WordPress.Security.EscapeOutput — renderer escapes inputs
+	echo $html; // phpcs:ignore WordPress.Security.EscapeOutput -- renderer escapes inputs
 	exit;
 } );
 
@@ -391,7 +391,7 @@ add_action( 'template_redirect', function () {
 		wp_die( 'Invoice not found.' );
 	}
 	header( 'Content-Type: text/html; charset=utf-8' );
-	echo $html; // phpcs:ignore WordPress.Security.EscapeOutput — renderer escapes inputs
+	echo $html; // phpcs:ignore WordPress.Security.EscapeOutput -- renderer escapes inputs
 	exit;
 } );
 
@@ -471,7 +471,7 @@ add_action( 'template_redirect', function () {
 		wp_die( 'Document renderer unavailable.' );
 	}
 	header( 'Content-Type: text/html; charset=utf-8' );
-	echo ZEST_Doc_Renderer::render_console(); // phpcs:ignore WordPress.Security.EscapeOutput — renderer escapes inputs
+	echo ZEST_Doc_Renderer::render_console(); // phpcs:ignore WordPress.Security.EscapeOutput -- renderer escapes inputs
 	exit;
 } );
 
