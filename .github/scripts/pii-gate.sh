@@ -16,6 +16,8 @@
 #     ZDZ_PII_WORDLIST="$(cat /path/to/private/wordlist.txt)" \
 #       bash .github/scripts/pii-gate.sh dist
 #
+# The wordlist is newline-separated; blank lines and #-comment/section-header lines are ignored.
+#
 # The script itself holds no terms, so it is safe to keep in the repo. It never
 # prints the wordlist or the matched text — only the offending file and a redacted
 # match count — so even its output cannot leak the terms.
@@ -55,7 +57,13 @@ done
 # "system", or "ImageOffset". Dash-/space-separated tokens like "92119-EM" still match, since
 # the separators are themselves word boundaries.)
 pat="$work/.patterns"
-printf '%s\n' "$ZDZ_PII_WORDLIST" | sed '/^[[:space:]]*$/d' > "$pat"
+# Normalize the supplied wordlist: strip CR (CRLF files), trim surrounding whitespace, then
+# drop comment lines (# …) and blanks. This lets an operator keep section headers and notes in
+# their private wordlist without those lines becoming spurious match patterns. (A term that must
+# literally begin with '#' is not supported — that leading character marks a comment.)
+printf '%s\n' "$ZDZ_PII_WORDLIST" \
+  | tr -d '\r' \
+  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^#/d' -e '/^$/d' > "$pat"
 terms="$(wc -l < "$pat" | tr -d ' ')"
 echo "PII gate: scanning ${#zips[@]} artifact(s) against ${terms} confidential term(s)…"
 
