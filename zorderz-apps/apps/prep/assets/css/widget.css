@@ -257,6 +257,23 @@
 }
 .zprep-w-atc-chev { flex-shrink: 0; color: var(--sys-text-ter); font-size: 18px; line-height: 1; }
 
+/* Install-date chip (S5-10/S5-11) — display-only decoration on the Ready-to-Cut card and lead
+   picker. Token-only (no brand literal); a KNOWN date reads slightly stronger than the
+   non-scheduled states, but nothing here gates or reorders a card. */
+.zprep-w-atc-install-row, .zprep-w-select-install { margin-top: 4px; }
+.zprep-w-install-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  font-size: 12px; color: var(--sys-text-sec);
+  background: var(--sys-surface-subtle, var(--sys-surface-raised));
+  padding: 2px 9px; border-radius: 99px; white-space: nowrap; max-width: 100%;
+}
+.zprep-w-install-lbl {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--sys-text-ter); font-weight: var(--sys-font-wt-b);
+}
+.zprep-w-install-known { color: var(--sys-text); font-weight: var(--sys-font-wt-b); }
+.zprep-w-install-known .zprep-w-install-lbl { color: var(--sys-text-sec); }
+
 .zprep-w-atc-empty { font-size: 14px; color: var(--sys-text-sec); padding: 12px 14px; background: var(--sys-surface-subtle, var(--sys-surface-raised)); border-radius: var(--ref-radius-sm); margin-top: var(--ref-space-2); }
 
 /* "or look one up" divider between the list and the manual search box. */

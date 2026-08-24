@@ -191,6 +191,7 @@ require_once ZRCPT_DIR . 'includes/class-zrcpt-heic.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-media.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-nutshell.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-freshbooks.php';
+require_once ZRCPT_DIR . 'includes/class-zrcpt-finalize.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-receipt.php';
 
 // Boot the engine (registers post type, admin, AJAX, routes, template hooks).

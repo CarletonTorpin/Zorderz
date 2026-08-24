@@ -624,7 +624,7 @@ class ZDZ_User_Media {
 	 * URL — the `privacy` field only filtered LIST queries, not file access, so a
 	 * private photo/sketch was retrievable by anyone who had/guessed the URL. Now the
 	 * getters return a gated URL and the file streams ONLY to an authorized viewer.
-	 * Access mapping (CT-approved): private → owner + admins (view_others_data);
+	 * Access mapping: private → owner + admins (view_others_data);
 	 * team/public → any logged-in user. Serves camera + media-library + sketch-pad. */
 
 	/** Get-or-lazily-mint the opaque per-record token (persisted). */
@@ -658,8 +658,22 @@ class ZDZ_User_Media {
 		return $row;
 	}
 
-	/** Admin-tier viewer test (owner-override for private media). */
-	private static function viewer_can_view_others( int $uid ): bool {
+	/**
+	 * Cross-user visibility predicate — "may this viewer see OTHER users' data?"
+	 *
+	 * v1.6.2 (Wave D / D-01): promoted from private to PUBLIC as a sanctioned shared
+	 * boundary so every app resolves cross-user visibility through this ONE ladder
+	 * (guard the call with method_exists(), INV-9) instead of forking a drifted copy
+	 * that silently omits the view_others_data rung. This is a VISIBILITY change only;
+	 * the ladder and its verdicts are byte-for-byte unchanged (no behaviour widened):
+	 *   1) manage_options (owner/admin override)  →  true
+	 *   2) ZDZ_Data_Permissions::can($uid,'view_others_data')  (the capability rung)
+	 *   3) last-resort role fallback when Data Permissions is absent.
+	 * Capability/trait based, never a role-slug literal for the security decision.
+	 * It fails closed, so publishing it can only GRANT the already-data-permitted
+	 * set, never invent a capability. Consumers keep their own GPS/property fence.
+	 */
+	public static function viewer_can_view_others( int $uid ): bool {
 		if ( $uid <= 0 ) { return false; }
 		if ( user_can( $uid, 'manage_options' ) ) { return true; }
 		if ( class_exists( 'ZDZ_Data_Permissions' ) && method_exists( 'ZDZ_Data_Permissions', 'can' ) ) {
@@ -704,7 +718,7 @@ class ZDZ_User_Media {
 		$expected = (string) ( $row['share_token'] ?? '' );
 		if ( '' === $expected || ! hash_equals( $expected, $tok ) ) { $fail(); }
 
-		// Access by privacy (CT-approved): private -> owner + admins; team/public -> any logged-in.
+		// Access by privacy: private -> owner + admins; team/public -> any logged-in.
 		$uid = (int) get_current_user_id();
 		if ( 'private' === (string) $row['privacy'] ) {
 			$is_owner = ( $uid > 0 && (int) $row['user_id'] === $uid );

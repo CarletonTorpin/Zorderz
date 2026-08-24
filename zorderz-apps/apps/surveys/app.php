@@ -218,9 +218,10 @@ add_action(
  * Declare this module's legacy->current rename map to the platform migration. Plugins
  * DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place. A fresh
  * Zorderz install has no legacy rows, so every entry no-ops. Data is never seeded — only
- * renamed if present. (The kathie_notes/kathie_status COLUMN rename lives in ZSV_DB, a
- * real ALTER guarded by zsv_db_version, because the platform map only renames whole
- * tables/options, not columns.)
+ * renamed if present. (The legacy operator-COLUMN rename lives in ZSV_DB, a real ALTER
+ * guarded by zsv_db_version, because the platform map only renames whole tables/options,
+ * not columns; person-named legacy columns come from a private pack via the
+ * zsv_legacy_operator_column_renames filter, so Core names no person.)
  */
 add_filter(
 	'zdz_rename_map',

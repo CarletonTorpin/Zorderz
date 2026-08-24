@@ -49,7 +49,7 @@
  *  1. TIER AT THE BOUNDARY. The orchestrator passes the caller's tier/kiosk; we
  *     enforce redaction here, before returning. We never rely on the model to
  *     redact. We resolve the tier ourselves from the WordPress user via the
- *     theme's `TS_Data_Permissions` so a spoofed payload can't widen access.
+ *     theme's `ZDZ_Data_Permissions` so a spoofed payload can't widen access.
  *  2. KIOSK = MOST-RESTRICTIVE-WINS. Leads carry contact info — the exact
  *     poaching risk the shared shop device guards against. So:
  *       - read verbs run in a **bounded kiosk variant**: name + city + pipeline
@@ -609,7 +609,7 @@ class ZL_TSA_Bridge {
 	 * from WordPress so a forged payload can't widen access (CONTRACT §3.1).
 	 *
 	 * Kiosk is defined by the theme as the `ts_general` role (the all-deny shared
-	 * shop account). We read it through `TS_Data_Permissions` when present, and
+	 * shop account). We read it through `ZDZ_Data_Permissions` when present, and
 	 * fall back to a direct role check + the payload hint if the theme isn't
 	 * loaded (e.g. unit context) — defaulting to the *most restrictive* reading.
 	 *

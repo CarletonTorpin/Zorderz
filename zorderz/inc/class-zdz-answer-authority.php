@@ -142,6 +142,22 @@ class ZDZ_Answer_Authority {
 	 */
 	const CHANNELS = array( 'chat', 'email', 'push', 'digest', 'stream' );
 
+	/**
+	 * A fourth verdict: the question does not apply (no filter was applied and
+	 * nothing matched) - the mirror image of a false refusal. The gate treats NA as
+	 * OK (the count block is simply omitted, no caveat added) and it NEVER upgrades a
+	 * real REFUSE. §64 CH2.
+	 */
+	const NA = 'not_applicable';
+
+	/**
+	 * Live in-browser surfaces. Their payload is NOT run through sanitize_outbound():
+	 * pictographs / zero-width characters render fine in a browser and scrubbing them
+	 * would alter what the human typed or reads. Every OTHER channel is an external
+	 * transport (CRM / email / push / digest) whose text IS scrubbed on the way out.
+	 */
+	const UI_SURFACES = array( 'chat', 'stream' );
+
 	public static function init(): void {
 		// Route for any component that would rather call a filter than the class.
 		add_filter( 'zdz_answer_gate', array( __CLASS__, 'gate_filter' ), 10, 2 );
@@ -213,6 +229,8 @@ class ZDZ_Answer_Authority {
 			'outcome_without_sor'  => 'refuse', // 'refuse' | 'caveat'
 			// Policy when a money/quantity figure has no backing in context.
 			'unbacked_figure'      => 'caveat', // 'refuse' | 'caveat' | 'allow'
+			// Money comparison tolerance in integer cents (reconcile + payment gate).
+			'money_tolerance_cents'=> 1,
 		);
 		$t = apply_filters( 'zdz_answer_authority_thresholds', $defaults );
 		return is_array( $t ) ? array_merge( $defaults, $t ) : $defaults;
@@ -348,32 +366,98 @@ class ZDZ_Answer_Authority {
 		$channel = isset( $outbound['channel'] ) ? (string) $outbound['channel'] : 'chat';
 		$text    = isset( $outbound['text'] ) ? (string) $outbound['text'] : '';
 		$context = isset( $outbound['context'] ) && is_array( $outbound['context'] ) ? $outbound['context'] : array();
-
+		
 		if ( ! in_array( $channel, self::CHANNELS, true ) ) {
-			// Fail loud (log), never crash — an unregistered send path still gates.
+			// Fail loud (log), never crash - an unregistered send path still gates.
 			error_log( '[ZDZ_Answer_Authority] gate() called for unregistered channel: ' . $channel );
 		}
-
-		$a       = self::assess( $text, $context );
-		$verdict = $a['verdict'];
-		$out     = $text;
-
+		
+		// Outbound text scrub - external transports only (CRM / email / push / digest),
+		// NEVER the live in-browser surfaces. Applied first so assessment runs on the
+		// cleaned text for those channels.
+		if ( ! in_array( $channel, self::UI_SURFACES, true ) ) {
+			$text = self::sanitize_outbound( $text );
+		}
+		
+		$a              = self::assess( $text, $context );
+		$assess_verdict = $a['verdict'];
+		$verdict        = $assess_verdict;
+		
+		// Reader tier (by TRAIT; fail-safe to the middle tier). Opt-in via context; when
+		// absent the legacy caveat is used, preserving prior behaviour exactly.
+		$reader_tier = '';
+		if ( isset( $context['reader_tier'] ) && '' !== (string) $context['reader_tier'] ) {
+			$reader_tier = self::normalize_reader_tier( (string) $context['reader_tier'] );
+		} elseif ( isset( $context['user_id'] ) ) {
+			$reader_tier = self::reader_tier( (int) $context['user_id'] );
+		}
+		
+		$additions    = array();            // factual lines APPENDED (never a rewrite)
+		$dispositions = $a['dispositions']; // returned to the caller
+		$fire         = $a['dispositions']; // fired here (reconcile fires its own)
+		
+		// -- CH1: total / row-sum reconciliation - flag-and-explain, NEVER rewrite --
+		if ( isset( $context['reconcile'] ) && is_array( $context['reconcile'] )
+			&& isset( $context['reconcile']['printed'], $context['reconcile']['rows'] ) ) {
+			$rec = self::reconcile_total( $context['reconcile']['printed'], (array) $context['reconcile']['rows'] );
+			if ( empty( $rec['agrees'] ) ) {
+				$verdict        = self::stronger_verdict( $verdict, self::PARTIAL );
+				$additions[]    = self::reconcile_caveat_text( $rec );
+				$dispositions[] = array(
+					'code'   => 'total_reconcile',
+					'detail' => 'printed total and row sum disagree',
+					'gap'    => $rec['gap'],
+				);
+			}
+		}
+		
+		// -- CH7: deterministic engine-emitted scope caveat (never asked of the model) --
+		if ( isset( $context['scope'] ) && is_array( $context['scope'] ) ) {
+			$sc       = $context['scope'];
+			$excluded = array_filter( array_map( 'trim', array_map( 'strval', (array) ( $sc['excluded'] ?? array() ) ) ) );
+			if ( ! empty( $sc['search_broadened'] ) || ! empty( $excluded ) ) {
+				$scope_line = self::scope_caveat_text( $sc );
+				if ( '' !== $scope_line ) {
+					$additions[]    = $scope_line;
+					$scope_disp     = array( 'code' => 'scope_disclosure', 'detail' => 'engine-emitted scope caveat' );
+					$dispositions[] = $scope_disp;
+					$fire[]         = $scope_disp;
+				}
+			}
+		}
+		
+		// -- Emit. A refusal REPLACES the body; a caveat / scope line is an ADDITION. --
 		if ( self::REFUSE === $verdict ) {
 			$out = self::refusal_text( $a );
-		} elseif ( self::PARTIAL === $verdict ) {
-			$out = $text . "\n\n" . self::caveat_text( $a );
+		} else {
+			$out = $text;
+			// The provisional caveat fires only when ASSESS itself degraded the answer
+			// (a genuine figure / outcome concern), tier-aware when the caller opted in.
+			if ( self::PARTIAL === $assess_verdict ) {
+				$partial_caveat = ( '' !== $reader_tier )
+					? self::disclose_for_tier( $a, $reader_tier )
+					: self::caveat_text( $a );
+				if ( '' !== $partial_caveat ) {
+					$out .= "\n\n" . $partial_caveat;
+				}
+			}
+			foreach ( $additions as $add ) {
+				if ( '' !== $add ) {
+					$out .= "\n\n" . $add;
+				}
+			}
 		}
-
-		// Nothing silent: fire a disposition for every finding so a funnel balances.
-		foreach ( $a['dispositions'] as $d ) {
+		
+		// Nothing silent: fire a disposition for every finding (reconcile fired its own).
+		foreach ( $fire as $d ) {
 			do_action( 'zdz_disposition', 'answer_authority', array_merge( $d, array( 'channel' => $channel, 'verdict' => $verdict ) ) );
 		}
-
+		
 		return array(
 			'verdict'      => $verdict,
 			'text'         => $out,
 			'score'        => $a['score'],
-			'dispositions' => $a['dispositions'],
+			'dispositions' => $dispositions,
 		);
 	}
 
@@ -389,7 +473,8 @@ class ZDZ_Answer_Authority {
 
 	/** OK < PARTIAL < REFUSE — return the more restrictive of two verdicts. */
 	private static function stronger_verdict( string $a, string $b ): string {
-		$rank = array( self::OK => 0, self::PARTIAL => 1, self::REFUSE => 2 );
+		// NA ranks with OK (0) so it never upgrades a real PARTIAL / REFUSE.
+		$rank = array( self::NA => 0, self::OK => 0, self::PARTIAL => 1, self::REFUSE => 2 );
 		return ( ( $rank[ $b ] ?? 0 ) > ( $rank[ $a ] ?? 0 ) ) ? $b : $a;
 	}
 
@@ -487,6 +572,323 @@ class ZDZ_Answer_Authority {
 	/** A caveat appended to a PARTIAL answer. */
 	public static function caveat_text( array $assessment = array() ): string {
 		return __( 'Note: some figures above are not confirmed by the underlying records — treat them as provisional.', 'zorderz' );
+	}
+
+	/* ----------------- AC2 additions (Wave A: CH1/CH2/CH7/CH11/CH19, S5-02) ------ */
+
+	/**
+	 * CH1 - reconcile a printed total against the sum of its rows. FLAGS and EXPLAINS;
+	 * it mutates nothing and NEVER rewrites the model's prose. Integer-cents compare.
+	 * Emits a total_reconcile disposition (nothing silent). Per S1-03 / D-04 it never
+	 * asserts which side is right beyond "likely".
+	 *
+	 * @param float|int|string|ZDZ_Figure $printed
+	 * @param array                       $rows Row values (numbers, strings, or ZDZ_Figure).
+	 * @param array                       $opts ['epsilon_cents'=>int]
+	 * @return array ['agrees','printed','row_sum','gap','probable_cause','verdict_hint']
+	 */
+	public static function reconcile_total( $printed, array $rows, array $opts = array() ): array {
+		$printed_cents = self::to_cents( $printed );
+		$sum_cents     = 0;
+		foreach ( $rows as $r ) {
+			$sum_cents += self::to_cents( $r );
+		}
+		$epsilon   = isset( $opts['epsilon_cents'] ) ? (int) $opts['epsilon_cents'] : (int) self::thresholds()['money_tolerance_cents'];
+		$gap_cents = $printed_cents - $sum_cents;
+		$agrees    = ( abs( $gap_cents ) <= $epsilon );
+		
+		$out = array(
+			'agrees'         => $agrees,
+			'printed'        => $printed_cents / 100,
+			'row_sum'        => $sum_cents / 100,
+			'gap'            => $gap_cents / 100,
+			'probable_cause' => null,
+			'verdict_hint'   => $agrees ? 'agree' : 'disagreement',
+		);
+		if ( ! $agrees ) {
+			$cause = self::explain_gap( $gap_cents / 100, $rows );
+			if ( null !== $cause ) {
+				$out['probable_cause'] = $cause;
+				$out['verdict_hint']   = 'printed_likely_correct';
+			}
+		}
+		
+		do_action( 'zdz_disposition', 'answer_authority', array(
+			'code'         => 'total_reconcile',
+			'agrees'       => $agrees,
+			'printed'      => $out['printed'],
+			'row_sum'      => $out['row_sum'],
+			'gap'          => $out['gap'],
+			'verdict_hint' => $out['verdict_hint'],
+		) );
+		return $out;
+	}
+
+	/**
+	 * Name the likeliest cause of a total/row-sum gap, or null. Conservative: only when
+	 * a single row value equals the gap (a value probably counted twice) does it speak,
+	 * and even then it only ever says the printed total is "probably" correct.
+	 */
+	public static function explain_gap( float $gap, array $rows ): ?string {
+		$gap_cents = (int) round( abs( $gap ) * 100 );
+		if ( 0 === $gap_cents ) {
+			return null;
+		}
+		foreach ( $rows as $r ) {
+			if ( self::to_cents( $r ) === $gap_cents ) {
+				$cur   = self::currency();
+				$shown = $cur['sigil'] . number_format( $gap_cents / 100, 2 );
+				return sprintf(
+					/* translators: %s is a money amount. */
+					__( 'a value of %s appears counted twice; the printed total is probably the correct one', 'zorderz' ),
+					$shown
+				);
+			}
+		}
+		return null;
+	}
+
+	/** The reader-facing caveat for a total/row-sum disagreement (an ADDITION, not a rewrite). */
+	public static function reconcile_caveat_text( array $rec ): string {
+		$cur     = self::currency();
+		$printed = $cur['sigil'] . number_format( (float) ( $rec['printed'] ?? 0 ), 2 );
+		$rowsum  = $cur['sigil'] . number_format( (float) ( $rec['row_sum'] ?? 0 ), 2 );
+		if ( ! empty( $rec['probable_cause'] ) ) {
+			return sprintf(
+				/* translators: 1: printed total, 2: row sum, 3: probable-cause clause. */
+				__( 'Note: the printed total (%1$s) and the sum of the lines (%2$s) disagree - %3$s.', 'zorderz' ),
+				$printed,
+				$rowsum,
+				$rec['probable_cause']
+			);
+		}
+		return sprintf(
+			/* translators: 1: printed total, 2: row sum. */
+			__( 'Note: the printed total (%1$s) and the sum of the lines (%2$s) disagree; I can\'t determine which is correct.', 'zorderz' ),
+			$printed,
+			$rowsum
+		);
+	}
+
+	/**
+	 * CH2 - the false-refusal guard. A filter is ACTIVE only when a filter field is
+	 * non-empty. Filter active + zero matched -> REFUSE (a real "nothing matched").
+	 * Filter INACTIVE (an unfiltered whole-portfolio question) + zero matched -> NA (not
+	 * applicable: emit nothing, inject no prohibition). Data present -> OK. Sparse /
+	 * unparseable above the ceiling -> PARTIAL.
+	 *
+	 * @param array $context ['filter_applied'=>bool,'detail_filter'=>array,'matched_count'=>int,'unparseable_ratio'=>float]
+	 * @return string OK|PARTIAL|REFUSE|NA
+	 */
+	public static function assess_count_answerability( array $context ): string {
+		$filter_active = ! empty( $context['filter_applied'] );
+		if ( ! $filter_active && isset( $context['detail_filter'] ) && is_array( $context['detail_filter'] ) ) {
+			foreach ( $context['detail_filter'] as $v ) {
+				if ( is_array( $v ) ? ! empty( $v ) : ( '' !== trim( (string) $v ) ) ) {
+					$filter_active = true;
+					break;
+				}
+			}
+		}
+		
+		if ( isset( $context['unparseable_ratio'] ) ) {
+			$th = self::thresholds();
+			if ( (float) $context['unparseable_ratio'] > (float) $th['max_unparseable_ratio'] ) {
+				return self::PARTIAL;
+			}
+		}
+		
+		$matched = isset( $context['matched_count'] ) ? (int) $context['matched_count'] : 0;
+		if ( $matched > 0 ) {
+			return self::OK;
+		}
+		// Zero matched: a filter that matched nothing is a real refusal; an unfiltered
+		// whole-portfolio question that simply has no data is NOT applicable - guarding the
+		// false refusal (over-refusing is as dishonest as over-claiming).
+		return $filter_active ? self::REFUSE : self::NA;
+	}
+
+	/**
+	 * CH7 - a deterministic, engine-emitted scope line (facts, never asked of the model).
+	 * States what was searched, whether the search was broadened, and what was excluded
+	 * (e.g. past-dated documents the CALLER filtered - the engine states it, not the model).
+	 */
+	public static function scope_caveat_text( array $scope ): string {
+		$consulted = array();
+		foreach ( (array) ( $scope['sources_consulted'] ?? array() ) as $s ) {
+			$s = trim( (string) $s );
+			if ( '' !== $s ) {
+				$consulted[] = $s;
+			}
+		}
+		$excluded = array();
+		foreach ( (array) ( $scope['excluded'] ?? array() ) as $e ) {
+			$e = trim( (string) $e );
+			if ( '' !== $e ) {
+				$excluded[] = $e;
+			}
+		}
+		
+		$parts = array();
+		if ( ! empty( $consulted ) ) {
+			/* translators: %s is a comma-separated list of data sources searched. */
+			$parts[] = sprintf( __( 'Searched: %s.', 'zorderz' ), implode( ', ', $consulted ) );
+		}
+		if ( ! empty( $scope['search_broadened'] ) ) {
+			$parts[] = __( 'The search was broadened to locate a match.', 'zorderz' );
+		}
+		if ( ! empty( $excluded ) ) {
+			/* translators: %s is a comma-separated list of what was excluded from the search. */
+			$parts[] = sprintf( __( 'Excluded: %s.', 'zorderz' ), implode( ', ', $excluded ) );
+		}
+		return empty( $parts ) ? '' : implode( ' ', $parts );
+	}
+
+	/**
+	 * CH11 - the reader's diagnostic tier, by TRAIT (never a role-slug literal). Fail-safe
+	 * to the MIDDLE tier: fail-to-admin leaks diagnostics, fail-to-shared strips an
+	 * admin's forensics.
+	 *
+	 * @return string 'admin'|'operator'|'shared'
+	 */
+	public static function reader_tier( int $user_id ): string {
+		if ( $user_id <= 0 ) {
+			return 'operator';
+		}
+		// Shared-device / kiosk trait wins even over an admin capability (a shared screen).
+		if ( class_exists( 'ZDZ_Hierarchy' ) && method_exists( 'ZDZ_Hierarchy', 'is_kiosk' ) && ZDZ_Hierarchy::is_kiosk( $user_id ) ) {
+			return 'shared';
+		}
+		// Admin trait - a capability, not a role slug.
+		if ( function_exists( 'user_can' ) && user_can( $user_id, 'manage_options' ) ) {
+			return 'admin';
+		}
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_admin_role' ) && function_exists( 'get_userdata' ) ) {
+			$u = get_userdata( $user_id );
+			if ( $u && isset( $u->roles ) && is_array( $u->roles ) && ! empty( $u->roles ) && ZDZ_User_Roles::is_admin_role( (string) reset( $u->roles ) ) ) {
+				return 'admin';
+			}
+		}
+		return 'operator';
+	}
+
+	/** Normalize an explicit tier string; unknown -> the middle tier. */
+	private static function normalize_reader_tier( string $tier ): string {
+		$tier = strtolower( trim( $tier ) );
+		return in_array( $tier, array( 'admin', 'operator', 'shared' ), true ) ? $tier : 'operator';
+	}
+
+	/**
+	 * CH11 - the reader-facing disclosure for a tier. admin -> full (provisional note +
+	 * score + flags); operator -> one plain provisional line, no score; shared -> ''
+	 * (nothing). Full detail is ALWAYS retained in the disposition log regardless of tier
+	 * - this governs reader-facing verbosity only. The raw score is surfaced to admin only.
+	 */
+	public static function disclose_for_tier( array $assessment, string $tier ): string {
+		$tier = self::normalize_reader_tier( $tier );
+		if ( 'shared' === $tier ) {
+			return '';
+		}
+		$line = self::caveat_text( $assessment );
+		if ( 'admin' !== $tier ) {
+			return $line; // operator: provisional line only, no score
+		}
+		$bits = array();
+		if ( isset( $assessment['score'] ) ) {
+			/* translators: %d is an internal confidence score out of 100. */
+			$bits[] = sprintf( __( 'confidence score %d/100', 'zorderz' ), (int) $assessment['score'] );
+		}
+		$codes = array();
+		foreach ( (array) ( $assessment['dispositions'] ?? array() ) as $d ) {
+			if ( ! empty( $d['code'] ) ) {
+				$codes[] = (string) $d['code'];
+			}
+		}
+		if ( ! empty( $codes ) ) {
+			/* translators: %s is a comma-separated list of internal check names. */
+			$bits[] = sprintf( __( 'flags: %s', 'zorderz' ), implode( ', ', array_values( array_unique( $codes ) ) ) );
+		}
+		return empty( $bits ) ? $line : $line . ' (' . implode( '; ', $bits ) . ')';
+	}
+
+	/**
+	 * CH19 - an HONEST coverage badge. States what a figures-located metric actually
+	 * measured; NEVER a raw confidence percentage.
+	 */
+	public static function coverage_note( int $located, int $total ): string {
+		$located = max( 0, $located );
+		$total   = max( 0, $total );
+		return sprintf(
+			/* translators: 1: figures located, 2: total figures. NEVER a percentage. */
+			__( 'Figures located: %1$d of %2$d matched to the source data. This checks that figures appear in the data - not that statements about them are correct.', 'zorderz' ),
+			$located,
+			$total
+		);
+	}
+
+	/**
+	 * S5-02 - the payment-claim gate. Returns true ONLY when the system of record backs
+	 * it: an explicit 'paid' SoR outcome, OR an SoR-backed amount match (amount_paid +
+	 * tolerance >= amount_due). Fail-safe FALSE - a heuristic or a model may NEVER assert
+	 * paid. The receipt paid panel calls this before rendering "PAID" (INV-12 for money).
+	 *
+	 * @param array $context ['sor_outcomes'=>string[],'amount_paid'=>mixed,'amount_due'=>mixed,'sor_backed'=>bool]
+	 */
+	public static function payment_claimed( array $context ): bool {
+		$sor = array();
+		foreach ( (array) ( $context['sor_outcomes'] ?? array() ) as $o ) {
+			$sor[] = strtolower( trim( (string) $o ) );
+		}
+		if ( in_array( 'paid', $sor, true ) ) {
+			return true;
+		}
+		if ( isset( $context['amount_paid'], $context['amount_due'] ) && ! empty( $context['sor_backed'] ) ) {
+			$paid = self::to_cents( $context['amount_paid'] );
+			$due  = self::to_cents( $context['amount_due'] );
+			$tol  = (int) self::thresholds()['money_tolerance_cents'];
+			if ( $paid + $tol >= $due ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Scrub outbound text for external transports (CRM / email / push). Conservative: it
+	 * does NOT touch ordinary content, and it is applied ONLY at the gate for non-UI
+	 * channels - never to prompts, never to the in-browser UI.
+	 *   - U+2028 / U+2029 -> newline (REPLACED, never deleted - they carry a break);
+	 *   - zero-width and joiners (U+200B..U+200D, U+FEFF) -> removed;
+	 *   - variation / pictograph presentation selectors (U+FE00..U+FE0F) -> removed;
+	 *   - 4-byte UTF-8 pictographs (astral plane, e.g. emoji) -> removed (CRM / SMS / push
+	 *     transports frequently reject them);
+	 *   - C0 / C1 controls except TAB and NEWLINE -> removed.
+	 */
+	public static function sanitize_outbound( string $text ): string {
+		if ( '' === $text ) {
+			return $text;
+		}
+		// Line / paragraph separators -> newline (REPLACED, never deleted).
+		$text = str_replace( array( "\u{2028}", "\u{2029}" ), "\n", $text );
+		// Everything below is removed. One class; TAB (\x09) and NEWLINE (\x0A) are kept.
+		$stripped = preg_replace(
+			'/[\x{0000}-\x{0008}\x{000B}-\x{001F}\x{007F}-\x{009F}\x{200B}-\x{200D}\x{FEFF}\x{FE00}-\x{FE0F}\x{10000}-\x{10FFFF}]/u',
+			'',
+			$text
+		);
+		return ( null === $stripped ) ? $text : $stripped;
+	}
+
+	/** Convert a number / money string / ZDZ_Figure to integer cents. */
+	private static function to_cents( $v ): int {
+		if ( $v instanceof ZDZ_Figure ) {
+			$v = $v->value;
+		}
+		if ( is_string( $v ) ) {
+			$n = self::normalize_number( $v );
+			$v = ( '' === $n ) ? 0 : (float) $n;
+		}
+		return (int) round( ( (float) $v ) * 100 );
 	}
 }
 

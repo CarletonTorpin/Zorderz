@@ -83,6 +83,21 @@ class ZDZ_Model_Registry {
 	}
 
 	/**
+	 * The model handles offered in the Settings AI-model chooser. Ships EMPTY — Core
+	 * names no model; a tenant/connections pack supplies the roster via the
+	 * `zdz_model_choices` filter, either as a flat list of handles
+	 * (array( 'Handle-A', 'Handle-B' )) or as handle => label pairs. When this is
+	 * empty the Settings UI renders a free-text field so an operator on any gateway
+	 * can type the handle their connections pack resolves. No literal here.
+	 *
+	 * @return array
+	 */
+	public static function choices(): array {
+		$choices = apply_filters( 'zdz_model_choices', array() );
+		return is_array( $choices ) ? $choices : array();
+	}
+
+	/**
 	 * Resolve the model for a task slot. Order:
 	 *   1. per-slot option  (zdz_model_slot_<slot>)
 	 *   2. the `zdz_model_for` filter (a tenant/plugin override)

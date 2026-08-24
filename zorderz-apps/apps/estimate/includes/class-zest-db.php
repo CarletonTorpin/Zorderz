@@ -18,7 +18,33 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZEST_DB {
 
-	const DB_VERSION = '1.22.0';
+	const DB_VERSION = '1.24.0';
+
+	/** doc_type discriminator values — this row models an estimate or an invoice document. */
+	const DOC_TYPE_ESTIMATE = 'estimate';
+	const DOC_TYPE_INVOICE  = 'invoice';
+
+	/**
+	 * The estimate document lifecycle, expressed as a documented Flow-shaped state set so the
+	 * later migration onto the Zorderz Flow substrate is a mechanical rename, not a redesign.
+	 *
+	 * DOCUMENTATION ONLY THIS RELEASE — nothing reads or writes against these keys yet; the
+	 * live `status` column keeps its current handling (the create/convert paths are unchanged).
+	 * The three later stages are deliberately DISTINCT: `accepted` (the customer said yes) is
+	 * not `invoiced` (a billing document exists — resolved by ZEST_Billing) is not `paid`
+	 * (money has been collected). Current column values map forward as 'created'→draft,
+	 * 'sent'→sent, 'accepted'→accepted, 'converted'→invoiced; `paid` is a fact about the linked
+	 * invoice, never a value the estimate row sets on itself.
+	 *
+	 * @var array<string,string>
+	 */
+	const ESTIMATE_LIFECYCLE = array(
+		'draft'    => 'Drafted, not yet sent to the customer.',
+		'sent'     => 'Delivered to the customer, awaiting a decision.',
+		'accepted' => 'Customer accepted — distinct from being billed.',
+		'invoiced' => 'A billing document exists for it (converted_invoice_id resolves live).',
+		'paid'     => 'The linked invoice has been paid in full.',
+	);
 
 	public static function estimates_table(): string {
 		global $wpdb;
@@ -38,6 +64,39 @@ class ZEST_DB {
 	public static function payments_table(): string {
 		global $wpdb;
 		return $wpdb->prefix . 'zest_payments';
+	}
+
+	/**
+	 * Resolve a raw document reference to an explicit ( doc_type, id ) pair — NEVER a bare
+	 * number. estimate #5982 and invoice #5982 are different documents; a lone integer is
+	 * ambiguous and is refused. Accepts an array ( { doc_type|type, id } ) or a "type:id"
+	 * string; returns { doc_type: 'estimate'|'invoice', id: int } on success, or
+	 * { doc_type: '', id: 0 } when the type is unknown / the id is missing / a bare number
+	 * was passed. This is the keying discipline the Projects ref map joins on.
+	 *
+	 * @param mixed $raw
+	 * @return array{doc_type:string,id:int}
+	 */
+	public static function extract_doc_ident( $raw ): array {
+		$fail = array( 'doc_type' => '', 'id' => 0 );
+		$type = '';
+		$id   = 0;
+		if ( is_array( $raw ) ) {
+			$type = strtolower( trim( (string) ( $raw['doc_type'] ?? ( $raw['type'] ?? '' ) ) ) );
+			$id   = (int) ( $raw['id'] ?? 0 );
+		} elseif ( is_string( $raw ) && false !== strpos( $raw, ':' ) ) {
+			list( $t, $i ) = array_pad( explode( ':', $raw, 2 ), 2, '' );
+			$type = strtolower( trim( $t ) );
+			$i    = trim( $i );
+			$id   = ctype_digit( $i ) ? (int) $i : 0;
+		} else {
+			// A bare number (or anything with no explicit doc_type) is refused on purpose.
+			return $fail;
+		}
+		if ( ! in_array( $type, array( self::DOC_TYPE_ESTIMATE, self::DOC_TYPE_INVOICE ), true ) || $id <= 0 ) {
+			return $fail;
+		}
+		return array( 'doc_type' => $type, 'id' => $id );
 	}
 
 	/** Create/upgrade the schema (idempotent via dbDelta). Never seeds data. */
@@ -84,6 +143,9 @@ class ZEST_DB {
 			shipping_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
 			terms           TEXT         NULL,
 			converted_invoice_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			doc_type        VARCHAR(20)  NOT NULL DEFAULT 'estimate',
+			invoice_checked_at DATETIME  NULL DEFAULT NULL,
+			updated_at      DATETIME     NULL DEFAULT NULL,
 			sent_at         DATETIME     NULL DEFAULT NULL,
 			accepted_at     DATETIME     NULL DEFAULT NULL,
 			accepted_by     BIGINT UNSIGNED NOT NULL DEFAULT 0,

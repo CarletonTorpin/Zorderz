@@ -1,6 +1,10 @@
 /**
- * TS Internal Messaging — Widget (front-end)
- * v1.0.21
+ * Zorderz Internal Messaging — Widget (front-end)
+ * v1.1.4
+ *
+ * v1.1.4: Vimeo chapter embed. A trusted-origin Vimeo player + clickable chapter
+ * list, distilled server-side to a [zdz-video] token and rebuilt here with the
+ * iframe origin fixed to player.vimeo.com (never an arbitrary iframe src).
  *
  * Single-file vanilla JS. No framework, no build step. All class names
  * prefixed zim-w-* to avoid collision.
@@ -153,6 +157,168 @@
 			.then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); });
 	}
 
+	/* ═══════════════════════════════════════════════════════════════════════
+	 * v1.1.4: Vimeo chapter embed (trusted-origin rebuild).
+	 *
+	 * The server (ZIM_Messages::extract_video_embeds) distils a trusted Vimeo
+	 * embed to a plain-text [zdz-video]<hex>[/zdz-video] token carrying only a
+	 * numeric video id, optional privacy hash, and the chapter list. Here we
+	 * rebuild the player — with the iframe origin HARD-FIXED to player.vimeo.com
+	 * and the id re-validated numeric — so a forged token (the token is plain
+	 * text a user could type) can never point the iframe off Vimeo. Chapter
+	 * clicks preventDefault() and seek host-side via the Vimeo postMessage API,
+	 * with a #t= reload fallback. Labels go in via textContent — injection-proof.
+	 * ═══════════════════════════════════════════════════════════════════════ */
+	var VIDEO_PH_OPEN = 'zdzvideotokenopen';
+	var VIDEO_PH_CLOSE = 'zdzvideotokenclose';
+	var VIMEO_ORIGIN = 'https://player.vimeo.com';
+
+	function zimHexToStr(hex) {
+		var bytes = [];
+		for (var i = 0; i + 1 < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+		try { return new TextDecoder('utf-8').decode(new Uint8Array(bytes)); }
+		catch (e) { var s = ''; for (var j = 0; j < bytes.length; j++) s += String.fromCharCode(bytes[j]); return s; }
+	}
+	function zimClock(sec) {
+		sec = Math.max(0, sec | 0);
+		var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+		function p(n) { return (n < 10 ? '0' : '') + n; }
+		return h > 0 ? h + ':' + p(m) + ':' + p(s) : m + ':' + p(s);
+	}
+	function zimHms(sec) {
+		sec = Math.max(0, sec | 0);
+		var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+		return (h > 0 ? h + 'h' : '') + m + 'm' + s + 's';
+	}
+
+	// Active embed iframes, and a single message listener that marks each ready
+	// when its player handshakes. Only messages from the Vimeo origin are trusted.
+	var zimVideoFrames = [];
+	var zimVimeoListenerAdded = false;
+	var zimVideoSeq = 0;
+	function zimEnsureVimeoListener() {
+		if (zimVimeoListenerAdded) return;
+		zimVimeoListenerAdded = true;
+		window.addEventListener('message', function (e) {
+			if (e.origin !== VIMEO_ORIGIN) return;   // trusted origin only
+			for (var i = 0; i < zimVideoFrames.length; i++) {
+				var f = zimVideoFrames[i];
+				if (f.iframe && e.source === f.iframe.contentWindow) f.ready = true;
+			}
+		}, false);
+	}
+	function zimPruneVideoFrames() {
+		zimVideoFrames = zimVideoFrames.filter(function (f) {
+			return f.iframe && f.iframe.isConnected;
+		});
+	}
+
+	function wireVideoEmbeds(container) {
+		if (!container || !container.querySelectorAll) return;
+		zimPruneVideoFrames();
+		var nodes = container.querySelectorAll('.zim-video-embed[data-zim-video-token]');
+		for (var i = 0; i < nodes.length; i++) buildOneVideoEmbed(nodes[i]);
+	}
+
+	function buildOneVideoEmbed(host) {
+		var hex = host.getAttribute('data-zim-video-token') || '';
+		host.removeAttribute('data-zim-video-token');
+		if (!/^([0-9a-f]{2})+$/i.test(hex)) { host.remove(); return; }
+
+		var data;
+		try { data = JSON.parse(zimHexToStr(hex)); } catch (e) { host.remove(); return; }
+		if (!data || typeof data !== 'object') { host.remove(); return; }
+
+		var id = String(data.v == null ? '' : data.v);
+		if (!/^\d+$/.test(id)) { host.remove(); return; }          // id MUST be numeric
+		var hash = String(data.h == null ? '' : data.h);
+		if (hash && !/^[0-9a-zA-Z]+$/.test(hash)) hash = '';        // drop a malformed hash
+		var chapters = Array.isArray(data.c) ? data.c : [];
+
+		// Origin is FIXED here. The token can never move the iframe off Vimeo.
+		var pid = 'zimvid_' + (++zimVideoSeq);
+		var params = 'dnt=1&badge=0&autopause=0&api=1&player_id=' + pid + (hash ? '&h=' + encodeURIComponent(hash) : '');
+		var srcBase = VIMEO_ORIGIN + '/video/' + id + '?' + params;
+		var watchBase = 'https://vimeo.com/' + id + (hash ? '/' + hash : '');
+
+		host.className = 'zim-video-embed';
+		while (host.firstChild) host.removeChild(host.firstChild);
+
+		var frameWrap = document.createElement('div');
+		frameWrap.className = 'zim-video-embed__frame';
+		var iframe = document.createElement('iframe');
+		iframe.src = srcBase;
+		iframe.title = 'Video';
+		iframe.setAttribute('frameborder', '0');
+		iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
+		iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+		iframe.allowFullscreen = true;
+		iframe.loading = 'lazy';
+		frameWrap.appendChild(iframe);
+		host.appendChild(frameWrap);
+
+		var record = { pid: pid, iframe: iframe, ready: false };
+		zimVideoFrames.push(record);
+		zimEnsureVimeoListener();
+
+		if (chapters.length) {
+			var nav = document.createElement('nav');
+			nav.className = 'zim-video-embed__chapters';
+			nav.setAttribute('aria-label', 'Video chapters');
+			var heading = document.createElement('p');
+			heading.className = 'zim-video-embed__heading';
+			heading.textContent = 'Chapters';
+			nav.appendChild(heading);
+			var ol = document.createElement('ol');
+			ol.className = 'zim-video-embed__list';
+			for (var c = 0; c < chapters.length; c++) {
+				var item = chapters[c];
+				var sec = 0, label = '';
+				if (Array.isArray(item)) { sec = parseInt(item[0], 10) || 0; label = String(item[1] == null ? '' : item[1]); }
+				else if (item && typeof item === 'object') { sec = parseInt(item.t, 10) || 0; label = String(item.x == null ? '' : item.x); }
+				if (sec < 0) sec = 0;
+				var li = document.createElement('li');
+				var a = document.createElement('a');
+				a.className = 'zim-video-embed__ch';
+				a.href = watchBase + '#t=' + zimHms(sec);            // fallback link (preventDefault below)
+				a.target = '_blank';
+				a.rel = 'noopener noreferrer';
+				var num = document.createElement('span'); num.className = 'zim-video-embed__num'; num.textContent = String(c + 1);
+				var tm = document.createElement('span'); tm.className = 'zim-video-embed__time'; tm.textContent = zimClock(sec);
+				var ti = document.createElement('span'); ti.className = 'zim-video-embed__title'; ti.textContent = label; // injection-proof
+				a.appendChild(num); a.appendChild(tm); a.appendChild(ti);
+				(function (seconds) {
+					a.addEventListener('click', function (e) {
+						e.preventDefault();                          // never navigate
+						seekVimeoEmbed(record, srcBase, seconds);
+					});
+				})(sec);
+				li.appendChild(a);
+				ol.appendChild(li);
+			}
+			nav.appendChild(ol);
+			host.appendChild(nav);
+		}
+	}
+
+	function seekVimeoEmbed(record, srcBase, sec) {
+		var iframe = record.iframe;
+		if (record.ready && iframe && iframe.contentWindow) {
+			try {
+				iframe.contentWindow.postMessage(JSON.stringify({ method: 'setCurrentTime', value: sec }), VIMEO_ORIGIN);
+				iframe.contentWindow.postMessage(JSON.stringify({ method: 'setMuted', value: false }), VIMEO_ORIGIN);
+				iframe.contentWindow.postMessage(JSON.stringify({ method: 'play' }), VIMEO_ORIGIN);
+				return;
+			} catch (e) { /* fall through to the reload fallback */ }
+		}
+		// #t= reload fallback — loads the player straight to the timestamp when the
+		// postMessage API hasn't handshaked (blocked, not yet ready, older player).
+		if (iframe) {
+			iframe.src = srcBase + '#t=' + zimHms(sec);
+			record.ready = false; // re-handshakes after the reload
+		}
+	}
+
 	// Markdown-lite with DOMPurify sanitization. Reuses marked.js if present.
 	// v1.0.21: Added italic support (_text_ and *text*), double-underscore bold,
 	// and friendly display text for this site URLs.
@@ -161,7 +327,34 @@
 	// will mangle HTML (underscores in href URLs, nested <a> tags from the URL
 	// autolinker, asterisks in attribute values triggering italic). The DOMPurify
 	// pass still runs so there's no XSS risk.
+	// v1.1.4: renderBody wraps the markdown/DOMPurify pipeline with protection for
+	// trusted [zdz-video] tokens, then rebuilds them as origin-fixed Vimeo players.
 	function renderBody(raw) {
+		var src = String(raw || '');
+		// Protect [zdz-video]<hex>[/zdz-video] tokens across the transform: swap each
+		// for an inert alphanumeric placeholder that marked.js and DOMPurify leave as
+		// text, then restore below as a self-built, hex-only placeholder element.
+		var videoTokens = [];
+		src = src.replace(/\[zdz-video\]([0-9a-fA-F]+)\[\/zdz-video\]/g, function (_, hex) {
+			var i = videoTokens.push(hex.toLowerCase()) - 1;
+			return VIDEO_PH_OPEN + i + VIDEO_PH_CLOSE;
+		});
+		var out = renderBodyPipeline(src);
+		if (videoTokens.length) {
+			out = out.replace(new RegExp(VIDEO_PH_OPEN + '(\\d+)' + VIDEO_PH_CLOSE, 'g'), function (_, i) {
+				var hex = videoTokens[+i];
+				// Inserted AFTER DOMPurify, so it must be safe by construction: a div
+				// carrying only a validated [0-9a-f] token. wireVideoEmbeds() turns it
+				// into an origin-fixed player; a malformed token yields nothing.
+				if (!hex || !/^([0-9a-f]{2})+$/.test(hex)) return '';
+				return '<div class="zim-video-embed" data-zim-video-token="' + hex + '"></div>';
+			});
+		}
+		return out;
+	}
+
+	// The markdown-lite + DOMPurify transform (unchanged behaviour; wrapped above).
+	function renderBodyPipeline(raw) {
 		var src = String(raw || '');
 
 		// v1.0.24: If the message body already contains HTML tags, it was
@@ -1125,6 +1318,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			text.textContent = m.deleted_placeholder || '[deleted]';
 		} else {
 			text.innerHTML = renderBody(m.body);
+			wireVideoEmbeds(text); // v1.1.4: rebuild any distilled Vimeo chapter embed
 		}
 		bubble.appendChild(text);
 

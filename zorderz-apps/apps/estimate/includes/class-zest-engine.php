@@ -87,11 +87,13 @@ class ZEST_Estimate_Engine {
 			return $out;
 		}
 
+		$context['input_text'] = $input; // so the conflict guard scans the raw stream
 		$estimate = $this->post_process( $data, $context );
-		$out['ok']       = true;
-		$out['estimate'] = $estimate['estimate'];
-		$out['rejected'] = $estimate['rejected'];
-		$out['warnings'] = $estimate['warnings'];
+		$out['ok']           = true;
+		$out['estimate']     = $estimate['estimate'];
+		$out['rejected']     = $estimate['rejected'];
+		$out['warnings']     = $estimate['warnings'];
+		$out['needs_review'] = ! empty( $estimate['needs_review'] );
 		return $out;
 	}
 
@@ -249,20 +251,113 @@ class ZEST_Estimate_Engine {
 	 * ============================================================== */
 
 	/**
-	 * Apply a natural-language modification to an existing estimate's line items. The
-	 * model proposes; the caller previews and confirms; conventions/pricing are
-	 * re-resolved server-side on output. Metadata ($0) lines are preserved as-is unless
-	 * explicitly targeted.
+	 * Apply a natural-language modification to an existing estimate's line items (Plan 02
+	 * E1/E2/E4/E6). The model proposes; the caller previews and confirms; conventions and
+	 * pricing are re-resolved server-side on output. The tail is:
+	 *   normalize prior (wire→model) → [vision: transcribe photos] → model applies the
+	 *   instruction → conflict guard → PRESERVATION LOCK → fold measurements → fill_prices.
 	 *
-	 * @return array{ ok:bool, line_items:array, error:string }
+	 * The preservation lock (E2) is armed from the operator's WORDS: a "leave the pricing"
+	 * instruction restores the priced lines while keeping learned measurements; a named
+	 * line edit stands the lock down. Vision measurements land in the lock-IGNORED
+	 * dimensions/measurements fields, so pricing is preserved while measurements populate.
+	 *
+	 * @param array  $existing_items prior line items (wire OR model shape).
+	 * @param string $instruction    the operator's modification words.
+	 * @param array  $context        { user_id, is_operator_mode, ... }
+	 * @param array  $images         optional photo URLs (E6 vision-on-update).
+	 * @return array{ ok:bool, line_items:array, warnings:array, needs_review:bool, disclosure:string, measurement_rows:array, error:string }
 	 */
-	public function apply_modification( array $existing_items, string $instruction, array $context = array() ): array {
-		$out = array( 'ok' => false, 'line_items' => $existing_items, 'error' => '' );
-		if ( '' === trim( $instruction ) || ! $this->ai->is_configured() ) {
-			$out['error'] = 'No instruction, or AI unavailable.';
+	public function apply_modification( array $existing_items, string $instruction, array $context = array(), array $images = array() ): array {
+		$out = array(
+			'ok'               => false,
+			'line_items'       => $existing_items,
+			'warnings'         => array(),
+			'needs_review'     => false,
+			'disclosure'       => '',
+			'measurement_rows' => array(),
+			'error'            => '',
+		);
+		$images      = array_values( array_filter( array_map( 'strval', (array) $images ) ) );
+		$instruction = trim( $instruction );
+		if ( '' === $instruction && empty( $images ) ) {
+			$out['error'] = 'No instruction or image to apply.';
 			return $out;
 		}
-		$payload = wp_json_encode( array( 'existing_line_items' => $existing_items, 'instruction' => $instruction ) );
+		if ( ! $this->ai->is_configured() ) {
+			$out['error'] = 'AI unavailable.';
+			return $out;
+		}
+
+		// Normalize the prior items to the model shape ONCE (handles the provider wire
+		// shape — unit_cost['amount'], qty — so A1 can never coerce a price to 1.0).
+		$original_model = class_exists( 'Zdz_Doc_Preservation' )
+			? Zdz_Doc_Preservation::normalize_provider_items( $existing_items )
+			: $existing_items;
+
+		// E6 — two-pass vision on update: transcribe the photographed measurement sheet.
+		$transcript       = '';
+		$measurement_rows = array();
+		if ( ! empty( $images ) ) {
+			$transcript = $this->transcribe_field_notes( $images, $context );
+			if ( '' !== $transcript ) {
+				$measurement_rows = $this->extract_measurement_rows( $transcript, $context );
+				$out['warnings'][] = 'Measurements read from photo via two-pass vision; verify against the note.';
+			}
+		}
+
+		// The model applies the instruction (with any transcript) to the existing lines.
+		if ( '' !== $instruction || '' !== $transcript ) {
+			$model_items = $this->run_modify_model( $original_model, $instruction, $transcript, $context );
+			if ( null === $model_items ) {
+				$out['error'] = 'Could not read modified line items.';
+				return $out;
+			}
+		} else {
+			$model_items = $original_model;
+		}
+
+		// E4 — impossible-product conflict guard on the interpreted stream + items.
+		$conflict_text = trim( $instruction . ' ' . $transcript );
+		$conf          = ZEST_Catalog::detect_conflicts( $conflict_text, $model_items );
+		if ( ! empty( $conf['needs_review'] ) ) {
+			$out['needs_review'] = true;
+			$out['warnings'][]   = 'product_conflict';
+			// Force the reference back to ZIP-only (never re-guessed to a category).
+			if ( isset( $context['zip'] ) && class_exists( 'ZDZ_Doc_Conventions' ) ) {
+				$out['reference'] = ZDZ_Doc_Conventions::format_reference( array( 'postal' => (string) $context['zip'] ) );
+			}
+			error_log( sprintf( 'Zorderz Estimates: product_conflict on update — %d contradiction(s); reference neutralized to ZIP-only.', count( (array) $conf['conflicts'] ) ) );
+		}
+
+		// E2 — the preservation lock (armed from the operator's words).
+		if ( class_exists( 'Zdz_Doc_Preservation' ) ) {
+			$lock        = Zdz_Doc_Preservation::apply( $original_model, $model_items, $instruction, $context );
+			$model_items = $lock['line_items'];
+			if ( ! empty( $lock['preserved'] ) ) {
+				$out['disclosure'] = (string) $lock['disclosure'];
+			}
+		}
+
+		// Fold vision measurements into the lock-ignored measurements field (never a new
+		// priced line — pricing stays as the lock left it).
+		if ( ! empty( $measurement_rows ) ) {
+			$model_items = $this->merge_measurements_into_items( $model_items, $measurement_rows );
+		}
+
+		$out['ok']               = true;
+		$out['line_items']       = $this->fill_prices( $model_items, $context );
+		$out['measurement_rows'] = $measurement_rows;
+		return $out;
+	}
+
+	/** Run the modify model over existing items + instruction (+ optional transcript). */
+	private function run_modify_model( array $existing_items, string $instruction, string $transcript, array $context ): ?array {
+		$payload = wp_json_encode( array(
+			'existing_line_items'  => $existing_items,
+			'instruction'          => $instruction,
+			'field_notes_transcript' => $transcript,
+		) );
 		$res = $this->ai->complete(
 			array(
 				array( 'role' => 'system', 'content' => $this->build_modify_prompt( $context ) ),
@@ -271,18 +366,72 @@ class ZEST_Estimate_Engine {
 			array( 'role' => 'parse', 'temperature' => 0.0, 'extra' => array( 'thinking_budget' => 8192 ) )
 		);
 		if ( empty( $res['ok'] ) ) {
-			$out['error'] = $res['error'] ?: 'Modify failed.';
-			return $out;
+			error_log( 'Zorderz Estimates: modify model failed: ' . ( $res['error'] ?? 'unknown' ) );
+			return null;
 		}
-		$data = $this->ai->parse_json( $res['text'] );
+		$data  = $this->ai->parse_json( $res['text'] );
 		$items = $data['line_items'] ?? ( is_array( $data ) ? $data : null );
-		if ( ! is_array( $items ) ) {
-			$out['error'] = 'Could not read modified line items.';
-			return $out;
+		return is_array( $items ) ? $items : null;
+	}
+
+	/** Pass-1 faithful transcription of photographed field notes (E6). '' on failure. */
+	private function transcribe_field_notes( array $images, array $context ): string {
+		$images = array_values( array_filter( array_map( 'strval', $images ) ) );
+		if ( empty( $images ) || ! $this->ai->is_configured() ) {
+			return '';
 		}
-		$out['ok']         = true;
-		$out['line_items'] = $this->fill_prices( $items, $context );
-		return $out;
+		$p1 = $this->ai->complete(
+			array(
+				array( 'role' => 'system', 'content' => $this->build_vision_pass1_prompt( $context ) ),
+				array( 'role' => 'user', 'content' => 'Transcribe every line of the attached note(s) faithfully. Do not price or interpret.' ),
+			),
+			array( 'role' => 'parse', 'images' => $images, 'temperature' => 0.0, 'extra' => array( 'thinking_budget' => 16384 ) )
+		);
+		if ( empty( $p1['ok'] ) ) {
+			error_log( 'Zorderz Estimates: field-note transcription failed: ' . ( $p1['error'] ?? 'unknown' ) );
+			return '';
+		}
+		return (string) $p1['text'];
+	}
+
+	/** Split a measurement transcript into non-empty rows (for the CRM note + line merge). */
+	private function extract_measurement_rows( string $transcript, array $context ): array {
+		$rows = array();
+		foreach ( (array) preg_split( '/\r\n|\r|\n/', $transcript ) as $line ) {
+			$line = trim( (string) $line );
+			if ( '' !== $line ) {
+				$rows[] = $line;
+			}
+		}
+		return $rows;
+	}
+
+	/**
+	 * Fold measurement rows into the items' lock-IGNORED measurements field. Best-effort
+	 * description match; unmatched rows stay in the returned measurement_rows for the CRM
+	 * note. NEVER adds a priced line — pricing is untouched (the parity floor).
+	 */
+	private function merge_measurements_into_items( array $items, array $measurement_rows ): array {
+		if ( empty( $items ) || empty( $measurement_rows ) ) {
+			return $items;
+		}
+		foreach ( $items as &$li ) {
+			if ( ! is_array( $li ) ) {
+				continue;
+			}
+			$desc = strtolower( trim( (string) ( $li['description'] ?? '' ) ) );
+			if ( '' === $desc ) {
+				continue;
+			}
+			foreach ( $measurement_rows as $row ) {
+				if ( false !== stripos( (string) $row, $desc ) || false !== stripos( $desc, strtolower( (string) $row ) ) ) {
+					$existing = (string) ( $li['measurements'] ?? '' );
+					$li['measurements'] = '' !== $existing ? ( $existing . "\n" . $row ) : (string) $row;
+				}
+			}
+		}
+		unset( $li );
+		return $items;
 	}
 
 	/* ============================================================== *
@@ -360,7 +509,41 @@ class ZEST_Estimate_Engine {
 			'reference'      => (string) ( $data['reference'] ?? '' ),
 		);
 
-		return array( 'estimate' => $estimate, 'rejected' => $rejected, 'warnings' => $warnings );
+		// E4 — impossible-product conflict guard (create + interpreted-vision paths run
+		// through here). Scans the raw stream and each single line item; on a contradiction
+		// it forces ZIP-only (never re-guessed to a category) and flags needs_review. With
+		// the conflict-pairs config EMPTY (Core default) this is inert — output unchanged.
+		$needs_review  = false;
+		$conflict_text = (string) ( $context['input_text'] ?? '' );
+		$conf          = ZEST_Catalog::detect_conflicts( $conflict_text, $estimate['line_items'] );
+		if ( ! empty( $conf['needs_review'] ) ) {
+			$needs_review = true;
+			$warnings[]   = 'product_conflict';
+			$estimate['reference'] = $this->zip_only_reference( $estimate );
+			error_log( sprintf( 'Zorderz Estimates: product_conflict on create — %d contradiction(s); reference neutralized to ZIP-only.', count( (array) $conf['conflicts'] ) ) );
+		}
+
+		return array( 'estimate' => $estimate, 'rejected' => $rejected, 'warnings' => $warnings, 'needs_review' => $needs_review );
+	}
+
+	/**
+	 * Neutralize a reference to bare ZIP on a product conflict — never re-guessed to a
+	 * category (guessing the right product from a contradictory phrase is the same mistake
+	 * reversed). A second pass strips a model-supplied "{ZIP}-Category" down to the ZIP.
+	 */
+	private function zip_only_reference( array $estimate ): string {
+		$zip = (string) ( $estimate['customer']['zip'] ?? ( $estimate['customer_zip'] ?? '' ) );
+		if ( '' === $zip && class_exists( 'ZDZ_Doc_Conventions' ) ) {
+			// Recover the postal token from any reference the model already produced.
+			$parsed = ZDZ_Doc_Conventions::parse_reference( (string) ( $estimate['reference'] ?? '' ) );
+			$zip    = (string) ( $parsed['postal'] ?? '' );
+		}
+		if ( '' === $zip ) {
+			return ''; // no ZIP to fall back to — blank the suffix rather than guess.
+		}
+		return class_exists( 'ZDZ_Doc_Conventions' )
+			? ZDZ_Doc_Conventions::format_reference( array( 'postal' => $zip ) )
+			: $zip;
 	}
 
 	/**
@@ -650,8 +833,8 @@ class ZEST_Estimate_Engine {
 		$p[] = "## Currency\n"
 			. "Return every money value as a number. When reading, strip \"\$\" and thousands commas, and treat wrapping parentheses \"(175.00)\" or a leading minus (\"-\" or the U+2212 \u{2212} sign) as NEGATIVE.";
 		$p[] = "## House-paperwork rules to encode (common FreshBooks exports)\n"
-			. "- A rep/initials code such as \"(GT)\" or a trailing \"- (AS)\" identifies the SALESPERSON: put the code (letters only, e.g. \"GT\" or \"AS\") in \"salesperson\". STILL keep the \"Location\" line itself as a kind:\"context\" line — do not delete it and do not move its text.\n"
-			. "- A line worded like \"per Geoff\" or \"per Dana\" is a manual DISCOUNT/credit: kind:\"discount\", negative line_total, and put the name (\"Geoff\"/\"Dana\") in \"attribution\".\n"
+			. "- A rep/initials code such as \"(AB)\" or a trailing \"- (CD)\" identifies the SALESPERSON: put the code (letters only, e.g. \"AB\" or \"CD\") in \"salesperson\". STILL keep the \"Location\" line itself as a kind:\"context\" line — do not delete it and do not move its text.\n"
+			. "- A line worded like \"per Alex\" or \"per Jordan\" is a manual DISCOUNT/credit: kind:\"discount\", negative line_total, and put the name (\"Alex\"/\"Jordan\") in \"attribution\".\n"
 			. "- A totals-section line like \"5% Discount\" is a HEADER discount, not an item: set discount_type:\"percent\" and discount_value:5 (the number only). A flat total-section discount like \"Discount -\$50\" → discount_type:\"amount\", discount_value:50. Do NOT also emit it as a line item.\n"
 			. "- A grouped/lot line like \"(4) ... Total for Lot\" is ONE item: kind:\"item\", is_lot:true, quantity 1, and line_total equal to the printed lot total (keep the \"(4)\" in the description).";
 		$p[] = "## Customer\n"
@@ -739,8 +922,10 @@ class ZEST_Estimate_Engine {
 
 	private function build_modify_prompt( array $context ): string {
 		$p = array();
-		$p[] = 'You edit an existing estimate\'s line items per the instruction. Input is JSON: {"existing_line_items":[...],"instruction":"..."}.';
+		$p[] = 'You edit an existing estimate\'s line items per the instruction. Input is JSON: {"existing_line_items":[...],"instruction":"...","field_notes_transcript":"..."}.';
 		$p[] = 'Apply ONLY what the instruction asks. Preserve every other line unchanged, in order. $0.00 metadata lines (location, closing notes) are preserved as-is unless the instruction targets them.';
+		$p[] = 'If "field_notes_transcript" is non-empty, it is a faithful transcription of a photographed measurement sheet. Fold each measurement into the matching line\'s "sub_description" WITHOUT changing that line\'s quantity or unit_price. Do NOT create new priced lines for measurements. If the instruction asks to leave the pricing as-is, change no price and no quantity.';
+		$p[] = 'If a line contains mutually contradictory product traits, FLAG it in that line\'s "notes" — do not silently pick one reading.';
 		$p[] = $this->casing_block();
 		$p[] = 'Return ONLY JSON: {"line_items":[{"description":"","sub_description":"","quantity":1,"unit_price":0.00,"is_discount":false}]}. Leave unit_price 0.00 for lines you add — the system prices them from the catalog.';
 		return implode( "\n\n", array_filter( $p ) );

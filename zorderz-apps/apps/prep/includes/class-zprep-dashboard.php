@@ -84,9 +84,13 @@ class ZPREP_Dashboard {
 			$all_leads = $crm->find_all_leads_for_query( $query );
 
 			if ( count( $all_leads ) === 1 ) {
-				$lead  = $all_leads[0];
-				$block = $crm->pick_measurement_block( $lead['notes'] );
-				$meta  = self::extract_job_meta_from_note( $block );
+				$lead      = $all_leads[0];
+				$block     = $crm->pick_measurement_block( $lead['notes'] );
+				$meta      = self::extract_job_meta_from_note( $block );
+				$est_num   = $meta['estimate_number'] ?? $lead['meta']['estimate_number'] ?? '';
+				// Server-bake the install date (both arms) so the cut sheet's Install line paints
+				// without a second round trip. DISPLAY-ONLY; degrades to null when jobs is absent.
+				$install   = ZPREP_Install_Date::for_reference( (int) $lead['id'], (string) $est_num, (int) get_current_user_id() );
 				wp_send_json_success(
 					array(
 						'source'    => 'crm',
@@ -98,9 +102,10 @@ class ZPREP_Dashboard {
 							'email'           => $meta['email'] ?? '',
 							'phone'           => $meta['phone'] ?? '',
 							'address'         => $meta['address'] ?? '',
-							'estimate_number' => $meta['estimate_number'] ?? $lead['meta']['estimate_number'] ?? '',
+							'estimate_number' => $est_num,
 							'salesperson'     => $meta['salesperson'] ?? '',
 						),
+						'install'   => $install,
 						'notes'     => $lead['notes'],
 						'trace'     => $crm->get_last_trace(),
 					)
@@ -121,6 +126,9 @@ class ZPREP_Dashboard {
 						'notes'        => $lead['notes'],
 					);
 				}
+				// Server-bake the install date onto each picker row (both arms, one batch).
+				// DISPLAY-ONLY: annotate never reorders/filters the choices.
+				$choices = ZPREP_Install_Date::annotate_jobs( $choices, (int) get_current_user_id() );
 				wp_send_json_success( array( 'source' => 'crm_multi', 'query' => $query, 'leads' => $choices, 'trace' => $crm->get_last_trace() ) );
 			}
 		}
@@ -135,7 +143,17 @@ class ZPREP_Dashboard {
 		if ( 'ok' !== $result['status'] || empty( $result['matches'] ) ) {
 			wp_send_json_error( array( 'message' => $result['message'] ?? __( 'No jobs found.', 'zorderz' ) ) );
 		}
-		wp_send_json_success( array( 'source' => 'billing', 'query' => $query, 'matches' => $result['matches'] ) );
+		// Server-bake the install date onto each billing match (estimate arm only — a billing
+		// record carries no CRM lead id). DISPLAY-ONLY; degrades to null when jobs is absent.
+		$viewer  = (int) get_current_user_id();
+		$matches = array();
+		foreach ( (array) $result['matches'] as $match ) {
+			if ( is_array( $match ) ) {
+				$match['install_fallback'] = ZPREP_Install_Date::for_reference( 0, (string) ( $match['number'] ?? '' ), $viewer );
+			}
+			$matches[] = $match;
+		}
+		wp_send_json_success( array( 'source' => 'billing', 'query' => $query, 'matches' => $matches ) );
 	}
 
 	private static function extract_job_meta_from_note( string $block ): array {
@@ -324,6 +342,13 @@ class ZPREP_Dashboard {
 				}
 			}
 		}
+
+		// FIRST-PAINT SERVER BAKE (S5-11): resolve the install date for the whole queue via the
+		// two published resolver arms (both lead + estimate keys) and write install_fallback onto
+		// each card, so the install chip paints on first render with no second async round trip.
+		// DISPLAY-ONLY: this ADDS a key and never reorders/filters/drops a card (install is not a
+		// gate or a sort). Degrades to no install line when the jobs resolver is absent (INV-8).
+		$jobs = ZPREP_Install_Date::annotate_jobs( $jobs, (int) get_current_user_id() );
 
 		wp_send_json_success(
 			array(

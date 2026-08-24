@@ -290,7 +290,7 @@ class ZDZ_Admin_UI {
 						class="regular-text"
 						maxlength="8"
 					/>
-					<p class="description"><?php esc_html_e( 'Used by reporting tools to filter FreshBooks data by user. CASE-SENSITIVE - match exactly what appears on invoices (e.g. "TC", not "tc").', 'zorderz' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Used by reporting tools to filter FreshBooks data by user. CASE-SENSITIVE - match exactly what appears on invoices (e.g. "AB", not "ab").', 'zorderz' ); ?></p>
 				</td>
 			</tr>
 		</table>
@@ -333,6 +333,15 @@ class ZDZ_Admin_UI {
 						value="<?php echo esc_attr( implode( ', ', (array) ( get_user_meta( $user->ID, 'zdz_user_territories', true ) ?: [] ) ) ); ?>"
 						class="regular-text" placeholder="e.g. AS, NSD, EC" />
 					<p class="description"><?php esc_html_e( 'Comma-separated territory codes this person covers. Used by the Lead Generator to auto-filter lead batches.', 'zorderz' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="zdz_login_aliases"><?php esc_html_e( 'Login Email Aliases', 'zorderz' ); ?></label></th>
+				<td>
+					<input type="text" id="zdz_login_aliases" name="zdz_login_aliases"
+						value="<?php echo esc_attr( implode( ', ', (array) ( get_user_meta( $user->ID, 'zdz_login_aliases', true ) ?: [] ) ) ); ?>"
+						class="regular-text" placeholder="e.g. shop@example.com, front-desk@example.com" />
+					<p class="description"><?php esc_html_e( 'Comma-separated extra email addresses this person may sign in with, in addition to their account email — on both the login-code and magic-link paths. Each must be a valid address that no other account already uses; any that are not are dropped on save.', 'zorderz' ); ?></p>
 				</td>
 			</tr>
 		</table>
@@ -390,6 +399,28 @@ class ZDZ_Admin_UI {
 			update_user_meta( $user_id, 'zdz_user_territories', array_values( array_unique( $territories ) ) );
 		}
 
+		// Login Email Aliases: saved for ALL roles (admins included) — this runs
+		// BEFORE the admin-role early-return below so an owner/admin can also carry
+		// an alias. Each candidate is normalised, validated, and run through the
+		// collision guard; anything that is not a valid, unclaimed address is dropped
+		// (never stored) so a duplicate can never shadow another account's login.
+		if ( isset( $_POST['zdz_login_aliases'] ) ) {
+			$raw   = wp_unslash( (string) $_POST['zdz_login_aliases'] );
+			$parts = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
+			$clean = [];
+			foreach ( $parts as $part ) {
+				$addr = strtolower( sanitize_email( $part ) );
+				if ( '' === $addr || ! is_email( $addr ) ) {
+					continue; // not a valid address
+				}
+				if ( self::alias_taken_by_other( $addr, (int) $user_id ) ) {
+					continue; // already another account's login email or alias
+				}
+				$clean[] = $addr;
+			}
+			update_user_meta( $user_id, 'zdz_login_aliases', array_values( array_unique( $clean ) ) );
+		}
+
 		// -- v2.32.0: Save the Crew (hierarchy). This is intentionally saved for
 		// ALL roles (admins included, since an admin could hypothetically lead a
 		// crew) - the picker only renders for lead-capable users, and set_crew()
@@ -424,6 +455,50 @@ class ZDZ_Admin_UI {
 			}
 			update_user_meta( $user_id, 'zdz_data_permissions', $clean_perms );
 		}
+	}
+
+	/**
+	 * Collision guard for a login alias: true when this address is already claimed
+	 * by a DIFFERENT account — either as that account's real user_email, or in that
+	 * account's own alias list. Load-bearing security: an alias must never resolve
+	 * to two people, or shadow another account's real login address.
+	 *
+	 * @param string $alias
+	 * @param int    $uid   The user the alias is being assigned to (excluded from the scan).
+	 * @return bool
+	 */
+	public static function alias_taken_by_other( $alias, $uid ) {
+		$alias = strtolower( trim( (string) $alias ) );
+		if ( '' === $alias ) {
+			return false;
+		}
+		// (a) equal to any OTHER account's real login email.
+		$owner = get_user_by( 'email', $alias );
+		if ( $owner instanceof WP_User && (int) $owner->ID !== (int) $uid ) {
+			return true;
+		}
+		// (b) already present in a DIFFERENT user's alias list.
+		$cap     = (int) apply_filters( 'zdz_login_alias_scan_cap', 500 );
+		$holders = get_users( [
+			'meta_key' => 'zdz_login_aliases',
+			'number'   => $cap,
+			'fields'   => 'all',
+		] );
+		foreach ( $holders as $holder ) {
+			if ( (int) $holder->ID === (int) $uid ) {
+				continue;
+			}
+			$aliases = get_user_meta( $holder->ID, 'zdz_login_aliases', true );
+			if ( ! is_array( $aliases ) ) {
+				continue;
+			}
+			foreach ( $aliases as $a ) {
+				if ( strtolower( trim( (string) $a ) ) === $alias ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 }
 

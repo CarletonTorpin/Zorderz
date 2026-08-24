@@ -145,15 +145,41 @@ class ZDZ_Core_Settings {
 					<tr>
 						<th scope="row"><label for="<?php echo esc_attr( self::OPTION_PREFIX . 'ai_model' ); ?>"><?php esc_html_e( 'AI Model', 'zorderz' ); ?></label></th>
 						<td>
-							<select id="<?php echo esc_attr( self::OPTION_PREFIX . 'ai_model' ); ?>" name="<?php echo esc_attr( self::OPTION_PREFIX . 'ai_model' ); ?>">
-								<?php
-								$models = [ 'Gemini-3.1-Pro', 'Claude-Opus-4.6', 'Claude-Sonnet-4.5' ];
-								$current = get_option( self::OPTION_PREFIX . 'ai_model', 'Gemini-3.1-Pro' );
-								foreach ( $models as $model ) {
-									echo '<option value="' . esc_attr( $model ) . '" ' . selected( $current, $model, false ) . '>' . esc_html( $model ) . '</option>';
+														<?php
+							// The AI-model roster is a vendor/tenant fact: Core names no model. The
+							// choices come from ZDZ_Model_Registry::choices() (the zdz_model_choices
+							// filter - EMPTY in Core, filled by the connections pack). When empty,
+							// render a free-text field so an operator on any gateway can type the
+							// handle their pack resolves.
+							$model_optname = self::OPTION_PREFIX . 'ai_model';
+							$current       = (string) get_option( $model_optname, '' );
+							$model_choices = class_exists( 'ZDZ_Model_Registry' ) ? ZDZ_Model_Registry::choices() : array();
+							if ( ! empty( $model_choices ) ) {
+								// Normalize to value => label (accept a flat list or handle => label).
+								$options = array();
+								foreach ( $model_choices as $ck => $cv ) {
+									if ( is_int( $ck ) ) {
+										$options[ (string) $cv ] = (string) $cv;
+									} else {
+										$options[ (string) $ck ] = (string) $cv;
+									}
 								}
+								// Never lose a saved handle that is no longer in the roster.
+								if ( '' !== $current && ! isset( $options[ $current ] ) ) {
+									$options[ $current ] = $current;
+								}
+								echo '<select id="' . esc_attr( $model_optname ) . '" name="' . esc_attr( $model_optname ) . '">';
+								foreach ( $options as $opt_val => $opt_label ) {
+									echo '<option value="' . esc_attr( $opt_val ) . '" ' . selected( $current, $opt_val, false ) . '>' . esc_html( $opt_label ) . '</option>';
+								}
+								echo '</select>';
+							} else {
 								?>
-							</select>
+								<input type="text" id="<?php echo esc_attr( $model_optname ); ?>" name="<?php echo esc_attr( $model_optname ); ?>" value="<?php echo esc_attr( $current ); ?>" class="regular-text" autocomplete="off" placeholder="<?php esc_attr_e( 'Enter the model handle from your connections pack', 'zorderz' ); ?>" />
+								<p class="description"><?php esc_html_e( 'The exact model/bot handle your AI gateway expects. Your connections pack can supply a picklist here.', 'zorderz' ); ?></p>
+								<?php
+							}
+							?>
 						</td>
 					</tr>
 				</table>
@@ -234,12 +260,14 @@ class ZDZ_Core_Settings {
 	/**
 	 * The configured AI model/bot name. Single source both the Poe gateway
 	 * (ZDZ_Core_Poe) and the Model Registry (ZDZ_Model_Registry::base_model) read.
-	 * Reads the credential cascade (honours a pre-rename tsa_ai_model on upgrade)
-	 * and defaults to the same value the Settings UI shows when nothing is set.
+	 * Reads the credential cascade (honours a pre-rename tsa_ai_model on upgrade).
+	 * Returns '' when nothing is configured - Core names NO model; the Model
+	 * Registry / gateway then resolve the neutral base handle from config
+	 * (the zdz_model_base_default filter), so a fresh install is never handed a
+	 * retired vendor literal.
 	 */
 	public static function get_ai_model(): string {
-		$model = self::get_credential( 'ai_model' );
-		return '' !== $model ? $model : 'Gemini-3.1-Pro';
+		return self::get_credential( 'ai_model' );
 	}
 
 	// v2.14.5: Review Bridge credentials (bridge URL is not in the credential

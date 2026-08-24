@@ -127,4 +127,98 @@ class ZEST_FreshBooks {
 		$out['number'] = (string) ( $est['estimate_number'] ?? $est['estimateid'] ?? '' );
 		return $out;
 	}
+
+	/**
+	 * Update an existing billing estimate through the shared client (Plan 02 E1). Applies
+	 * document conventions ON OUTPUT, then maps the model shape → the provider WIRE shape
+	 * at THIS boundary — the one place the wire shape is authoritative:
+	 *   unit_price → unit_cost['amount'], quantity → qty, description → name,
+	 *   sub_description → the provider's secondary description line.
+	 * Prefers the client's own update helper; falls back to a generic PUT (logged) when the
+	 * shared client lacks it. Returns { ok, id, number, error }.
+	 *
+	 * @param string $billing_doc_id provider estimate id.
+	 * @param array  $estimate       { customer, line_items(model shape), notes, reference }
+	 * @param array  $ctx            { initials, parenthetical, user_id }
+	 */
+	public static function update_estimate( string $billing_doc_id, array $estimate, array $ctx = array() ): array {
+		$out    = array( 'ok' => false, 'id' => (string) $billing_doc_id, 'number' => '', 'error' => '' );
+		$client = self::client();
+		if ( ! $client ) {
+			$out['error'] = 'Billing is not configured. Connect the billing provider in Zorderz settings.';
+			return $out;
+		}
+		if ( '' === trim( (string) $billing_doc_id ) ) {
+			$out['error'] = 'No billing document id to update.';
+			return $out;
+		}
+
+		// House style on output only.
+		if ( class_exists( 'ZDZ_Doc_Conventions' ) ) {
+			$estimate = ZDZ_Doc_Conventions::apply_on_output( $estimate, $ctx );
+		}
+
+		// Model → WIRE mapping (the provider boundary owns the wire shape).
+		$wire = self::to_wire_estimate( $estimate );
+
+		try {
+			if ( method_exists( $client, 'update_estimate' ) ) {
+				$resp = $client->update_estimate( $billing_doc_id, $wire );
+			} else {
+				// Fallback: a generic PUT via the shared client's api_request (logged).
+				error_log( 'Zorderz Estimates: shared FreshBooks client lacks update_estimate(); using generic PUT.' );
+				$account = class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_fb_account_id' )
+					? (string) ZDZ_Core_Settings::get_fb_account_id() : '';
+				if ( '' === $account || ! method_exists( $client, 'api_request' ) ) {
+					$out['error'] = 'Billing update is unavailable on this connection.';
+					return $out;
+				}
+				$endpoint = '/accounting/account/' . rawurlencode( $account ) . '/estimates/estimates/' . rawurlencode( $billing_doc_id );
+				$resp     = $client->api_request( 'PUT', $endpoint, array( 'estimate' => $wire ) );
+			}
+		} catch ( \Throwable $e ) {
+			$out['error'] = 'Billing update failed: ' . $e->getMessage();
+			return $out;
+		}
+
+		$est = $resp['response']['result']['estimate'] ?? ( is_array( $resp ) ? $resp : null );
+		if ( ! is_array( $est ) ) {
+			$out['error'] = 'Billing update returned no estimate.';
+			return $out;
+		}
+		$out['ok']     = true;
+		$out['id']     = (string) ( $est['id'] ?? $est['estimateid'] ?? $billing_doc_id );
+		$out['number'] = (string) ( $est['estimate_number'] ?? $est['estimateid'] ?? '' );
+		return $out;
+	}
+
+	/**
+	 * Map a model-shape estimate to the provider WIRE shape. Only the fields the provider
+	 * needs are emitted; the caller's subtractive-write discipline is preserved upstream.
+	 */
+	private static function to_wire_estimate( array $estimate ): array {
+		$wire  = array();
+		$lines = array();
+		foreach ( (array) ( $estimate['line_items'] ?? array() ) as $li ) {
+			if ( ! is_array( $li ) ) {
+				continue;
+			}
+			$lines[] = array(
+				'name'        => (string) ( $li['description'] ?? '' ),
+				'description' => (string) ( $li['sub_description'] ?? '' ),
+				'qty'         => (string) ( isset( $li['quantity'] ) ? ( 0 + $li['quantity'] ) : 1 ),
+				'unit_cost'   => array( 'amount' => number_format( (float) ( $li['unit_price'] ?? 0 ), 2, '.', '' ) ),
+			);
+		}
+		$wire['lines'] = $lines;
+		if ( isset( $estimate['customer'] ) && is_array( $estimate['customer'] ) ) {
+			$wire['customer'] = $estimate['customer'];
+		}
+		// Notes may be the customer-facing field after apply_on_output (customer_notes).
+		$notes = (string) ( $estimate['customer_notes'] ?? ( $estimate['notes'] ?? '' ) );
+		if ( '' !== $notes ) {
+			$wire['notes'] = $notes;
+		}
+		return $wire;
+	}
 }
