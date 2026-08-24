@@ -1,0 +1,26 @@
+/* Zorderz Dot Plot widget. Uses the theme's --sys-* design tokens with neutral fallbacks so it
+   re-skins with the brand ramp and never hardcodes a company colour. */
+.zdp-w { display: flex; flex-direction: column; gap: 10px; font: inherit; color: var(--sys-text, #1f2937); }
+.zdp-w-bar, .zdp-w-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.zdp-input { flex: 1 1 220px; min-width: 160px; padding: 8px 10px; border: 1px solid var(--sys-border, #d1d5db); border-radius: 8px; background: var(--sys-surface, #fff); color: inherit; }
+.zdp-select, .zdp-date { padding: 7px 9px; border: 1px solid var(--sys-border, #d1d5db); border-radius: 8px; background: var(--sys-surface, #fff); color: inherit; }
+.zdp-btn { padding: 8px 14px; border: 0; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.zdp-btn-primary { background: var(--sys-accent, #0f766e); color: var(--sys-on-accent, #fff); }
+.zdp-btn-secondary { background: var(--sys-surface-2, #eef2f7); color: var(--sys-text, #1f2937); }
+.zdp-btn:focus-visible { outline: 2px solid var(--sys-accent, #0f766e); outline-offset: 2px; }
+
+.zdp-msg { min-height: 1.2em; font-size: 13px; color: var(--sys-text-muted, #6b7280); }
+.zdp-msg-error { color: var(--sys-danger, #b91c1c); }
+.zdp-msg-ok { color: var(--sys-accent, #0f766e); }
+.zdp-msg-muted { color: var(--sys-text-muted, #6b7280); }
+
+.zdp-grid-wrap { overflow-x: auto; border: 1px solid var(--sys-border, #e5e7eb); border-radius: 10px; padding: 6px; background: var(--sys-surface, #fff); }
+.zdp-empty { padding: 20px; text-align: center; color: var(--sys-text-muted, #6b7280); }
+
+table.zdp-grid { border-collapse: collapse; font-size: 12px; }
+table.zdp-grid th, table.zdp-grid td { padding: 0; }
+.zdp-rowhead { position: sticky; left: 0; z-index: 1; background: var(--sys-surface, #fff); text-align: right; padding: 2px 8px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.zdp-dayhead { width: 22px; }
+.zdp-dayhead span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); color: var(--sys-text-muted, #6b7280); font-weight: 500; padding: 4px 0; }
+.zdp-cell { width: 22px; height: 22px; text-align: center; vertical-align: middle; border-top: 1px solid var(--sys-border-faint, #f1f5f9); }
+.zdp-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: var(--sys-accent, #0f766e); }

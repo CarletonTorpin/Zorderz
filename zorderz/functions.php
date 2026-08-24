@@ -119,6 +119,8 @@ require_once get_template_directory() . '/inc/class-zdz-doc-conventions.php'; //
 require_once get_template_directory() . '/inc/class-zdz-compensation.php'; // v1.1.0: Compensation Core service (ZDZ_Compensation) — commission structures/tiers, split policies, piece rates, product minimums, ledger kinds, card-fee handling, pay calendar, payability gate, attribution precedence. Ships EMPTY. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-answer-authority.php'; // v1.1.0: Answer Authority — confidence tier (confirmed>derived>inferred>unknown, propagates through arithmetic) + the SINGLE outbound gate (chat/email/push/digest/stream) enforcing INV-12. Ships neutral; self-boots.
 require_once get_template_directory() . '/inc/class-zdz-rule-governance.php'; // v1.1.0: Rule Governance — rules as typed parameterised objects; the prompt is a rendering of the rule set. A cited rule must exist (fails loudly); the safety floor is non-overridable. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-doc-preservation.php'; // Wave C (Plan 02 E2): Zdz_Doc_Preservation — shared estimate+invoice preservation lock (arm-from-typed-rules, restore-preserving-internal-fields). Stateless; no self-boot.
+require_once get_template_directory() . '/inc/class-zdz-doc-guard.php';        // Wave C (Plan 02 E3): Zdz_Doc_Guard — identity-blind, fail-open zero-regression value floor (protects document totals on update). Stateless; no self-boot.
 require_once get_template_directory() . '/inc/class-zdz-model-registry.php'; // v1.1.0: Model Registry — per-task model slots replacing hardcoded model names; capability/fallback/retired maps ship EMPTY; base model read from ZDZ_Core_Settings; Poe stays the v1 gateway. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-request-guard.php';   // Wave A: Zdz_Request_Guard — wall-clock request budget (reserve-next-call), per-cURL-handle timeout clamp, crash-safe global cron lock. Ends worker-exhaustion 502s. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-service-breaker.php'; // Wave A: Zdz_Service_Breaker — general per-service circuit breaker (3 fails → 15-min pause) + auth-wall. Self-boots.
@@ -156,7 +158,10 @@ require_once get_template_directory() . '/inc/class-zdz-kiosk-demo.php'; // v2.2
 require_once get_template_directory() . '/inc/class-zdz-kpi-metrics.php';
 require_once get_template_directory() . '/inc/class-zdz-data-permissions.php'; // v2.17.0: Cross-plugin data permission resolution
 require_once get_template_directory() . '/inc/class-zdz-hierarchy.php'; // v2.32.0: Crew Lead hierarchy (ZDZ_Hierarchy)
+require_once get_template_directory() . '/inc/class-zdz-report-spec.php';    // Wave C (C-15 / P3a-AC5): report/chart spec validator — the security boundary (pure; allow-lists source/entity/filter/window). Self-contained.
+require_once get_template_directory() . '/inc/class-zdz-report-sources.php'; // Wave C (C-15 / P3a-AC5): report event-source registry + money-entitlement gate + Flow-outbox reader. Ships EMPTY. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-party.php'; // v1.1.0: authoritative "selectable people" roster (ZDZ_Party) — first shape of the Party core service
+require_once get_template_directory() . '/inc/class-zdz-inference.php'; // Wave C (C-14 / P3a-AC4): Zdz_Inference — CRON-only, side-effect-free advisory schedule inference (Connections-in → Identity parser → TIER_INFERRED → non-autoloaded cache → read-only consumers). Self-boots its cron; ships no parser (infers nothing until configured).
 require_once get_template_directory() . '/inc/class-zdz-integration-tests.php'; // v2.17.0 7B: Integration health check panel
 
 // ── v2.13.0 Backend infrastructure (no frontend changes) ──────────────
@@ -169,6 +174,8 @@ require_once get_template_directory() . '/inc/class-zdz-user-media.php'; // v2.1
 require_once get_template_directory() . '/inc/class-zdz-media-geocoder.php';   // EXIF inspector: offline reverse geocoder (privacy-first)
 require_once get_template_directory() . '/inc/class-zdz-media-exif.php';       // EXIF inspector: report builder
 require_once get_template_directory() . '/inc/class-zdz-media-exif-rest.php';  // EXIF inspector: GET /zorderz/v1/media/{id}/exif
+require_once get_template_directory() . '/inc/class-zdz-geocoder.php';         // Wave C (C-10 / P3b-C1): ZDZ_Geocoder — forward geocoder + shared address cache-key contract (networked-off by default). Server-side only; coordinates never cross a client boundary.
+require_once get_template_directory() . '/inc/class-zdz-media-location.php';   // Wave C (C-10 / P3b-C1): ZDZ_Media_Location — media-set location classifier (CATEGORICAL STATUS ONLY; closes the raw-centroid leak).
 require_once get_template_directory() . '/inc/class-zdz-magic-link-bridge.php'; // v2.18.0: PWA magic login bridge
 require_once get_template_directory() . '/inc/class-zdz-alert-router.php'; // v2.19.0: Cross-plugin alert routing + notification delivery
 require_once get_template_directory() . '/inc/class-zdz-data-portability.php'; // v1.4.0: Company Data Export / Import (portability, backup, migration) under Tools -> Zorderz Data
