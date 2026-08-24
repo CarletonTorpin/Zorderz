@@ -40,7 +40,8 @@ jobs:
       - name: php -l on changed PHP files
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          [ -z "$base" ] && base="HEAD~1"
+          # New-branch pushes report the null SHA as `before`; fall back to a resolvable base.
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then base="HEAD~1"; fi
           changed="$(git diff --name-only "$base"...HEAD -- '*.php' || true)"
           [ -z "$changed" ] && echo "no PHP changes" && exit 0
           rc=0
@@ -77,17 +78,26 @@ jobs:
           coverage: none
           tools: composer
       - run: composer install --no-interaction --prefer-dist
-      - name: PHP_CodeSniffer (security ruleset, changed PHP only)
-        # Scoped to changed files with the security-only ruleset so the gate stays green on a
-        # clean PR (the codebase predates WPCS; a full-tree style scan would be red forever and
-        # train everyone to ignore it). Full style cleanup is `composer lint` (phpcs.xml.dist).
+      - name: PHP_CodeSniffer (security ruleset, changed lines only, import-baselined)
+        # Runs the security-only ruleset on changed files, subtracts the accepted extraction
+        # baseline (.github/phpcs-security-baseline.json — grandfathers the one-time pre-WPCS
+        # import), then reports ONLY findings on lines this change actually touched
+        # (phpcs-changed-lines.py). Diff-line scoping keeps a contributor answerable for their own
+        # diff while still catching a real new vulnerability; the baseline stops the initial
+        # extraction merge from lighting up hundreds of inherited (mostly false-positive) findings.
+        # See docs/SECURITY-REVIEW.md and claude/ts-delta-analysis/phpcs-security-gate-findings.md.
+        # Full style cleanup remains `composer lint` (phpcs.xml.dist).
         run: |
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          [ -z "$base" ] && base="HEAD~1"
-          changed="$(git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.php' | grep -vE '(^|/)(bundled|vendor|tests|dist)/' || true)"
+          # A new-branch push reports the null SHA as `before`; fall back to a resolvable base so
+          # the branch's own commits are actually scanned instead of vacuously passing.
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then base="HEAD~1"; fi
+          changed="$(git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.php' | grep -vE '(^|/)(bundled|vendor|tests|dist|\.github)/' || true)"
           if [ -z "$changed" ]; then echo "no PHP changes to scan"; exit 0; fi
-          echo "Scanning:"; echo "$changed"
-          vendor/bin/phpcs -q --standard=phpcs-security.xml.dist --report=full $changed
+          echo "Scanning changed files (baseline-subtracted, reporting only changed lines):"; echo "$changed"
+          vendor/bin/phpcs -q --standard=phpcs-security.xml.dist --report=json $changed > phpcs-report.json || true
+          python3 .github/scripts/phpcs-baseline.py filter phpcs-report.json .github/phpcs-security-baseline.json > phpcs-report.filtered.json
+          python3 .github/scripts/phpcs-changed-lines.py "$base" HEAD phpcs-report.filtered.json
 
   integration:
     name: Integration tests (WordPress harness)
