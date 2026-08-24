@@ -56,6 +56,12 @@ class ZDZ_Share_Link {
 	/** Rate-limit window, seconds. */
 	const RATE_WINDOW = 60;
 
+	/** Sentinel expiry meaning "no TTL" — a link with this expiry never expires. */
+	const NO_EXPIRY = 0;
+
+	/** Seconds in a day (TTL is expressed in whole days). */
+	const DAY_SECONDS = 86400;
+
 	/**
 	 * Mint an opaque, unguessable token (default shape: 128-bit hex).
 	 *
@@ -248,5 +254,85 @@ class ZDZ_Share_Link {
 			}
 		}
 		exit;
+	}
+
+	/* ── OPTIONAL LINK EXPIRY / TTL (opt-in, default OFF) ──────────────────────
+	 *
+	 * A capability link is deliberately long-lived: a customer or an insurer may
+	 * re-open a receipt weeks after it was forwarded. So TTL ships OFF and is
+	 * strictly ADDITIVE — enabling it, or later changing the number of days, must
+	 * NEVER invalidate a link already handed out.
+	 *
+	 * That guarantee is structural, not incidental: the caller stamps an
+	 * `expires_at` epoch onto the record AT MINT TIME (a companion field the route
+	 * checks), and it is never recomputed. A link minted while TTL was off carries
+	 * NO_EXPIRY (0) forever, even if the tenant later turns TTL on; a link minted
+	 * with a 30-day TTL keeps that exact expiry even if the default later drops to
+	 * 7. Only a fresh mint (or the explicit revoke/regenerate) ever stamps a new
+	 * expiry. This class never rotates a live token and never re-stamps one.
+	 */
+
+	/**
+	 * The configured TTL in whole days for a namespace. Opt-in: the Core default
+	 * is 0 (OFF — links never expire). A tenant turns it on per Business Profile
+	 * or via the filter; a value <= 0 keeps expiry off.
+	 *
+	 * @param string $namespace App/scope id (so apps can differ).
+	 * @return int Days (>= 0). 0 means "no expiry".
+	 */
+	public static function ttl_days( string $namespace = '' ): int {
+		$days = 0;
+		// Per-Business-Profile opt-in, when a profile is present. Absent => 0.
+		if ( class_exists( 'ZDZ_Business_Profile' ) && method_exists( 'ZDZ_Business_Profile', 'get' ) ) {
+			$p = ZDZ_Business_Profile::get( 'security.share_link_ttl_days', 0 );
+			if ( is_numeric( $p ) ) {
+				$days = (int) $p;
+			}
+		}
+		if ( function_exists( 'apply_filters' ) ) {
+			$days = (int) apply_filters( 'zdz_share_link_ttl_days', $days, $namespace );
+		}
+		return max( 0, $days );
+	}
+
+	/**
+	 * Compute the immutable `expires_at` epoch to STAMP on a freshly minted link,
+	 * given a TTL in days. Returns NO_EXPIRY (0) when TTL is off — the caller then
+	 * stores 0 (or nothing), and the link never expires.
+	 *
+	 * Call this ONCE, at mint. Never recompute it for an existing link, or a
+	 * config change would move an already-issued link's deadline.
+	 *
+	 * @param int $ttl_days Whole days (<= 0 => no expiry).
+	 * @param int $now      Epoch to base the deadline on (0 => time()).
+	 * @return int expires_at epoch, or 0 for "never".
+	 */
+	public static function expires_at_for( int $ttl_days, int $now = 0 ): int {
+		if ( $ttl_days <= 0 ) {
+			return self::NO_EXPIRY;
+		}
+		$now = ( $now > 0 ) ? $now : time();
+		return $now + ( $ttl_days * self::DAY_SECONDS );
+	}
+
+	/**
+	 * Is a link with this stored `expires_at` expired as of $now? A NO_EXPIRY (0)
+	 * or absent value is NEVER expired — that is the default-off posture and the
+	 * reason a config change can't invalidate an already-issued link (it carries
+	 * its own stamped deadline, or none).
+	 *
+	 * The public route calls this alongside the token check; on true it should
+	 * emit not_found() (a 404, never a distinguishable "expired" response).
+	 *
+	 * @param int $expires_at The epoch stamped at mint (0 => never expires).
+	 * @param int $now        Epoch to compare against (0 => time()).
+	 * @return bool True only when a real deadline exists and has passed.
+	 */
+	public static function is_expired( int $expires_at, int $now = 0 ): bool {
+		if ( $expires_at <= self::NO_EXPIRY ) {
+			return false; // no deadline stamped => never expires (opt-in, default off)
+		}
+		$now = ( $now > 0 ) ? $now : time();
+		return $now > $expires_at;
 	}
 }

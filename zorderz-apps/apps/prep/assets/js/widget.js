@@ -141,7 +141,10 @@
   var state = {
     source: null, match: null, customer: null, leadId: null, cachedNotes: null,
     parsed: null, measurements: [], plan: null, useLeftovers: false, reservedLeftoverIds: [],
-    pendingLeads: [], batchLeadIds: [], approvedJobs: [], appliedAdjustments: false, debug: false
+    pendingLeads: [], batchLeadIds: [], approvedJobs: [], appliedAdjustments: false, debug: false,
+    // Install date is DISPLAY-ONLY: baked server-side (S5-11), it is NEVER read as a gate,
+    // a permission or a sort — only rendered. A baked install_fallback payload = {line,status,state}.
+    install: null
   };
 
   function $(id) { return document.getElementById(id); }
@@ -165,6 +168,24 @@
   }
   function setErr(id, msg) { var el = $(id); if (!el) return; if (msg) { el.textContent = msg; el.style.display = 'block'; } else { el.textContent = ''; el.style.display = 'none'; } }
   function fmtIn(n) { if (n == null || isNaN(n)) return ''; n = Number(n); if (Math.abs(n - Math.round(n)) < 0.001) return String(Math.round(n)); return String(Number(n.toFixed(2))).replace(/\.?0+$/, ''); }
+
+  /* ── INSTALL DATE (DISPLAY-ONLY) ──
+   * The install date is baked server-side onto each card by ZPREP_Install_Date (both published
+   * resolver arms). The client RENDERS it and nothing else: it is never used as a gate, a
+   * permission, or a sort that changes which cards show or their order. The only value shown is
+   * the resolver's paper_line string (`.line`) — the client is never handed a raw date, so a
+   * blank / 0000-00-00 datetime can never surface here as a real date. When no install_fallback
+   * was baked (the jobs resolver is absent), these return '' and the surface omits the line. */
+  function installLineFor(f) { return (f && f.line) ? String(f.line) : ''; }
+  function installLine() { return installLineFor(state.install); }
+  // A compact chip for the Ready-to-Cut card and lead picker. `.state`/`.status` drive style only.
+  function installChipHtml(f) {
+    var line = installLineFor(f);
+    if (!line) return '';
+    var known = (f && f.state === 'known');
+    return '<span class="zprep-w-install-chip' + (known ? ' zprep-w-install-known' : '') + '">' +
+      '<span class="zprep-w-install-lbl">Install</span> ' + esc(line) + '</span>';
+  }
 
   /* ── APPROVED TO CUT (configured cut stage) ── */
   function loadApprovedToCut() {
@@ -293,10 +314,14 @@
     var fbTag = j.fb_pending
       ? '<span class="zprep-w-atc-fbtag">' + esc(j.fb_note || 'Approved in billing') + '</span>'
       : '';
+    // Install chip (S5-10/S5-11): baked server-side, display-only — it decorates the card and
+    // never changes which cards show or their order.
+    var installChip = installChipHtml(j.install_fallback);
     btn.innerHTML =
       '<span class="zprep-w-atc-card-body">' +
         '<span class="zprep-w-atc-card-name">' + esc(name) + '</span>' +
         (metaHtml ? '<span class="zprep-w-atc-card-meta">' + metaHtml + '</span>' : '') +
+        (installChip ? '<span class="zprep-w-atc-install-row">' + installChip + '</span>' : '') +
         fbTag +
       '</span>' +
       count +
@@ -356,6 +381,7 @@
     state.leadId = job.lead_id;
     state.cachedNotes = null;           // force a fresh by-id fetch on the server
     state.batchLeadIds = [];
+    state.install = job.install_fallback || null;   // carry the baked install date to the cut sheet
     state.customer = {
       name: job.customer || '',
       email: '', phone: '', address: '',
@@ -387,10 +413,12 @@
 
       if (d.source === 'crm') {
         state.leadId = d.lead_id; state.cachedNotes = d.notes || null; state.customer = d.customer || {};
+        state.install = d.install || null;   // server-baked install date for the cut sheet
         renderMatch(); startParse();
       } else {
         var matches = d.matches || []; if (!matches.length) { setErr('zprep-w-lookup-error', 'No jobs found.'); return; }
         state.match = matches[0];
+        state.install = state.match.install_fallback || null;   // baked from the estimate arm
         state.customer = { name: (state.match.customer_detail && state.match.customer_detail.name) || state.match.customer_name, email: (state.match.customer_detail && state.match.customer_detail.email) || '', phone: (state.match.customer_detail && state.match.customer_detail.phone) || '', address: (state.match.customer_detail && state.match.customer_detail.address) || '', estimate_number: state.match.number, salesperson: '', total: '' };
         renderMatch(); startParse();
       }
@@ -441,6 +469,7 @@
             (l.cut_count ? '<span class="zprep-w-sep">·</span><span>' + l.cut_count + ' pieces</span>' : '') +
             (l.estimate_num ? '<span class="zprep-w-sep">·</span><span>Est #' + esc(l.estimate_num) + '</span>' : '') +
           '</div>' +
+          (installChipHtml(l.install_fallback) ? '<div class="zprep-w-select-install">' + installChipHtml(l.install_fallback) + '</div>' : '') +
         '</div>' +
       '</div>';
     });
@@ -491,6 +520,7 @@
   function selectSingleLead(lead) {
     state.leadId = lead.lead_id;
     state.cachedNotes = lead.notes || null;
+    state.install = lead.install_fallback || null;   // carry the baked install date to the cut sheet
     state.customer = {
       name: lead.customer || '', email: '', phone: '',
       address: lead.city || '', estimate_number: lead.estimate_num || '',
@@ -511,6 +541,8 @@
     state.leadId = leadIds[0];
     state.batchLeadIds = leadIds;
     state.cachedNotes = allNotes;
+    // A batch prints one customer block (the first job); show that job's baked install date.
+    state.install = (leads[0] && leads[0].install_fallback) || null;
     state.customer = {
       name: leads[0].customer || '', email: '', phone: '',
       address: leads[0].city || '', estimate_number: leads.map(function(l){ return l.estimate_num; }).filter(Boolean).join(', '),
@@ -1349,7 +1381,11 @@
     if (c.address) lines.push('Address: ' + c.address);
     if (c.estimate_number) lines.push('Estimate #: ' + c.estimate_number);
     lines.push('Cut by: ' + (zprepWidgetData.user && zprepWidgetData.user.name || 'Unknown'));
-    lines.push('Date: ' + new Date().toLocaleDateString());
+    // Install date (S5-10): the real install date, only when baked (resolver present). Distinct
+    // from the cut date below — display-only, never a fault token.
+    var il = installLine();
+    if (il) lines.push('Install: ' + il);
+    lines.push('Date cut: ' + new Date().toLocaleDateString());
     lines.push('', '── Pieces Cut ──');
     var notCutList = [];
     (p.deliverables || []).forEach(function(d){
@@ -1435,15 +1471,19 @@
           '<div class="zprep-print-premade-note">Ships with the order. Not cut from roll stock — not the cutter\u2019s responsibility for this job.</div></div>';
       }
 
+      // Install line (S5-10): a REAL install date, distinct from the print moment. Rendered only
+      // from the server-baked resolver string; omitted entirely when no install info was baked
+      // (jobs resolver absent) — the relabels below still ship. Never a fault/overdue token.
+      var installRow = installLine() ? ('<div><strong>Install:</strong> ' + esc(installLine()) + '</div>') : '';
       html += '<div class="zprep-print-page">' +
         '<div class="zprep-print-header"><h1>' + esc(zprepWidgetData.letterhead || '') + ' — CUT SHEET</h1></div>' +
-        '<div class="zprep-print-job"><div><strong>Customer:</strong> ' + esc(c.name||'') + '</div><div><strong>Est #:</strong> ' + esc(c.estimate_number||'—') + '</div><div><strong>Address:</strong> ' + esc(c.address||'') + '</div><div><strong>Salesperson:</strong> ' + esc(c.salesperson||'') + '</div><div><strong>Phone:</strong> ' + esc(c.phone||'') + '</div><div><strong>Date:</strong> ' + new Date().toLocaleDateString() + '</div></div>' +
+        '<div class="zprep-print-job"><div><strong>Customer:</strong> ' + esc(c.name||'') + '</div><div><strong>Est #:</strong> ' + esc(c.estimate_number||'—') + '</div><div><strong>Address:</strong> ' + esc(c.address||'') + '</div><div><strong>Salesperson:</strong> ' + esc(c.salesperson||'') + '</div><div><strong>Phone:</strong> ' + esc(c.phone||'') + '</div>' + installRow + '<div><strong>Printed:</strong> ' + new Date().toLocaleDateString() + '</div></div>' +
         '<div class="zprep-print-roll"><strong>' + page.roll_width_in + '" ' + page.color.toUpperCase() + '</strong> — Sheet ' + (idx+1) + ' of ' + pages.length + ' — Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft · ' + sqft + ' sq ft)</div>' +
         '<div class="zprep-print-svg">' + svg + '</div>' +
         '<div class="zprep-print-checklist"><strong>CUT LIST:</strong>' + delHtml + '</div>' +
         premadeHtml +
         '<div class="zprep-print-cost">Material: ' + page.linear_feet.toFixed(1) + ' ft of ' + page.roll_width_in + '" ' + page.color + ' — ' + sqft + ' sq ft</div>' +
-        '<div class="zprep-print-signoff"><div>Cut by: <span class="zprep-sig-line"></span></div><div>Date: <span class="zprep-sig-line"></span></div></div>' +
+        '<div class="zprep-print-signoff"><div>Cut by: <span class="zprep-sig-line"></span></div><div>Date cut: <span class="zprep-sig-line"></span></div></div>' +
         '<div class="zprep-print-footer">v' + zprepWidgetData.version + ' · ' + esc((zprepWidgetData.contract && zprepWidgetData.contract.signature) || 'Prep') + '</div></div>';
     });
 
@@ -1583,7 +1623,7 @@
   }
 
   function resetAll() {
-    state = { source:null, match:null, customer:null, leadId:null, cachedNotes:null, parsed:null, measurements:[], plan:null, useLeftovers:false, reservedLeftoverIds:[], pendingLeads:[], batchLeadIds:[], approvedJobs:[], appliedAdjustments:false, debug:false };
+    state = { source:null, match:null, customer:null, leadId:null, cachedNotes:null, parsed:null, measurements:[], plan:null, useLeftovers:false, reservedLeftoverIds:[], pendingLeads:[], batchLeadIds:[], approvedJobs:[], appliedAdjustments:false, debug:false, install:null };
     $('zprep-w-search').value = ''; setErr('zprep-w-lookup-error', ''); showView('zprep-w-lookup');
   }
 

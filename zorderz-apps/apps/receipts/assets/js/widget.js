@@ -72,8 +72,16 @@
   /** Capture sessions pulled from the shared library for the selected job. */
   var mediaSessions = [];
 
-  /** The session id the user has selected as the install set (e.g. "sess-0"). */
+  /** The session id currently OPEN for review (drives the big photo grid /
+   *  drag / lightbox). One set is reviewed at a time. */
   var selectedSessionId = null;
+
+  /** S5-06 — MULTI-SET selection: the ids of every set INCLUDED in the receipt,
+   *  in display order. Two crews' capture sets from the same property can be
+   *  combined; the generate payload is the included sets concatenated in this
+   *  order, each in its own photo order. A blocked set (loc_status off_site) or
+   *  an already-used set (S5-08) can never be included. */
+  var includedSetIds = [];
 
   /** v3.4.0 — per-photo exclusions within the chosen set: media_id -> true.
    *  The escape hatch when any grouping (however smart) disagrees with
@@ -679,6 +687,7 @@
     if (emptyEl) hide(emptyEl);
     mediaSessions = [];
     selectedSessionId = null;
+    includedSetIds = [];       // S5-06
     photoExcluded = {};
     photoOrder = {};   // v3.8.0
     setPickerExpanded = false; // v3.8.1
@@ -694,9 +703,15 @@
 
     var fd = new FormData();
     // Pass GPS if the customer record happened to carry coordinates (rare today).
+    // Used ONLY server-side as the classification anchor — never echoed back.
     if (match.customer_detail && match.customer_detail.gps_lat && match.customer_detail.gps_lng) {
       fd.append('near_lat', match.customer_detail.gps_lat);
       fd.append('near_lng', match.customer_detail.gps_lng);
+    }
+    // S5-08 — the current job's own invoice number, so its OWN receipt's photos
+    // are not locked as "used" (a redo keeps its photos).
+    if (match && match.number) {
+      fd.append('invoice_numbers', JSON.stringify([ String(match.number) ]));
     }
 
     ajaxPost('zrcpt_match_media', fd).then(function (res) {
@@ -712,6 +727,16 @@
       mediaSessions = data.sessions || [];
       photoExcluded = {};
       photoOrder = {};   // v3.8.0
+      includedSetIds = [];  // S5-06
+
+      // S5-08 — pre-exclude photos the server flagged as already-used, so the
+      // preview matches what will generate (the server re-enforces this at
+      // generate regardless, so a manual re-include is still dropped safely).
+      mediaSessions.forEach(function (s) {
+        (s.photos || []).forEach(function (p) {
+          if (p && p.used && p.media_id) { photoExcluded[p.media_id] = true; }
+        });
+      });
 
       if (!data.available || !mediaSessions.length) {
         // No photos of their own -> leave the uploader as the sole path.
@@ -750,6 +775,20 @@
     if (role === 'install') return 'Installation set';
     if (role === 'before') return 'Before / estimate set';
     return 'Earlier set';
+  }
+
+  /* S5-07/S5-08 — the categorical location / one-time-use hint the SERVER sends
+   * (never a coordinate). on_site is selectable; off_site is blocked; used means
+   * every photo is already on another receipt. */
+  function locBadge(s) {
+    if (s && s.has_used) { return ' · 🔒 already used'; }
+    switch (s && s.loc_status) {
+      case 'on_site':   return ' · 📍 on site';
+      case 'off_site':  return ' · ⚠ off site (can’t combine)';
+      case 'located':   return ' · 📍 located';
+      case 'unlocated': return '';
+      default:          return (s && s.has_gps) ? ' · 📍 located' : '';
+    }
   }
 
   /* v3.4.0 — how many of this set's photos are still included, and the line
@@ -874,13 +913,17 @@
     // the picker (setPickerExpanded) shows them all again; choosing any set
     // re-collapses.
     var activeSession = selectedSessionId ? findSession(selectedSessionId) : null;
-    var collapsed = !!(activeSession && !setPickerExpanded);
+    // S5-06 — only collapse the picker when a SINGLE set is in play; when 2+
+    // sets are combined the tech needs to see every included set at once.
+    var collapsed = !!(activeSession && !setPickerExpanded && includedSetIds.length <= 1);
     var toRender = collapsed ? [ activeSession ] : sessions;
     var hiddenCount = collapsed ? (sessions.length - 1) : 0;
 
     var html = '';
     toRender.forEach(function (s) {
       var isActive = (s.id === selectedSessionId);
+      var isIncl   = isIncluded(s.id);
+      var selectable = setIsSelectable(s);
       var roleCls = 'zrcpt-w-sess-role-' + esc(s.role);
 
       // v3.4.0 — batch-tagged sets (grouped by a Media-app upload, not by the
@@ -893,14 +936,27 @@
           (s.batch_note ? ' · ' + esc(truncate(s.batch_note, 26)) : '') + '</span>';
       }
 
-      html += '<div class="zrcpt-w-sess' + (isActive ? ' zrcpt-w-sess-active' : '') + '" data-sid="' + esc(s.id) + '" role="button" tabindex="0">' +
+      var blockedNote = selectable ? '' :
+        '<span class="zrcpt-w-sess-blocked">' +
+          (s.has_used ? 'These photos are already on another receipt.'
+                      : 'This set was captured away from the job location, so it can’t be added.') +
+        '</span>';
+
+      html += '<div class="zrcpt-w-sess' + (isActive ? ' zrcpt-w-sess-active' : '') +
+          (isIncl ? ' zrcpt-w-sess-included' : '') + (selectable ? '' : ' zrcpt-w-sess-blocked-card') +
+          '" data-sid="' + esc(s.id) + '" role="button" tabindex="0">' +
         '<div class="zrcpt-w-sess-head">' +
-          '<span class="zrcpt-w-sess-radio" aria-hidden="true"></span>' +
+          // S5-06 — a checkbox controls INCLUSION (combine several sets); blocked/
+          // used sets are disabled and can never be included.
+          '<input type="checkbox" class="zrcpt-w-sess-cb" data-sid="' + esc(s.id) + '"' +
+            (isIncl ? ' checked' : '') + (selectable ? '' : ' disabled') +
+            ' aria-label="Include this photo set" />' +
           '<div class="zrcpt-w-sess-meta">' +
             '<span class="zrcpt-w-sess-role ' + roleCls + '">' + esc(roleLabel(s.role)) + '</span>' +
             tag +
             '<span class="zrcpt-w-sess-date">' + esc(s.date_display) + ' · ' + s.photo_count + ' photo' + (s.photo_count === 1 ? '' : 's') +
-              (s.has_gps ? ' · 📍 located' : '') + '</span>' +
+              locBadge(s) + '</span>' +
+            blockedNote +
           '</div>' +
         '</div>' +
         sessThumbsHTML(s, isActive) +
@@ -936,14 +992,25 @@
       });
     }
 
+    // S5-06 — inclusion checkboxes: toggle a set in/out of the receipt without
+    // opening it for review. Blocked/used sets are disabled and never toggle.
+    el.querySelectorAll('.zrcpt-w-sess-cb').forEach(function (cb) {
+      cb.addEventListener('click', function (e) { e.stopPropagation(); });
+      cb.addEventListener('change', function () {
+        var sid = cb.getAttribute('data-sid');
+        setIncluded(sid, cb.checked);
+        renderSessions(mediaSessions);
+      });
+    });
+
     el.querySelectorAll('.zrcpt-w-sess').forEach(function (card) {
       var sid = card.getAttribute('data-sid');
       card.addEventListener('click', function (e) {
-        if (e.target.closest('.zrcpt-w-ph, .zrcpt-w-ph-toggle')) return; // photos handle themselves
+        if (e.target.closest('.zrcpt-w-ph, .zrcpt-w-ph-toggle, .zrcpt-w-sess-cb')) return; // photos/checkbox handle themselves
         selectSession(sid, false);
       });
       card.addEventListener('keydown', function (e) {
-        if (e.target.closest('.zrcpt-w-ph, .zrcpt-w-ph-toggle')) return;
+        if (e.target.closest('.zrcpt-w-ph, .zrcpt-w-ph-toggle, .zrcpt-w-sess-cb')) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectSession(sid, false); }
       });
 
@@ -1243,9 +1310,52 @@
       : '✓ Included — tap to leave out';
   }
 
+  /* S5-06/07/08 — a set may be INCLUDED in the receipt only when its server-side
+   * classification says so: an off-site set (loc_status) or a fully-used set
+   * (S5-08) arrives with selectable === false and can never be combined. */
+  function setIsSelectable(s) {
+    return !s || (s.selectable !== false);
+  }
+  function isIncluded(sessionId) {
+    return includedSetIds.indexOf(sessionId) !== -1;
+  }
+  function setIncluded(sessionId, on) {
+    var s = findSession(sessionId);
+    if (on) {
+      if (!setIsSelectable(s)) { return; }        // blocked/used — never include
+      if (!isIncluded(sessionId)) {
+        // Keep includedSetIds in display (mediaSessions) order.
+        includedSetIds = mediaSessions
+          .map(function (m) { return m.id; })
+          .filter(function (id) { return id === sessionId || isIncluded(id); });
+      }
+      // Combining a captured set clears any manual uploads (one source wins).
+      if (photoData.length) {
+        photoData = [];
+        var thumbsEl = $('zrcpt-w-thumbs');
+        if (thumbsEl) thumbsEl.innerHTML = '';
+        updatePhotoCount();
+      }
+    } else {
+      includedSetIds = includedSetIds.filter(function (id) { return id !== sessionId; });
+    }
+    updateGenerateState();
+  }
+
   function selectSession(sessionId, isAuto) {
     selectedSessionId = sessionId;
     setPickerExpanded = false;   // v3.8.1 — choosing a set collapses the rest
+
+    // S5-06 — opening a SELECTABLE set for review also includes it (the common
+    // single-set flow: tap a set → reviewed AND included, exactly as before). A
+    // blocked/used set opens for review so the tech can see WHY, but is not
+    // included.
+    var reviewed = findSession(sessionId);
+    if (setIsSelectable(reviewed) && !isIncluded(sessionId)) {
+      includedSetIds = mediaSessions
+        .map(function (m) { return m.id; })
+        .filter(function (id) { return id === sessionId || isIncluded(id); });
+    }
 
     // v3.4.0 — re-render so the ACTIVE card swaps its 5-thumb preview for the
     // full toggleable photo grid (and the previous card swaps back).
@@ -1287,28 +1397,41 @@
     return null;
   }
 
-  function selectedSessionMediaIds() {
-    var s = findSession(selectedSessionId);
-    if (!s || !s.photos) return [];
-    // v3.4.0 — exclusions filtered here so provenance (media_ids) only ever
-    // records photos that were actually used.
-    // v3.8.0 — in the tech's chosen order.
-    return orderedSessionPhotos(s).map(function (p) { return p.media_id; })
-      .filter(function (mid) { return mid && !photoExcluded[mid]; });
+  /* S5-06 — the INCLUDED sets, in display order (each set's photos in its own
+   * chosen order). A blocked/used set is never in includedSetIds, so it can
+   * never contribute a photo even if it is the one open for review. */
+  function includedSessions() {
+    return mediaSessions.filter(function (s) { return isIncluded(s.id); });
   }
 
-  // Full photo objects for the selected library set: { url, media_id }.
-  // We send these through photo_data (with their resolved file_url) rather than
-  // id-only via media_ids, because the generator resolves photo_data['url']
-  // directly. media_id is the ZDZ_User_Media ROW id (NOT a wp attachment id), so
-  // the server's id->attachment lookup can't resolve it — only the url can.
+  function selectedSessionMediaIds() {
+    var out = [];
+    includedSessions().forEach(function (s) {
+      if (!s || !s.photos) return;
+      // v3.4.0 — exclusions filtered here so provenance (media_ids) only ever
+      // records photos that were actually used. v3.8.0 — in the chosen order.
+      orderedSessionPhotos(s).forEach(function (p) {
+        if (p && p.media_id && !photoExcluded[p.media_id]) { out.push(p.media_id); }
+      });
+    });
+    return out;
+  }
+
+  // Full photo objects for the included library sets: { url, media_id,
+  // attachment_id }. Sent through photo_data (with resolved file_url) because
+  // media_id is the ZDZ_User_Media ROW id, not a wp attachment id; the server
+  // records provenance from attachment_id and embeds url.
   function selectedSessionPhotos() {
-    var s = findSession(selectedSessionId);
-    if (!s || !s.photos) return [];
-    // v3.4.0 — tap-excluded photos never reach the generator.
-    // v3.8.0 — in the tech's chosen (dragged) order: the receipt's gallery
-    // comes out exactly as arranged on screen.
-    return orderedSessionPhotos(s).filter(function (p) { return p && p.url && !photoExcluded[p.media_id]; });
+    var out = [];
+    includedSessions().forEach(function (s) {
+      if (!s || !s.photos) return;
+      // v3.4.0 — tap-excluded photos never reach the generator. v3.8.0 — in the
+      // tech's chosen (dragged) order, per set, sets in display order.
+      orderedSessionPhotos(s).forEach(function (p) {
+        if (p && p.url && !photoExcluded[p.media_id]) { out.push(p); }
+      });
+    });
+    return out;
   }
 
   /* v3.6.2 — INVOICE-FILE FALLBACK (no-job path).
@@ -1548,7 +1671,7 @@
     if (!btn) return;
 
     var readyPhotos = photoData.filter(function (p) { return p.url; }).length;
-    var hasLibraryPhotos = !!selectedSessionId && selectedSessionMediaIds().length > 0;
+    var hasLibraryPhotos = includedSetIds.length > 0 && selectedSessionMediaIds().length > 0;
     var usingUpload = readyPhotos > 0;
     var hasPhotos = hasLibraryPhotos || usingUpload;
 
@@ -1826,7 +1949,7 @@
     }
 
     // Photos can come from the library (selected set) OR manual upload.
-    var libraryPhotos = selectedSessionId ? selectedSessionPhotos() : [];
+    var libraryPhotos = includedSetIds.length ? selectedSessionPhotos() : [];
     var readyPhotos = photoData.filter(function (p) { return p.url; });
 
     if (!libraryPhotos.length && !readyPhotos.length) {
