@@ -935,7 +935,7 @@ class ZDZ_Magic_Link_Bridge {
 		if ( '' === $email ) {
 			return null;
 		}
-		$user = get_user_by( 'email', $email );
+		$user = get_user_by( 'email', $email ); // sentinel:allow alias-resolution lookup only — resolves an address to an account; the authenticated identity still comes solely from the server-side OTP transient, never from this request-supplied address
 		if ( $user instanceof WP_User ) {
 			return $user;
 		}
@@ -1007,7 +1007,7 @@ class ZDZ_Magic_Link_Bridge {
 				continue;
 			}
 			// Already the canonical account email — nothing to rewrite.
-			if ( get_user_by( 'email', $candidate ) instanceof WP_User ) {
+			if ( get_user_by( 'email', $candidate ) instanceof WP_User ) { // sentinel:allow existence check that skips already-canonical emails during alias pre-map; the rewrite below only maps $_POST to the real account email, never sets the authenticated identity
 				continue;
 			}
 			$user = self::user_by_alias( $candidate );
