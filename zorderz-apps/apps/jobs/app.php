@@ -138,6 +138,39 @@ require_once ZJOB_DIR . 'includes/class-zjob-ajax.php';
 require_once ZJOB_DIR . 'includes/class-zjob-chat-bridge.php';
 require_once ZJOB_DIR . 'includes/class-zjob-admin.php';
 
+// Wave B — the Flow substrate (app-local but Flow-shaped; promotable to a Core class-zdz-flow.php).
+require_once ZJOB_DIR . 'includes/flow/class-zdz-ulid.php';
+require_once ZJOB_DIR . 'includes/flow/class-zdz-flow-db.php';
+require_once ZJOB_DIR . 'includes/flow/class-zdz-flow-refs.php';
+require_once ZJOB_DIR . 'includes/flow/class-zdz-flow.php';
+// Wave B — the Job Dossier substrate (events/notes/scope; self-booting schema).
+require_once ZJOB_DIR . 'includes/class-zjob-scope.php';
+require_once ZJOB_DIR . 'includes/class-zjob-events.php';
+require_once ZJOB_DIR . 'includes/class-zjob-notes.php';
+
+// Wave B — Projects (the estimate-shaped container over the Flow substrate; app-local).
+// init() only registers filters/subscribers (guarded); it seeds nothing and is safe to
+// call at load, before after_setup_theme, so the flow definition/namespaces/derive-state
+// filters and the audit-seam subscriber are in place before any request touches Flow.
+require_once ZJOB_DIR . 'includes/class-zjob-project-signal.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-visibility.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-resolver.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-sweep.php';
+// Wave C (C-01) — install-date resolver + INV-8 published boundary + compose_context handoff.
+require_once ZJOB_DIR . 'includes/class-zjob-install-date.php';
+require_once ZJOB_DIR . 'includes/class-zjob-appointment-link.php';
+require_once ZJOB_DIR . 'includes/class-zjob-schedule-context.php';
+if ( class_exists( 'Zjob_Project' ) && method_exists( 'Zjob_Project', 'init' ) ) {
+	Zjob_Project::init();
+}
+if ( class_exists( 'Zjob_Install_Date' ) && method_exists( 'Zjob_Install_Date', 'init' ) ) {
+	Zjob_Install_Date::init();
+}
+if ( class_exists( 'Zjob_Schedule_Context' ) && method_exists( 'Zjob_Schedule_Context', 'init' ) ) {
+	Zjob_Schedule_Context::init();
+}
+
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
  * Creates/upgrades the tables and grants the tile to eligible users.
@@ -163,6 +196,7 @@ function zjob_activate() {
 function zjob_deactivate() {
 	wp_clear_scheduled_hook( 'zjob_heartbeat' );
 	wp_clear_scheduled_hook( 'zjob_close_sweep' );
+	wp_clear_scheduled_hook( 'zjob_project_sweep' );
 }
 
 /**
@@ -229,6 +263,12 @@ add_action( 'plugins_loaded', function () {
 		ZJOB_Photos::init();
 	}
 	ZJOB_AJAX::init();
+
+	// B4 — the budgeted "every estimate is a Project" sweep: registers its 15-min schedule +
+	// cron callback and self-heals the event if unscheduled. It NEVER unschedules itself.
+	if ( class_exists( 'Zjob_Project_Sweep' ) ) {
+		Zjob_Project_Sweep::init();
+	}
 
 	// Admin settings screen (Settings -> Zorderz Jobs), incl. the single-operator toggle.
 	// Admin requests only; hooks admin_menu/admin_init so it must register before those fire.

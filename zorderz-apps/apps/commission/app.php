@@ -136,6 +136,7 @@ require_once ZCC_DIR . 'includes/class-zcc-ledger.php';
 require_once ZCC_DIR . 'includes/class-zcc-audit.php';
 require_once ZCC_DIR . 'includes/class-zcc-rep-overrides.php';
 require_once ZCC_DIR . 'includes/class-zcc-calc-engine.php';
+require_once ZCC_DIR . 'includes/class-zcc-coverage.php';
 require_once ZCC_DIR . 'includes/class-zcc-installer-pay.php';
 require_once ZCC_DIR . 'includes/class-zcc-self-test.php';
 require_once ZCC_DIR . 'includes/class-zcc-tsa-bridge.php';

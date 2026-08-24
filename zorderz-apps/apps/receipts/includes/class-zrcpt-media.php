@@ -257,6 +257,128 @@ class ZRCPT_Media {
 		return $out;
 	}
 
+	/* ================================================================
+	 * LOCATION INTEGRITY (geo-PII boundary) — S5-07 / §78
+	 *
+	 * The picker classifies each capture set against the job anchor and hands
+	 * the CLIENT ONLY a categorical status. get_sessions_for_user() returns raw
+	 * session centroids and per-photo GPS (needed server-side to classify) — a
+	 * customer's home coordinates, derived from install photos at a private
+	 * residence (GDPR/CCPA weight). sanitize_sessions_for_client() is the ONE
+	 * gate every AJAX/client path must pass the sessions through: it classifies
+	 * server-side via ZDZ_Media_Location, drops sets the caller must not return,
+	 * and STRIPS every coordinate — so no gps_lat/gps_lng/centroid ever crosses
+	 * to the browser or the public receipt page.
+	 * ================================================================ */
+
+	/**
+	 * Resolve the job's geocoded anchor from the customer record, PRIVACY-FIRST
+	 * and DEFENSIVELY. Prefers coordinates already on the record; otherwise asks
+	 * a forward geocoder (ZDZ_Media_Geocoder::resolve_address) when one exists.
+	 * Returns null when no anchor can be resolved — never invents a property.
+	 * The anchor stays SERVER-SIDE; it is used only to classify, never emitted.
+	 *
+	 * @param array $customer_detail e.g. lookup_data['customer_detail'] (address, lat, lng).
+	 * @return array{lat:float,lng:float}|null
+	 */
+	public static function resolve_anchor( array $customer_detail ): ?array {
+		// 1) Coordinates carried on the customer record (many CRMs store them).
+		$lat = $customer_detail['gps_lat'] ?? $customer_detail['lat'] ?? null;
+		$lng = $customer_detail['gps_lng'] ?? $customer_detail['lng'] ?? ( $customer_detail['lon'] ?? null );
+		if ( is_numeric( $lat ) && is_numeric( $lng ) && ( (float) $lat || (float) $lng ) ) {
+			return array( 'lat' => (float) $lat, 'lng' => (float) $lng );
+		}
+		// 2) Forward geocode the address, if a Core forward geocoder is present.
+		//    (The baseline geocoder is reverse-only; this lights up when the
+		//    forward seam lands — a net compliance improvement, not a dependency.)
+		$address = trim( (string) ( $customer_detail['address'] ?? '' ) );
+		if ( $address !== '' && class_exists( 'ZDZ_Media_Geocoder' ) && method_exists( 'ZDZ_Media_Geocoder', 'resolve_address' ) ) {
+			$anchor = ZDZ_Media_Geocoder::resolve_address( $address );
+			if ( is_array( $anchor ) ) {
+				$a_lat = $anchor['lat'] ?? $anchor['latitude'] ?? null;
+				$a_lng = $anchor['lng'] ?? $anchor['longitude'] ?? null;
+				if ( is_numeric( $a_lat ) && is_numeric( $a_lng ) ) {
+					return array( 'lat' => (float) $a_lat, 'lng' => (float) $a_lng );
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Classify every session against the anchor and return a client-safe copy:
+	 * each session gains `loc_status` (categorical) + `selectable` (bool) and
+	 * LOSES every coordinate (session centroid AND per-photo GPS). Sets the
+	 * caller must not return are dropped:
+	 *   - self mode      : drop only 'dropped' (> candidate radius); 'off_site'
+	 *                      is KEPT but blocked (shown, not selectable).
+	 *   - cross_user mode : a whole-team pull keeps a STRICT drop — anything not
+	 *                       selectable (off_site + dropped) is removed.
+	 *
+	 * @param array      $sessions From get_sessions_for_user()['sessions'].
+	 * @param array|null $anchor   From resolve_anchor(); null => no anchor.
+	 * @param string     $mode     'self' (default) | 'cross_user'.
+	 * @return array Client-safe sessions (no coordinates anywhere).
+	 */
+	public static function sanitize_sessions_for_client( array $sessions, ?array $anchor = null, string $mode = 'self' ): array {
+		$out = array();
+		$have_classifier = class_exists( 'ZDZ_Media_Location' ) && method_exists( 'ZDZ_Media_Location', 'classify' );
+
+		foreach ( $sessions as $s ) {
+			if ( ! is_array( $s ) ) {
+				continue;
+			}
+			// Classify from the centroid BEFORE we strip it. Missing GPS =>
+			// 'unlocated' (always selectable — a missing geotag can't be disproven).
+			$loc_status = 'unlocated';
+			$selectable = true;
+			if ( $have_classifier ) {
+				$centroid = array(
+					'lat' => $s['gps_lat'] ?? null,
+					'lng' => $s['gps_lng'] ?? null,
+				);
+				$verdict    = ZDZ_Media_Location::classify( $centroid, $anchor );
+				$loc_status = (string) ( $verdict['loc_status'] ?? 'unlocated' );
+				$selectable = (bool) ( $verdict['selectable'] ?? true );
+
+				// The caller must NOT return a dropped set to the client at all.
+				if ( method_exists( 'ZDZ_Media_Location', 'is_droppable' ) && ZDZ_Media_Location::is_droppable( $loc_status ) ) {
+					continue;
+				}
+				// A cross-user / whole-team pull keeps a strict drop of anything
+				// off-property (not just > candidate radius).
+				if ( 'cross_user' === $mode && ! $selectable ) {
+					continue;
+				}
+			}
+
+			$out[] = self::strip_coordinates( $s ) + array(
+				'loc_status' => $loc_status,
+				'selectable' => $selectable,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Return a copy of a session with EVERY coordinate removed — the session
+	 * centroid and each photo's GPS. The only geo signal that survives is
+	 * `has_gps` (a boolean fact, not a location). This is the last line before a
+	 * coordinate could reach the client.
+	 */
+	private static function strip_coordinates( array $session ): array {
+		unset( $session['gps_lat'], $session['gps_lng'] );
+		if ( ! empty( $session['photos'] ) && is_array( $session['photos'] ) ) {
+			$session['photos'] = array_map( static function ( $p ) {
+				if ( is_array( $p ) ) {
+					unset( $p['gps_lat'], $p['gps_lng'] );
+				}
+				return $p;
+			}, $session['photos'] );
+		}
+		return $session;
+	}
+
 	/**
 	 * Convenience: resolve the photos for a chosen session id out of a sessions
 	 * payload, returned as the {url,id} shape the generator expects.

@@ -41,9 +41,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ZDZ_Party {
 
 	/**
-	 * Roles that are NEVER a selectable party. zdz_general is the shared-kiosk
-	 * hard floor — the kiosk is a device, not a person, and identity mapping
-	 * excludes it for the same reason.
+	 * Role slugs that are NEVER a selectable party — the shared-kiosk hard floor
+	 * (a kiosk is a device, not a person). Retained as the fail-closed FALLBACK
+	 * input for the shared-device check when ZDZ_User_Roles::is_shared_device() is
+	 * unavailable; the trait (capability-first, relabel-safe) is the primary gate.
 	 */
 	const NEVER_PARTY_ROLES = array( 'zdz_general' );
 
@@ -138,7 +139,13 @@ class ZDZ_Party {
 		$base = array();
 		foreach ( $users as $user ) {
 			$roles = (array) $user->roles;
-			if ( array_intersect( $roles, self::NEVER_PARTY_ROLES ) ) {
+			// Shared-device exclusion by TRAIT, not a bare slug match: consult the
+			// canonical predicate when present, fall back to the slug otherwise.
+			// Fail-closed either way — a shared kiosk is a device, never a party.
+			$is_shared = ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) )
+				? ZDZ_User_Roles::is_shared_device( (int) $user->ID )
+				: (bool) array_intersect( $roles, self::NEVER_PARTY_ROLES );
+			if ( $is_shared ) {
 				continue; // shared kiosk is never a party
 			}
 			if ( ! self::is_active( $user ) ) {

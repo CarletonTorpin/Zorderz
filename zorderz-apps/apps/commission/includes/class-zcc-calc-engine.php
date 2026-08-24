@@ -476,4 +476,166 @@ class ZCC_Calc_Engine {
 		}
 		return false;
 	}
+
+	/* ==================================================================
+	 * COVERAGE TELEMETRY  (observability — NEVER a pay path)
+	 *
+	 * The two methods below are ADDITIVE and PURE. Nothing above this line
+	 * calls them, so the deterministic money engine (calculate / process_invoice
+	 * / apply_commission_structure / apply_tiered / apply_product_minimums) is
+	 * byte-for-byte unchanged and every ledger dollar is identical. build_coverage
+	 * is a leaf read-only counter the caller runs AFTER the money is computed; it
+	 * cannot change a payout. GUARD RAIL: it may read only COUNTS and one
+	 * unassigned-revenue total — it must NEVER read a rate, tier, piece rate,
+	 * minimum, or COGS (those are the most sensitive data in the platform).
+	 * ================================================================== */
+
+	/**
+	 * Coverage telemetry — a PURE, read-only snapshot of attribution completeness.
+	 *
+	 * Same $ctx in ⇒ same array out; no I/O, no globals, no side effects. It reads
+	 * only: the PRESENCE of attribution codes (attributed vs not), one coverage
+	 * revenue figure per row (summed ONLY into the unassigned bucket), the two
+	 * dates (for the lookback gauge), an optional bare-initials shadow candidate,
+	 * and an optional unknown-line count. It never reads a rate or a cost, and it
+	 * resolves no code to a person, so it cannot surface an individual's pay.
+	 *
+	 * $ctx = [
+	 *   'invoices'      => array<int, array{ codes?:string[], revenue?:float,
+	 *                        attributed_party?:int, date_completed?:string,
+	 *                        date_paid?:string, unknown_lines?:int,
+	 *                        shadow_candidate?:string }>,
+	 *   'lookback_days' => int,     // caller applies apply_filters('zcc_payment_lookback_days',75)
+	 *   'as_of'         => string,  // 'YYYY-MM-DD' reference date for the gap gauge
+	 *   'target_party'  => int,     // optional rep this run is "for" (0 = aggregate)
+	 * ]
+	 *
+	 * @return array{ fetched:int, attributed:int, unattributed:int,
+	 *   unattributed_rev:float, other_reps:int, shadow_ready:int,
+	 *   unknown_lines:int, lookback_days:int, gap_near_floor:int,
+	 *   gap_over_floor:int, max_gap_days:int }
+	 */
+	public static function build_coverage( array $ctx ): array {
+		$rows     = isset( $ctx['invoices'] ) && is_array( $ctx['invoices'] ) ? $ctx['invoices'] : [];
+		$lookback = max( 0, (int) ( $ctx['lookback_days'] ?? 0 ) );
+		$as_of    = isset( $ctx['as_of'] ) ? self::coverage_day( (string) $ctx['as_of'] ) : null;
+		$target   = (int) ( $ctx['target_party'] ?? 0 );
+		$near_lo  = (int) floor( $lookback * 0.8 );
+
+		$fetched = 0; $attributed = 0; $unattributed = 0; $unassigned_rev = 0.0;
+		$other_reps = 0; $shadow_ready = 0; $unknown = 0;
+		$near = 0; $over = 0; $max_gap = 0;
+
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$fetched++;
+
+			// COUNTS ONLY: the presence of a resolvable rep code ⇒ attributed. We
+			// read that a code exists, never a rate it might map to.
+			$codes    = isset( $row['codes'] ) && is_array( $row['codes'] ) ? array_filter( array_map( 'strval', $row['codes'] ), 'strlen' ) : [];
+			$has_code = ! empty( $codes );
+
+			if ( $has_code ) {
+				$attributed++;
+				$party = (int) ( $row['attributed_party'] ?? 0 );
+				if ( $target > 0 && $party > 0 && $party !== $target ) {
+					$other_reps++;
+				}
+			} else {
+				$unattributed++;
+				// The ONE revenue figure this surface reports: company-wide revenue
+				// with no rep code. A coverage number, not comp/COGS. Admin-only.
+				$unassigned_rev += (float) ( $row['revenue'] ?? 0 );
+				// A bare-initials shadow candidate on an otherwise-unattributed
+				// invoice is "shadow_ready": Tier-2 WOULD attribute it if it went live.
+				if ( trim( (string) ( $row['shadow_candidate'] ?? '' ) ) !== '' ) {
+					$shadow_ready++;
+				}
+			}
+
+			$unknown += max( 0, (int) ( $row['unknown_lines'] ?? 0 ) );
+
+			// Lookback gauge: how far past issue did payment land? An invoice paid
+			// more than `lookback` days after issue is one the payment-basis
+			// over-fetch can miss entirely — the one place an invoice vanishes.
+			$gap = self::coverage_gap_days( $row, $as_of );
+			if ( $gap !== null ) {
+				if ( $gap > $max_gap ) {
+					$max_gap = $gap;
+				}
+				if ( $lookback > 0 && $gap > $lookback ) {
+					$over++;
+				} elseif ( $lookback > 0 && $gap >= $near_lo ) {
+					$near++;
+				}
+			}
+		}
+
+		return [
+			'fetched'          => $fetched,
+			'attributed'       => $attributed,
+			'unattributed'     => $unattributed,
+			'unattributed_rev' => round( $unassigned_rev, 2 ),
+			'other_reps'       => $other_reps,
+			'shadow_ready'     => $shadow_ready,
+			'unknown_lines'    => $unknown,
+			'lookback_days'    => $lookback,
+			'gap_near_floor'   => $near,
+			'gap_over_floor'   => $over,
+			'max_gap_days'     => $max_gap,
+		];
+	}
+
+	/**
+	 * Format a coverage snapshot as one debug line: `[ZCC coverage] ...`. PURE —
+	 * returns the string; the caller decides whether to log it (WP_DEBUG only,
+	 * never a customer/kiosk/AI surface). Counts + the single unassigned-revenue
+	 * total; NO per-person figure and NO rate.
+	 */
+	public static function coverage_log_line( array $c ): string {
+		return sprintf(
+			'[ZCC coverage] fetched=%d attributed=%d unattributed=%d unassigned_rev=%.2f other_reps=%d shadow_ready=%d unknown_lines=%d lookback=%dd near_floor=%d over_floor=%d max_gap=%dd',
+			(int) ( $c['fetched'] ?? 0 ),
+			(int) ( $c['attributed'] ?? 0 ),
+			(int) ( $c['unattributed'] ?? 0 ),
+			(float) ( $c['unattributed_rev'] ?? 0 ),
+			(int) ( $c['other_reps'] ?? 0 ),
+			(int) ( $c['shadow_ready'] ?? 0 ),
+			(int) ( $c['unknown_lines'] ?? 0 ),
+			(int) ( $c['lookback_days'] ?? 0 ),
+			(int) ( $c['gap_near_floor'] ?? 0 ),
+			(int) ( $c['gap_over_floor'] ?? 0 ),
+			(int) ( $c['max_gap_days'] ?? 0 )
+		);
+	}
+
+	/** Parse a leading 'YYYY-MM-DD' to a whole day number (UTC epoch days), or null. PURE + timezone-independent. */
+	private static function coverage_day( string $date ): ?int {
+		$date = trim( $date );
+		if ( $date === '' ) {
+			return null;
+		}
+		if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})/', $date, $m ) ) {
+			$ts = gmmktime( 0, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1] );
+			return $ts === false ? null : (int) floor( $ts / 86400 );
+		}
+		return null;
+	}
+
+	/** Payment lag in whole days for one coverage row (paid − issue; falls back to as_of when unpaid). PURE. */
+	private static function coverage_gap_days( array $row, ?int $as_of ): ?int {
+		$issue = self::coverage_day( (string) ( $row['date_completed'] ?? '' ) );
+		if ( $issue === null ) {
+			return null;
+		}
+		$paid = self::coverage_day( (string) ( $row['date_paid'] ?? '' ) );
+		$end  = $paid !== null ? $paid : $as_of;
+		if ( $end === null ) {
+			return null;
+		}
+		$gap = $end - $issue;
+		return $gap > 0 ? $gap : 0;
+	}
 }

@@ -118,6 +118,38 @@ class ZSCH_REST {
 			),
 		) );
 
+		// ── v1.9.0 Schedule-Job handoff (intake) ───────────────────────
+		// A launch carries context, never authority: POST {ns, ref_id}; the server
+		// composes a prefill + free-slot suggestions and returns an OPAQUE token.
+		// The origin never travels back to the client.
+		register_rest_route( ZDZ_REST_NS . self::ROUTE_BASE, '/intake', array(
+			'methods'             => $write,
+			'callback'            => array( __CLASS__, 'intake' ),
+			'permission_callback' => array( __CLASS__, 'can_write' ),
+		) );
+
+		// ── v1.9.0 Participants (real ZDZ_Party on an event) ───────────
+		// GET current participants; POST {user_ids:[…]} to add (gated as an edit);
+		// DELETE a participant. Its own rate bucket on the write paths.
+		register_rest_route( ZDZ_REST_NS . self::ROUTE_BASE, '/events/(?P<id>\d+)/participants', array(
+			array(
+				'methods'             => $read,
+				'callback'            => array( __CLASS__, 'list_participants' ),
+				'permission_callback' => array( __CLASS__, 'can_read' ),
+			),
+			array(
+				'methods'             => $write,
+				'callback'            => array( __CLASS__, 'add_participants' ),
+				'permission_callback' => array( __CLASS__, 'can_write' ),
+			),
+		) );
+
+		register_rest_route( ZDZ_REST_NS . self::ROUTE_BASE, '/events/(?P<id>\d+)/participants/(?P<user_id>\d+)', array(
+			'methods'             => 'DELETE',
+			'callback'            => array( __CLASS__, 'remove_participant' ),
+			'permission_callback' => array( __CLASS__, 'can_write' ),
+		) );
+
 		register_rest_route( ZDZ_REST_NS . self::ROUTE_BASE, '/availability', array(
 			array(
 				'methods'             => $read,
@@ -264,7 +296,18 @@ class ZSCH_REST {
 			return self::rate_limited( $rl );
 		}
 		if ( self::hidden() ) { return self::not_available(); }
-		$res = ZSCH_Appointments::create( get_current_user_id(), self::event_input( $req ) );
+		$uid = (int) get_current_user_id();
+		// The handoff ORIGIN rides ONLY the signed intake token — never the request
+		// body (INV-1). Claim it here (single-use, single-user); a body-supplied
+		// origin is ignored by construction (event_input() reads no ns/ref/origin).
+		// The receiver still re-derives its own gate: the born-linked write re-runs
+		// Jobs' two fail-closed gates (on_created → attach()).
+		$origin = array();
+		$token  = (string) $req->get_param( 'intake_token' );
+		if ( '' !== $token && class_exists( 'Zsch_Intake' ) ) {
+			$origin = Zsch_Intake::claim( $token, $uid );
+		}
+		$res = ZSCH_Appointments::create( $uid, self::event_input( $req ), $origin );
 		return self::respond( $res );
 	}
 
@@ -278,6 +321,112 @@ class ZSCH_REST {
 		if ( self::hidden() ) { return self::not_available(); }
 		$res = ZSCH_Appointments::delete( get_current_user_id(), (int) $req['id'] );
 		return self::respond( $res );
+	}
+
+	// ── Schedule-Job handoff (v1.9.0) ──────────────────────────────
+
+	/**
+	 * POST /scheduler/intake { ns, ref_id } — compose a prefill + free-slot
+	 * suggestions from the origin and return an opaque single-user token. The
+	 * origin never travels back to the client. Own rate bucket.
+	 */
+	public static function intake( WP_REST_Request $req ) {
+		$rl = self::rate_gate( 'intake', 60, 3600 );
+		if ( $rl > 0 ) {
+			return self::rate_limited( $rl );
+		}
+		if ( self::hidden() ) { return self::not_available(); }
+		if ( ! class_exists( 'Zsch_Intake' ) ) {
+			return rest_ensure_response( array( 'ok' => false, 'error' => 'unavailable' ) );
+		}
+		return rest_ensure_response( Zsch_Intake::rest_intake( $req ) );
+	}
+
+	// ── Participants (v1.9.0) ──────────────────────────────────────
+
+	/**
+	 * GET /scheduler/events/{id}/participants — the current participants for an
+	 * event the viewer may see. The candidate PICKER is the platform Party roster
+	 * (GET zorderz/v1/party/people); this returns only who is already on the event.
+	 */
+	public static function list_participants( WP_REST_Request $req ) {
+		if ( self::hidden() ) { return self::not_available(); }
+		if ( ! class_exists( 'ZSCH_Participants' ) ) {
+			return self::not_available();
+		}
+		$appt_id = (int) $req['id'];
+		// Per-object visibility: the viewer must be able to SEE this event (owner,
+		// admin, shared, or already a participant) before its roster is listed.
+		if ( ! self::viewer_may_see( $appt_id, (int) get_current_user_id() ) ) {
+			return self::not_available(); // 404 — never confirm an id the viewer can't see.
+		}
+		return rest_ensure_response( array(
+			'participants' => ZSCH_Participants::list_for( $appt_id ),
+			'me'           => (int) get_current_user_id(),
+		) );
+	}
+
+	/**
+	 * POST /scheduler/events/{id}/participants { user_ids:[…] } — add participants
+	 * (gated as an EDIT inside the model: IDOR re-gate per object). Own rate bucket.
+	 */
+	public static function add_participants( WP_REST_Request $req ) {
+		$rl = self::rate_gate( 'part_add', 60, 3600 );
+		if ( $rl > 0 ) {
+			return self::rate_limited( $rl );
+		}
+		if ( self::hidden() ) { return self::not_available(); }
+		if ( ! class_exists( 'ZSCH_Participants' ) ) {
+			return self::not_available();
+		}
+		$ids = $req->get_param( 'user_ids' );
+		if ( ! is_array( $ids ) ) {
+			$ids = ( '' !== (string) $ids ) ? explode( ',', (string) $ids ) : array();
+		}
+		$res = ZSCH_Participants::add( (int) get_current_user_id(), (int) $req['id'], array_map( 'intval', (array) $ids ) );
+		return rest_ensure_response( $res );
+	}
+
+	/**
+	 * DELETE /scheduler/events/{id}/participants/{user_id} — remove a participant
+	 * (gated as an edit inside the model).
+	 */
+	public static function remove_participant( WP_REST_Request $req ) {
+		$rl = self::rate_gate( 'part_del', 60, 3600 );
+		if ( $rl > 0 ) {
+			return self::rate_limited( $rl );
+		}
+		if ( self::hidden() ) { return self::not_available(); }
+		if ( ! class_exists( 'ZSCH_Participants' ) ) {
+			return self::not_available();
+		}
+		$res = ZSCH_Participants::remove( (int) get_current_user_id(), (int) $req['id'], (int) $req['user_id'] );
+		return rest_ensure_response( $res );
+	}
+
+	/**
+	 * Per-object visibility for the participants read: owner, admin, shared event,
+	 * or an existing participant. Fail-closed. Uses the model's own get_raw() +
+	 * participant check so no visibility rule is re-implemented here.
+	 */
+	private static function viewer_may_see( int $appt_id, int $viewer ): bool {
+		if ( $appt_id <= 0 || $viewer <= 0 || ! is_callable( array( 'ZSCH_Appointments', 'get_raw' ) ) ) {
+			return false;
+		}
+		$raw = ZSCH_Appointments::get_raw( $appt_id );
+		if ( ! is_array( $raw ) || ! empty( $raw['deleted_at'] ) ) {
+			return false;
+		}
+		if ( 'shared' === ( $raw['calendar_scope'] ?? '' ) ) {
+			return true;
+		}
+		if ( (int) ( $raw['owner_user_id'] ?? 0 ) === $viewer || (int) ( $raw['created_by'] ?? 0 ) === $viewer ) {
+			return true;
+		}
+		if ( is_callable( array( 'ZSCH_Appointments', 'viewer_is_admin' ) ) && ZSCH_Appointments::viewer_is_admin( $viewer ) ) {
+			return true;
+		}
+		return ZSCH_Participants::is_participant( $appt_id, $viewer );
 	}
 
 	// ── availability ───────────────────────────────────────────────

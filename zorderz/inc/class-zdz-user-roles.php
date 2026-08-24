@@ -14,10 +14,13 @@
  *   TECH      (zdz_tech)     — Field staff: field-only tools.
  *   GENERAL   (zdz_general)  — Shared device. Least privilege by design.
  *
- * NOTE: several slugs are matched as literal strings elsewhere in the platform
- * (most importantly the shared-device privacy check). Renaming one without
- * running ZDZ_Rename_Migration will disable those checks silently rather than
- * raising an error. Change labels freely; change slugs only via the migration.
+ * NOTE: several slugs are matched as literal strings elsewhere in the platform.
+ * The most sensitive of those — the shared-device (kiosk) privacy check — now
+ * resolves through the ZDZ_User_Roles::is_shared_device() TRAIT (a capability
+ * first, with the slug consulted only as one back-compat input), so a role
+ * RELABEL no longer disables it. Any remaining direct slug match still relies on
+ * the slug being stable: change labels freely; change slugs only via the
+ * migration (ZDZ_Rename_Migration), which also carries the trait capability.
  *
  * @package Zorderz
  */
@@ -142,6 +145,50 @@ class ZDZ_User_Roles {
 		return in_array( $role, [ 'administrator', 'zdz_owner', 'zdz_admin' ], true );
 	}
 
+	/**
+	 * The platform's shared-device (kiosk) role slug. Kept as ONE input to the
+	 * shared-device trait for back-compat; never the sole security test.
+	 */
+	const SHARED_DEVICE_ROLE = 'zdz_general';
+
+	/**
+	 * The first-class shared-device capability/trait. Granted on the shared-device
+	 * role at activation, so the kiosk privacy check survives a role RELABEL (the
+	 * label is the business's to name; this trait and the slug are the platform's).
+	 */
+	const SHARED_DEVICE_CAP = 'zdz_is_shared_device';
+
+	/**
+	 * Is this user a shared-device (kiosk) identity?
+	 *
+	 * Security by TRAIT, not by role-slug string match: the capability is the
+	 * primary signal; the platform's shared-device role slug is consulted as ONE
+	 * additional back-compat input. The shared-device profile is the platform's
+	 * most-restrictive identity, so every consumer treats a `true` return as the
+	 * MORE-restrictive path — this predicate is therefore fail-closed by design:
+	 * a genuine "has neither the trait nor the slug" resolves false (matching the
+	 * prior behaviour exactly), while callers themselves fall back to the raw slug
+	 * (still restrictive) when this class/method is unavailable.
+	 *
+	 * @param int $uid
+	 * @return bool
+	 */
+	public static function is_shared_device( int $uid ): bool {
+		if ( $uid <= 0 ) {
+			return false;
+		}
+		// Primary signal: the capability/trait (survives a role relabel).
+		if ( user_can( $uid, self::SHARED_DEVICE_CAP ) ) {
+			return true;
+		}
+		// Back-compat input: the shared-device role slug (one input, not the sole test).
+		$user = get_userdata( $uid );
+		if ( $user && in_array( self::SHARED_DEVICE_ROLE, (array) $user->roles, true ) ) {
+			return true;
+		}
+		return false;
+	}
+
 	public static function init() {
 		add_action( 'user_register', [ __CLASS__, 'set_default_apps' ] );
 	}
@@ -184,6 +231,16 @@ class ZDZ_User_Roles {
 			if ( $role ) {
 				$role->add_cap( 'zdz_access_app' );
 			}
+		}
+
+		// Grant the shared-device TRAIT as a capability on the shared-device role,
+		// so the kiosk / privacy checks that consult is_shared_device() keep working
+		// after a role RELABEL. Re-applied every activation (same pattern as
+		// zdz_access_app above), so the def-sync remove loop can never strip it for
+		// good. The slug stays one input to the trait; this capability is the other.
+		$shared = get_role( self::SHARED_DEVICE_ROLE );
+		if ( $shared ) {
+			$shared->add_cap( self::SHARED_DEVICE_CAP );
 		}
 	}
 

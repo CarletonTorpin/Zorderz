@@ -8,6 +8,9 @@ class ZDZ_Plugin_API {
 	private static $instance = null;
 	private $apps = null;
 
+	/** App ids declined at boot (a declared hot-path class was undefined) => missing[]. */
+	private static $unavailable = [];
+
 	public static function get_instance() {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -36,13 +39,98 @@ class ZDZ_Plugin_API {
 					// or load in a different order.
 					$config = $app->get_config();
 					$app_id = $config['id'] ?? null;
-					if ( $app_id ) {
-						$this->apps[ $app_id ] = $app;
+					if ( ! $app_id ) {
+						continue;
 					}
+					// AC3 boot fail-loud: an app that registered its tile but whose
+					// declared hot-path class never loaded (the §74 "partial zip") must
+					// NOT render — it would fatal on the first call at wp_head. Decline
+					// it gracefully: log a disposition + admin notice and skip, so no
+					// half-wired tile appears. A complete install is unaffected (no app
+					// declares a class it does not ship, so the miss list is empty).
+					$missing = self::missing_declared_classes( $app_id, $config );
+					if ( ! empty( $missing ) ) {
+						self::$unavailable[ $app_id ] = $missing;
+						do_action( 'zdz_disposition', 'app_manifest', [ 'app' => $app_id, 'missing' => $missing ] );
+						self::notice_app_unavailable( $app_id, $config, $missing );
+						continue;
+					}
+					$this->apps[ $app_id ] = $app;
 				}
 			}
 		}
 		return $this->apps;
+	}
+
+	/**
+	 * Was app <app_id> available at boot? False once it has been declined because a
+	 * declared hot-path class was undefined (a half-installed / partial-zip app).
+	 * Other surfaces (tiles, gates) can consult this to stay consistent with the skip.
+	 */
+	public static function is_app_available( string $app_id ): bool {
+		self::get_instance()->get_all_apps(); // ensure the boot assertion has run.
+		return ! isset( self::$unavailable[ $app_id ] );
+	}
+
+	/**
+	 * The declared hot-path classes an app registers with that are NOT defined. An app
+	 * may declare them inline in its config ('classes'/'requires_classes' — future apps
+	 * and connections packs), and Core seeds/filters a per-id map (code metadata only —
+	 * no business literal) via `zdz_app_required_classes`. Empty result = all present.
+	 *
+	 * @return string[] Missing class names (empty when the app is complete).
+	 */
+	private static function missing_declared_classes( string $app_id, array $config ): array {
+		$declared = [];
+		foreach ( [ 'classes', 'requires_classes' ] as $k ) {
+			if ( ! empty( $config[ $k ] ) && is_array( $config[ $k ] ) ) {
+				$declared = array_merge( $declared, $config[ $k ] );
+			}
+		}
+		$map = apply_filters( 'zdz_app_required_classes', self::default_required_classes() );
+		if ( isset( $map[ $app_id ] ) && is_array( $map[ $app_id ] ) ) {
+			$declared = array_merge( $declared, $map[ $app_id ] );
+		}
+		$missing = [];
+		foreach ( array_unique( $declared ) as $cls ) {
+			$cls = (string) $cls;
+			if ( '' !== $cls && ! class_exists( $cls ) && ! interface_exists( $cls ) && ! trait_exists( $cls ) ) {
+				$missing[] = $cls;
+			}
+		}
+		return $missing;
+	}
+
+	/**
+	 * Core-seeded hot-path class map (keyed by the app's config id). Declares the
+	 * classes that MUST exist once each app has registered, so a partial install is
+	 * caught here instead of fataling at wp_head. Purely declarative code metadata;
+	 * the build-time gate in build.sh mirrors it. Extend as apps declare more.
+	 */
+	private static function default_required_classes(): array {
+		return [
+			'sales-analytics' => [ 'ZANA_Chat', 'ZANA_Prompt_Builder', 'ZANA_Markers' ],
+			'surveys'         => [ 'ZSV_Survey_Manager', 'ZSV_DB' ],
+		];
+	}
+
+	/** Queue a one-line admin notice that a partially-installed app was disabled. */
+	private static function notice_app_unavailable( string $app_id, array $config, array $missing ): void {
+		$label = (string) ( $config['nm'] ?? $config['name'] ?? $app_id );
+		add_action(
+			'admin_notices',
+			static function () use ( $label, $missing ) {
+				printf(
+					'<div class="notice notice-error"><p><strong>Zorderz:</strong> %s</p></div>',
+					esc_html( sprintf(
+						/* translators: 1: app label, 2: missing class name(s) */
+						__( 'The %1$s app is partially installed — %2$s is missing — and has been disabled to protect the site.', 'zorderz' ),
+						$label,
+						implode( ', ', $missing )
+					) )
+				);
+			}
+		);
 	}
 
 	/**

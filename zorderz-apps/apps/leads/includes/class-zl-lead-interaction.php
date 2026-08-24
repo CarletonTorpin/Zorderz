@@ -39,14 +39,33 @@ class ZL_Lead_Interaction {
 		add_action( 'wp_ajax_zl_mark_forward_complete', array( $this, 'ajax_mark_forward_complete' ) );
 		add_action( 'wp_ajax_zl_get_team_members',      array( $this, 'ajax_get_team_members' ) );
 
-		// Stale batch cleanup cron
+		// Stale batch cleanup cron.
+		//
+		// ORDER IS LOAD-BEARING: the custom interval must be registered on
+		// `cron_schedules` BEFORE wp_schedule_event() runs, or core cannot
+		// resolve 'fifteen_minutes', returns false silently, and the event
+		// never schedules (re-failing on every page load). Filter first,
+		// then schedule.
+		add_filter( 'cron_schedules', array( $this, 'add_cron_intervals' ) );
+
 		add_action( 'zl_cleanup_stale_batches', array( $this, 'cleanup_stale_batches' ) );
 		if ( ! wp_next_scheduled( 'zl_cleanup_stale_batches' ) ) {
-			wp_schedule_event( time(), 'fifteen_minutes', 'zl_cleanup_stale_batches' );
+			// time()+300, not time(): don't fire the reaper during activation/boot.
+			$scheduled = wp_schedule_event( time() + 300, 'fifteen_minutes', 'zl_cleanup_stale_batches' );
+			if ( false === $scheduled ) {
+				// An hourly reaper that runs beats a 15-minute one that doesn't.
+				$scheduled = wp_schedule_event( time() + 300, 'hourly', 'zl_cleanup_stale_batches' );
+			}
+			if ( false === $scheduled ) {
+				// Nothing silent: surface the scheduling failure as a disposition.
+				if ( function_exists( 'do_action' ) ) {
+					do_action( 'zdz_flow_disposition', 'leads_reaper', 'schedule_failed', array(
+						'event' => 'zl_cleanup_stale_batches',
+					) );
+				}
+				error_log( '[ZL_Lead_Interaction] failed to schedule zl_cleanup_stale_batches (fifteen_minutes and hourly both refused).' );
+			}
 		}
-
-		// Register custom cron interval
-		add_filter( 'cron_schedules', array( $this, 'add_cron_intervals' ) );
 	}
 
 	/**
@@ -411,13 +430,17 @@ class ZL_Lead_Interaction {
 	public function cleanup_stale_batches() {
 		global $wpdb;
 
+		// Timezone basis: the batch rows are written with current_time('mysql', true)
+		// (UTC — see :454 and update_batch_progress()), so the age comparison reads
+		// against UTC_TIMESTAMP(), NOT server-local NOW(). Using NOW() here would be
+		// off by the server's UTC offset on any host whose MySQL session isn't UTC.
 		$stale = $wpdb->get_results(
 			"SELECT id FROM {$wpdb->prefix}zl_batches
 			 WHERE status IN ('generating', 'running')
 			 AND (
-			     (updated_at IS NOT NULL AND updated_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE))
+			     (updated_at IS NOT NULL AND updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE))
 			     OR
-			     (updated_at IS NULL AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE))
+			     (updated_at IS NULL AND created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE))
 			 )",
 			ARRAY_A
 		);

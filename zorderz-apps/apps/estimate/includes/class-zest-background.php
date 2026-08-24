@@ -62,6 +62,12 @@ class ZEST_Background {
 			if ( in_array( $kind, array( 'estimate', 'invoice' ), true ) ) {
 				$ctx['kind'] = $kind;
 			}
+		} elseif ( 'modify' === $mode ) {
+			// E6 — a photographed update: transcribe + apply_modification off the request.
+			$ctx['mode']            = 'modify';
+			$ctx['estimate_number'] = isset( $_POST['estimate_number'] ) ? sanitize_text_field( wp_unslash( $_POST['estimate_number'] ) ) : '';
+			$ctx['estimate_id']     = isset( $_POST['estimate_id'] ) ? (int) $_POST['estimate_id'] : 0;
+			$ctx['instruction']     = isset( $_POST['instruction'] ) ? wp_kses_post( wp_unslash( $_POST['instruction'] ) ) : '';
 		}
 
 		$wpdb->insert( ZEST_DB::jobs_table(), array(
@@ -115,6 +121,18 @@ class ZEST_Background {
 		if ( 'import' === ( $ctx['mode'] ?? '' ) ) {
 			// Verbatim import parse: returns { ok, doc, warnings, error } — no pricing.
 			$result = $engine->parse_document( (string) $row['input_text'], $ctx );
+		} elseif ( 'modify' === ( $ctx['mode'] ?? '' ) && class_exists( 'ZEST_Dashboard' ) && method_exists( 'ZEST_Dashboard', 'compute_update_preview' ) ) {
+			// E6 — vision-on-update, symmetric with create: transcribe the photo(s) and run
+			// apply_modification (lock + conflict + guards) to a PREVIEW + confirm_hash. The
+			// widget then confirms via zest_update (phase 2). Writes nothing here.
+			$result = ZEST_Dashboard::compute_update_preview( array(
+				'estimate_number' => (string) ( $ctx['estimate_number'] ?? '' ),
+				'estimate_id'     => (int) ( $ctx['estimate_id'] ?? 0 ),
+				'instruction'     => (string) ( $ctx['instruction'] ?? '' ),
+				'image_urls'      => $images,
+				'confirm_hash'    => '',
+				'doc'             => null,
+			), (int) $row['user_id'] );
 		} elseif ( ! empty( $images ) ) {
 			$result = $engine->parse_vision( $images, $ctx );
 		} else {

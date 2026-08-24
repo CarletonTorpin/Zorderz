@@ -69,9 +69,16 @@
 	function digits(s) { return String(s == null ? '' : s).replace(/[^\d+]/g, ''); }
 
 	/* Deep-link an address to the native maps app for turn-by-turn directions.
+	   v1.6.2 (D-01): delegates to the ONE shared helper window.zdzMapsUrl() (theme
+	   app.js) so the Apple/Google map-URL rule can't drift across surfaces; the
+	   dossier wants DIRECTIONS (daddr / dir), so it passes { directions: true }.
+	   Falls back to the same rule inline when the shared helper is not on the page.
 	   Apple platforms (iPhone/iPad/Mac) -> Apple Maps daddr; everyone else ->
 	   Google Maps dir/?api=1&destination. Empty address -> ''. */
 	function mapsHref(addr) {
+		if (typeof window !== 'undefined' && typeof window.zdzMapsUrl === 'function') {
+			return window.zdzMapsUrl(addr, { directions: true });
+		}
 		var q = encodeURIComponent(String(addr == null ? '' : addr).trim());
 		if (!q) { return ''; }
 		var ua = navigator.userAgent || '';

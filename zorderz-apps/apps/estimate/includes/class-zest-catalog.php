@@ -68,6 +68,24 @@ class ZEST_Catalog {
 		return is_array( $m ) ? $m : null;
 	}
 
+	/**
+	 * Detect mutually-exclusive trait pairs in the input (create/update/vision paths).
+	 * Thin adapter over ZDZ_Item_Engine::detect_conflicts — the static class when loaded,
+	 * else the `zdz_item_detect_conflicts` mirror, so the app has no hard class dependency.
+	 * Empty conflict-pairs config (Core default) => no conflicts, output unchanged.
+	 *
+	 * @return array{ conflicts:array, needs_review:bool }
+	 */
+	public static function detect_conflicts( string $text, array $items = array() ): array {
+		$neutral = array( 'conflicts' => array(), 'needs_review' => false );
+		if ( class_exists( 'ZDZ_Item_Engine' ) && method_exists( 'ZDZ_Item_Engine', 'detect_conflicts' ) ) {
+			$r = ZDZ_Item_Engine::detect_conflicts( $text, $items );
+			return is_array( $r ) ? array_merge( $neutral, $r ) : $neutral;
+		}
+		$r = apply_filters( 'zdz_item_detect_conflicts', null, $text, $items );
+		return is_array( $r ) ? array_merge( $neutral, $r ) : $neutral;
+	}
+
 	/** One item by id, or null. */
 	public static function get( string $item_id ): ?array {
 		if ( '' === $item_id ) {

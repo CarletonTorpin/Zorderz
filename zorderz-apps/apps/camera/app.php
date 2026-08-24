@@ -2,7 +2,17 @@
 /**
  * Plugin Name: Zorderz Camera
  * Description: Camera and photo capture for Zorderz Field OS. Photos saved to ZDZ_User_Media for cross-app use.
- * Version: 1.7.4
+ * Version: 1.10.0
+ * == 1.10.0 == ASSET CACHE-BUST (version-only). No functional delta found for
+ *   1.8.1 → 1.10.0 in the S8 analysis (S8-10): these releases have no dedicated
+ *   Bible section. The §47 architecture wave (1.7.4 → 1.8.1: queue-first capture,
+ *   geotagging, and the photo-saved event Jobs matches on) is already present in
+ *   this baseline (durable IndexedDB + Background-Sync queue, capture_uid
+ *   idempotency, geo_source='device_fallback' provenance, EXIF-arg forwarding;
+ *   the client-side `zcam_photo_saved` CustomEvent is dispatched at widget.js).
+ *   Per the DEVICE-DIFF / DON'T-INVENT rule, the constant is advanced to the
+ *   current-on-disk target with no fabricated feature; the bump cache-busts the
+ *   asset banner. No behaviour change; no DB change.
  * == 1.7.4 == DOC-ONLY (no behavior change): documented, at the capture save
  *   path, that a new photo intentionally defaults to privacy='private' and that
  *   'private' on this platform already means "the uploader AND any admin can
@@ -326,7 +336,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'ZCAM_VERSION', '1.7.4' );
+define( 'ZCAM_VERSION', '1.10.0' );
 define( 'ZCAM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZCAM_NONCE', 'zcam_nonce_v1' );
 
