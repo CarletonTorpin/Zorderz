@@ -459,7 +459,7 @@ class ZDZ_Magic_Link_Bridge {
 			$redirect_to,
 			$requested,
 			self::is_ios_device() ? 'yes' : 'no',
-			isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( $_SERVER['HTTP_USER_AGENT'], 0, 80 ) : 'n/a'
+			isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 80 ) : 'n/a'
 		) );
 
 		// Parse out any request_id from the redirect URL — check both
@@ -472,7 +472,7 @@ class ZDZ_Magic_Link_Bridge {
 		// pass the redirect_to params through the query string on the callback
 		// page rather than in the login_redirect filter arguments.
 		if ( ! empty( $_GET['zdz_bridge_request_id'] ) ) {
-			$request_id = sanitize_text_field( $_GET['zdz_bridge_request_id'] );
+			$request_id = sanitize_text_field( wp_unslash( $_GET['zdz_bridge_request_id'] ) );
 		}
 
 		if ( ! $request_id ) {
@@ -579,7 +579,7 @@ class ZDZ_Magic_Link_Bridge {
 	 * @return bool
 	 */
 	public static function is_ios_device() {
-		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? $_SERVER['HTTP_USER_AGENT'] : '';
+		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 		return (bool) preg_match( '/iPhone|iPad|iPod/', $ua );
 	}
 
@@ -593,7 +593,7 @@ class ZDZ_Magic_Link_Bridge {
 	 * @return string
 	 */
 	private static function rate_limit_ip(): string {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '0.0.0.0';
 		$ip = (string) apply_filters( 'zdz_magic_link_rate_limit_ip', $ip );
 		return sanitize_text_field( $ip );
 	}
@@ -613,7 +613,7 @@ class ZDZ_Magic_Link_Bridge {
 		];
 		foreach ( $headers as $header ) {
 			if ( ! empty( $_SERVER[ $header ] ) ) {
-				$ip = sanitize_text_field( $_SERVER[ $header ] );
+				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
 				// X-Forwarded-For may contain multiple IPs
 				if ( strpos( $ip, ',' ) !== false ) {
 					$ip = trim( explode( ',', $ip )[0] );
@@ -993,15 +993,15 @@ class ZDZ_Magic_Link_Bridge {
 		if ( ! self::has_magic_login() ) {
 			return;
 		}
-		if ( empty( $_POST ) ) {
+		if ( empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Hooks Magic Login Pro's own form submit (which carries and verifies its nonce); this pass only pre-maps an alias address in $_POST to the canonical account email before that plugin authenticates.
 			return;
 		}
 		$fields = (array) apply_filters( 'zdz_login_alias_fields', [ 'log', 'user_login', 'email' ] );
 		foreach ( $fields as $field ) {
-			if ( ! is_string( $field ) || empty( $_POST[ $field ] ) || ! is_string( $_POST[ $field ] ) ) {
+			if ( ! is_string( $field ) || empty( $_POST[ $field ] ) || ! is_string( $_POST[ $field ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Magic Login Pro alias pre-map; nonce is owned and verified by that plugin's form, not this pass.
 				continue;
 			}
-			$candidate = trim( wp_unslash( $_POST[ $field ] ) );
+			$candidate = sanitize_text_field( wp_unslash( $_POST[ $field ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Magic Login Pro alias pre-map; value is validated by is_email() below.
 			// Only email-shaped values can be an alias; a username login is left alone.
 			if ( '' === $candidate || ! is_email( $candidate ) ) {
 				continue;
