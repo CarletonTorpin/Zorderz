@@ -8,7 +8,7 @@ name: security
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [ main, wave-a ]
 
 permissions:
   contents: read
@@ -120,3 +120,51 @@ jobs:
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1:3306 latest
       - name: PHPUnit integration suite
         run: vendor/bin/phpunit -c phpunit-integration.xml.dist
+
+  build-gate:
+    name: Build + packaging gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: Build both zips (runs the completeness/packaging gate)
+        run: bash build.sh
+      - name: php -l across the built tree
+        run: |
+          rc=0
+          while IFS= read -r f; do php -l "$f" >/dev/null || rc=1; done \
+            < <(find zorderz zorderz-apps -name '*.php')
+          exit $rc
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zorderz-zips
+          path: dist/*.zip
+          if-no-files-found: error
+
+  pii-gate:
+    name: PII / tenant-data scan gate
+    # Blocking gate for a PUBLIC release: fails if any confidential term reaches the zips.
+    # Requires the ZDZ_PII_WORDLIST repository secret (newline-separated confidential terms).
+    # Until that secret is set this job FAILS BY DESIGN — a gate that never ran must not pass.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: Build both zips
+        run: bash build.sh
+      - name: Scan built artifacts against the confidential wordlist
+        # The gate never prints the wordlist or the matched text, so this public log cannot leak it.
+        env:
+          ZDZ_PII_WORDLIST: ${{ secrets.ZDZ_PII_WORDLIST }}
+        run: bash .github/scripts/pii-gate.sh dist
