@@ -639,6 +639,12 @@
   color: #991B1B;
 }
 
+/* D-04: 'no matches' — a definite, NEUTRAL outcome (not red, not green). Slate. */
+.zl-w-status-nomatch {
+  background: #E2E8F0;
+  color: #334155;
+}
+
 /* Lead count in batch header */
 .zl-w-batch-count {
   font-size: var(--ref-font-xs, 11px);
@@ -1356,6 +1362,12 @@
 
 [data-theme="sunlight"] .zl-w-status-failed {
   background: #FEE2E2;
+  color: #000;
+  border: 1px solid #000;
+}
+
+[data-theme="sunlight"] .zl-w-status-nomatch {
+  background: #E2E8F0;
   color: #000;
   border: 1px solid #000;
 }
@@ -2306,6 +2318,15 @@ body.sunlight-active .zl-w-context-how,
 .zl-lc-skip {
     background: transparent; color: var(--ref-gray-500, #6b7280);
     border-color: var(--ref-gray-300, #d1d5db);
+}
+
+/* D-03: recover a failed lead — attention, but NOT an error colour (amber). */
+.zl-lc-recover {
+    background: #B45309; color: #fff; border-color: #B45309;
+}
+.zl-lc-recover:hover { background: #92400E; border-color: #92400E; }
+.zl-lc-recover.zl-lc-recover-done {
+    background: #047857; border-color: #047857; color: #fff; cursor: default;
 }
 
 /* Skipped card — dimmed, collapsed, with visible undo */

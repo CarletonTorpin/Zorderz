@@ -354,7 +354,7 @@ class ZL_Dashboard {
 								<td><?php echo esc_html( $sp_label ); ?></td>
 								<td><?php echo (int) $b['lead_count']; ?></td>
 								<td><?php echo (int) $b['contacted_count']; ?> / <?php echo (int) $b['lead_count']; ?></td>
-								<td><span class="zl-status <?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( ucfirst( $b['status'] ) ); ?></span></td>
+								<td><span class="zl-status <?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( $b['status'] === 'no_matches' ? 'No matches' : ucfirst( $b['status'] ) ); ?></span></td>
 								<td><?php echo esc_html( date( 'M j, Y g:ia', strtotime( $b['created_at'] ) ) ); ?></td>
 								<td>
 									<?php if ( $is_test ) : ?>
@@ -522,7 +522,7 @@ class ZL_Dashboard {
 		}
 
 		// v2.17.0 (5C): Theme-level revenue gate — invoice data contains dollar amounts.
-		if ( class_exists( 'TS_Data_Permissions' ) && ! TS_Data_Permissions::can( get_current_user_id(), 'view_company_revenue' ) ) {
+		if ( class_exists( 'ZDZ_Data_Permissions' ) && ! ZDZ_Data_Permissions::can( get_current_user_id(), 'view_company_revenue' ) ) {
 			wp_send_json_error( 'Revenue data access restricted.' );
 		}
 
@@ -1153,7 +1153,18 @@ class ZL_Dashboard {
 		$candidates = $this->get_compressed_transient( "zl_batch_{$batch_id}_candidates" ) ?: array();
 
 		if ( empty( $candidates ) ) {
-			wp_send_json_error( 'No eligible candidates found. Try adjusting lookback or cooldown settings.' );
+			// D-04: an empty candidate pool is a definite NO-MATCH result, not an error.
+			$nm = ZL_Rejection_Ledger::no_matches_result(
+				ZL_Rejection_Ledger::make( 0, array(), 0 ),
+				function_exists( 'zl_territory_names' ) ? zl_territory_names() : array(),
+				array( 'filters' => $this->zl_applied_filter_labels( $batch['product_filter'] ?? '', $sp_code, get_transient( "zl_batch_{$batch_id}_options" ) ?: array() ) )
+			);
+			$nm['message'] .= ' No customers made it past enrichment — try a wider lookback or a looser product filter.';
+			$wpdb->update( $wpdb->prefix . 'zl_batches',
+				array( 'status' => 'no_matches', 'total_leads' => 0, 'error_message' => $nm['message'] ),
+				array( 'id' => $batch_id ), array( '%s', '%d', '%s' ), array( '%d' ) );
+			if ( class_exists( 'ZL_Progress' ) ) { ZL_Progress::complete( $batch_id ); }
+			wp_send_json_success( array_merge( array( 'no_matches' => true, 'lead_count' => 0 ), $nm ) );
 		}
 
 		try {
@@ -1164,7 +1175,24 @@ class ZL_Dashboard {
 			$filtered = $gen->filter_by_territory( $candidates, $sp_code );
 
 			if ( empty( $filtered ) ) {
-				wp_send_json_error( 'No candidates match the territory for ' . $sp_code . '. Check Nutshell Territory custom fields.' );
+				// D-04: the territory gate emptied the pool — a definite NO-MATCH result that
+				// NAMES the gate (territory, not product) with names drawn from config.
+				$terr_seen = array();
+				foreach ( $candidates as $c_seen ) {
+					$t_seen = strtoupper( trim( (string) ( $c_seen['territory'] ?? '' ) ) );
+					if ( $t_seen !== '' ) { $terr_seen[ $t_seen ] = ( $terr_seen[ $t_seen ] ?? 0 ) + 1; }
+				}
+				$scanned = count( $candidates );
+				$nm = ZL_Rejection_Ledger::no_matches_result(
+					ZL_Rejection_Ledger::make( $scanned, array( 'territory' => $scanned ), 0 ),
+					function_exists( 'zl_territory_names' ) ? zl_territory_names() : array(),
+					array( 'territory_seen' => $terr_seen, 'filters' => $this->zl_applied_filter_labels( $batch['product_filter'] ?? '', $sp_code, get_transient( "zl_batch_{$batch_id}_options" ) ?: array() ) )
+				);
+				$wpdb->update( $wpdb->prefix . 'zl_batches',
+					array( 'status' => 'no_matches', 'total_leads' => 0, 'error_message' => $nm['message'] ),
+					array( 'id' => $batch_id ), array( '%s', '%d', '%s' ), array( '%d' ) );
+				if ( class_exists( 'ZL_Progress' ) ) { ZL_Progress::complete( $batch_id ); }
+				wp_send_json_success( array_merge( array( 'no_matches' => true, 'lead_count' => 0 ), $nm ) );
 			}
 
 			// Score each lead
@@ -1686,6 +1714,15 @@ class ZL_Dashboard {
 			unset( $lead );
 		}
 
+		// D-03: flag leads that failed to reach the CRM so the UI can offer a one-click,
+		// duplicate-safe recovery ("Create Now"). Read-only predicate — moves no data.
+		if ( class_exists( 'ZL_Lead_Recovery' ) && is_array( $batch ) ) {
+			foreach ( $leads as &$lead ) {
+				$lead['crm_recoverable'] = ZL_Lead_Recovery::is_recoverable( $lead, $batch ) ? 1 : 0;
+			}
+			unset( $lead );
+		}
+
 		wp_send_json_success( array(
 			'leads'   => $leads,
 			'batch'   => $batch,
@@ -1960,6 +1997,24 @@ class ZL_Dashboard {
 			foreach ( $leads as &$lead ) {
 				$lead = ZL_Permissions::maybe_scrub_lead( $lead );
 				$lead = ZL_Permissions::maybe_scrub_contact_info( $lead );
+			}
+			unset( $lead );
+		}
+
+		// D-03: mark leads that failed to reach the CRM (one lightweight batch lookup),
+		// so the rep view can offer the same duplicate-safe recovery. Read-only.
+		if ( class_exists( 'ZL_Lead_Recovery' ) && ! empty( $leads ) ) {
+			$bids = array_values( array_unique( array_map( static function( $l ) { return (int) ( $l['batch_id'] ?? 0 ); }, $leads ) ) );
+			$bids = array_filter( $bids );
+			$bmap = array();
+			if ( ! empty( $bids ) ) {
+				$ph   = implode( ',', array_fill( 0, count( $bids ), '%d' ) );
+				$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, is_test, status FROM {$wpdb->prefix}zl_batches WHERE id IN ({$ph})", ...$bids ), ARRAY_A );
+				foreach ( (array) $rows as $br ) { $bmap[ (int) $br['id'] ] = $br; }
+			}
+			foreach ( $leads as &$lead ) {
+				$b = $bmap[ (int) ( $lead['batch_id'] ?? 0 ) ] ?? array();
+				$lead['crm_recoverable'] = ZL_Lead_Recovery::is_recoverable( $lead, $b ) ? 1 : 0;
 			}
 			unset( $lead );
 		}
@@ -2257,8 +2312,8 @@ class ZL_Dashboard {
 		// created by an admin. Now both surfaces are scoped identically.
 		$ws_uid          = get_current_user_id();
 		$can_see_others  = true;
-		if ( class_exists( 'TS_Data_Permissions' ) ) {
-			$can_see_others = TS_Data_Permissions::can( $ws_uid, 'view_others_data' );
+		if ( class_exists( 'ZDZ_Data_Permissions' ) ) {
+			$can_see_others = ZDZ_Data_Permissions::can( $ws_uid, 'view_others_data' );
 		}
 		$is_admin_user = current_user_can( 'manage_options' )
 			|| in_array( 'zdz_owner', (array) wp_get_current_user()->roles, true )
@@ -2419,9 +2474,9 @@ class ZL_Dashboard {
 		$wb_uid = get_current_user_id();
 
 		// Check theme-level data permissions
-		if ( class_exists( 'TS_Data_Permissions' ) ) {
-			$can_see_others  = TS_Data_Permissions::can( $wb_uid, 'view_others_data' );
-			$can_see_revenue = TS_Data_Permissions::can( $wb_uid, 'view_company_revenue' );
+		if ( class_exists( 'ZDZ_Data_Permissions' ) ) {
+			$can_see_others  = ZDZ_Data_Permissions::can( $wb_uid, 'view_others_data' );
+			$can_see_revenue = ZDZ_Data_Permissions::can( $wb_uid, 'view_company_revenue' );
 		}
 
 		// Non-admin users see only batches assigned to their salesperson code
@@ -2660,6 +2715,40 @@ class ZL_Dashboard {
 	 * @param string $message  Human-readable status message.
 	 * @param string $status   One of 'running', 'complete', 'error'.
 	 */
+	/**
+	 * D-04: human labels for the filters a run applied, so an empty-result message can
+	 * name the WHOLE gate set (not just the one that fired). Values come from the batch
+	 * itself and the salesperson code — all tenant config, never a hardcoded literal.
+	 * Territory/place NAMES resolve through zl_territory_names() elsewhere; this only
+	 * names the filter knobs the operator set.
+	 *
+	 * @param string $product_filter
+	 * @param string $sp_code
+	 * @param array  $batch_options
+	 * @return array<int,string>
+	 */
+	private function zl_applied_filter_labels( $product_filter, $sp_code, $batch_options ) {
+		$labels = array();
+		if ( trim( (string) $product_filter ) !== '' ) {
+			$labels[] = 'product: "' . trim( (string) $product_filter ) . '"';
+		}
+		$sp = trim( (string) $sp_code );
+		if ( $sp !== '' && $sp !== '_ALL_' ) {
+			$labels[] = 'salesperson: ' . $sp;
+		} elseif ( $sp === '_ALL_' ) {
+			$labels[] = 'salesperson: All';
+		}
+		$cz = isset( $batch_options['city_zip_filter'] ) ? trim( (string) $batch_options['city_zip_filter'] ) : '';
+		if ( $cz !== '' ) {
+			$labels[] = 'city/zip: ' . $cz;
+		}
+		$demo = isset( $batch_options['demographic_filter'] ) ? (string) $batch_options['demographic_filter'] : '';
+		if ( $demo !== '' && $demo !== 'both' ) {
+			$labels[] = 'demographic: ' . $demo;
+		}
+		return $labels;
+	}
+
 	private function update_batch_progress( $batch_id, $step, $pct, $message, $status = 'running' ) {
 		set_transient( "zl_batch_progress_{$batch_id}", array(
 			'batch_id' => $batch_id,
@@ -2689,6 +2778,9 @@ class ZL_Dashboard {
 				ZL_Progress::start( $batch_id, $message );
 			}
 			if ( $status === 'complete' ) {
+				ZL_Progress::complete( $batch_id );
+			} elseif ( $status === 'no_matches' ) {
+				// D-04: an empty result is a completed run (100%), not a failure.
 				ZL_Progress::complete( $batch_id );
 			} elseif ( $status === 'error' ) {
 				ZL_Progress::fail( $batch_id, $message );
@@ -3292,15 +3384,35 @@ class ZL_Dashboard {
 
 		try {
 			if ( empty( $candidates ) ) {
-				$diag = "Scanned {$processed}/{$total_customers} customers from {$inv_count} invoices.";
-				if ( ! empty( $product_filter ) ) {
-					$diag .= " Filter \"{$product_filter}\" matched 0.";
+				// D-04 (S6-05): "no matches is a result." Zero INVOICES is a real error
+				// (a broken billing provider) and deliberately stays red/failed. But
+				// invoices found + zero candidates after enrichment is a definite, legible
+				// NO-MATCH result at 100% — not a crash. Red text that isn't an error
+				// trains an operator to ignore red text.
+				if ( (int) $inv_count <= 0 ) {
+					$diag = 'No invoices found — check the billing-provider connection in Settings.';
+					$this->update_batch_progress( $batch_id, 'error', 0, $diag, 'error' );
+					error_log( 'ZL Relay: No invoices (real error) — ' . $diag );
+					$wpdb->update( $wpdb->prefix . 'zl_batches',
+						array( 'status' => 'failed', 'error_message' => $diag ),
+						array( 'id' => $batch_id ), array( '%s', '%s' ), array( '%d' ) );
+				} else {
+					$scanned = max( (int) $processed, (int) $total_customers );
+					$rej     = ( $scanned > 0 ) ? array( 'pre_candidate' => $scanned ) : array();
+					$ledger  = ZL_Rejection_Ledger::make( $scanned, $rej, 0 );
+					$filters = $this->zl_applied_filter_labels( $product_filter, $sp_code, $batch_options );
+					$nm      = ZL_Rejection_Ledger::no_matches_result(
+						$ledger,
+						function_exists( 'zl_territory_names' ) ? zl_territory_names() : array(),
+						array( 'filters' => $filters )
+					);
+					$msg = $nm['message'] . ' No customers made it past enrichment — try a wider lookback or a looser product filter.';
+					$this->update_batch_progress( $batch_id, 'no_matches', 100, $msg, 'no_matches' );
+					error_log( 'ZL Relay: No candidates (no_matches) — ' . $msg );
+					$wpdb->update( $wpdb->prefix . 'zl_batches',
+						array( 'status' => 'no_matches', 'total_leads' => 0, 'error_message' => $msg ),
+						array( 'id' => $batch_id ), array( '%s', '%d', '%s' ), array( '%d' ) );
 				}
-				$diag .= ' Try broadening filters or lookback.';
-				$this->update_batch_progress( $batch_id, 'error', 0, $diag, 'error' );
-				error_log( 'ZL Relay: No candidates — ' . $diag );
-				$wpdb->update( $wpdb->prefix . 'zl_batches',
-					array( 'status' => 'failed' ), array( 'id' => $batch_id ), array( '%s' ), array( '%d' ) );
 				delete_transient( $lock_key );
 				$this->cleanup_batch_transients( $batch_id );
 				wp_die();
@@ -3312,10 +3424,31 @@ class ZL_Dashboard {
 			// ── Step 4: Score + Select ──
 			$this->update_batch_progress( $batch_id, 'select', 50, 'Scoring and selecting leads...' );
 
+			// D-04: rejection accounting — capture per-gate drop counts as the funnel
+			// narrows so an empty result can name where the candidates went. No count
+			// is moved: these are the SAME numbers, only observed.
+			$candidates_in       = count( $candidates );
+			$territory_dropped   = 0;
+			$demographic_dropped = 0;
+			$ai_dropped          = 0;
+			$terr_seen           = array();
+
 			// v2.0.0: Skip territory filtering for cross-territory (_ALL_) batches
 			if ( $sp_code !== '_ALL_' ) {
-				$filtered = $gen->filter_by_territory( $candidates, $sp_code );
-				if ( empty( $filtered ) ) { $filtered = $candidates; }
+				$filtered_terr     = $gen->filter_by_territory( $candidates, $sp_code );
+				$territory_dropped = max( 0, $candidates_in - count( $filtered_terr ) );
+				foreach ( $candidates as $c_seen ) {
+					$t_seen = strtoupper( trim( (string) ( $c_seen['territory'] ?? '' ) ) );
+					if ( $t_seen !== '' ) { $terr_seen[ $t_seen ] = ( $terr_seen[ $t_seen ] ?? 0 ) + 1; }
+				}
+				// Preserve the existing safety fallback (territory never empties the run
+				// here); when we fall back, territory dropped nobody from THIS run.
+				if ( empty( $filtered_terr ) ) {
+					$filtered          = $candidates;
+					$territory_dropped = 0;
+				} else {
+					$filtered = $filtered_terr;
+				}
 			} else {
 				$filtered = $candidates;
 			}
@@ -3336,7 +3469,9 @@ class ZL_Dashboard {
 
 			$demo_filter = $batch_options['demographic_filter'] ?? 'both';
 			if ( ! empty( $demo_filter ) && $demo_filter !== 'both' ) {
-				$leads = $gen->filter_by_demographic( $leads, $demo_filter );
+				$leads_before_demo   = count( $leads );
+				$leads               = $gen->filter_by_demographic( $leads, $demo_filter );
+				$demographic_dropped = max( 0, $leads_before_demo - count( $leads ) );
 			}
 
 			$saved = 0;
@@ -3361,6 +3496,7 @@ class ZL_Dashboard {
 					if ( ! empty( $db_leads ) ) {
 						$result       = $gen->ai_strict_validate( $db_leads, $product_filter );
 						$rejected_ids = array_column( $result['rejected'], 'id' );
+						$ai_dropped  += count( $rejected_ids ); // D-04: AI strict-review drops
 						if ( ! empty( $rejected_ids ) ) {
 							$ph = implode( ',', array_fill( 0, count( $rejected_ids ), '%d' ) );
 							$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}zl_leads WHERE id IN ({$ph})", ...$rejected_ids ) );
@@ -3459,21 +3595,62 @@ class ZL_Dashboard {
 			$final_leads = (int) $wpdb->get_var( $wpdb->prepare(
 				"SELECT COUNT(*) FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d", $batch_id
 			) );
-			$wpdb->update( $wpdb->prefix . 'zl_batches', array(
-				'status'      => 'complete',
-				'total_leads' => $final_leads,
-			), array( 'id' => $batch_id ), array( '%s', '%d' ), array( '%d' ) );
 
-			if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
-				$bt = $wpdb->get_var( $wpdb->prepare(
-					"SELECT batch_tag FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id ) );
-				ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Relay batch finalized: {$bt} — {$final_leads} leads" );
+			// D-04: build the per-batch rejection ledger from the drop counts captured as
+			// the funnel narrowed. It balances by construction:
+			//   candidates_in = matched + territory + demographic + ai_validation + over_limit
+			// where over_limit is the closed-form remainder (candidates scored but beyond the
+			// batch limit / never saved). No count is moved — these are the same totals.
+			$rej = array();
+			if ( $territory_dropped > 0 )   { $rej['territory']     = $territory_dropped; }
+			if ( $demographic_dropped > 0 ) { $rej['demographic']   = $demographic_dropped; }
+			if ( $ai_dropped > 0 )          { $rej['ai_validation'] = $ai_dropped; }
+			$accounted  = $final_leads + array_sum( $rej );
+			$over_limit = max( 0, ( isset( $candidates_in ) ? (int) $candidates_in : 0 ) - $accounted );
+			if ( $over_limit > 0 ) { $rej['over_limit'] = $over_limit; }
+			$ledger = ZL_Rejection_Ledger::make( isset( $candidates_in ) ? (int) $candidates_in : 0, $rej, $final_leads );
+
+			if ( $final_leads === 0 && isset( $candidates_in ) && $candidates_in > 0 ) {
+				// A definite NO-MATCH result — neutral, 100%, naming the gate that emptied the
+				// run. NOT a failure: the pipeline ran cleanly and found nothing.
+				$filters = $this->zl_applied_filter_labels( $product_filter, $sp_code, $batch_options );
+				$nm = ZL_Rejection_Ledger::no_matches_result(
+					$ledger,
+					function_exists( 'zl_territory_names' ) ? zl_territory_names() : array(),
+					array( 'territory_seen' => $terr_seen, 'filters' => $filters )
+				);
+				$wpdb->update( $wpdb->prefix . 'zl_batches', array(
+					'status'        => 'no_matches',
+					'total_leads'   => 0,
+					'error_message' => $nm['message'],
+				), array( 'id' => $batch_id ), array( '%s', '%d', '%s' ), array( '%d' ) );
+
+				if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
+					$bt = $wpdb->get_var( $wpdb->prepare(
+						"SELECT batch_tag FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id ) );
+					ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Relay batch no-match: {$bt} — {$nm['message']}" );
+				}
+
+				delete_transient( $lock_key );
+				$this->update_batch_progress( $batch_id, 'no_matches', 100, $nm['message'], 'no_matches' );
+				error_log( "ZL Relay: Batch #{$batch_id} finalized — no matches. " . $nm['message'] );
+			} else {
+				$wpdb->update( $wpdb->prefix . 'zl_batches', array(
+					'status'      => 'complete',
+					'total_leads' => $final_leads,
+				), array( 'id' => $batch_id ), array( '%s', '%d' ), array( '%d' ) );
+
+				if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
+					$bt = $wpdb->get_var( $wpdb->prepare(
+						"SELECT batch_tag FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id ) );
+					ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Relay batch finalized: {$bt} — {$final_leads} leads" );
+				}
+
+				delete_transient( $lock_key );
+				$this->update_batch_progress( $batch_id, 'complete', 100,
+					"Complete! {$final_leads} leads created.", 'complete' );
+				error_log( "ZL Relay: Batch #{$batch_id} finalized — {$final_leads} leads." );
 			}
-
-			delete_transient( $lock_key );
-			$this->update_batch_progress( $batch_id, 'complete', 100,
-				"Complete! {$final_leads} leads created.", 'complete' );
-			error_log( "ZL Relay: Batch #{$batch_id} finalized — {$final_leads} leads." );
 
 		} catch ( \Throwable $e ) {
 			error_log( 'ZL Relay: Finalize fatal error: ' . $e->getMessage() );
@@ -3547,13 +3724,21 @@ class ZL_Dashboard {
 		if ( ! $progress ) {
 			global $wpdb;
 			$batch = $wpdb->get_row( $wpdb->prepare(
-				"SELECT status, total_leads FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id
+				"SELECT status, total_leads, error_message FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id
 			), ARRAY_A );
 
 			if ( $batch && $batch['status'] === 'complete' ) {
 				wp_send_json_success( array_merge( array(
 					'batch_id' => $batch_id, 'step' => 'complete', 'pct' => 100,
 					'message' => 'Complete! ' . $batch['total_leads'] . ' leads created.', 'status' => 'complete',
+				), $stall_info ) );
+			} elseif ( $batch && $batch['status'] === 'no_matches' ) {
+				// D-04: an empty result is a definite outcome at 100% — not an error.
+				$nm_msg = trim( (string) ( $batch['error_message'] ?? '' ) );
+				if ( $nm_msg === '' ) { $nm_msg = 'No matches — every candidate was accounted for; none met the filters.'; }
+				wp_send_json_success( array_merge( array(
+					'batch_id' => $batch_id, 'step' => 'no_matches', 'pct' => 100,
+					'message' => $nm_msg, 'status' => 'no_matches',
 				), $stall_info ) );
 			} elseif ( $batch && $batch['status'] === 'failed' ) {
 				wp_send_json_success( array_merge( array(
