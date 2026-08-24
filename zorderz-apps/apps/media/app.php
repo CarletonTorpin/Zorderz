@@ -2,11 +2,22 @@
 /**
  * Plugin Name: Zorderz Media
  * Description: Organization media library for Zorderz Field OS. Browse public photos & sketches across the org, plus your own uploads — grouped by date, filterable by type/source, with transcribable notes and per-photo visibility control. Add photos directly via bulk upload. Reads from / writes to ZDZ_User_Media.
- * Version: 2.3.3
+ * Version: 2.7.0
  * Author: Zorderz
  * Requires PHP: 8.0
  *
  * == Changelog ==
+ * 2.7.0  (asset cache-bust — version-only)
+ *   - No functional delta found for 2.4.1 → 2.7.0 in the S8 analysis (S8-09):
+ *     these releases have no dedicated Bible section. The §47 architecture wave
+ *     (2.3.3 → 2.4.1: the full-bleed viewer + the cross-app open-a-gallery entry
+ *     point, window.TSMedia.mountFullscreen / fullscreenAppId 'zdz-media-all')
+ *     is already present in this baseline. Per the DEVICE-DIFF / DON'T-INVENT
+ *     rule, the constant is advanced to the current-on-disk target with no
+ *     fabricated feature; the bump busts the JS/CSS asset cache. No behaviour
+ *     change; no DB change. The Core geo/EXIF services this app reads
+ *     (ZDZ_User_Media / ZDZ_Media_Exif / ZDZ_Media_Geocoder) are theme-owned and
+ *     untouched here.
  * 2.3.3  (Widget usability: browse more in place + tab-label fit — the owner)
  *   - LOAD MORE IN THE WIDGET. The dashboard Media widget used to show only the
  *     6 most-recent items, forcing "See All" to see anything older. It now loads
@@ -235,7 +246,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'ZML_VERSION', '2.3.3' );
+define( 'ZML_VERSION', '2.7.0' );
 define( 'ZML_FILE', __FILE__ );
 define( 'ZML_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZML_URL', plugin_dir_url( __FILE__ ) );

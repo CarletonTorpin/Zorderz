@@ -64,13 +64,26 @@ class ZSCH_Appointments {
 
 		$is_admin = self::viewer_is_admin( $viewer_id );
 
+		// PARTICIPANT VISIBILITY (v1.9.0). A participant SEES the event they are on
+		// — the disclosure the add() gate authorizes, bounded to that party (never a
+		// blanket public flip). Ids come straight from the DB (ints), so they are
+		// embedded directly and safely — no user input touches this fragment.
+		$part_or = '';
+		if ( ! $is_admin && class_exists( 'ZSCH_Participants' ) && is_callable( array( 'ZSCH_Participants', 'appointment_ids_for_participant' ) ) ) {
+			$part_ids = array_values( array_filter( array_map( 'intval', ZSCH_Participants::appointment_ids_for_participant( $viewer_id ) ) ) );
+			if ( ! empty( $part_ids ) ) {
+				$part_or = ' OR id IN (' . implode( ',', $part_ids ) . ')';
+			}
+		}
+
 		if ( 'shared' === $scope ) {
 			$where[] = "calendar_scope = 'shared'";
 		} elseif ( 'personal' === $scope ) {
-			$where[]  = "calendar_scope = 'personal' AND owner_user_id = %d";
+			$where[]  = "( ( calendar_scope = 'personal' AND owner_user_id = %d )$part_or )";
 			$params[] = $viewer_id;
 		} else {
-			// 'all' — shared (everyone) + personal (own, or anyone if admin).
+			// 'all' — shared (everyone) + personal (own, or anyone if admin) +
+			// events the viewer participates in.
 			if ( $is_admin && ! empty( $args['owner_id'] ) ) {
 				$where[]  = "( calendar_scope = 'shared' OR ( calendar_scope = 'personal' AND owner_user_id = %d ) )";
 				$params[] = (int) $args['owner_id'];
@@ -78,7 +91,7 @@ class ZSCH_Appointments {
 				// admins see all personal + shared
 				$where[] = "( calendar_scope = 'shared' OR calendar_scope = 'personal' )";
 			} else {
-				$where[]  = "( calendar_scope = 'shared' OR ( calendar_scope = 'personal' AND owner_user_id = %d ) )";
+				$where[]  = "( calendar_scope = 'shared' OR ( calendar_scope = 'personal' AND owner_user_id = %d )$part_or )";
 				$params[] = $viewer_id;
 			}
 		}
@@ -96,9 +109,15 @@ class ZSCH_Appointments {
 	 * @param array $data      raw input: title, body, location, start_local,
 	 *                         end_local, time_zone, is_all_day, calendar_scope,
 	 *                         busy_status, owner_id?, attendees?[]
+	 * @param array $origin    the handoff origin {ns, ref_id} — read from the
+	 *                         signed intake TOKEN by the REST layer, NEVER from the
+	 *                         request body (INV-1). Empty for a plain create. It
+	 *                         rides ONLY the fired zsch_appointment_created payload
+	 *                         (so a contributor born-links the appointment); this
+	 *                         model never resolves or trusts it itself.
 	 * @return array { success, id?, appointment?, error?, graph? }
 	 */
-	public static function create( $actor_id, array $data ) {
+	public static function create( $actor_id, array $data, array $origin = array() ) {
 		global $wpdb;
 		$actor_id = (int) $actor_id;
 
@@ -173,6 +192,11 @@ class ZSCH_Appointments {
 		// Push to Graph (owner's mailbox). Non-fatal on failure — local row stands.
 		$graph_result = self::push_create( $owner_id, array_merge( $row, array( 'id' => $id ) ) );
 
+		// LIFECYCLE (C-01 contract): announce the created appointment so a
+		// contributor can born-link it to its origin (a Project). The origin comes
+		// from the signed intake token via the REST layer — NEVER the request body.
+		self::fire_lifecycle( 'created', $id, $actor_id, $origin );
+
 		return array(
 			'success'     => true,
 			'id'          => $id,
@@ -239,6 +263,11 @@ class ZSCH_Appointments {
 		$merged = array_merge( $existing, $update );
 		$graph_result = self::push_update( (int) $existing['owner_user_id'], $merged );
 
+		// LIFECYCLE (C-01 drift): the resolver re-reads get_raw() and refreshes any
+		// cached job date against this edit — so the calendar and the container
+		// never drift. int id is the first arg (the drift subscriber's signature).
+		self::fire_lifecycle( 'updated', $id, $actor_id );
+
 		return array(
 			'success'     => true,
 			'id'          => $id,
@@ -274,6 +303,11 @@ class ZSCH_Appointments {
 			ZSCH_Graph::delete_event( $mailbox, $map['graph_event_id'] );
 			$wpdb->delete( self::map_table(), array( 'appointment_id' => $id ) ); // phpcs:ignore
 		}
+
+		// LIFECYCLE (C-01 drift): the resolver clears any cached job date and
+		// forgets the Project's appointment ref (else is_scheduled() answers true
+		// forever for a deleted appointment, and UNIQUE blocks re-use of the id).
+		self::fire_lifecycle( 'deleted', $id, (int) $actor_id );
 
 		return array( 'success' => true, 'id' => $id );
 	}
@@ -324,6 +358,14 @@ class ZSCH_Appointments {
 			if ( '' === $graph_id ) {
 				continue;
 			}
+			// INV-Loop: never re-ingest our OWN write-back copy. The owner's own
+			// calendar is also their conflict feed, so an unguarded copy makes its
+			// owner look busy against itself within 5 minutes. Belt (the write-back
+			// map) + braces (our stamp) live in ZSCH_Writeback, so the guard holds
+			// even while the write-back engine is OFF (it simply never matches yet).
+			if ( class_exists( 'ZSCH_Writeback' ) && ZSCH_Writeback::is_own_writeback( $ev ) ) {
+				continue;
+			}
 			$start_utc = ZSCH_Graph::graph_to_utc( $ev['start'] ?? array() );
 			$end_utc   = ZSCH_Graph::graph_to_utc( $ev['end'] ?? array() );
 			if ( '' === $start_utc || '' === $end_utc ) {
@@ -336,6 +378,8 @@ class ZSCH_Appointments {
 			if ( $cancelled ) {
 				if ( $existing_id ) {
 					$wpdb->update( self::table(), array( 'deleted_at' => current_time( 'mysql', true ) ), array( 'id' => $existing_id ) ); // phpcs:ignore
+					// Drift: an Outlook-side cancel must clear any cached job date.
+					self::fire_lifecycle( 'deleted', $existing_id, 0 );
 				}
 				continue;
 			}
@@ -357,6 +401,9 @@ class ZSCH_Appointments {
 			if ( $existing_id ) {
 				$wpdb->update( self::table(), $fields, array( 'id' => $existing_id ) ); // phpcs:ignore
 				self::touch_map_synced( $existing_id, $ev['@odata.etag'] ?? '' );
+				// Drift: an Outlook-side edit refreshes the cached job date so the
+				// calendar and the container never disagree.
+				self::fire_lifecycle( 'updated', $existing_id, 0 );
 			} else {
 				$fields['created_by'] = 0; // system/pull
 				$fields['created_at'] = current_time( 'mysql', true );
@@ -443,7 +490,18 @@ class ZSCH_Appointments {
 		return $out;
 	}
 
-	private static function can_modify( $actor_id, array $row ) {
+	/**
+	 * May this actor MODIFY this appointment? PUBLISHED (was private) so
+	 * Zjob_Appointment_Link and ZSCH_Participants can double-gate through it via
+	 * is_callable — the estimate # / address land on a SHARED calendar, so a link
+	 * or a participant-add (a disclosure) must clear the same edit gate as an edit.
+	 * Read-only (kiosk) never passes; admins always; else owner or creator.
+	 *
+	 * @param int   $actor_id
+	 * @param array $row  a raw appointment row (from get_raw()).
+	 * @return bool
+	 */
+	public static function can_modify( $actor_id, array $row ) {
 		if ( ! zsch_user_can_write( $actor_id ) ) {
 			return false;
 		}
@@ -451,8 +509,52 @@ class ZSCH_Appointments {
 			return true;
 		}
 		// Owner can modify their own; shared events can be edited by their creator.
-		return (int) $row['owner_user_id'] === (int) $actor_id
-			|| (int) $row['created_by'] === (int) $actor_id;
+		return (int) ( $row['owner_user_id'] ?? 0 ) === (int) $actor_id
+			|| (int) ( $row['created_by'] ?? 0 ) === (int) $actor_id;
+	}
+
+	/**
+	 * Fire an appointment lifecycle action (the C-01 contract). The subscribers
+	 * have TWO different first-arg shapes, honored exactly here:
+	 *   - created  → do_action('zsch_appointment_created', $payload)  [array first:
+	 *     Zjob_Schedule_Context::on_created reads $payload['origin'|'actor'|'appt_id']]
+	 *   - updated  → do_action('zsch_appointment_updated', $id, $payload)  [int first:
+	 *     Zjob_Install_Date::on_appointment_updated re-reads get_raw($id); the
+	 *     payload rides as a 2nd arg for any richer subscriber]
+	 *   - deleted  → do_action('zsch_appointment_deleted', $id, $payload)  [int first]
+	 *
+	 * `origin` carries the handoff pair {ns, ref_id} from the signed intake token
+	 * (empty for a plain create/update/delete or a Graph-pull reconcile — the drift
+	 * subscribers never read it, they re-read get_raw). `actor` is the acting USER
+	 * ID (int) — on_created casts it and passes it to attach() as the viewer, so it
+	 * must be the real id, never a structure. NO money ever rides a payload.
+	 *
+	 * @param string $event  'created' | 'updated' | 'deleted'
+	 * @param int    $id      appointment id.
+	 * @param int    $actor   acting user id.
+	 * @param array  $origin  {ns, ref_id} from the token; empty otherwise.
+	 */
+	private static function fire_lifecycle( $event, $id, $actor, array $origin = array() ) {
+		$id = (int) $id;
+		if ( $id <= 0 || ! function_exists( 'do_action' ) ) {
+			return;
+		}
+		$payload = array(
+			'appt_id' => $id,
+			'id'      => $id,
+			'actor'   => (int) $actor,
+			'origin'  => array(
+				'ns'     => isset( $origin['ns'] ) ? (string) $origin['ns'] : '',
+				'ref_id' => isset( $origin['ref_id'] ) ? (string) $origin['ref_id'] : '',
+			),
+		);
+		if ( 'created' === $event ) {
+			do_action( 'zsch_appointment_created', $payload );
+		} elseif ( 'updated' === $event ) {
+			do_action( 'zsch_appointment_updated', $id, $payload );
+		} elseif ( 'deleted' === $event ) {
+			do_action( 'zsch_appointment_deleted', $id, $payload );
+		}
 	}
 
 	public static function viewer_is_admin( $user_id ) {

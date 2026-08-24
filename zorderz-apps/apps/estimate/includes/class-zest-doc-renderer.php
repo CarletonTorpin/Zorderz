@@ -430,8 +430,13 @@ table.items tbody td.desc{text-align:left}
 			'created_by'      => get_current_user_id(),
 			'created_at'      => $mysql_date ? ( $mysql_date . ' 12:00:00' ) : current_time( 'mysql' ),
 		);
-		$ok = $wpdb->insert( $table = ZEST_DB::estimates_table(), $data );
-		return $ok ? (int) $wpdb->insert_id : 0;
+		$ok  = $wpdb->insert( $table = ZEST_DB::estimates_table(), $data );
+		$eid = $ok ? (int) $wpdb->insert_id : 0;
+		if ( $eid > 0 && function_exists( 'do_action' ) ) {
+			// B4 seam — an imported estimate mints its Project too (see class-zest-dashboard.php).
+			do_action( 'zest_estimate_saved', $eid, array( 'source' => 'import', 'created_by' => (int) ( $data['created_by'] ?? 0 ) ) );
+		}
+		return $eid;
 	}
 
 	/**

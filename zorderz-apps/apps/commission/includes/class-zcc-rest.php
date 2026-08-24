@@ -58,6 +58,15 @@ class ZCC_REST {
 			'callback'            => [ __CLASS__, 'self_test' ],
 			'permission_callback' => [ __CLASS__, 'can_admin' ],
 		] );
+
+		// ADMIN-ONLY coverage telemetry. Reports counts + the single unassigned-
+		// revenue total; never a per-person figure. Read-only — cannot move a dollar.
+		register_rest_route( $ns, '/commission/coverage', [
+			'methods'             => 'GET',
+			'callback'            => [ __CLASS__, 'coverage' ],
+			'permission_callback' => [ __CLASS__, 'can_admin' ],
+			'args'                => [ 'period' => [ 'type' => 'string', 'required' => false ] ],
+		] );
 	}
 
 	public static function can_access( WP_REST_Request $req ) {
@@ -120,5 +129,20 @@ class ZCC_REST {
 
 	public static function self_test( WP_REST_Request $req ) {
 		return rest_ensure_response( class_exists( 'ZCC_Self_Test' ) ? ZCC_Self_Test::run() : [ 'passed' => false, 'error' => 'self-test unavailable' ] );
+	}
+
+	/**
+	 * Admin-only attribution-coverage snapshot for a period (default this month).
+	 * Counts + one unassigned-revenue total only; no per-person figure. Read-only.
+	 */
+	public static function coverage( WP_REST_Request $req ) {
+		if ( ! class_exists( 'ZCC_Coverage' ) || ! class_exists( 'ZCC_FreshBooks' ) ) {
+			return new WP_Error( 'zcc_unavailable', 'Coverage unavailable.', [ 'status' => 503 ] );
+		}
+		$period = (string) ( $req->get_param( 'period' ) ?: '' );
+		$start  = preg_match( '/^\d{4}-\d{2}$/', $period ) ? $period . '-01' : current_time( 'Y-m-01' );
+		$end    = preg_match( '/^\d{4}-\d{2}$/', $period ) ? gmdate( 'Y-m-t', strtotime( $start ) ) : current_time( 'Y-m-d' );
+		$invoices = ZCC_FreshBooks::is_connected() ? ZCC_FreshBooks::get_invoices( $start, $end ) : [];
+		return rest_ensure_response( ZCC_Coverage::snapshot( is_array( $invoices ) ? $invoices : [] ) );
 	}
 }

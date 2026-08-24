@@ -196,6 +196,17 @@
                     clearInterval(_pollTimer);
                     _pollTimer = null;
                     generationComplete();
+                } else if (status === 'no_matches') {
+                    // D-04: a definite empty result — terminal, neutral (never red).
+                    clearInterval(_pollTimer);
+                    _pollTimer = null;
+                    setProgress(100);
+                    log('🔵 No matches: ' + msg);
+                    isRunning = false;
+                    $('#zl-btn-test, #zl-btn-full').prop('disabled', false);
+                    $('#zl-salesperson, #zl-lookback, #zl-product-filter').prop('disabled', false);
+                    $('#zl-city-zip, #zl-spend-min, #zl-spend-max, #zl-demographic').prop('disabled', false);
+                    setTimeout(function () { location.reload(); }, 4000);
                 } else if (status === 'error') {
                     clearInterval(_pollTimer);
                     _pollTimer = null;
@@ -876,6 +887,11 @@
                     html += '<button class="button button-small zl-mark-skipped" data-lead-id="' + lead.id + '">✕ Skip</button>';
                 }
                 
+                // D-03: recover a lead that failed to reach the CRM (duplicate-safe retry).
+                if ((lead.crm_recoverable === 1 || lead.crm_recoverable === '1' || lead.crm_recoverable === true) && !lead.nutshell_lead_id) {
+                    html += ' <button class="button button-small zl-recover-lead" data-lead-id="' + lead.id + '" title="This lead never reached the CRM. Create it now (safe to retry).">↻ Create Now</button>';
+                }
+
                 // Nutshell Link Button
                 if (lead.nutshell_lead_id) {
                     html += ' <a href="https://app.nutshell.com/lead/' + lead.nutshell_lead_id + '" target="_blank" class="button button-small zl-nutshell-link">Nutshell ↗</a>';
@@ -1023,6 +1039,38 @@
         var leadId = $(this).data('lead-id');
         updateContactStatus(leadId, 'skipped', '');
     });
+
+    /**
+     * D-03: recover a lead that never reached the CRM. Duplicate-safe, CRM-only retry.
+     * A failed retry is a real, human-labelled response (retryable or not), not a crash.
+     */
+    $(document).on('click', '.zl-recover-lead', function () {
+        var $btn = $(this);
+        var leadId = $btn.data('lead-id');
+        recoverLead(leadId, $btn);
+    });
+
+    function recoverLead(leadId, $btn) {
+        if (!leadId) { return; }
+        $btn.prop('disabled', true).text('↻ Creating\u2026');
+        var $row = $('[data-lead-id="' + leadId + '"]').closest('.zl-leads-container');
+        var batchId = $row.length ? $row.attr('id').replace('zl-leads-container-', '') : null;
+        ajaxPost('zl_retry_lead', { lead_id: leadId },
+            function (data) {
+                var action = (data && data.action) ? data.action : 'created';
+                $btn.text(action === 'adopted' ? '✓ Re-linked' : '✓ Created');
+                log('✅ Recovered lead ' + leadId + ': ' + ((data && data.label) || 'created in CRM.'));
+                if (batchId) { setTimeout(function () { loadBatchLeads(batchId); }, 800); }
+            },
+            function (data) {
+                // onError receives response.data (an object with label/retryable).
+                var label = (data && data.label) ? data.label : (typeof data === 'string' ? data : 'Retry failed.');
+                var retryable = !(data && data.retryable === false);
+                $btn.prop('disabled', !retryable).text(retryable ? '↻ Try again' : ('✕ ' + label));
+                log('⚠️ Recover lead ' + leadId + ' failed: ' + label);
+            }
+        );
+    }
 
     /**
      * Updates the status of a lead in the database and refreshes the UI.
