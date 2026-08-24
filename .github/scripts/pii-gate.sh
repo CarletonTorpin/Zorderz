@@ -6,15 +6,19 @@
 # appears in the built zips. This is the safety gate that makes the open-source
 # extraction safe to publish: Core must name no business.
 #
-# The wordlist is CONFIDENTIAL and MUST NOT live in this public repo. Supply it at
-# runtime via the ZDZ_PII_WORDLIST environment variable — a newline-separated list
-# of terms — wired from a GitHub Actions *secret*:
+# The wordlist is CONFIDENTIAL and MUST NEVER be handed to this repository — not
+# committed, and NOT stored as a GitHub Actions secret (a repo secret still lives
+# with the repo). This gate therefore runs PRIVATELY, never in public CI: run it in
+# a private environment (e.g. a local checkout or a trusted session) where the
+# wordlist is supplied out-of-band via the ZDZ_PII_WORDLIST environment variable —
+# a newline-separated list of terms — and never persisted:
 #
-#     env:
-#       ZDZ_PII_WORDLIST: ${{ secrets.ZDZ_PII_WORDLIST }}
+#     ZDZ_PII_WORDLIST="$(cat /path/to/private/wordlist.txt)" \
+#       bash .github/scripts/pii-gate.sh dist
 #
-# This script never prints the wordlist or the matched text — only the offending
-# file and a redacted match count — so a PUBLIC CI log cannot leak the terms.
+# The script itself holds no terms, so it is safe to keep in the repo. It never
+# prints the wordlist or the matched text — only the offending file and a redacted
+# match count — so even its output cannot leak the terms.
 #
 # Usage:  bash .github/scripts/pii-gate.sh [dist-dir]   (default: dist)
 # Exit:   0 clean · 1 leak found · 2 misconfigured (wordlist/zips missing)
