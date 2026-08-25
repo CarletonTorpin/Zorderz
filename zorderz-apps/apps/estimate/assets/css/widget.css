@@ -1,38 +1,43 @@
 /*
  * Zorderz Estimates — widget styles.
- * Neutral, self-contained; leans on the theme's CSS variables when present.
+ * Neutral, self-contained; leans on the theme's --sys-* design tokens when present,
+ * with light-mode literals as fallback. (Pre-1.7.1 this referenced a --zdz-* token
+ * namespace the theme never defined, so it always fell back to the light-mode
+ * literals — dark-on-dark text on the dark dashboard. The theme's real tokens are
+ * --sys-text / --sys-text-sec / --sys-text-ter / --sys-border / --sys-brand /
+ * --sys-tint-neutral-* / --sys-tint-warning-fg, each theme-aware.)
  */
-.zest-w { font: inherit; color: var(--zdz-fg, #1d2327); }
-.zest-w-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--zdz-border, #e2e4e7); margin-bottom: 12px; overflow-x: auto; }
-.zest-w-tab { appearance: none; background: none; border: none; padding: 10px 12px; min-height: 44px; font: inherit; color: var(--zdz-muted, #646970); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
-.zest-w-tab.is-active { color: var(--zdz-accent, #0E7C86); border-bottom-color: var(--zdz-accent, #0E7C86); font-weight: 600; }
+.zest-w { font: inherit; color: var(--sys-text, #1d2327); }
+.zest-w-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--sys-border, #e2e4e7); margin-bottom: 12px; overflow-x: auto; }
+.zest-w-tab { appearance: none; background: none; border: none; padding: 10px 12px; min-height: 44px; font: inherit; color: var(--sys-text-sec, #646970); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+.zest-w-tab.is-active { color: var(--sys-brand, #0E7C86); border-bottom-color: var(--sys-brand, #0E7C86); font-weight: 600; }
 .zest-w-panel { display: none; }
 .zest-w-panel.is-active { display: block; }
 
-.zest-textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--zdz-border, #dcdcde); border-radius: 8px; font: inherit; resize: vertical; }
+.zest-textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--sys-border, #dcdcde); border-radius: 8px; font: inherit; resize: vertical; }
 .zest-action-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-.zest-upload { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--zdz-border, #dcdcde); border-radius: 8px; cursor: pointer; }
+.zest-upload { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--sys-border, #dcdcde); border-radius: 8px; cursor: pointer; }
 .zest-btn { appearance: none; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid transparent; font: inherit; cursor: pointer; }
-.zest-btn-primary { background: var(--zdz-accent, #0E7C86); color: #fff; }
+.zest-btn-primary { background: var(--sys-brand, #0E7C86); color: var(--sys-text-brand, #fff); }
 .zest-btn-primary[disabled] { opacity: .5; cursor: not-allowed; }
-.zest-btn-secondary { background: transparent; border-color: var(--zdz-border, #dcdcde); }
+.zest-btn-secondary { background: transparent; border-color: var(--sys-border, #dcdcde); }
 
-.zest-status { margin-top: 10px; display: flex; align-items: center; gap: 8px; color: var(--zdz-muted, #646970); }
+.zest-status { margin-top: 10px; display: flex; align-items: center; gap: 8px; color: var(--sys-text-sec, #646970); }
 /* The status is toggled with the [hidden] attribute in JS. Its own display:flex above
    would otherwise beat the UA [hidden] rule, so setStatus('') left "Reading..." on
    screen above the finished preview. Restore hide-on-clear. */
 .zest-status[hidden] { display: none; }
 .zest-preview { margin-top: 12px; }
-.zest-line { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--zdz-border, #f0f0f1); }
-.zest-line-meta { color: var(--zdz-muted, #646970); font-size: .9em; }
+.zest-line { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--sys-border, #f0f0f1); }
+.zest-line-meta { color: var(--sys-text-ter, #646970); font-size: .9em; }
 .zest-line-price { font-variant-numeric: tabular-nums; }
-.zest-hint { color: #a15c00; font-size: .9em; margin-top: 6px; }
+.zest-hint { color: var(--sys-tint-warning-fg, #a15c00); font-size: .9em; margin-top: 6px; }
 
 .zest-w-list { display: flex; flex-direction: column; gap: 8px; }
-.zest-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--zdz-border, #f0f0f1); border-radius: 8px; min-height: 44px; cursor: pointer; }
-.zest-row:hover { border-color: var(--zdz-accent, #0E7C86); }
+.zest-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--sys-border, #f0f0f1); border-radius: 8px; min-height: 44px; cursor: pointer; }
+.zest-row:hover { border-color: var(--sys-brand, #0E7C86); }
 .zest-row-name { font-weight: 600; }
-.zest-row-sub { color: var(--zdz-muted, #646970); font-size: .9em; }
-.zest-badge { font-size: .75em; padding: 2px 8px; border-radius: 999px; background: var(--zdz-chip, #eef1f2); color: var(--zdz-muted, #646970); }
-.zest-empty { color: var(--zdz-muted, #646970); padding: 16px; text-align: center; }
+.zest-row-sub { color: var(--sys-text-ter, #646970); font-size: .9em; }
+.zest-badge { font-size: .75em; padding: 2px 8px; border-radius: 999px; background: var(--sys-tint-neutral-bg, #eef1f2); color: var(--sys-tint-neutral-fg, #646970); }
+.zest-empty { color: var(--sys-text-sec, #646970); padding: 16px; text-align: center; }
 .zest-loading::after { content: ""; }
