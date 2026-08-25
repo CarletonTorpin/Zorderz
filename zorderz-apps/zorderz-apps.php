@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Apps
  * Plugin URI:  https://zorderz.org
  * Description: The Zorderz app bundle - 19 apps (Camera, Media, Sketch Pad, Messaging, Quick-ID, Game, Invoices, Knowledge Base, Scheduler, Jobs, Surveys, Stock, Leads, Prep, Receipts, Estimates, Commission, Dot Plot, and the Chat assistant). Requires the Zorderz theme, which provides the dashboard, roles, permissions, shared media store, Item Engine and Core services these apps register into.
- * Version:     1.7.1
+ * Version:     1.7.2
  * Author:      Zorderz
  * Author URI:  https://zorderz.com
  * License:     GPL-2.0-or-later
@@ -40,7 +40,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ZDZ_APPS_VERSION', '1.6.1' );
+/*
+ * Bundle release version — the single number the theme and this bundle share in
+ * lockstep. Derived from this file's own "Version:" header so it can never drift
+ * from it. The in-place-upgrade gate on `plugins_loaded` (below) re-runs every
+ * app's activation only when this differs from the stored `zdz_apps_version`
+ * option, so a release that bumped the header but forgot a hardcoded constant
+ * here would silently skip that re-activation. The literal is only a fallback
+ * for the rare boot where get_file_data() is not yet available.
+ */
+if ( ! defined( 'ZDZ_APPS_VERSION' ) ) {
+	$zdz_apps_ver = '1.7.2';
+	if ( function_exists( 'get_file_data' ) ) {
+		$zdz_apps_hdr = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
+		if ( ! empty( $zdz_apps_hdr['Version'] ) ) {
+			$zdz_apps_ver = $zdz_apps_hdr['Version'];
+		}
+		unset( $zdz_apps_hdr );
+	}
+	define( 'ZDZ_APPS_VERSION', $zdz_apps_ver );
+	unset( $zdz_apps_ver );
+}
 define( 'ZDZ_APPS_FILE', __FILE__ );
 define( 'ZDZ_APPS_DIR', plugin_dir_path( __FILE__ ) );
 
