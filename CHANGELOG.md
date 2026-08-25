@@ -11,6 +11,20 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.7.2] - 2026-08-25
+
+Point release: repairs the in-place-upgrade path for the apps bundle and closes three version and configuration congruence gaps found in review. No database, schema or REST changes — a straight upgrade over 1.7.1.
+
+### Fixed
+- **In-place apps upgrade skipped its re-activation step.** The bundle re-runs every app's activation on `plugins_loaded` when its version changes, because uploading a new apps zip over an existing install does not fire WordPress activation. The version marker `ZDZ_APPS_VERSION` had been left at `1.6.1` since that release, so on a 1.6.1 → 1.7.x in-place upgrade the marker still equalled the stored value and the re-activation was silently skipped. `ZDZ_APPS_VERSION` now derives from the plugin's own `Version:` header, so it tracks every release and cannot drift again. Fresh installs were never affected (they run activation directly), and per-app database migrations were never affected (each guards itself on its own DB version).
+
+### Changed
+- Declared PHP floor aligned to **8.0** everywhere — `composer.json` and both phpcs rulesets — to match the theme and apps `Requires PHP: 8.0` headers.
+- `SECURITY.md` supported-versions note corrected (Zorderz is past 1.0, not "pre-1.x").
+- Theme and apps bundle move to 1.7.2 in lockstep.
+
+---
+
 ## [1.7.1] - 2026-08-24
 
 Point release: display fix found during live functional verification of 1.7.0. No database, schema or REST changes — a straight upgrade over 1.7.0.
