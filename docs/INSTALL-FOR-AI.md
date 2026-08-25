@@ -69,23 +69,35 @@ If any check fails, stop: this environment cannot run Zorderz yet.
 
 ## 2. Obtain the artifact(s)
 
-**Action:** Download the release zip(s) to the host (or note their local paths).
+**Do not hardcode a version.** This guide deliberately names no release number, and neither should your installer. The single source of truth is the **latest published release**: the version is authored once in the theme's `style.css`, and `build.sh` carries it into the two zip filenames and the release tag, so the release itself is the manifest. Read the current version and the asset filenames from that release, then use them for the rest of this guide. (Copying a version out of any document, including this one, is how installs drift out of date.)
 
-- `zorderz-theme-1.7.0.zip`: the theme (platform kernel + Core services). **On the default one-upload path this is the only file you need**, because the theme carries the apps bundle inside it.
-- `zorderz-apps-1.7.0.zip`: the apps bundle (19 apps) on its own. You need this only for the two-artifact fallback (step 6) or to update the apps independently.
+**Action:** Resolve the latest release, then set `VER` to its version.
+
+```bash
+# The approved manifest is the latest release. The theme and apps zips upgrade
+# together in lockstep, so they always share one version.
+VER="$(curl -fsSL https://api.github.com/repos/CarletonTorpin/Zorderz/releases/latest \
+  | grep -oE '"tag_name": *"v?[0-9]+\.[0-9]+\.[0-9]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+echo "$VER"     # e.g. 1.7.1 — whatever the current release is
+```
+
+**Action:** Download both assets from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed there.
+
+- `zorderz-theme-${VER}.zip`: the theme (platform kernel + Core services). **On the default one-upload path this is the only file you need**, because the theme carries the apps bundle inside it.
+- `zorderz-apps-${VER}.zip`: the apps bundle (19 apps) on its own. You need this only for the two-artifact fallback (step 6) or to update the apps independently.
 
 **Verify** each zip you have is intact with the expected top-level folder:
 
 ```bash
-unzip -Z1 zorderz-theme-1.7.0.zip | head -1                     # -> zorderz/
-unzip -Z1 zorderz-theme-1.7.0.zip | grep -m1 'zorderz/style.css'
-unzip -Z1 zorderz-theme-1.7.0.zip | grep -m1 'zorderz/bundled/zorderz-apps/zorderz-apps.php'   # the vendored apps
-unzip -Z1 zorderz-apps-1.7.0.zip  | grep -m1 'zorderz-apps/zorderz-apps.php'                   # only if using the fallback
+unzip -Z1 "zorderz-theme-${VER}.zip" | head -1                     # -> zorderz/
+unzip -Z1 "zorderz-theme-${VER}.zip" | grep -m1 'zorderz/style.css'
+unzip -Z1 "zorderz-theme-${VER}.zip" | grep -m1 'zorderz/bundled/zorderz-apps/zorderz-apps.php'   # the vendored apps
+unzip -Z1 "zorderz-apps-${VER}.zip"  | grep -m1 'zorderz-apps/zorderz-apps.php'                   # only if using the fallback
 ```
 
 Theme slug is `zorderz`; plugin slug is `zorderz-apps`.
 
-> Building from source instead of a release? Run `./build.sh`. It reads the version from `style.css` and produces both zips, vendoring the apps into the theme. A raw source checkout has no vendored apps, so on a raw checkout the auto-installer will fall back to the two-artifact path (step 6); a built release zip will not.
+> Building from source instead of a release? Run `./build.sh`. It reads the version from `style.css` and produces both zips (named `zorderz-theme-<version>.zip` and `zorderz-apps-<version>.zip`), vendoring the apps into the theme. A raw source checkout has no vendored apps, so on a raw checkout the auto-installer will fall back to the two-artifact path (step 6); a built release zip will not.
 
 ---
 
@@ -117,7 +129,7 @@ The theme is the platform. It must be active before the plugin, because it defin
 **Action (WP-CLI):**
 
 ```bash
-wp theme install /path/to/zorderz-theme-1.7.0.zip --activate
+wp theme install /path/to/zorderz-theme-${VER}.zip --activate
 ```
 
 **Action (wp-admin / browser):** Appearance -> Themes -> Add New -> Upload Theme -> choose the theme zip -> Install -> **Activate**.
@@ -128,7 +140,7 @@ On activation, and again on the next admin page load, the theme's `ZDZ_Apps_Auto
 
 ```bash
 wp theme list --status=active --field=name        # -> includes zorderz
-wp theme get zorderz --field=version              # -> 1.7.0
+wp theme get zorderz --field=version              # -> equals $VER (from step 2)
 curl -fsS "SITE/wp-json/" | grep -o '"zorderz/v1"' # -> "zorderz/v1"
 ```
 
@@ -138,7 +150,7 @@ If `zorderz/v1` is absent, the theme is not active; do not continue.
 
 ```bash
 wp plugin list --status=active --field=name       # -> includes zorderz-apps
-wp plugin get zorderz-apps --field=version        # -> 1.7.0
+wp plugin get zorderz-apps --field=version        # -> equals $VER; matches the theme (they ship in lockstep)
 ```
 
 - If `zorderz-apps` is active, **skip step 6** and go to step 7.
@@ -159,7 +171,7 @@ Only if step 4 showed the apps did not auto-install.
 **Action (WP-CLI):**
 
 ```bash
-wp plugin install /path/to/zorderz-apps-1.7.0.zip --activate
+wp plugin install /path/to/zorderz-apps-${VER}.zip --activate
 ```
 
 **Action (wp-admin / browser):** Plugins -> Add New -> Upload Plugin -> choose the apps zip -> Install -> **Activate Plugin**.
@@ -289,8 +301,8 @@ Connections are optional for a first boot; the apps stand alone and hook into ex
 
 The install is **done** when all of the following hold:
 
-- [ ] `wp theme get zorderz --field=version` -> `1.7.0`, and the theme is active.
-- [ ] `wp plugin get zorderz-apps --field=version` -> `1.7.0`, and the plugin is active (auto-installed, or by step 6).
+- [ ] `wp theme get zorderz --field=version` equals `$VER` (the version resolved in step 2), and the theme is active.
+- [ ] `wp plugin get zorderz-apps --field=version` equals `$VER` too (theme and apps ship in lockstep), and the plugin is active (auto-installed, or by step 6).
 - [ ] No admin notice about a missing theme or a failed app load.
 - [ ] `SITE/zdz-manifest.json` returns JSON (not HTML).
 - [ ] `SITE/wp-json/` lists `zorderz/v1`.
@@ -308,8 +320,8 @@ When every box is checked, stop. The site is a working Zorderz install.
 **Re-running is safe.** Updating in place:
 
 ```bash
-wp theme install /path/to/zorderz-theme-1.7.0.zip --force
-wp plugin install /path/to/zorderz-apps-1.7.0.zip --force   # only if you manage the apps separately
+wp theme install /path/to/zorderz-theme-${VER}.zip --force
+wp plugin install /path/to/zorderz-apps-${VER}.zip --force   # only if you manage the apps separately
 wp rewrite flush --hard
 ```
 
