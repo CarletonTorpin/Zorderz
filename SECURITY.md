@@ -20,8 +20,8 @@ Please give us a reasonable window to ship a fix before any public disclosure.
 
 ## Supported versions
 
-Zorderz is pre-1.x and moves quickly. Security fixes land on `main` and in the next tagged
-release. Run the latest release.
+Zorderz moves quickly, and the supported version is always the latest release. Security fixes
+land on `main` and in the next tagged release, so run the latest.
 
 ## What we consider a vulnerability
 
