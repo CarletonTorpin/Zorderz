@@ -11,6 +11,21 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.7.1] - 2026-08-24
+
+Point release: display fix found during live functional verification of 1.7.0. No database, schema or REST changes — a straight upgrade over 1.7.0.
+
+### Fixed
+- **Estimates widget rendered dark-on-dark.** The widget styled its text with a `--zdz-*` CSS-variable namespace the theme never defines, so on the dark dashboard it fell back to hardcoded light-mode colors — the customer name, every line item and price, the typed textarea text and the open/history cards were all near-invisible. Repointed to the theme's real `--sys-*` tokens (theme-aware across light/dark/sunlight/system). Isolated to this one widget.
+
+### Changed
+- Apps-bundle plugin header corrected to **19 apps** (adds Dot Plot) and brought into 1.7.x lockstep with the theme.
+
+### Notes
+- Theme and apps bundle move to 1.7.1 in lockstep.
+
+---
+
 ## [1.7.0] - 2026-08-24
 
 The workflow release. Ported the delta between the source app's V9.15 and V9.25.14 as four build waves, generalizing every tenant-specific value as it went so Core still names no business. Adds a workflow spine and the apps that ride on it, an update path for estimates, a schedule-inference service and a visualization app — plus the reliability fix that ends the worker-exhaustion 502s.
