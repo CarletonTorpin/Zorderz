@@ -275,7 +275,7 @@ class ZIM_Admin {
 				<?php submit_button( __( 'Download CSV', 'zdz-internal-messaging' ) ); ?>
 			</form>
 			<?php if ( ! class_exists( 'ZDZ_Admin_Dashboard' ) ) : ?>
-				<p><em><?php esc_html_e( 'The theme audit log is not available in this TS theme version. Export will be empty.', 'zdz-internal-messaging' ); ?></em></p>
+				<p><em><?php esc_html_e( 'The theme audit log is not available in this Zorderz theme version. Export will be empty.', 'zdz-internal-messaging' ); ?></em></p>
 			<?php endif; ?>
 		</div>
 		<?php

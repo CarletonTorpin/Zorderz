@@ -91,7 +91,7 @@ class ZIM_Dashboard {
 				'code'    => 'zim_not_logged_in',
 			), 403 );
 		}
-		// Dual capability check — matches TSA v1.9.27+'s pattern:
+		// Dual capability check — matches Analytics v1.9.27+'s pattern:
 		// WordPress admin (manage_options) OR Zorderz custom cap (zdz_access_app).
 		if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'zdz_access_app' ) ) {
 			wp_send_json_error( array(
@@ -484,7 +484,7 @@ class ZIM_Dashboard {
 	 * v1.0.20: Knowledge Vault document preview.
 	 *
 	 * Accepts either `id` (numeric vault doc ID) or `slug` (pretty URL slug).
-	 * Delegates to ZIM_Vault_Cards which calls TSKV's REST endpoint via
+	 * Delegates to ZIM_Vault_Cards which calls Knowledge Vault's REST endpoint via
 	 * internal dispatch — same pattern as FreshBooks preview cards.
 	 */
 	public function ajax_preview_vault() {
@@ -600,8 +600,8 @@ class ZIM_Dashboard {
 
 		// v1.0.23: Removed `ID <> %d` exclusion so the current user appears
 		// in their own search results. This lets users initiate a self-DM
-		// ("Notes to Self") from the TSIM New DM picker — not only via
-		// Brain Bot. The ZIM_DMs::get_or_create_conversation() backend
+		// ("Notes to Self") from the Messaging New DM picker — not only via
+		// the assistant. The ZIM_DMs::get_or_create_conversation() backend
 		// now allows $user_a === $user_b.
 		$rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT ID, user_login, display_name

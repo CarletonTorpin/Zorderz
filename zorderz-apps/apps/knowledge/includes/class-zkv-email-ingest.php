@@ -484,13 +484,13 @@ class ZKV_Email_Ingest {
 		// forwarded the text — and no vault link they may not be able to open.)
 		if ( 'transcript_private' === ( $final['visibility'] ?? '' ) ) {
 			$lines[] = 'Visibility: PRIVATE TRANSCRIPT — only the people named as speakers can open it (matched to staff accounts; unmatched speakers wait for an admin to confirm).';
-			$lines[] = 'It does NOT appear in general search or Brain Bot except for its named parties.';
+			$lines[] = 'It does NOT appear in general search or the assistant except for its named parties.';
 		} else {
 			if ( ! empty( $final['slug'] ) ) {
 				$lines[] = 'View it: ' . home_url( '/vault/' . $final['slug'] );
 			}
 			$lines[] = '';
-			$lines[] = 'It is now searchable in the Knowledge app and available to Brain Bot.';
+			$lines[] = 'It is now searchable in the Knowledge app and available to the assistant.';
 		}
 
 		self::send_mail( $notify['to'], 'Knowledge Vault — filed: ' . $final['title'], $lines );

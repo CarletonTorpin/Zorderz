@@ -7,7 +7,7 @@
  * the Widget_App_Interface contract ("return lightweight HTML; load heavy data
  * via AJAX").
  *
- * should_render() mirrors TSIM: hide entirely under TSA customer-facing mode.
+ * should_render() mirrors Messaging: hide entirely under Analytics customer-facing mode.
  *
  * v1.6.0 adds the CONNECTED CALENDARS card (flag-gated): a ⚙ header button +
  * modal where a user connects their own Google / Microsoft calendars as
@@ -27,8 +27,8 @@ class ZSCH_Widget {
 
 	/**
 	 * Whether the scheduler should render at all for the current request.
-	 * Hidden when TSA's customer-facing mode is active (never a visible
-	 * refusal). Degrades to "true" when TSA isn't installed.
+	 * Hidden when Analytics's customer-facing mode is active (never a visible
+	 * refusal). Degrades to "true" when Analytics isn't installed.
 	 *
 	 * @return bool
 	 */

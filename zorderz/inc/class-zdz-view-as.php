@@ -10,7 +10,7 @@
  *   ?zdz_view_as=zdz_operator   → preview as Operator
  *   ?zdz_view_as=zdz_sales      → preview as Salesperson
  *   ?zdz_view_as=zdz_tech       → preview as Field Tech
- *   ?zdz_view_as=zdz_admin      → preview as TS Admin (sees all apps)
+ *   ?zdz_view_as=zdz_admin      → preview as an app admin (sees all apps)
  *   ?zdz_view_as=reset         → exit preview, return to real admin view
  *
  * UI surfaces (v2.14.0):
@@ -23,7 +23,7 @@
  *
  * The pre-2.14 always-visible floating button was removed because it
  * sat at top:8px right:12px with z-index:99999 and overlapped controls
- * in the TS Internal Messaging plugin (search/bell/settings) on iPhone
+ * in the Zorderz Internal Messaging plugin (search/bell/settings) on iPhone
  * and iPad viewports. Admins who want quick frontend access can either
  * (a) use the URL param mechanism, (b) bookmark common roles, or
  * (c) enable their own admin bar from User Profile → Toolbar.
@@ -198,7 +198,7 @@ class ZDZ_View_As {
 		$reset_url     = esc_url( add_query_arg( 'zdz_view_as', 'reset' ) );
 		?>
 
-		<!-- TS View-As active-session banner (admin only, only while emulating) -->
+		<!-- View-As active-session banner (admin only, only while emulating) -->
 		<div id="zdz-view-as" style="
 			position: fixed;
 			top: 0; left: 0; right: 0;

@@ -25,7 +25,7 @@
  *     are GONE from code; with an empty catalog every resolver degrades to neutral and nothing
  *     breaks. A fictional demo catalog is available only via the Item Engine's own sample
  *     mechanism (Settings → "Apply sample catalog"), never auto-seeded.
- *   - The off-repo "TS-STOCK-BRAIN" bot's baked product-catalog knowledge becomes an in-repo,
+ *   - The off-repo "the stock assistant" bot's baked product-catalog knowledge becomes an in-repo,
  *     placeholder-driven prompt template (defaults/brain-prompt.md) assembled at runtime from
  *     the Business Profile + the live Item Engine catalog, sent through the shared ZDZ_Core_Poe
  *     client. The bot name is a setting (blank ⇒ the platform's default model) — no bot name is

@@ -85,7 +85,7 @@
  * v1.0.26 (chat-regression fix): The cron_schedules filter used __() for its
  *   schedule label, which fires before the `init` action and triggered WP 6.7+'s
  *   "_load_textdomain_just_in_time was called incorrectly" PHP notice on EVERY
- *   request. With WP_DEBUG_DISPLAY on, that notice leaked into the TSA chat's
+ *   request. With WP_DEBUG_DISPLAY on, that notice leaked into the Analytics chat's
  *   AJAX JSON responses, corrupting them → "Network error creating/loading
  *   session." Fix: the label is now a plain string (admin-only; no early
  *   translation needed). Paired with the analytics app's verify_ajax() JSON-output guard.
@@ -109,7 +109,7 @@
  *   - UI: the composer footer is NOT rendered into the DOM for the kiosk
  *     (removed, not merely disabled), the "New DM" affordance is hidden, and a
  *     read-only notice is shown where the composer would be. zimData carries
- *     isReadOnly. The widget also refuses the TSA embed auto-send / DM-route
+ *     isReadOnly. The widget also refuses the Analytics embed auto-send / DM-route
  *     for read-only users (client-side defence-in-depth; the server blocks are
  *     the guarantee).
  *   No DB migration: read-only behaviour is role-derived; #announcements
@@ -147,7 +147,7 @@
  *
  * SELF-CONTAINED:
  * This plugin uses NO external API clients. FreshBooks preview cards proxy
- * through the analytics app's /zorderz/v1/freshbooks-preview/{id} endpoint when TSA is
+ * through the analytics app's /zorderz/v1/freshbooks-preview/{id} endpoint when Analytics is
  * installed; when not, #NNNNN auto-linking still works via a plain FB search
  * URL, and preview cards degrade gracefully. See Trap 2.
  *
@@ -397,18 +397,18 @@ add_filter( 'cron_schedules', function( $schedules ) {
 			// v1.0.25: plain string — NOT __(). The cron_schedules filter fires before
 			// the `init` action, so a translation call here triggered WP 6.7+'s
 			// "_load_textdomain_just_in_time was called incorrectly" PHP notice on EVERY
-			// request. That notice was leaking into the TSA chat's AJAX JSON responses
+			// request. That notice was leaking into the Analytics chat's AJAX JSON responses
 			// (DOING_AJAX guard runs too late to catch a load-time notice), corrupting
 			// them → "Network error creating/loading session." The label is admin-only
 			// (the WP-Cron schedules screen); it does not need early translation.
-			'display'  => 'Every minute (TSIM)',
+			'display'  => 'Every minute (Messaging)',
 		);
 	}
 	return $schedules;
 } );
 
 // ── Media Library exclusion ─────────────────────────────────────────
-// TSIM chat attachments are stored as private WP attachment posts with
+// Messaging chat attachments are stored as private WP attachment posts with
 // meta key `_tsim_chat_attachment`. We exclude them from the admin Media
 // Library so they don't clutter the shared media grid. Users can still
 // view their images through the chat thread where they were shared.

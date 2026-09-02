@@ -23,7 +23,7 @@
  * NitroPack (Strong mode) handles all caching (CDN, browser cache headers,
  * critical CSS extraction, JS deferral). This SW exists to support the
  * PWA ↔ Safari authentication bridge via CacheStorage, and (since v2.21.0)
- * to drain the TS Camera durable upload queue via Background Sync.
+ * to drain the Zorderz Camera durable upload queue via Background Sync.
  *
  * The custom fetch handler is for the virtual /_ts-bridge-token endpoint,
  * which stores/retrieves bridge tokens in CacheStorage. All other requests
@@ -75,7 +75,7 @@
  *                   HTML). A long-deferred background sync may still hold an
  *                   expired nonce — acceptable: the attempt fails clean and
  *                   the foreground drain retries with a live one.
- * @updated 2.21.0 — Background Sync drain for TS Camera durable uploads.
+ * @updated 2.21.0 — Background Sync drain for Zorderz Camera durable uploads.
  * @updated 2.21.2 — Background-Sync drain rebuilds the upload Blob from the
  *                   record's ArrayBuffer (`buf`) via tscamBlob(), matching
  *                   zdz-camera v1.2.7 (which stores bytes, not a Blob, because
@@ -241,7 +241,7 @@ self.addEventListener('fetch', function (event) {
 });
 
 /* ─────────────────────────────────────────────────────────────────────────
- * TS Camera — Durable photo upload via Background Sync (v2.x)
+ * Zorderz Camera — Durable photo upload via Background Sync (v2.x)
  *
  * The camera plugin persists each capture (original file + EXIF args) to an
  * IndexedDB store the instant the shutter fires. When a foreground upload

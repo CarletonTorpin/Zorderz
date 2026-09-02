@@ -33,7 +33,7 @@
 		var root = document.getElementById('zim-widget');
 		if (!root || typeof window.zimData === 'undefined') return;
 		booted = true;
-		try { new TSIMController(root); } catch (e) { console.error('[TSIM] boot failed', e); }
+		try { new ZIMController(root); } catch (e) { console.error('[Messaging] boot failed', e); }
 	}
 	document.addEventListener('zdz_widgets_rendered', bootOnce);
 	if (document.readyState === 'loading') {
@@ -322,7 +322,7 @@
 	// Markdown-lite with DOMPurify sanitization. Reuses marked.js if present.
 	// v1.0.21: Added italic support (_text_ and *text*), double-underscore bold,
 	// and friendly display text for this site URLs.
-	// v1.0.24: TSA v1.18.1 sends pre-rendered HTML (bodyDiv.innerHTML instead of
+	// v1.0.24: Analytics v1.18.1 sends pre-rendered HTML (bodyDiv.innerHTML instead of
 	// .textContent). Detect it and skip the markdown-lite pipeline — the regexes
 	// will mangle HTML (underscores in href URLs, nested <a> tags from the URL
 	// autolinker, asterisks in attribute values triggering italic). The DOMPurify
@@ -358,7 +358,7 @@
 		var src = String(raw || '');
 
 		// v1.0.24: If the message body already contains HTML tags, it was
-		// pre-rendered by TSA v1.18.1+ or another plugin. Skip all text→HTML
+		// pre-rendered by Analytics v1.18.1+ or another plugin. Skip all text→HTML
 		// transforms (markdown, @mentions, #NNNNN chips, vault slug conversion)
 		// because those regexes assume plain text input and will produce broken
 		// output when run against existing HTML (nested <a> tags, matches inside
@@ -545,7 +545,7 @@
 	}
 
 	// ── Controller ──────────────────────────────────────────────
-	function TSIMController(root) {
+	function ZIMController(root) {
 		this.root = root;
 		this.el = {
 			messages: $('zim-w-messages'),
@@ -621,7 +621,7 @@
 	}
 
 	// ── Event wiring ────────────────────────────────────────────
-	TSIMController.prototype.wireEvents = function () {
+	ZIMController.prototype.wireEvents = function () {
 		var self = this;
 		this.el.sendBtn && this.el.sendBtn.addEventListener('click', function () { self.sendMessage(); });
 		if (this.el.input) {
@@ -705,7 +705,7 @@
 		// Preview chip + message-action clicks (delegated)
 		this.el.messages && this.el.messages.addEventListener('click', function (e) {
 			// v1.0.24: Regular <a> links in message bodies (from pre-rendered
-			// HTML via TSA v1.18.1+) should navigate naturally. Don't intercept
+			// HTML via Analytics v1.18.1+) should navigate naturally. Don't intercept
 			// them — they're already valid hyperlinks with href, target, rel.
 			// Only vault/FreshBooks chips (which have .zim-w-preview-chip) get
 			// special handling below.
@@ -815,12 +815,12 @@
 	/* ═══════════════════════════════════════════════════════════════════
 	 * v1.0.21: PULL-TO-REFRESH
 	 *
-	 * Consistent with TSA v1.13.7/v1.13.8 implementation. On iOS the
+	 * Consistent with Analytics v1.13.7/v1.13.8 implementation. On iOS the
 	 * browser chrome disappears when scrolling, leaving no way to trigger
 	 * a page refresh. This adds a pull-down gesture at the top of the
 	 * messages area that soft-refreshes the sidebar + active conversation.
 	 * ═══════════════════════════════════════════════════════════════════ */
-	TSIMController.prototype.initPullToRefresh = function () {
+	ZIMController.prototype.initPullToRefresh = function () {
 		var self = this;
 		var msgArea = this.el.messages;
 		if (!msgArea) return;
@@ -828,7 +828,7 @@
 		var startY = 0;
 		var pulling = false;
 		var indicator = null;
-		var threshold = 45; // matches TSA v1.13.8 reduced threshold
+		var threshold = 45; // matches Analytics v1.13.8 reduced threshold
 
 		msgArea.addEventListener('touchstart', function (e) {
 			// Only activate when scrolled to top
@@ -876,9 +876,9 @@
 
 	/**
 	 * v1.0.21: Soft refresh — reload sidebar + active conversation data
-	 * in-place without navigating away. Matches TSA v1.13.8 pattern.
+	 * in-place without navigating away. Matches Analytics v1.13.8 pattern.
 	 */
-	TSIMController.prototype.softRefresh = function () {
+	ZIMController.prototype.softRefresh = function () {
 		var self = this;
 
 		// Reload the sidebar
@@ -904,10 +904,10 @@
 		}
 	};
 
-	TSIMController.prototype.showOverlay = function (el) {
+	ZIMController.prototype.showOverlay = function (el) {
 		if (el) { el.hidden = false; el.style.display = ''; }
 	};
-	TSIMController.prototype.hideOverlay = function (el) {
+	ZIMController.prototype.hideOverlay = function (el) {
 		if (el) { el.hidden = true; el.style.display = 'none'; }
 	};
 
@@ -923,17 +923,17 @@
 	 *   .zim-w--view-list  → show sidebar, hide main
 	 *   .zim-w--view-convo → show main, hide sidebar
 	 */
-	TSIMController.prototype.showConvoView = function () {
+	ZIMController.prototype.showConvoView = function () {
 		this.root.classList.remove('zim-w--view-list');
 		this.root.classList.add('zim-w--view-convo');
 	};
-	TSIMController.prototype.showListView = function () {
+	ZIMController.prototype.showListView = function () {
 		this.root.classList.remove('zim-w--view-convo');
 		this.root.classList.add('zim-w--view-list');
 	};
 
 	// ── Sidebar polling ─────────────────────────────────────────
-	TSIMController.prototype.startSidebarPoll = function () {
+	ZIMController.prototype.startSidebarPoll = function () {
 		var self = this;
 		var tick = function () {
 			if (self.sidebarFetching) return;
@@ -955,7 +955,7 @@
 		this.sidebarPoll.start();
 	};
 
-	TSIMController.prototype.hideAll = function () {
+	ZIMController.prototype.hideAll = function () {
 		// v1.0.17 — fully destroy the pollable wrappers (clears their
 		// internal timers AND removes the visibilitychange listeners they
 		// each registered). `stop()` would only do the former, leaving the
@@ -966,7 +966,7 @@
 		this.root.innerHTML = '';
 	};
 
-	TSIMController.prototype.renderSidebar = function (payload) {
+	ZIMController.prototype.renderSidebar = function (payload) {
 		var self = this;
 		var channels = payload.channels || [];
 		var dms      = payload.dms || [];
@@ -1042,7 +1042,7 @@
 	};
 
 	// ── Conversation selection ──────────────────────────────────
-	TSIMController.prototype.selectConversation = function (conv) {
+	ZIMController.prototype.selectConversation = function (conv) {
 		var self = this;
 		// v1.0.18 — clear any pending loading timeout from a previous selection.
 		if (this._loadingTimeout) { clearTimeout(this._loadingTimeout); this._loadingTimeout = null; }
@@ -1140,7 +1140,7 @@
 		}, 12000);
 	};
 
-	TSIMController.prototype.startMainPoll = function () {
+	ZIMController.prototype.startMainPoll = function () {
 		var self = this;
 		var tick = function () {
 			if (!self.active || self.mainFetching) return;
@@ -1168,7 +1168,7 @@
 		this.mainPoll.start();
 	};
 
-	TSIMController.prototype.loadOlder = function () {
+	ZIMController.prototype.loadOlder = function () {
 		var self = this;
 		if (!this.active) return;
 		var oldestEl = this.el.messages.querySelector('.zim-w-msg');
@@ -1207,15 +1207,15 @@
 		});
 	};
 
-	TSIMController.prototype.isNearBottom = function () {
+	ZIMController.prototype.isNearBottom = function () {
 		var el = this.el.messages;
 		return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 	};
-	TSIMController.prototype.scrollToBottom = function () {
+	ZIMController.prototype.scrollToBottom = function () {
 		this.el.messages.scrollTop = this.el.messages.scrollHeight;
 	};
 
-	TSIMController.prototype.markRead = function () {
+	ZIMController.prototype.markRead = function () {
 		if (!this.active || !this.lastSeenId) return;
 		ajax('zim_mark_read', { conversation_id: this.active.id, message_id: this.lastSeenId }, { method: 'POST' });
 	};
@@ -1227,7 +1227,7 @@
 	 * definition, matching how iMessage groups messages by conversation
 	 * session rather than showing every timestamp.
 	 */
-	TSIMController.prototype.maybeInsertTimeSeparator = function (m, position) {
+	ZIMController.prototype.maybeInsertTimeSeparator = function (m, position) {
 		var gapMinutes = 30;
 		var prevTs = this._lastRenderedTs || 0;
 		var thisTs = m && m.created_at ? new Date(m.created_at).getTime() : 0;
@@ -1246,7 +1246,7 @@
 		}
 	};
 
-	TSIMController.prototype.appendMessage = function (m) {
+	ZIMController.prototype.appendMessage = function (m) {
 		if (this.renderedIds[m.id]) { this.updateMessage(m); return; }
 		this.renderedIds[m.id] = true;
 		this.maybeInsertTimeSeparator(m, 'append');
@@ -1254,14 +1254,14 @@
 		this.el.messages.appendChild(node);
 		this.observePreviewsIn(node);
 	};
-	TSIMController.prototype.prependMessage = function (m) {
+	ZIMController.prototype.prependMessage = function (m) {
 		if (this.renderedIds[m.id]) return;
 		this.renderedIds[m.id] = true;
 		var node = this.renderMessageNode(m);
 		this.el.messages.insertBefore(node, this.el.messages.firstChild);
 		this.observePreviewsIn(node);
 	};
-	TSIMController.prototype.updateMessage = function (m) {
+	ZIMController.prototype.updateMessage = function (m) {
 		var existing = this.el.messages.querySelector('[data-id="' + m.id + '"]');
 		if (!existing) return;
 		var fresh = this.renderMessageNode(m);
@@ -1269,7 +1269,7 @@
 		this.observePreviewsIn(fresh);
 	};
 
-TSIMController.prototype.renderMessageNode = function (m) {
+ZIMController.prototype.renderMessageNode = function (m) {
 		var isMine = !!(m.author && parseInt(m.author.id, 10) === parseInt(data.userId, 10));
 		var node = document.createElement('div');
 		// v1.0.20: In channels, all messages look left-aligned (Slack-style) so
@@ -1385,18 +1385,18 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── Composer: typing, @-autocomplete, send ──────────────────
-	TSIMController.prototype.onInput = function () {
+	ZIMController.prototype.onInput = function () {
 		this.autoGrow();
 		this.updateSendEnabled();
 		this.maybeOpenMention();
 		this.saveDraft();
 	};
-	TSIMController.prototype.autoGrow = function () {
+	ZIMController.prototype.autoGrow = function () {
 		var el = this.el.input; if (!el) return;
 		el.style.height = 'auto';
 		el.style.height = Math.min(160, el.scrollHeight) + 'px';
 	};
-	TSIMController.prototype.updateSendEnabled = function () {
+	ZIMController.prototype.updateSendEnabled = function () {
 		if (!this.el.sendBtn || !this.el.input) return;
 		var hasText = this.el.input.value.trim().length > 0;
 		var hasAtt = this.pendingAttachments.length > 0;
@@ -1407,7 +1407,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		// without the attachment.
 		this.el.sendBtn.disabled = uploading || !(hasText || hasAtt);
 	};
-	TSIMController.prototype.onKeydown = function (e) {
+	ZIMController.prototype.onKeydown = function (e) {
 		if (this.mention.open) {
 			if (e.key === 'ArrowDown') { e.preventDefault(); this.moveMention(1); return; }
 			if (e.key === 'ArrowUp')   { e.preventDefault(); this.moveMention(-1); return; }
@@ -1419,7 +1419,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.sendMessage(); }
 	};
 
-	TSIMController.prototype.maybeOpenMention = function () {
+	ZIMController.prototype.maybeOpenMention = function () {
 		var el = this.el.input; if (!el) return;
 		var pos = el.selectionStart || 0;
 		var before = el.value.substring(0, pos);
@@ -1439,7 +1439,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			self.renderMentionPop();
 		});
 	};
-	TSIMController.prototype.renderMentionPop = function () {
+	ZIMController.prototype.renderMentionPop = function () {
 		var pop = this.el.mentionPop; if (!pop) return;
 		var self = this;
 		if (!this.mention.candidates.length) { pop.hidden = true; pop.style.display = 'none'; return; }
@@ -1453,13 +1453,13 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		});
 		pop.hidden = false; pop.style.display = '';
 	};
-	TSIMController.prototype.moveMention = function (dir) {
+	ZIMController.prototype.moveMention = function (dir) {
 		var n = this.mention.candidates.length;
 		if (!n) return;
 		this.mention.active = (this.mention.active + dir + n) % n;
 		this.renderMentionPop();
 	};
-	TSIMController.prototype.acceptMention = function () {
+	ZIMController.prototype.acceptMention = function () {
 		var el = this.el.input;
 		var cand = this.mention.candidates[this.mention.active];
 		if (!cand || !el) { this.closeMention(); return; }
@@ -1473,13 +1473,13 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		this.updateSendEnabled();
 		this.saveDraft();
 	};
-	TSIMController.prototype.closeMention = function () {
+	ZIMController.prototype.closeMention = function () {
 		this.mention.open = false;
 		this.mention.candidates = [];
 		if (this.el.mentionPop) { this.el.mentionPop.hidden = true; this.el.mentionPop.style.display = 'none'; }
 	};
 
-	TSIMController.prototype.sendMessage = function () {
+	ZIMController.prototype.sendMessage = function () {
 		var self = this;
 		// v1.0.24 — Read-only roles (the shared kiosk) can never send. The
 		// composer isn't rendered for them, but guard here too in case any code
@@ -1519,7 +1519,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── Edit / delete ──────────────────────────────────────────
-	TSIMController.prototype.beginEdit = function (mid, mEl) {
+	ZIMController.prototype.beginEdit = function (mid, mEl) {
 		var self = this;
 		var textEl = mEl.querySelector('.zim-w-msg-text'); if (!textEl) return;
 		// Fetch the raw body from the rendered body_raw data — we stash it on the element at render time.
@@ -1538,7 +1538,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			self.lastSeenId = Math.max(0, mid - 1);
 		});
 	};
-	TSIMController.prototype.confirmDelete = function (mid) {
+	ZIMController.prototype.confirmDelete = function (mid) {
 		var self = this;
 		if (!window.confirm('Delete this message? It will be replaced with "[deleted]".')) return;
 		ajax('zim_delete', { message_id: mid }, { method: 'POST' }).then(function (r) {
@@ -1559,7 +1559,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	 * individual messages for quick single-message removal.
 	 * ═══════════════════════════════════════════════════════════════════ */
 
-	TSIMController.prototype.toggleSelectMode = function () {
+	ZIMController.prototype.toggleSelectMode = function () {
 		this.selectMode = !this.selectMode;
 		this.selectedIds = {};
 		this.root.classList.toggle('zim-w--select-mode', this.selectMode);
@@ -1575,7 +1575,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		});
 	};
 
-	TSIMController.prototype.toggleMessageSelect = function (mid) {
+	ZIMController.prototype.toggleMessageSelect = function (mid) {
 		if (this.selectedIds[mid]) {
 			delete this.selectedIds[mid];
 		} else {
@@ -1587,7 +1587,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		this.updateBulkBar();
 	};
 
-	TSIMController.prototype.updateBulkBar = function () {
+	ZIMController.prototype.updateBulkBar = function () {
 		var existing = this.root.querySelector('.zim-w-bulk-bar');
 		var count = Object.keys(this.selectedIds).length;
 
@@ -1608,7 +1608,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			' Delete ' + count + ' message' + (count > 1 ? 's' : '');
 	};
 
-	TSIMController.prototype.bulkDelete = function () {
+	ZIMController.prototype.bulkDelete = function () {
 		var ids = Object.keys(this.selectedIds);
 		if (!ids.length) return;
 		if (!window.confirm('Delete ' + ids.length + ' message' + (ids.length > 1 ? 's' : '') + '? This cannot be undone.')) return;
@@ -1638,7 +1638,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	 * Only on messages the user can delete (own or admin).
 	 * ═══════════════════════════════════════════════════════════════════ */
 
-	TSIMController.prototype.initSwipeToDelete = function () {
+	ZIMController.prototype.initSwipeToDelete = function () {
 		var self = this;
 		var msgArea = this.el.messages;
 		if (!msgArea) return;
@@ -1737,7 +1737,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	 * user taps Send before an upload completes — otherwise the message
 	 * goes out without the attachment.
 	 */
-	TSIMController.prototype.onFilePicked = function () {
+	ZIMController.prototype.onFilePicked = function () {
 		var self = this;
 		var f = this.el.fileInput.files && this.el.fileInput.files[0];
 		this.el.fileInput.value = '';
@@ -1821,7 +1821,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		});
 	};
 
-	TSIMController.prototype.renderAttachChips = function () {
+	ZIMController.prototype.renderAttachChips = function () {
 		if (!this.el.attachChips) return;
 		var self = this;
 		this.el.attachChips.innerHTML = '';
@@ -1863,37 +1863,37 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── Drafts (per-conversation, in sessionStorage) ───────────
-	TSIMController.prototype.loadDrafts = function () {
+	ZIMController.prototype.loadDrafts = function () {
 		try { this.drafts = JSON.parse(sessionStorage.getItem(this.draftsKey) || '{}') || {}; }
 		catch (e) { this.drafts = {}; }
 	};
-	TSIMController.prototype.saveDraft = function () {
+	ZIMController.prototype.saveDraft = function () {
 		if (!this.active || !this.el.input) return;
 		this.drafts[this.active.id] = this.el.input.value;
 		try { sessionStorage.setItem(this.draftsKey, JSON.stringify(this.drafts)); } catch (e) {}
 	};
-	TSIMController.prototype.restoreDraft = function () {
+	ZIMController.prototype.restoreDraft = function () {
 		if (!this.active || !this.el.input) return;
 		var draft = this.drafts[this.active.id] || '';
 		this.el.input.value = draft;
 		this.autoGrow();
 		this.updateSendEnabled();
 	};
-	TSIMController.prototype.clearDraft = function () {
+	ZIMController.prototype.clearDraft = function () {
 		if (!this.active) return;
 		delete this.drafts[this.active.id];
 		try { sessionStorage.setItem(this.draftsKey, JSON.stringify(this.drafts)); } catch (e) {}
 	};
 
 	// ── Search ─────────────────────────────────────────────────
-	TSIMController.prototype.toggleSearch = function () {
+	ZIMController.prototype.toggleSearch = function () {
 		if (!this.el.searchBar) return;
 		this.searchMode = !this.searchMode;
 		this.el.searchBar.hidden = !this.searchMode; this.el.searchBar.style.display = this.searchMode ? '' : 'none';
 		if (this.searchMode) { this.el.searchInput.focus(); this.el.searchInput.value = ''; }
 		else { this.runSearch(); } // empty = reloads regular view
 	};
-	TSIMController.prototype.runSearch = function () {
+	ZIMController.prototype.runSearch = function () {
 		var self = this;
 		if (!this.active) return;
 		var q = this.el.searchInput.value.trim();
@@ -1926,7 +1926,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── Preview cards ──────────────────────────────────────────
-	TSIMController.prototype.setupPreviewObserver = function () {
+	ZIMController.prototype.setupPreviewObserver = function () {
 		if (!('IntersectionObserver' in window)) return;
 		var self = this;
 		this.previewObserver = new IntersectionObserver(function (entries) {
@@ -1950,12 +1950,12 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			});
 		}, { root: this.el.messages, rootMargin: '100px' });
 	};
-	TSIMController.prototype.observePreviewsIn = function (scope) {
+	ZIMController.prototype.observePreviewsIn = function (scope) {
 		if (!this.previewObserver) return;
 		var chips = scope.querySelectorAll('.zim-w-preview-chip[data-zim-state="pending"]');
 		chips.forEach(function (c) { this.previewObserver.observe(c); }, this);
 	};
-	TSIMController.prototype.loadPreviewInto = function (chip, ref) {
+	ZIMController.prototype.loadPreviewInto = function (chip, ref) {
 		var self = this;
 		if (this.previewCache[ref]) { this.applyPreview(chip, this.previewCache[ref]); return; }
 		ajax('zim_preview_ref', { number: ref }).then(function (r) {
@@ -1967,7 +1967,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			});
 		});
 	};
-	TSIMController.prototype.applyPreview = function (chip, card) {
+	ZIMController.prototype.applyPreview = function (chip, card) {
 		chip.classList.remove('is-loading');
 		chip.setAttribute('data-zim-state', 'loaded');
 		chip.href = card.url || '#';
@@ -1987,7 +1987,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			}
 		}
 	};
-	TSIMController.prototype.openPreviewPanel = function (ref) {
+	ZIMController.prototype.openPreviewPanel = function (ref) {
 		var self = this;
 		this.showOverlay(this.el.previewPanel);
 		this.el.previewTitle.textContent = '#' + ref;
@@ -2016,7 +2016,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── v1.0.20: Knowledge Vault preview cards ─────────────────
-	TSIMController.prototype.loadVaultPreviewInto = function (chip, vaultId, vaultSlug) {
+	ZIMController.prototype.loadVaultPreviewInto = function (chip, vaultId, vaultSlug) {
 		var self = this;
 		var cacheKey = 'vault-' + (vaultId || vaultSlug);
 		if (this.previewCache[cacheKey]) { this.applyVaultPreview(chip, this.previewCache[cacheKey]); return; }
@@ -2034,7 +2034,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			});
 		});
 	};
-	TSIMController.prototype.applyVaultPreview = function (chip, card) {
+	ZIMController.prototype.applyVaultPreview = function (chip, card) {
 		chip.classList.remove('is-loading');
 		chip.setAttribute('data-zim-state', 'loaded');
 		// Store resolved ID on slug-based chips for the detail panel
@@ -2077,7 +2077,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			chip.appendChild(infoBtn);
 		}
 	};
-	TSIMController.prototype.openVaultPreviewPanel = function (vaultId, vaultSlug) {
+	ZIMController.prototype.openVaultPreviewPanel = function (vaultId, vaultSlug) {
 		var self = this;
 		this.showOverlay(this.el.previewPanel);
 		this.el.previewTitle.textContent = '📄 Vault Document';
@@ -2109,7 +2109,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── Channel create / New DM ────────────────────────────────
-	TSIMController.prototype.createChannel = function () {
+	ZIMController.prototype.createChannel = function () {
 		var self = this;
 		var slug = (this.el.channelSlug.value || '').trim();
 		var desc = (this.el.channelDesc.value || '').trim();
@@ -2134,7 +2134,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			});
 		});
 	};
-	TSIMController.prototype.openNewDm = function () {
+	ZIMController.prototype.openNewDm = function () {
 		// v1.0.24 — Read-only roles cannot start DMs. The affordance is hidden
 		// for them; guard the method too so nothing can open the picker.
 		if (data.isReadOnly) return;
@@ -2143,7 +2143,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 		if (this.el.dmCandidates) this.el.dmCandidates.innerHTML = '';
 		this.searchDmCandidates();
 	};
-	TSIMController.prototype.searchDmCandidates = function () {
+	ZIMController.prototype.searchDmCandidates = function () {
 		var self = this;
 		var q = this.el.dmSearch ? this.el.dmSearch.value : '';
 		ajax('zim_user_search', { q: q }).then(function (r) {
@@ -2172,7 +2172,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── Settings: quiet hours ───────────────────────────────────
-	TSIMController.prototype.saveQuietHours = function () {
+	ZIMController.prototype.saveQuietHours = function () {
 		var start = this.el.quietStart.value;
 		var end = this.el.quietEnd.value;
 		ajax('zim_set_quiet_hours', { start: start, end: end }, { method: 'POST' }).then(function (r) {
@@ -2183,7 +2183,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	// ── Push subscription ───────────────────────────────────────
-	TSIMController.prototype.promptPush = function () {
+	ZIMController.prototype.promptPush = function () {
 		var self = this;
 		if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
 			alert('Push notifications are not supported by this browser.');
@@ -2218,12 +2218,12 @@ TSIMController.prototype.renderMessageNode = function (m) {
 				});
 			});
 		}).catch(function (err) {
-			console.error('[TSIM] push setup failed', err);
+			console.error('[Messaging] push setup failed', err);
 			alert('Could not enable notifications.');
 		});
 	};
 
-	TSIMController.prototype.listenForSWMessages = function () {
+	ZIMController.prototype.listenForSWMessages = function () {
 		var self = this;
 		if (!('serviceWorker' in navigator)) return;
 		navigator.serviceWorker.addEventListener('message', function (event) {
@@ -2249,7 +2249,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	};
 
 	/**
-	 * Listen for postMessages from the parent window (TSA embed).
+	 * Listen for postMessages from the parent window (Analytics embed).
 	 *
 	 * Only runs when we're inside an iframe — `window.parent !== window`.
 	 * On boot, announces readiness so the parent can flush any queued
@@ -2264,7 +2264,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	 * as ours since we only embed on same-origin), but we also verify
 	 * event.source matches window.parent for defense-in-depth.
 	 */
-	TSIMController.prototype.listenForParentMessages = function () {
+	ZIMController.prototype.listenForParentMessages = function () {
 		var self = this;
 		if (window.parent === window) return; // not embedded — nothing to do
 
@@ -2281,7 +2281,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 			if (msg.type === 'zim-embed-dm-with') {
 				self.acceptDmRoute(msg);
 			}
-			// v1.0.20: Share text from TSA vault share button.
+			// v1.0.20: Share text from Analytics vault share button.
 			// Pre-fills the current conversation's composer with the shared text.
 			if (msg.type === 'zim-embed-share-text' && msg.body) {
 				var ta = document.querySelector('.zim-w-compose-input, #zim-w-compose-input');
@@ -2331,11 +2331,11 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	 * (as the latest) rather than being rendered before the history
 	 * arrives and then re-ordered.
 	 */
-	TSIMController.prototype.acceptDmRoute = function (msg) {
+	ZIMController.prototype.acceptDmRoute = function (msg) {
 		var self = this;
-		// v1.0.24 — On a read-only shared device, refuse the TSA embed's
+		// v1.0.24 — On a read-only shared device, refuse the Analytics embed's
 		// DM-route / auto-send instruction outright. This is the client-side
-		// half of the messaging lockdown: even if an upstream Brain Bot emitted
+		// half of the messaging lockdown: even if an upstream assistant emitted
 		// a DM draft, this account cannot open a DM or auto-send. The server
 		// blocks (zim_dm_open / ZIM_Messages::post) are the real guarantee;
 		// this prevents the request from ever being attempted and acks the
@@ -2407,7 +2407,7 @@ TSIMController.prototype.renderMessageNode = function (m) {
 	}
 
 	/**
-	 * v1.0.19: Send acknowledgment to parent window (TSA embed).
+	 * v1.0.19: Send acknowledgment to parent window (Analytics embed).
 	 * The parent holds the analytics input text until it receives this ack,
 	 * then clears it. If ack never arrives, the parent restores the text.
 	 */

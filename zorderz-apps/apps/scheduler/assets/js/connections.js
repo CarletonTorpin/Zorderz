@@ -1,5 +1,5 @@
 /**
- * TS Scheduler — Connected Calendars card (v1.6.0, Phase 0).
+ * Zorderz Scheduler — Connected Calendars card (v1.6.0, Phase 0).
  *
  * Separate small bundle so the core calendar JS is untouched. Loads only when
  * the feature flag + provider config are live and the user can write (the

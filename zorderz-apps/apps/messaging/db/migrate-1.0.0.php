@@ -1,6 +1,6 @@
 <?php
 /**
- * TSIM schema migration — v1.0.0
+ * Messaging schema migration — v1.0.0
  *
  * Idempotent. Safe to run repeatedly; dbDelta handles schema diffs.
  *

@@ -26,10 +26,10 @@ class ZDZ_Integration_Tests {
 
 	public function add_admin_page() {
 		// Register under Tools menu (reliable across all hosting/caching setups)
-		// Access: Tools → TS Integration Health
+		// Access: Tools → Zorderz Integration Health
 		add_management_page(
-			'TS Integration Health',
-			'TS Integration Health',
+			'Zorderz Integration Health',
+			'Zorderz Integration Health',
 			'manage_options',
 			'zdz-integration-health-tools',
 			[ $this, 'render_page' ]
@@ -192,25 +192,25 @@ class ZDZ_Integration_Tests {
 	}
 
 	private function check_game_embed() {
-		$has_game = class_exists( 'TSG_App' );
+		$has_game = class_exists( 'ZG_Scores' );
 		return [
 			'name'   => 'Game Embed API',
 			'pass'   => $has_game,
-			'detail' => $has_game ? 'TSG_App class available' : 'Game plugin not active',
+			'detail' => $has_game ? 'ZG_Scores class available' : 'Game app not active',
 		];
 	}
 
 	private function check_vault_bridge() {
-		$has_bridge = class_exists( 'TSKV_TSA_Bridge' );
+		$has_bridge = class_exists( 'ZKV_TSA_Bridge' );
 		$has_methods = $has_bridge
-			&& method_exists( 'TSKV_TSA_Bridge', 'get_inventory' )
-			&& method_exists( 'TSKV_TSA_Bridge', 'get_context' );
+			&& method_exists( 'ZKV_TSA_Bridge', 'get_inventory' )
+			&& method_exists( 'ZKV_TSA_Bridge', 'get_context' );
 		return [
 			'name'   => 'Knowledge Vault Bridge',
 			'pass'   => $has_bridge && $has_methods,
 			'detail' => $has_bridge
 				? ( $has_methods ? 'Bridge active, get_inventory + get_context available' : 'Bridge active but missing expected methods' )
-				: 'TSKV_TSA_Bridge class not found',
+				: 'ZKV_TSA_Bridge class not found',
 		];
 	}
 
@@ -271,17 +271,17 @@ class ZDZ_Integration_Tests {
 	}
 
 	private function check_pricing_oracle() {
-		$has_bridge = class_exists( 'TSKV_Bridge' );
+		$has_bridge = class_exists( 'ZKV_Bridge' );
 		if ( ! $has_bridge ) {
 			return [
 				'name'   => 'Pricing Oracle (Group 6B)',
 				'pass'   => false,
-				'detail' => 'TSKV_Bridge class not found — Group 6B not yet deployed',
+				'detail' => 'ZKV_Bridge class not found — Group 6B not yet deployed',
 			];
 		}
-		$pricing  = TSKV_Bridge::get_pricing_context();
+		$pricing  = ZKV_Bridge::get_pricing_context();
 		$has_docs = ! empty( $pricing['doc_ids'] );
-		$detail   = 'TSKV_Bridge active. ';
+		$detail   = 'ZKV_Bridge active. ';
 
 		if ( ! $has_docs ) {
 			$detail .= 'No docs designated yet';
@@ -307,7 +307,7 @@ class ZDZ_Integration_Tests {
 					'name'   => 'Pricing Oracle (Group 6B)',
 					'pass'   => false,
 					'detail' => $detail . ' ⚠️ ' . implode( ', ', $chunk_warnings )
-						. ' — run chunk seeder or re-index. Brain Bot cannot read pricing tables without chunks.',
+						. ' — run chunk seeder or re-index. The assistant cannot read pricing tables without chunks.',
 				];
 			}
 		}

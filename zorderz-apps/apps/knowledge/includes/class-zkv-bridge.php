@@ -4,9 +4,9 @@
  *
  * Provides pricing authority document context to other plugins.
  * Used by:
- *   - TS Commission Calculator (TSCC) for cost-of-goods context
+ *   - Zorderz Commission Calculator (Commissions) for cost-of-goods context
  *   - Integration Health Check (check #11) for deployment verification
- *   - TSA Brain Bot for pricing-aware responses
+ *   - the assistant for pricing-aware responses
  *
  * Usage in other plugins:
  *   if ( class_exists( 'ZKV_Bridge' ) ) {

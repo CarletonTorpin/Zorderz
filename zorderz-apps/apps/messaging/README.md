@@ -1,4 +1,4 @@
-# TS Internal Messaging
+# Zorderz Internal Messaging
 
 Internal team messaging for the Zorderz Field OS ecosystem.
 
@@ -19,7 +19,7 @@ A WordPress plugin that provides real-time-ish channels and 1:1 direct messages 
 
 ### Optional but recommended
 
-- **`zdz-sales-analytics` v1.12.2+**: enables rich FreshBooks `#NNNNN` preview cards (via the `/zorderz/v1/freshbooks-preview/{id}` REST endpoint) and the coordinated customer-facing hard-block (via `TSA_Customer_Facing::is_active_for_user()`). Without TSA, `#NNNNN` references still link out to FreshBooks search; preview metadata is just unavailable.
+- **`zdz-sales-analytics` v1.12.2+**: enables rich FreshBooks `#NNNNN` preview cards (via the `/zorderz/v1/freshbooks-preview/{id}` REST endpoint) and the coordinated customer-facing hard-block (via `TSA_Customer_Facing::is_active_for_user()`). Without Analytics, `#NNNNN` references still link out to FreshBooks search; preview metadata is just unavailable.
 - **`zdz-events-relay` (TSER) for HEIC image support**: when present, HEIC uploads are converted server-side to JPEG via `TSER_Heic::convert_to_jpeg()`. Without TSER, HEIC is accepted only on hosts that can handle it via ImageMagick.
 
 ---
@@ -52,7 +52,7 @@ Deactivation stops crons but leaves data intact. Uninstall (via WordPress → Pl
 - **Web Push is self-contained** (Trap 2): no Minishlink/WebPush or other external SDK. `openssl` + `hash_hkdf` implement RFC 8291 (aes128gcm) and ES256 VAPID JWTs directly. Keys rotate every 90 days.
 - **Customer-facing hard-block at PHP render time** (Trap 5): when the analytics app's customer-facing mode is active for the current user, the widget renders nothing at all and every AJAX endpoint returns **404, not 403**, so the plugin's existence is not leaked to a screen a customer might see.
 
-See `patches/tsa-v1.11.4-preview-endpoint.md` for the TSA coordination contract.
+See `patches/tsa-v1.11.4-preview-endpoint.md` for the Analytics coordination contract.
 
 ---
 
@@ -93,7 +93,7 @@ In order, with the line these live at in the prompt spec:
 | #  | Trap                                                               | How we followed it |
 |----|--------------------------------------------------------------------|--------------------|
 | 1  | No WebSockets                                                      | HTTP polling, 2-in-flight ceiling |
-| 2  | No external API clients                                            | Web Push done directly; FreshBooks proxied through TSA |
+| 2  | No external API clients                                            | Web Push done directly; FreshBooks proxied through Analytics |
 | 3  | Mention reconcile only notifies ADDED (edit doesn't re-notify)     | `ZIM_Mentions::reconcile()` diffs and returns `added`/`removed`; only `added` triggers push |
 | 4  | Soft-delete preserves mention rows                                 | delete blanks body + stamps `deleted_at`; mention rows untouched |
 | 5  | Customer-facing hide at PHP render time, not 403                   | `ZIM_Widget::should_render()` + all AJAX gates return 404 |
@@ -159,13 +159,13 @@ Part of the platform-wide "General Account Hardening" effort. The shop iPad is l
   - **Model chokepoint**: `ZIM_Messages::post()` refuses read-only authors. Every write funnels through `post()` (AJAX `zim_post`, the REST `/post` route, any future caller), so no forgotten higher-layer gate can re-open a send path.
   - **Conversation creation**: `ZIM_DMs::get_or_create_conversation()` refuses a read-only initiator. No DMs, no self-DM "notes."
   - **AJAX**: a new `gate_write()` guards `zim_post`, `zim_edit`, `zim_delete`, `zim_bulk_delete`, `zim_upload`, and `zim_dm_open`; `gate_admin()` (channel-create, member-add) also refuses read-only roles.
-  - **REST**: the `tsim/v1/post` route (the cross-plugin "post to #channel" surface Brain Bot uses) returns a clean `403 zim_read_only` for read-only users.
+  - **REST**: the `tsim/v1/post` route (the cross-plugin "post to #channel" surface the assistant uses) returns a clean `403 zim_read_only` for read-only users.
 - **Security note**: this closes the messaging-side write back-door behind the Session 406 autonomous-posting incident. For the most-shared account the send capability is *removed*, not merely discouraged at the prompt layer: the structural fix the platform learned it needed.
-- **Changed (UI)**: for the kiosk, the message composer is **not rendered into the DOM at all** (removed, not disabled). A muted read-only notice ("Read-only on this shared device…") shows in its place once a conversation is opened. The "New DM" affordance is hidden. `zimData.isReadOnly` drives client behavior: `sendMessage()`, `openNewDm()`, and the TSA-embed DM-route/auto-send are all short-circuited. (These are courtesy UX; the server blocks are the guarantee.)
+- **Changed (UI)**: for the kiosk, the message composer is **not rendered into the DOM at all** (removed, not disabled). A muted read-only notice ("Read-only on this shared device…") shows in its place once a conversation is opened. The "New DM" affordance is hidden. `zimData.isReadOnly` drives client behavior: `sendMessage()`, `openNewDm()`, and the Analytics-embed DM-route/auto-send are all short-circuited. (These are courtesy UX; the server blocks are the guarantee.)
 - **Changed**: `zdz_general` added to the app-registration role lists so the Messages tile is visible on the workshop iPad.
 - **No DB migration**: read-only behavior is entirely role-derived; existing `#announcements` auto-join already provides the kiosk's read access.
 
-> **Scope note**: the other halves of the kiosk hardening (greeting alias, dashboard KPI suppression, ephemeral chat, EXIF media provenance, the Brain Bot kiosk prompt block, and the server-side TSIM-marker strip in the analytics response pipeline) live in the theme and `zdz-sales-analytics`. This release covers only the Internal Messaging plugin's part: read-only announcements with zero send capability.
+> **Scope note**: the other halves of the kiosk hardening (greeting alias, dashboard KPI suppression, ephemeral chat, EXIF media provenance, the assistant kiosk prompt block, and the server-side Messaging-marker strip in the analytics response pipeline) live in the theme and `zdz-sales-analytics`. This release covers only the Internal Messaging plugin's part: read-only announcements with zero send capability.
 
 ### 1.0.18, 2026-04
 
@@ -178,7 +178,7 @@ iPad UX hardening + icon system overhaul.
 - **Fixed**: on iPad (especially in iframe embed mode), the software keyboard could dismiss when the user scrolled or tapped outside the textarea, and then refuse to reopen on subsequent taps. This is a longstanding iOS WebKit focus-management bug inside iframes. Three mitigations added: (a) a `touchstart` handler on the composer area that re-focuses the textarea when the user taps back into it; (b) `touch-action: manipulation` + `-webkit-appearance: none` on the textarea to prevent iOS gesture conflicts; (c) a `visualViewport` resize listener that re-scrolls the message list to the bottom when the keyboard dismisses, preventing the "messages jumped and I lost my place" disorientation.
 - **Changed**: back button redesigned with inline SVG chevron (was a CSS pseudo-element `‹` character) and larger 44px touch target per Apple HIG minimum. Hover/focus-visible state matches the rest of the icon button system. The button text reads "Messages" (was previously bare text with a character prefix) so it's clearly a navigation action, not a browser back button, addressing the user confusion reported when using the browser's own back/forward nav alongside the in-app back button.
 
-> **Note**: the "Self-Check" feature mentioned on the board is a TS Sales Analytics (TSA) feature, not an Internal Messaging feature. Self-Check is the analytics app's AI self-review system (v1.13.1) that optionally validates its own answers before displaying them. It has no counterpart in TSIM.
+> **Note**: the "Self-Check" feature mentioned on the board is a the Analytics app feature, not an Internal Messaging feature. Self-Check is the analytics app's AI self-review system (v1.13.1) that optionally validates its own answers before displaying them. It has no counterpart in Messaging.
 
 ### 1.0.17, 2026-04
 
@@ -199,7 +199,7 @@ Cross-plugin sub-view bleed + iframe loader hang.
 
 "Type @riley in analytics, talk to Riley" integration.
 
-- **Added**: REST endpoint `GET /wp-json/tsim/v1/user-by-login?login=<name>`. Resolves a WordPress login to `{ user_id, login, name }`. Returns 404 for unknowns or non-teammates (no membership leak). Used by TSA v1.12.3's @-mention intercept.
+- **Added**: REST endpoint `GET /wp-json/tsim/v1/user-by-login?login=<name>`. Resolves a WordPress login to `{ user_id, login, name }`. Returns 404 for unknowns or non-teammates (no membership leak). Used by Analytics v1.12.3's @-mention intercept.
 - **Added**: cross-frame postMessage protocol. When messaging is running inside an iframe:
 	- On boot, announces readiness to the parent (`{ type: 'zim-embed-ready' }`).
 	- Accepts `{ type: 'zim-embed-dm-with', user_id, body, auto_send }` from the parent: opens or creates a DM with that user and, if `auto_send`, sends `body` as the first message.
@@ -207,11 +207,11 @@ Cross-plugin sub-view bleed + iframe loader hang.
 
 ### 1.0.2, 2026-04
 
-Tile-visibility fix + TSA inline embed integration.
+Tile-visibility fix + Analytics inline embed integration.
 
 - **Fixed**: the "Messages" tile was invisible to non-admin users (sales, operator, mfg, tech). The theme's plugin-api gates tiles behind per-user `zdz_allowed_apps` meta for non-admin roles, and 1.0.1 never wrote to that meta. On activation, 1.0.2 now grants `internal-messaging` to every user holding the `zdz_access_app` capability (unless explicitly denied), and the same grant runs on `wp_login` so users created or promoted later also receive it. Users with an explicit deny in `zdz_denied_apps` are still honored.
-- **Added**: REST endpoint `GET /wp-json/tsim/v1/unread-total` (permission `zdz_access_app`). Returns `{ unread: <int>, by_conversation: [...] }`: total unread messages across all conversations the current user belongs to. Same customer-facing 404-not-403 rule as admin-ajax. Exists so TSA v1.12.3+ can drive its "💬 Team" button unread badge without needing messaging's admin-ajax nonce in scope.
-- **Integration**: with `zdz-sales-analytics` v1.12.3+, a 💬 Team button appears in the TSA chat header. Clicking slides in a right-side panel hosting the messaging UI (via iframe to `?zim_page=1&zdz_embed=tsa`). Messaging itself remains a standalone tile; the TSA panel is an additional access point.
+- **Added**: REST endpoint `GET /wp-json/tsim/v1/unread-total` (permission `zdz_access_app`). Returns `{ unread: <int>, by_conversation: [...] }`: total unread messages across all conversations the current user belongs to. Same customer-facing 404-not-403 rule as admin-ajax. Exists so Analytics v1.12.3+ can drive its "💬 Team" button unread badge without needing messaging's admin-ajax nonce in scope.
+- **Integration**: with `zdz-sales-analytics` v1.12.3+, a 💬 Team button appears in the Analytics chat header. Clicking slides in a right-side panel hosting the messaging UI (via iframe to `?zim_page=1&zdz_embed=tsa`). Messaging itself remains a standalone tile; the Analytics panel is an additional access point.
 
 ### 1.0.1, 2026-04
 
@@ -230,7 +230,7 @@ Initial release.
 - @mentions with push + email digest fallback
 - Per-conversation search (FULLTEXT w/ LIKE fallback)
 - Attachments (jpeg/png/webp/heic/pdf, 5 MB cap)
-- FreshBooks `#NNNNN` preview cards (via TSA)
+- FreshBooks `#NNNNN` preview cards (via Analytics)
 - Web Push (self-contained, 90-day VAPID rotation)
 - Quiet hours with deferred digest
 - Customer-facing hard block

@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Media EXIF REST endpoint.
+ * Zorderz Media EXIF REST endpoint.
  *
  * GET /wp-json/zorderz/v1/media/{id}/exif
  *   → Returns the EXIF report for a single media record the current user is
