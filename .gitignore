@@ -10,6 +10,8 @@ node_modules/
 # Release archives (built, not tracked)
 *.zip
 *.tgz
+# ...except the bundled sample-data seed, which is a shipped theme asset (not a build byproduct)
+!zorderz/sample-data/*.zip
 
 # Vendored dependencies
 /vendor/

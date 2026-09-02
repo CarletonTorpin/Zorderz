@@ -1395,7 +1395,7 @@
     });
   }
 
-  /* ── Foreground drain (runs while a Zorderz tab is open) ─────────────────── */
+  /* ── Foreground drain (runs while an app tab is open) ─────────────────── */
 
   // v1.2.9: the caller resolves (and verifies) the upload bytes first and
   // passes them in — this form NEVER carries an unverified IndexedDB read.
