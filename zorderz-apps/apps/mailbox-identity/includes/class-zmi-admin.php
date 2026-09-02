@@ -91,8 +91,8 @@ class ZMI_Admin {
 		if ( ! isset( $_POST['zmi_profile_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['zmi_profile_nonce'] ) ), 'zmi_save_profile_' . $user_id ) ) {
 			return;
 		}
-		$upn     = isset( $_POST['zmi_upn'] ) ? (string) wp_unslash( $_POST['zmi_upn'] ) : '';
-		$aliases = self::split_csv( isset( $_POST['zmi_aliases'] ) ? (string) wp_unslash( $_POST['zmi_aliases'] ) : '' );
+		$upn     = isset( $_POST['zmi_upn'] ) ? sanitize_text_field( wp_unslash( $_POST['zmi_upn'] ) ) : '';
+		$aliases = self::split_csv( isset( $_POST['zmi_aliases'] ) ? sanitize_textarea_field( wp_unslash( $_POST['zmi_aliases'] ) ) : '' );
 
 		$res = ZMI_Store::save_identity( $user_id, $upn, $aliases );
 		self::note( is_wp_error( $res ) ? $res->get_error_message() : 'Exchange identity saved.', is_wp_error( $res ) ? 'error' : 'success' );
@@ -244,7 +244,7 @@ class ZMI_Admin {
 		$readers = array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['zmi_readers'] ?? array() ) );
 		update_option( ZMI_Store::OPT_READER_ROLES, $readers ?: array( 'administrator' ) );
 
-		ZMI_Store::set_service_mailboxes( self::parse_services( (string) wp_unslash( $_POST['zmi_services'] ?? '' ) ) );
+		ZMI_Store::set_service_mailboxes( self::parse_services( sanitize_textarea_field( wp_unslash( $_POST['zmi_services'] ?? '' ) ) ) );
 		ZMI_Store::set_flag( 'autofill', ! empty( $_POST['zmi_autofill'] ) );
 
 		self::note( 'Settings saved.', 'success' );
