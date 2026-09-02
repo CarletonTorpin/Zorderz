@@ -19,6 +19,7 @@ There are two independent choices. Make both before you start.
 **How the install gets its data:**
 - **Import a Company Data bundle (fast, complete).** If you have a bundle exported from another Zorderz install, import it. It restores the entire business (settings, catalog, roster, estimates, orders, receipts, chats, knowledge base, internal messaging, media files) and the WordPress site settings in one step. This is the fastest way to a populated, ready-to-use install. See step 8A.
 - **Configure by hand (fresh business).** No bundle? Give the install an identity through the Business Profile or an Identity Pack, then fill the catalog and roster yourself. See step 8B.
+- **Load the bundled sample company (to explore only).** Just evaluating? A build that ships the seed exposes a one-click loader for a *fictional* demo company, so you can see every app populated before entering any real data. This is for evaluation, not production. See step 8C.
 
 Either way, connection **secrets are never carried** and must be reconnected on the new install (step 9).
 
@@ -84,7 +85,7 @@ echo "$VER"     # e.g. 1.7.1 — whatever the current release is
 **Action:** Download both assets from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed there.
 
 - `zorderz-theme-${VER}.zip`: the theme (platform kernel + Core services). **On the default one-upload path this is the only file you need**, because the theme carries the apps bundle inside it.
-- `zorderz-apps-${VER}.zip`: the apps bundle (19 apps) on its own. You need this only for the two-artifact fallback (step 6) or to update the apps independently.
+- `zorderz-apps-${VER}.zip`: the apps bundle (20 apps) on its own. You need this only for the two-artifact fallback (step 6) or to update the apps independently.
 
 **Verify** each zip you have is intact with the expected top-level folder:
 
@@ -282,6 +283,25 @@ Then fill the catalog (Zorderz -> Item Engine) and roster as needed. **Verify** 
 
 ```bash
 curl -fsS "SITE/zdz-manifest.json"       # name/short_name now reflect the applied profile
+```
+
+---
+
+## 8C. Load the bundled sample company (to explore, not for production)
+
+Use this **only** when you are evaluating Zorderz and want every app populated with realistic data before you enter your own. A build that ships the seed exposes a one-click loader for **TestCo**, a complete **fictional** demo company. It is clearly-marked sample data, not fabricated real-business data, so loading it does not violate the "never invent business data" rule below. Do **not** load it onto an install you intend to run a real business on without clearing it first.
+
+**Where:** wp-admin -> **Tools -> Zorderz Data**, the **"Sample data"** card. The button is **"Load TestCo sample data"**, with a **"Preview counts only (write nothing)"** checkbox for a dry run. It is a wp-admin feature with no WP-CLI command; drive it in the browser or a logged-in session that carries the `zdz_load_sample` nonce. If the build ships no seed, this card is absent, so use 8A or 8B.
+
+**Action:** optionally check "Preview counts only" and submit to read the counts, then submit again unchecked to load. It imports the demo company (catalog, price list, estimates and invoices, a team roster, chat history, and knowledge documents), **keeps you as the owner**, and does **not** change your WordPress site settings. It uses fixed record ids, so loading again refreshes the sample rather than duplicating it.
+
+**Browser-driving note:** set the checkbox by its `checked` property and submit with `input.form.submit()` if a button click misses, exactly as in step 8A.
+
+**Verify** the sample landed:
+
+```bash
+curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/item-engine/catalog" | head -c 200
+#    empty:false now, with a real item count.
 ```
 
 ---
