@@ -6,17 +6,17 @@
  * WHAT THIS IS (Phase 1 of the per-user-leads program)
  * ─────────────────────────────────────────────────────────────────────────────
  * This class makes a *the app user* the owner of a lead, and makes that
- * ownership the **source of truth for assignment** — Zorderz's own checkable data,
+ * ownership the **source of truth for assignment** — the app's own checkable data,
  * usable with NO Nutshell account. (Nutshell remains authoritative only for the
  * CRM pipeline *stage*; that's a separate, later concern. See
  * ZL-PER-USER-LEADS-AND-PIPELINE-PLAN-v1.md §1.)
  *
  * The model, per the CRM-integration best practice "choose one system as master
  * and use a source flag to prevent overwrites":
- *   • Zorderz owns WHO the lead is assigned to + the rep's task state.
+ *   • the app owns WHO the lead is assigned to + the rep's task state.
  *   • Nutshell owns the pipeline stage (advanced automatically on Nutshell).
- *   • Default data flow is Zorderz → Nutshell (push); we never let a CRM read
- *     overwrite Zorderz assignment.
+ *   • Default data flow is app → Nutshell (push); we never let a CRM read
+ *     overwrite the app's assignment.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * AUTHORITATIVE vs. FUZZY (the rigor you asked for)
@@ -177,7 +177,7 @@ class ZL_Lead_Assignment {
 	 * ═══════════════════════════════════════════════════════════════════════ */
 
 	/**
-	 * Assign one or more leads to a Zorderz user. Authoritative, explicit, audited.
+	 * Assign one or more leads to an app user. Authoritative, explicit, audited.
 	 *
 	 * Caller MUST have already verified the actor is a lead admin (the AJAX
 	 * handler does this); this method also re-checks defensively.

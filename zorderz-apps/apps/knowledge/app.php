@@ -86,7 +86,7 @@
  * v1.5.0 (PRIVATE TRANSCRIPTS — party-siloed documents, 0% cross-over):
  *   A transcript document is readable ONLY by the WP users who are its named
  *   speaking parties — everywhere at once: vault list/search, /vault/{slug},
- *   preview chips, AND the Brain Bot's retrieval context. Admins/owners who are
+ *   preview chips, AND the assistant's retrieval context. Admins/owners who are
  *   not parties see nothing (silent 404 / absent — INV-1, fail closed).
  *
  *   Mechanics (see ZKV_ACL):
@@ -117,7 +117,7 @@
  *     admin queue's ±1-line context read from (chunks overlap; lines don't).
  *   - Closes a pre-existing leak in the same pass: ZKV_TSA_Bridge previously
  *     applied NO visibility filter, so admin_only chunk text could reach any
- *     user's Brain Bot context. All bridge queries are now ACL-scoped, and the
+ *     user's the assistant context. All bridge queries are now ACL-scoped, and the
  *     shared inventory transient is tier-keyed (admin/staff) + transcript-free.
  *
  * v1.4.1 (shared-mailbox coordination for the messaging DM-reply bridge):
@@ -1882,7 +1882,7 @@ add_filter( 'zdz_rename_map', function ( $map ) {
  */
 add_action( 'plugins_loaded', function () {
 	foreach ( array(
-		'ZKV_TSA_Bridge' => 'TSKV_TSA_Bridge',
+		'ZKV_TSA_Bridge' => 'ZKV_TSA_Bridge',
 		'ZKV_Bridge'     => 'TSKV_Bridge',
 		'ZKV_Mailbox'    => 'TSKV_Mailbox',
 		'ZKV_ACL'        => 'TSKV_ACL',

@@ -213,7 +213,7 @@ class ZDZ_Core_FreshBooks {
 	/**
 	 * Fetch a single client's invoices within a recent date window.
 	 *
-	 * Shared convenience used by the cross-app orchestrator (the Brain Bot
+	 * Shared convenience used by the cross-app orchestrator (the assistant
 	 * customer-document lookup, e.g. "estimate for Sam Rivera" — the invoice
 	 * half of that lookup). Centralizing it here means every consumer reads
 	 * invoices through ONE implementation rather than each plugin shipping its

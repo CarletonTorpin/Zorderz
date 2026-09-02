@@ -250,7 +250,7 @@ class ZL_TSA_Bridge {
 
 	/* ═══════════════════════════════════════════════════════════════════════
 	 * VERB 2 — find_leads_for_tsa()  (READ, by filter not by person)
-	 * "leads from <source>", "leads not yet contacted in 00011", "new this week"
+	 * "leads from <source>", "leads not yet contacted in 12345", "new this week"
 	 * ═══════════════════════════════════════════════════════════════════════ */
 
 	/**
@@ -267,7 +267,7 @@ class ZL_TSA_Bridge {
 	 * Returns the same envelope as lookup_for_tsa but `leads[]` is the filtered
 	 * set and `resolved`/`pipeline_stage` are null/empty. On kiosk this returns
 	 * an *aggregate-leaning* view: counts + non-contact facts only (the bounded
-	 * form), so "is there an open lead in 00011" works without exposing a name's
+	 * form), so "is there an open lead in 12345" works without exposing a name's
 	 * contact path.
 	 *
 	 * @param array $payload

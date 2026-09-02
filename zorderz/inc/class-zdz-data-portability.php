@@ -56,6 +56,7 @@ class ZDZ_Data_Portability {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'admin_post_zdz_data_export', array( __CLASS__, 'handle_export' ) );
 		add_action( 'admin_post_zdz_data_import', array( __CLASS__, 'handle_import' ) );
+		add_action( 'admin_post_zdz_load_sample', array( __CLASS__, 'handle_load_sample' ) );
 	}
 
 	/* ---------------------------------------------------------------------- */
@@ -1134,6 +1135,75 @@ class ZDZ_Data_Portability {
 		exit;
 	}
 
+	/* ---------------------------------------------------------------------- */
+	/* Bundled sample data (one-click "Load TestCo")                           */
+	/* ---------------------------------------------------------------------- */
+
+	/** Absolute path to the bundled TestCo sample-data seed, if this build ships one. */
+	private static function sample_bundle_path(): string {
+		return get_theme_file_path( 'sample-data/testco.zip' );
+	}
+
+	/** True when this build ships the one-click TestCo sample-data seed. */
+	private static function has_sample_bundle(): bool {
+		$p = self::sample_bundle_path();
+		return $p && is_readable( $p );
+	}
+
+	/**
+	 * Import a Zorderz bundle from a .zip already on disk (a server-side path, not an
+	 * upload). Shared by the one-click sample-data loader. Returns [ notice, result|null ].
+	 */
+	private static function import_from_zip_path( string $path, bool $dry ): array {
+		if ( ! class_exists( 'ZipArchive' ) ) {
+			return array( array( 'type' => 'error', 'msg' => 'The sample-data bundle is a .zip but ZipArchive is unavailable on this server. Enable the PHP zip extension.' ), null );
+		}
+		if ( ! $path || ! is_readable( $path ) ) {
+			return array( array( 'type' => 'error', 'msg' => 'Sample-data bundle not found in this install.' ), null );
+		}
+		$zip = new ZipArchive();
+		if ( true !== $zip->open( $path ) ) {
+			return array( array( 'type' => 'error', 'msg' => 'Could not open the sample-data bundle.' ), null );
+		}
+		$bundle = json_decode( (string) $zip->getFromName( 'zorderz-data.json' ), true );
+		if ( ! is_array( $bundle ) || empty( $bundle['zorderz_data_bundle'] ) ) {
+			$zip->close();
+			return array( array( 'type' => 'error', 'msg' => 'The sample-data bundle is invalid.' ), null );
+		}
+		$media = $dry ? self::count_upload_entries( $zip ) : self::extract_uploads( $zip );
+		$zip->close();
+		$result                = self::import_bundle( $bundle, array( 'dry_run' => $dry ) );
+		$result['media_files'] = $media;
+		$notice = array( 'type' => 'success', 'msg' => $dry ? 'Sample-data dry run complete (nothing written).' : 'TestCo sample data loaded.' );
+		return array( $notice, $result );
+	}
+
+	/**
+	 * One-click loader for the bundled TestCo sample data. Unlike a full migration import,
+	 * the shipped seed intentionally OMITS the owner account and the WordPress site settings,
+	 * so loading it populates every app with a demo company WITHOUT replacing the account of
+	 * the person loading it or reconfiguring their WordPress. Best on a fresh install.
+	 */
+	public static function handle_load_sample() {
+		if ( ! current_user_can( self::CAP ) ) {
+			wp_die( 'Forbidden', '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( 'zdz_load_sample' );
+		@set_time_limit( 0 );
+		@ini_set( 'memory_limit', '512M' );
+
+		$acting = get_current_user_id();
+		$dry    = ! empty( $_POST['dry_run'] );
+
+		list( $notice, $result ) = self::import_from_zip_path( self::sample_bundle_path(), $dry );
+		if ( is_array( $result ) ) {
+			set_transient( 'zdz_dp_result_' . $acting, $result, 300 );
+		}
+		set_transient( 'zdz_dp_notice_' . $acting, $notice, 300 );
+		wp_safe_redirect( admin_url( 'tools.php?page=' . self::SLUG ) );
+		exit;
+	}
+
 	public static function render_page() {
 		if ( ! current_user_can( self::CAP ) ) {
 			return;
@@ -1166,6 +1236,18 @@ class ZDZ_Data_Portability {
 				echo ' <span style="color:#a00">' . count( $result['errors'] ) . ' error(s).</span>';
 			}
 			echo '</p></div>';
+		}
+
+		// Sample-data card (only when this build ships the bundled TestCo seed).
+		if ( self::has_sample_bundle() ) {
+			echo '<h2 class="title">Sample data</h2>';
+			echo '<p>New to Zorderz? Load the <strong>TestCo</strong> demo company &mdash; a complete fictional business with a product catalog, price list, estimates, invoices, a team roster, chat history and knowledge documents &mdash; so you can explore every app with realistic data before entering your own. This adds demo records and demo staff; it does <strong>not</strong> change your own account or your WordPress site title. Best on a fresh install; records use fixed ids, so loading again simply refreshes them.</p>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			wp_nonce_field( 'zdz_load_sample' );
+			echo '<input type="hidden" name="action" value="zdz_load_sample">';
+			echo '<p><label><input type="checkbox" name="dry_run" value="1"> Preview counts only (write nothing)</label></p>';
+			echo '<p><button type="submit" class="button button-primary button-hero">Load TestCo sample data</button></p>';
+			echo '</form><hr>';
 		}
 
 		// Export card.

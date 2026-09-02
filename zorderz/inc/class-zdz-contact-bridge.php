@@ -8,7 +8,7 @@
  * platform data (not owned by any one app), so the bridge lives in the theme
  * alongside the ZDZ_Core_* data clients rather than in a plugin.
  *
- * CALLED BY: Analytics Analytics Engine (class-tsa-analytics-engine.php), the
+ * CALLED BY: the Analytics engine, the
  *            [ZDZ_CONTACT] marker handler. Mirrors TSEC_TSA_Bridge::lookup_for_tsa().
  *
  * DATA SOURCES (Seam 1, shared clients only — no private API client):
@@ -527,7 +527,7 @@ class ZDZ_Contact_Bridge {
 	/**
 	 * Pull the salesperson INITIALS attached to a FreshBooks customer by reading
 	 * the codes off their recent invoices/estimates. Reuses the same parenthesized
-	 * "(GT)" / "(GT/DT)" convention Commission parses for commission splits.
+	 * "(GT)" / "(GT/DT)" convention Commissions parses for commission splits.
 	 *
 	 * @param array $fb_client
 	 * @return array Upper-cased initials, e.g. ['GT','DT'].
@@ -664,7 +664,7 @@ class ZDZ_Contact_Bridge {
 
 	/**
 	 * The requester's salesperson initials, from their commission profile meta
-	 * (set in Commission), with a ZDZ_Core_Settings fallback.
+	 * (set in Commissions), with a ZDZ_Core_Settings fallback.
 	 *
 	 * @param int $uid
 	 * @return string
