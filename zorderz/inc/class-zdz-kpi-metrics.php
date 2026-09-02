@@ -463,7 +463,7 @@ class ZDZ_KPI_Metrics {
 	 * endpoint — verified in production testing 2026-04-30. The math
 	 * is self-correcting: unpaid invoices contribute $0 to the sum.
 	 *
-	 * Aligns with Brain Bot RULE #4 / RULE B: only actual collections
+	 * Aligns with the assistant RULE #4 / RULE B: only actual collections
 	 * (paid or partially paid) count as revenue.
 	 *
 	 * @since  2.14.4.1 — Removed broken payment_status filter; single query.

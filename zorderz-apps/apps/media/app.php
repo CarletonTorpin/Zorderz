@@ -311,7 +311,7 @@ add_action( 'admin_init', 'zml_seed_allowed_apps' );
 function zml_seed_allowed_apps() {
 	if ( get_option( 'zml_seeded_apps_v2', false ) ) return;
 
-	// Roles that should see Media. Admin/owner/admin-TS see everything anyway,
+	// Roles that should see Media. Admin/owner/admins see everything anyway,
 	// so we only need to seed the non-admin roles' explicit allow-lists.
 	$roles_to_seed = [ 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'zdz_general' ];
 	$add_ids       = [ 'zdz-media', 'zdz-media-all' ];

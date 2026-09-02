@@ -1,5 +1,5 @@
 /**
- * TS Internal Messaging — Service Worker
+ * Zorderz Internal Messaging — Service Worker
  *
  * Minimal surface: receive Web Push, render a notification, and on click
  * focus-or-open the deep-link URL the server attached.

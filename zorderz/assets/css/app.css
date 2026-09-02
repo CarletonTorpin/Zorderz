@@ -151,7 +151,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .sub-view:not(.active){display:none !important}
 
 /* v2.14.3.1: Pull-to-refresh indicator — inserted at the top of the active
-   sub-view by initPullToRefresh() in app.js. Consistent with the TSA/TSIM
+   sub-view by initPullToRefresh() in app.js. Consistent with the Analytics/Messaging
    plugin-level PTR pattern but at the theme shell level. */
 .zdz-pull-indicator {
   display: flex;
@@ -1647,7 +1647,7 @@ body.app-active #view-main{pointer-events:none}
    viewport on desktop. iMessage/Slack on macOS are full-width by design;
    the messaging plugin's Team tab and any future chat-shaped plugin should
    match that expectation. Plugins opt in by adding `.zdz-fullwidth` to
-   their .sub-view element. The TS Internal Messaging plugin's #sv-team is
+   their .sub-view element. The Zorderz Internal Messaging plugin's #sv-team is
    wired in here directly so it works without any plugin-side change.
    Cap-overrides repeat at every cap breakpoint so a more-specific media
    rule above can't sneak the cap back in. The !important on the base rule

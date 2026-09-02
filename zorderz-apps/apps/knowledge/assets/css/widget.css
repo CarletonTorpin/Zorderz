@@ -1,4 +1,4 @@
-/* TS Knowledge Vault — Widget Styles */
+/* Zorderz Knowledge Vault — Widget Styles */
 .zkv-vault { display:flex; flex-direction:column; gap:12px; padding:16px; }
 .zkv-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .zkv-header-title { display:flex; align-items:center; gap:8px; font-size:var(--ref-font-lg,18px); font-weight:600; color:var(--sys-text,#0F172A); }

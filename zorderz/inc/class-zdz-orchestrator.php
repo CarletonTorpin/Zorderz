@@ -1,12 +1,12 @@
 <?php
 /**
- * TS Orchestrator — deterministic, Poe-free intent classifier for the dashboard
+ * Zorderz Orchestrator — deterministic, Poe-free intent classifier for the dashboard
  * "ask" field.
  *
  * The dashboard sends a free-text query here; this classifies it and, for the
  * read verbs we can answer in place, returns structured data the dashboard
  * renders as an inline card. Everything else returns route:'chat' so the
- * dashboard hands the query to the full Brain Bot chat (where open-ended
+ * dashboard hands the query to the full assistant chat (where open-ended
  * questions belong).
  *
  * WHY THIS EXISTS: the analytics app's own planner classification is LLM-based (it costs a Poe

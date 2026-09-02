@@ -3,7 +3,7 @@
  * ZSCH_TSA_Bridge — orchestrator capability bridge for the scheduler.
  *
  * Per ORCHESTRATOR-INTEROP-CONTRACT-v1 §2.1, this is the static class the
- * operator bot (Brain Bot / TSA) calls server-side. Every method returns a
+ * operator bot (the assistant) calls server-side. Every method returns a
  * structured array (never throws, never null), is self-contained, accepts the
  * caller's tier, and reads through this plugin's own models.
  *

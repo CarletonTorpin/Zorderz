@@ -249,7 +249,7 @@ class ZKV_Indexer {
 			}
 		}
 
-		// v1.2.6: Invalidate TSA bridge inventory cache so new docs appear immediately.
+		// v1.2.6: Invalidate Analytics bridge inventory cache so new docs appear immediately.
 		if ( class_exists( 'ZKV_TSA_Bridge' ) && method_exists( 'ZKV_TSA_Bridge', 'invalidate_cache' ) ) {
 			ZKV_TSA_Bridge::invalidate_cache();
 		}

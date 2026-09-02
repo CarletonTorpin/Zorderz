@@ -1298,7 +1298,7 @@ function renderFieldPreferences() {
     '</div>' +
     '<div id="zdz-fp-body" class="zdz-fp-body" style="display:none">' +
       '<p class="zdz-fp-hint">How you write notes, abbreviations, and walkthrough patterns. ' +
-      'Brain Bot and the Estimate Creator use this to parse your handwritten estimates accurately.</p>' +
+      'The assistant and the Estimate Creator use this to parse your handwritten estimates accurately.</p>' +
       '<div id="zdz-fp-fields"><div class="zdz-fp-loading">Loading…</div></div>' +
     '</div>';
   refreshIcons();
@@ -1814,7 +1814,7 @@ function saveNutshellCredentials() {
 // ---- COMMAND PALETTE ----
 // ---- COMMAND PALETTE ----
 // v2.20.0: The older simple app-search version has been removed.
-// The enhanced version with Brain Bot routing and fuzzy match is
+// The enhanced version with the assistant routing and fuzzy match is
 // defined below (see the second initCommandPalette block).
 
 // ---- APP VIEWPORT CONTROLS ----
@@ -1844,7 +1844,7 @@ function initAppViewport() {
 // the browser's native PTR. This adds a pull-down gesture at the top of any
 // sub-view that triggers a full page reload.
 //
-// Does NOT conflict with plugin-level PTR (TSA, TSIM) because those attach
+// Does NOT conflict with plugin-level PTR (Analytics, Messaging) because those attach
 // to their own internal scroll containers (#tsa-w-messages, #zim-w-messages).
 // The theme PTR only fires when the .sub-view itself is at scrollTop 0.
 function initPullToRefresh() {
@@ -2463,7 +2463,7 @@ function initCommandPalette() {
   // a lookup needs a named person AND retrieval framing, and must NOT be an
   // aggregate/analytic question. Returns the extracted customer name (string)
   // to show on the row, or null if it's not a lookup. This never changes the
-  // routing — the query still goes to the Brain Bot, which makes the real call.
+  // routing — the query still goes to the assistant, which makes the real call.
   function detectLookupIntent(raw) {
     if (!raw) return null;
     var q = raw.trim();
@@ -2517,12 +2517,12 @@ function initCommandPalette() {
   // Turns the top-of-dashboard ask field into an operator entry point. It
   // CLASSIFIES a natural-language command into one of:
   //   • { kind:'shell', ... }  — an instant in-shell action (e.g. open Camera
-  //                              with a sticky pre-label). No Brain Bot round-trip.
-  //   • { kind:'route', ... }  — route to the Brain Bot (sales-analytics) with the
+  //                              with a sticky pre-label). No the assistant round-trip.
+  //   • { kind:'route', ... }  — route to the assistant (sales-analytics) with the
   //                              prompt + an orchestrator_hint so the user sees the
   //                              intent was understood; the bot/engine does the work.
   //   • null                    — not a recognized command; fall through to the
-  //                              normal "Ask Brain Bot" behavior (nothing regresses).
+  //                              normal "Ask the assistant" behavior (nothing regresses).
   // It is deterministic (regex + the existing detectLookupIntent), so the clear
   // commands work WITHOUT any Poe change and answer instantly. Anything it can't
   // classify still goes to the bot exactly as before.
@@ -2555,7 +2555,7 @@ function initCommandPalette() {
       if (hasCamera) {
         // v2.24.0: a camera-capture command ALWAYS opens the camera in-shell —
         // with OR without a pre-label. Previously only the labeled form became a
-        // shell action and a bare "take a picture" fell through to the Brain Bot
+        // shell action and a bare "take a picture" fell through to the assistant
         // (which tried to "take a picture" itself — wrong). Now any recognized
         // capture intent opens the real camera; the label is applied if present.
         var camName = label
@@ -2601,7 +2601,7 @@ function initCommandPalette() {
     // for the Smith job", "start a sketch", "check stock for sliders", "pull up
     // commission for last month", etc. Like the Camera block, these are INSTANT
     // in-shell shell actions — openApp() jumps to the app's dashboard widget (no
-    // Brain Bot round-trip). Each app can optionally capture a bit of context
+    // the assistant round-trip). Each app can optionally capture a bit of context
     // (a customer/job name, a date/period) passed through openApp options so the
     // widget can pre-focus. Camera is handled above (it has bespoke label logic);
     // email/contact/document lookups are handled below and take precedence over a
@@ -3043,7 +3043,7 @@ function initCommandPalette() {
     // v2.28.1: aggregate/analytic COMMISSION questions ("commission by
     // salesperson", "commission report for the team", "average commission",
     // "how much commission did we pay") must NOT launch the widget — they're
-    // questions for the Brain Bot. Skip the launch entirely so they fall through
+    // questions for the assistant. Skip the launch entirely so they fall through
     // to chat. (A named-person commission was already handled as an inline card
     // before the launch detector ran.)
     var commAggregate = /\bcommissions?\b/.test(lower)
@@ -3106,20 +3106,20 @@ function initCommandPalette() {
 
     var html = '';
 
-    // ── v2.20.0: ALWAYS show "Ask Brain Bot" as the primary action ──
-    // v2.20.0 r4: Guard against TSA (sales-analytics) being inactive.
+    // ── v2.20.0: ALWAYS show "Ask the assistant" as the primary action ──
+    // v2.20.0 r4: Guard against Analytics (sales-analytics) being inactive.
     // v2.26.3: Check the REGISTERED apps (zdzData.apps), not getVisibleApps().
     // Analytics is a secondary surface (springboard:false) so it no longer shows
     // as a top-bar icon — but it IS still registered/active and must remain
-    // reachable from search as "Ask Brain Bot". Keying on getVisibleApps() would
+    // reachable from search as "Ask the assistant". Keying on getVisibleApps() would
     // silently drop the row once Analytics left the springboard.
     var hasBrainBot = (zdzData.apps || []).some(function(a) {
       return a && (a.id === 'sales-analytics' || a.id === 'zdz-sales-analytics');
     });
     // v2.21.4 (cross-app orchestrator): consult the deterministic router first.
     // A 'shell' action (e.g. open Camera w/ a pre-label) becomes its OWN primary
-    // row and runs instantly. A 'route' relabels the Brain Bot row and carries an
-    // orchestrator_hint. Anything else falls through to the plain "Ask Brain Bot".
+    // row and runs instantly. A 'route' relabels the assistant row and carries an
+    // orchestrator_hint. Anything else falls through to the plain "Ask the assistant".
     var route = zdzOrchestratorRoute(q.trim());
 
     if (route && route.kind === 'inline') {
@@ -3141,8 +3141,8 @@ function initCommandPalette() {
     } else if (hasBrainBot) {
       var truncated = q.trim().length > 50 ? q.trim().substring(0, 50) + '…' : q.trim();
 
-      // Default Brain Bot row.
-      var biName = 'Ask Brain Bot';
+      // Default the assistant row.
+      var biName = 'Ask the assistant';
       var biIcon = 'sparkles';
       var biDesc = '"' + truncated + '"';
       var biOptions = { prompt: q.trim() };
@@ -3186,7 +3186,7 @@ function initCommandPalette() {
     }
 
     // ── 2. App matches follow (already rendered above) ──
-    // The Brain Bot row is always first, app matches follow.
+    // The the assistant row is always first, app matches follow.
 
     results.innerHTML = html;
     refreshIcons();
@@ -3199,7 +3199,7 @@ function initCommandPalette() {
 // resolved data in the same call. This makes phrasing robustness a server concern,
 // not a JS-regex guess: even if the palette row label guessed wrong, the action
 // reflects what the server actually found. 'chat' (or any miss) hands off to the
-// full Brain Bot. Contact/lookup render as compact cards with an "Open in chat →".
+// full assistant. Contact/lookup render as compact cards with an "Open in chat →".
 // v2.28.8 — INSTANT SKELETON. The client detector already knows the verb,
 // subject and period before the server replies, so we paint a real card frame
 // immediately (subject + period + a shimmering figure placeholder) instead of a
@@ -3852,7 +3852,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.__tsClearRecovery) window.__tsClearRecovery();
   refreshIcons();
 
-  // v2.21.0: route an external #tsa-session=<id> deep link (TSA digest "Open this
+  // v2.21.0: route an external #tsa-session=<id> deep link (Analytics digest "Open this
   // chat →") now that the shell + Bridge are ready, and again whenever the hash
   // changes (an installed PWA is reactivated rather than cold-booted on link tap).
   zdzRouteDeepLink();

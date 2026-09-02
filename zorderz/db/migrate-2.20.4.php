@@ -69,7 +69,7 @@ function zdz_migrate_2_20_4() {
 		update_option( 'zdz_media_schema', 3, true );
 	}
 
-	error_log( 'TS migrate-2.20.4: ensured EXIF columns (captured_at, gps_lat, gps_lng) on zdz_user_media.' );
+	error_log( 'Zorderz migrate-2.20.4: ensured EXIF columns (captured_at, gps_lat, gps_lng) on zdz_user_media.' );
 	update_option( 'zdz_migrated_2_20_4', true, false );
 }
 

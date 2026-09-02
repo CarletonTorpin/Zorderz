@@ -1,5 +1,5 @@
 /**
- * TS Camera — Dashboard Widget v1.7.2
+ * Zorderz Camera — Dashboard Widget v1.7.2
  *
  * v1.6.1 — FIX: the AE/AF press-and-hold could trigger iOS TEXT SELECTION
  *   (everything tinted blue + the magnifier loupe) because the long-press was
@@ -1395,7 +1395,7 @@
     });
   }
 
-  /* ── Foreground drain (runs while a TS tab is open) ─────────────────── */
+  /* ── Foreground drain (runs while an app tab is open) ─────────────────── */
 
   // v1.2.9: the caller resolves (and verifies) the upload bytes first and
   // passes them in — this form NEVER carries an unverified IndexedDB read.

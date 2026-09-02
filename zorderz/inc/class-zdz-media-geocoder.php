@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Media Geocoder — privacy-first reverse geocoding (GPS → place name).
+ * Zorderz Media Geocoder — privacy-first reverse geocoding (GPS → place name).
  *
  * Design goals:
  *   - PRIVACY FIRST. The bundled resolver is 100% on-server: it reads a local

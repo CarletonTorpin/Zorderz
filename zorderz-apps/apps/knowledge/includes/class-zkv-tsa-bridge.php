@@ -1,8 +1,8 @@
 <?php
 /**
- * ZKV_TSA_Bridge — For TSA to inject vault context into Brain Bot.
+ * ZKV_TSA_Bridge — For Analytics to inject vault context into the assistant.
  *
- * Usage in TSA's analytics engine:
+ * Usage in Analytics's analytics engine:
  *   if ( class_exists( 'ZKV_TSA_Bridge' ) ) {
  *       $system_prompt .= ZKV_TSA_Bridge::get_inventory();   // compact doc list
  *       $vault_block    = ZKV_TSA_Bridge::get_context( $q );  // topic-matched content
@@ -10,7 +10,7 @@
  *
  * v1.2.6: Added get_inventory(), cache invalidation, removed [VAULT-{id}] citation style.
  * v1.3.0: Added content chunk search — get_context() now returns actual document
- *         content excerpts alongside AI summaries, so Brain Bot can answer specific
+ *         content excerpts alongside AI summaries, so the assistant can answer specific
  *         questions (pricing, dimensions, part numbers) from raw document text.
  * v1.3.1: Boosted chunk retrieval for pricing authority docs — more chunks with
  *         larger excerpts. Added pricing query detection and fallback chunk pull
@@ -27,7 +27,7 @@
  *         (lowers threshold progressively). Document priority fix ensures pricing
  *         authority docs always survive the max_docs trim.
  * v1.5.0: PRIVATE TRANSCRIPTS + the bridge is finally visibility-aware.
- *         This bridge is the Brain Bot's REAL retrieval path (the engine calls
+ *         This bridge is the assistant's REAL retrieval path (the engine calls
  *         it in-process; REST is not involved), and before 1.5.0 it applied NO
  *         visibility filter at all — admin_only chunk text could reach any
  *         user's chat context, and a private transcript would have too.
@@ -36,10 +36,10 @@
  *           ZKV_ACL::sql_where_chat( $uid ) — the PARTY-ONLY predicate.
  *           Chat deliberately uses the strict mode: a shared-with recipient
  *           can *read* a transcript lent to them in the Vault, but their
- *           Brain Bot never answers from it (a share lends a view, not a
+ *           the assistant never answers from it (a share lends a view, not a
  *           chat seat).
  *         - get_context() takes the requesting user id from the engine
- *           ($uid param; falls back to get_current_user_id(), which the TSA
+ *           ($uid param; falls back to get_current_user_id(), which the Analytics
  *           cron worker restores via wp_set_current_user before processing).
  *         - get_inventory() NEVER lists transcripts (a private conversation
  *           is not "reference material the team can draw on" — its title
@@ -61,7 +61,7 @@ class ZKV_TSA_Bridge {
 
 	/**
 	 * Compact listing of indexed vault documents — titles and types only.
-	 * Injected into every Brain Bot system prompt so the AI knows what
+	 * Injected into every the assistant system prompt so the AI knows what
 	 * reference material exists, even before topic-matching fires.
 	 *
 	 * v1.5.0: transcripts are excluded OUTRIGHT (never listed, for anyone —
@@ -131,14 +131,14 @@ class ZKV_TSA_Bridge {
 	 *   Layer 1: FULLTEXT on AI-generated index (synopsis, key_facts, tags)
 	 *   Layer 2: FULLTEXT on raw content chunks (actual document text)
 	 * When content chunks match, the relevant excerpt is included in the
-	 * context block so Brain Bot has the specific details (prices, specs,
+	 * context block so the assistant has the specific details (prices, specs,
 	 * dimensions) needed to answer precisely.
 	 *
 	 * @param string   $query    The user's question.
 	 * @param int      $max_docs Max documents to return (default 8).
 	 * @param int|null $uid      Requesting user id (v1.5.0). Engine passes it
 	 *                           explicitly; defaults to get_current_user_id()
-	 *                           (valid even in the TSA cron worker, which
+	 *                           (valid even in the Analytics cron worker, which
 	 *                           restores identity via wp_set_current_user).
 	 * @return string  Block to append to system prompt, or empty string.
 	 */

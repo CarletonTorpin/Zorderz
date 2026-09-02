@@ -1,8 +1,8 @@
 /**
- * TSIM v1.0.17 — Team bottom-nav tab injector
+ * Messaging v1.0.17 — Team bottom-nav tab injector
  *
  * Runs on Zorderz theme front page (where #view-main and .bnav exist).
- * Mirrors the pattern TSA uses to inject its Chat tab — creates a sub-view
+ * Mirrors the pattern Analytics uses to inject its Chat tab — creates a sub-view
  * that hosts the messaging iframe and adds a "Team" button to the bottom nav.
  *
  * This script does NOT run inside the messaging widget itself (full-page
@@ -78,7 +78,7 @@
 			'<span class="ni-label">Team</span>' +
 			'<span class="ni-badge" id="ni-team-badge" hidden></span>';
 
-		// Find the Chat button if TSA injected it, otherwise use Apps.
+		// Find the Chat button if Analytics injected it, otherwise use Apps.
 		var chatBtn = bnav.querySelector('[data-view="sv-chat"]');
 		var appsBtn = bnav.querySelector('[data-view="sv-dash"]');
 		var anchor = chatBtn || appsBtn;
@@ -120,7 +120,7 @@
 						if (skeleton) skeleton.style.display = 'none';
 					}, 80);
 					if (reason === 'timeout' && window.console) {
-						console.warn('[TSIM] iframe load timeout; revealing anyway');
+						console.warn('[Messaging] iframe load timeout; revealing anyway');
 					}
 				}
 

@@ -19,7 +19,7 @@
  * Why REST and not admin-ajax.php:
  *   the analytics app's embed lives on a different page than messaging's widget, so
  *   `zimData.nonce` (the admin-ajax nonce) isn't in scope. REST uses
- *   the standard `X-WP-Nonce` cookie-bound nonce, which TSA already has
+ *   the standard `X-WP-Nonce` cookie-bound nonce, which Analytics already has
  *   (via `wpApiSettings` from wp-api core or its own localized rest nonce).
  *
  * @since 1.0.2
@@ -63,7 +63,7 @@ class ZIM_REST {
 		) );
 
 		// v1.0.20: List channels the current user belongs to.
-		// Used by TSA and TSKV for "share to channel" pickers.
+		// Used by Analytics and Knowledge Vault for "share to channel" pickers.
 		register_rest_route( self::NS, '/channels', array(
 			'methods'             => WP_REST_Server::READABLE,
 			'callback'            => array( __CLASS__, 'get_channels' ),
@@ -71,7 +71,7 @@ class ZIM_REST {
 		) );
 
 		// v1.0.20: Post a message to a channel on behalf of the current user.
-		// Used by TSA Brain Bot "post to #channel" feature.
+		// Used by the assistant "post to #channel" feature.
 		// Requires: channel_slug (string) + body (string).
 		// The message is posted AS the current logged-in user (not a bot).
 		register_rest_route( self::NS, '/post', array(
@@ -181,9 +181,9 @@ class ZIM_REST {
 	/**
 	 * v1.0.20: Post a message to a channel as the current user.
 	 *
-	 * Cross-plugin integration point — the analytics app's Brain Bot uses this to post
+	 * Cross-plugin integration point — the analytics app's the assistant uses this to post
 	 * AI-generated content to channels when the user says "post this to #X".
-	 * The message appears as FROM the user who asked Brain Bot, not from a bot.
+	 * The message appears as FROM the user who asked the assistant, not from a bot.
 	 *
 	 * Security: same permission stack as the AJAX post handler —
 	 * logged-in + zdz_access_app + membership + customer-facing gate.
@@ -195,7 +195,7 @@ class ZIM_REST {
 		}
 
 		// v1.0.24 — Read-only roles (the shared kiosk `zdz_general`) cannot post.
-		// This route is the cross-plugin "post to #channel" surface Brain Bot
+		// This route is the cross-plugin "post to #channel" surface the assistant
 		// uses; blocking it here gives a clean 403 and makes the lockdown
 		// explicit at the integration boundary. ZIM_Messages::post() refuses
 		// read-only authors too, so this is belt-and-suspenders.

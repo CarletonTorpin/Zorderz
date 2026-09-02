@@ -2,7 +2,7 @@
 /**
  * Shared Review Bridge Client
  *
- * Calls the TS Review Bridge REST API on the marketing site to check whether
+ * Calls the Zorderz Review Bridge REST API on the marketing site to check whether
  * a customer left a Thrive Ovation testimonial. This is a read-only client —
  * it never writes to either site's database.
  *
@@ -93,7 +93,7 @@ class ZDZ_Core_ReviewBridge {
 		] );
 
 		if ( is_wp_error( $response ) ) {
-			error_log( 'TS Review Bridge Error: ' . $response->get_error_message() );
+			error_log( 'Zorderz Review Bridge Error: ' . $response->get_error_message() );
 			return null;
 		}
 
@@ -101,13 +101,13 @@ class ZDZ_Core_ReviewBridge {
 		if ( $code !== 200 ) {
 			$body = json_decode( wp_remote_retrieve_body( $response ), true );
 			$err  = $body['code'] ?? 'unknown';
-			error_log( "TS Review Bridge HTTP {$code}: {$err}" );
+			error_log( "Zorderz Review Bridge HTTP {$code}: {$err}" );
 			return null;
 		}
 
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( ! is_array( $data ) || ! isset( $data['found'] ) ) {
-			error_log( 'TS Review Bridge: unexpected response format' );
+			error_log( 'Zorderz Review Bridge: unexpected response format' );
 			return null;
 		}
 

@@ -8,11 +8,12 @@
  * endpoint (which owns job creation + the CRM mirror + address/phone resolve).
  *
  * Data flow (all structured, no DOM scraping of line data):
- *   history row  --data-id-->  tsec_get_estimate_detail (TSEC's own AJAX)
+ *   history row  --data-id-->  zest_detail (the Estimates app's own AJAX)
  *                --lines+customer+ns_lead+ns_contact-->  zjob_create_from_estimate
  *
- * Requires window.zjob (localized by the Jobs app) and window.tsecWidget (TSEC's own
- * localized config, for its nonce). Degrades to a no-op if either is absent.
+ * Requires window.zjob (localized by the Jobs app) and window.zestWidget (the
+ * Estimates app's localized config, for its nonce). Degrades to a no-op if either
+ * is absent.
  *
  * @package Zorderz\Jobs
  * @since 1.7.0
@@ -53,7 +54,7 @@
 		return (norm((desc || '') + ' ' + (sub || '')) + '||' + norm(dims) + '||q' + (parseInt(qty, 10) || 0)).slice(0, 191);
 	}
 
-	function tsecCfg() { return window.tsecWidget || null; }
+	function estCfg() { return window.zestWidget || null; }
 
 	function jobsPost(action, data) {
 		var body = new URLSearchParams();
@@ -66,9 +67,9 @@
 		}).then(function (r) { return r.json(); });
 	}
 
-	function tsecPost(action, data) {
-		var T = tsecCfg();
-		if (!T || !T.ajaxurl) { return Promise.reject(new Error('no tsec')); }
+	function estPost(action, data) {
+		var T = estCfg();
+		if (!T || !T.ajaxurl) { return Promise.reject(new Error('no estimates config')); }
 		var body = new URLSearchParams();
 		body.set('action', action);
 		body.set('nonce', T.nonce || '');
@@ -97,16 +98,18 @@
 
 	/* ---- inject the "Send as job(s)" button into history action rows -------- */
 	function injectHistory() {
-		var rows = document.querySelectorAll('.tsec-w-history-actions');
+		// History rows render as .zest-row[data-id] inside #zest-history-list; append a
+		// "Send as job" control to each (idempotent). The row itself is clickable, so the
+		// button stops propagation on click.
+		var rows = document.querySelectorAll('#zest-history-list .zest-row[data-id], .zest-w-list .zest-row[data-id]');
 		for (var i = 0; i < rows.length; i++) {
-			var actions = rows[i];
-			if (actions.querySelector('.zjobx-send')) { continue; } // idempotent
-			var idBtn = actions.querySelector('[data-id]');
-			var id = idBtn ? idBtn.getAttribute('data-id') : '';
+			var row = rows[i];
+			if (row.querySelector('.zjobx-send')) { continue; } // idempotent
+			var id = row.getAttribute('data-id');
 			if (!id) { continue; }
 			var b = document.createElement('button');
 			b.type = 'button';
-			b.className = 'tsec-w-btn-small zjobx-send';
+			b.className = 'zest-btn zjobx-send';
 			b.setAttribute('data-id', id);
 			b.innerHTML = '<span class="zjobx-send-ic">&rarr;</span> Send as job';
 			(function (eid) {
@@ -115,18 +118,21 @@
 					openPicker(eid);
 				});
 			})(id);
-			actions.appendChild(b);
+			row.appendChild(b);
 		}
 	}
 
 	/* ---- review/edit view entry point (2C) --------------------------------- */
 	/* Track which saved estimate is being edited, and blank it on a fresh parse. */
 	function trackClicks(e) {
-		var edit = e.target.closest ? e.target.closest('[class*="edit-history"], .tsec-w-edit-histo') : null;
-		if (edit && edit.getAttribute('data-id')) { lastEditId = edit.getAttribute('data-id'); return; }
+		// Opening a saved estimate (clicking its history row) captures its id for the
+		// review-view button. Ignore clicks on our own Send-as-job button (it carries its
+		// own id and stops propagation).
+		var row = e.target.closest ? e.target.closest('.zest-row[data-id]') : null;
+		if (row && !e.target.closest('.zjobx-send') && row.getAttribute('data-id')) { lastEditId = row.getAttribute('data-id'); return; }
 		// A new parse, a new-estimate tab, or start-over means "no saved estimate".
-		if (e.target.closest && e.target.closest('#tsec-w-parse')) { lastEditId = ''; return; }
-		var tabOrBtn = e.target.closest ? e.target.closest('.tsec-w-tab, button') : null;
+		if (e.target.closest && e.target.closest('#zest-parse')) { lastEditId = ''; return; }
+		var tabOrBtn = e.target.closest ? e.target.closest('.zest-w-tab, button') : null;
 		if (tabOrBtn && /new estimate|start over/i.test((tabOrBtn.textContent || ''))) { lastEditId = ''; }
 	}
 
@@ -134,7 +140,7 @@
 	   saved estimate is being edited (valid captured id). Otherwise remove any
 	   stale button so a fresh parse never shows one. */
 	function injectReview() {
-		var create = document.getElementById('tsec-w-create');
+		var create = document.getElementById('zest-create');
 		var host = create ? create.parentElement : null;
 		var existing = host ? host.querySelector('.zjobx-send-review') : null;
 		if (!create || create.offsetParent === null || !host || !lastEditId) {
@@ -145,7 +151,7 @@
 		var eid = lastEditId;
 		var b = document.createElement('button');
 		b.type = 'button';
-		b.className = 'tsec-w-btn zjobx-send-review';
+		b.className = 'zest-btn zjobx-send-review';
 		b.innerHTML = '<span class="zjobx-send-ic">&rarr;</span> Send as job(s)';
 		b.addEventListener('click', function (e) {
 			e.preventDefault(); e.stopPropagation();
@@ -342,7 +348,7 @@
 
 	function openPicker(estimateId) {
 		Promise.all([
-			tsecPost('tsec_get_estimate_detail', { id: estimateId }),
+			estPost('zest_detail', { id: estimateId }),
 			loadAssignees(),
 			jobsPost('zjob_estimate_rollup', { estimate_id: estimateId }).catch(function () { return null; })
 		]).then(function (r) {
@@ -350,7 +356,7 @@
 			var rollup = (r[2] && r[2].success) ? r[2].data : null;
 			if (!res || !res.success || !res.data) {
 				// fall back: try the alternate param name once
-				return tsecPost('tsec_get_estimate_detail', { estimate_id: estimateId }).then(function (res2) {
+				return estPost('zest_detail', { estimate_id: estimateId }).then(function (res2) {
 					if (res2 && res2.success && res2.data) { renderModal(res2.data, parseItems(res2.data), assignees, rollup); }
 					else { flashError('Could not load that estimate.'); }
 				});
@@ -374,7 +380,7 @@
 		tick();
 		if (!mo) {
 			mo = new MutationObserver(tick);
-			var host = document.querySelector('.tsec-w') || document.body;
+			var host = document.querySelector('.zest-w') || document.body;
 			try { mo.observe(host, { childList: true, subtree: true }); } catch (e) { /* non-fatal */ }
 		}
 	}
