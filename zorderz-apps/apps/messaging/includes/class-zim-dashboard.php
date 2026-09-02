@@ -484,7 +484,7 @@ class ZIM_Dashboard {
 	 * v1.0.20: Knowledge Vault document preview.
 	 *
 	 * Accepts either `id` (numeric vault doc ID) or `slug` (pretty URL slug).
-	 * Delegates to ZIM_Vault_Cards which calls Knowledge's REST endpoint via
+	 * Delegates to ZIM_Vault_Cards which calls Knowledge Vault's REST endpoint via
 	 * internal dispatch — same pattern as FreshBooks preview cards.
 	 */
 	public function ajax_preview_vault() {
@@ -601,7 +601,7 @@ class ZIM_Dashboard {
 		// v1.0.23: Removed `ID <> %d` exclusion so the current user appears
 		// in their own search results. This lets users initiate a self-DM
 		// ("Notes to Self") from the Messaging New DM picker — not only via
-		// Brain Bot. The ZIM_DMs::get_or_create_conversation() backend
+		// the assistant. The ZIM_DMs::get_or_create_conversation() backend
 		// now allows $user_a === $user_b.
 		$rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT ID, user_login, display_name

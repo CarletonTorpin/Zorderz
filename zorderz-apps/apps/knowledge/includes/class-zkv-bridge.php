@@ -4,9 +4,9 @@
  *
  * Provides pricing authority document context to other plugins.
  * Used by:
- *   - Zorderz Commission Calculator (Commission) for cost-of-goods context
+ *   - Zorderz Commission Calculator (Commissions) for cost-of-goods context
  *   - Integration Health Check (check #11) for deployment verification
- *   - Analytics Brain Bot for pricing-aware responses
+ *   - the assistant for pricing-aware responses
  *
  * Usage in other plugins:
  *   if ( class_exists( 'ZKV_Bridge' ) ) {

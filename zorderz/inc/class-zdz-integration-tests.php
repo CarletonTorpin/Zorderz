@@ -192,11 +192,11 @@ class ZDZ_Integration_Tests {
 	}
 
 	private function check_game_embed() {
-		$has_game = class_exists( 'ZG_App' );
+		$has_game = class_exists( 'ZG_Scores' );
 		return [
 			'name'   => 'Game Embed API',
 			'pass'   => $has_game,
-			'detail' => $has_game ? 'ZG_App class available' : 'Game plugin not active',
+			'detail' => $has_game ? 'ZG_Scores class available' : 'Game app not active',
 		];
 	}
 
@@ -307,7 +307,7 @@ class ZDZ_Integration_Tests {
 					'name'   => 'Pricing Oracle (Group 6B)',
 					'pass'   => false,
 					'detail' => $detail . ' ⚠️ ' . implode( ', ', $chunk_warnings )
-						. ' — run chunk seeder or re-index. Brain Bot cannot read pricing tables without chunks.',
+						. ' — run chunk seeder or re-index. The assistant cannot read pricing tables without chunks.',
 				];
 			}
 		}

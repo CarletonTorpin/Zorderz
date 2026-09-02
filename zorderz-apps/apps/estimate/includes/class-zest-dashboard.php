@@ -33,6 +33,7 @@ class ZEST_Dashboard {
 			'zest_update'        => 'ajax_update',
 			'zest_list_open'     => 'ajax_list_open',
 			'zest_history'       => 'ajax_history',
+			'zest_detail'        => 'ajax_detail',
 			'zest_assignables'   => 'ajax_assignables',
 			'zest_lookup'        => 'ajax_lookup',
 			'zest_lead_to_stub'  => 'ajax_lead_to_stub',
@@ -226,6 +227,48 @@ class ZEST_Dashboard {
 	public static function ajax_history(): void {
 		$uid = self::guard();
 		wp_send_json_success( array( 'rows' => self::rows_for( $uid, '1=1', 200 ) ) );
+	}
+
+	/**
+	 * One estimate's full detail (line items + customer + CRM ids), for the
+	 * cross-app Jobs handoff bridge. Ownership-scoped: an admin tier may read any
+	 * estimate; anyone else only their own (created_by or provenance-initials), so
+	 * the id parameter is not an IDOR. Shapes the payload the bridge expects
+	 * (parseItems() reads line_items; submit() reads customer_name + ns_*).
+	 */
+	public static function ajax_detail(): void {
+		$uid = self::guard();
+		$id  = isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) )
+			: ( isset( $_POST['estimate_id'] ) ? absint( wp_unslash( $_POST['estimate_id'] ) ) : 0 );
+		if ( ! $id ) {
+			wp_send_json_error( array( 'message' => 'Missing estimate id.' ), 400 );
+		}
+		global $wpdb;
+		$table = ZEST_DB::estimates_table();
+		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		if ( ! $row ) {
+			wp_send_json_error( array( 'message' => 'Estimate not found.' ), 404 );
+		}
+		if ( ! self::is_admin_tier( $uid ) ) {
+			$mine = ( (int) $row['created_by'] === $uid );
+			if ( ! $mine ) {
+				$code = self::user_code( $uid );
+				$mine = ( '' !== $code && false !== stripos( (string) $row['notes'], $code ) );
+			}
+			if ( ! $mine ) {
+				wp_send_json_error( array( 'message' => 'Not allowed.' ), 403 );
+			}
+		}
+		$items = json_decode( (string) ( $row['items_json'] ?? '' ), true );
+		wp_send_json_success( array(
+			'id'              => (int) $row['id'],
+			'customer_name'   => (string) $row['customer_name'],
+			'estimate_number' => (string) $row['billing_doc_num'],
+			'fb_estimate_num' => (string) $row['billing_doc_num'],
+			'ns_lead_id'      => (string) $row['crm_lead_id'],
+			'ns_contact_id'   => (string) $row['crm_contact_id'],
+			'line_items'      => is_array( $items ) ? array_values( $items ) : array(),
+		) );
 	}
 
 	/** Assignable people from ZDZ_Party (active, emailable) — never a local roster. */

@@ -25,7 +25,7 @@ class ZIM_DMs {
 	 * Get-or-create a DM conversation between two users.
 	 *
 	 * v1.0.23: Self-DMs ($user_a === $user_b) are now allowed.
-	 * Use case: "Notes to Self" and Brain Bot admin testing.
+	 * Use case: "Notes to Self" and the assistant admin testing.
 	 * The deterministic pair normalization still works for self-DMs:
 	 * min(12,12) = 12, max(12,12) = 12, and the UNIQUE KEY
 	 * idx_dm_pair(user_a, user_b) is satisfied.
