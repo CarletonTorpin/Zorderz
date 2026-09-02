@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Media EXIF — build a clean, human report from a media record's metadata.
+ * Zorderz Media EXIF — build a clean, human report from a media record's metadata.
  *
  * Source of truth is the row stored by ZDZ_User_Media:
  *   - Normalized columns: captured_at, gps_lat, gps_lng (always queryable).

@@ -10,7 +10,7 @@
  * @since 1.7.0
  */
 
-/* Injected history-row button (inherits .tsec-w-btn-small; add a teal accent). */
+/* Injected history-row button (inherits .zest-btn; add a teal accent). */
 .zjobx-send {
 	color: var(--sys-text-brand, #FFFFFF) !important;
 	background: #0E9F8E !important;

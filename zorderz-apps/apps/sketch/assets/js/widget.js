@@ -1,5 +1,5 @@
 /**
- * TS Sketch Pad — SPA Dashboard Widget v1.0.4
+ * Zorderz Sketch Pad — SPA Dashboard Widget v1.0.4
  *
  * v1.0.4: One-tap finish + intuitive flow.
  *   - "Done" in the fullscreen overlay is now SAVE: it commits the sketch and

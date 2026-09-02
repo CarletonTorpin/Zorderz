@@ -198,7 +198,7 @@ class ZL_Parallel_Dispatch {
 			CURLOPT_FOLLOWLOCATION => true,
 			CURLOPT_MAXREDIRS      => 3,
 			// Reasonable defaults — callers can override via headers[] if needed.
-			CURLOPT_USERAGENT      => 'TS-Sales-Leads/1.8.0 (curl_multi)',
+			CURLOPT_USERAGENT      => 'Zorderz-Leads/1.8.0 (curl_multi)',
 			CURLOPT_SSL_VERIFYPEER => true,
 			CURLOPT_SSL_VERIFYHOST => 2,
 		);

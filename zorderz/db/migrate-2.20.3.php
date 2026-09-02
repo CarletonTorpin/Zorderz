@@ -45,7 +45,7 @@ function zdz_migrate_2_20_3() {
 
 	$deleted = $wpdb->rows_affected;
 	if ( $deleted > 0 ) {
-		error_log( "TS migrate-2.20.3: Removed {$deleted} deprecated zdz_pr_* user meta rows." );
+		error_log( "Zorderz migrate-2.20.3: Removed {$deleted} deprecated zdz_pr_* user meta rows." );
 	}
 
 	update_option( 'zdz_migrated_2_20_3', true, false );

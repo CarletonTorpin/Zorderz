@@ -28,7 +28,7 @@
  *                      the app never passes an API key.
  *
  * ── PORTED AS A DELETION (S8-03) ──────────────────────────────────────
- * The TS five-Poe-key rotation is GONE: no key list, no rotation on 402, no remembered-option,
+ * The five-Poe-key rotation is GONE: no key list, no rotation on 402, no remembered-option,
  * no upgrade-clear. Single-credential is the Zorderz invariant; the app just calls the gateway.
  * Only the honest-diagnostic discipline (option NAMES / lengths / 8-char digests, never values)
  * is kept — see ZDP_Ai::diagnostics().

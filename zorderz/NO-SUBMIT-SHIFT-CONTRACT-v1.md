@@ -2,7 +2,7 @@
 
 > **Status:** Stable (new in Theme v2.21.0)
 > **Depends on:** `--sys-*` tokens (DATA-THEME-CONTRACT), `.dash-widget-body { overflow: clip }` (WIDGET-OVERFLOW-CONTRACT)
-> **Depended on by (should adopt):** TSSV (Surveys), TSL (Leads), TSCC (Commissions), TSEC (Estimates): any widget with an action button that triggers a server round-trip.
+> **Depended on by (should adopt):** Surveys (Surveys), Leads (Leads), Commissions (Commissions), Estimates (Estimates): any widget with an action button that triggers a server round-trip.
 
 ---
 

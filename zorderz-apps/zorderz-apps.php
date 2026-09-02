@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Apps
  * Plugin URI:  https://zorderz.org
  * Description: The Zorderz app bundle - 19 apps (Camera, Media, Sketch Pad, Messaging, Quick-ID, Game, Invoices, Knowledge Base, Scheduler, Jobs, Surveys, Stock, Leads, Prep, Receipts, Estimates, Commission, Dot Plot, and the Chat assistant). Requires the Zorderz theme, which provides the dashboard, roles, permissions, shared media store, Item Engine and Core services these apps register into.
- * Version:     1.7.2
+ * Version:     1.8.0
  * Author:      Zorderz
  * Author URI:  https://zorderz.com
  * License:     GPL-2.0-or-later
@@ -202,6 +202,18 @@ function zdz_apps_manifest() {
 			'file'       => 'apps/dotplot/app.php',
 			'activate'   => 'zdp_activate',
 			'deactivate' => 'zdp_deactivate',
+		],
+		'inbox' => [
+			'label'      => 'Email',
+			'file'       => 'apps/inbox/app.php',
+			'activate'   => 'zib_activate',
+			'deactivate' => 'zib_deactivate',
+		],
+		'mailbox-identity' => [
+			'label'      => 'Mailbox Identity',
+			'file'       => 'apps/mailbox-identity/app.php',
+			'activate'   => null,
+			'deactivate' => null,
 		],
 	];
 }

@@ -7,9 +7,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * This is ZL's seat at the cross-app orchestrator table, written to
  * `ORCHESTRATOR-INTEROP-CONTRACT-v1.md` (2026-06-03). The operator bot ("Brain
- * Bot", the TSA analytics app) plans a request, and when a request resolves to
+ * Bot", the Analytics analytics app) plans a request, and when a request resolves to
  * "show me <person>'s leads / pipeline status", it invokes a ZL **read verb**
- * here, server-side. We return a structured array; the TSA engine strips its
+ * here, server-side. We return a structured array; the Analytics engine strips its
  * marker and renders a card/list in its widget.
  *
  * It is the L1 ("Reachable — read") brick for ZL and is shaped as a future
@@ -64,7 +64,7 @@
  *     `purchase_summary`/`purchase_history` *already stored* against the lead
  *     (which itself came from FreshBooks at generation time). We never compute a
  *     fresh aggregate here, so there is no new un-provenanced number; any figure
- *     the bot then *states* still flows through TSA's provenance backbone.
+ *     the bot then *states* still flows through Analytics's provenance backbone.
  *  4. NO FABRICATION ON EMPTY. A zero-result lookup says so (with the sanctioned
  *     auto-widen note); it never invents a lead. Below the name-confidence floor
  *     we return needs_clarify instead of guessing the wrong person.
@@ -89,7 +89,7 @@ class ZL_TSA_Bridge {
 
 	/**
 	 * Name-match confidence floor. Below this we ask rather than guess
-	 * (resolve-then-confirm, mirrors TSEC's "go clarify rather than show the
+	 * (resolve-then-confirm, mirrors Estimates's "go clarify rather than show the
 	 * wrong client"). 0.0–1.0.
 	 */
 	const CONFIDENCE_FLOOR = 0.45;
@@ -250,7 +250,7 @@ class ZL_TSA_Bridge {
 
 	/* ═══════════════════════════════════════════════════════════════════════
 	 * VERB 2 — find_leads_for_tsa()  (READ, by filter not by person)
-	 * "leads from <source>", "leads not yet contacted in 92065", "new this week"
+	 * "leads from <source>", "leads not yet contacted in 12345", "new this week"
 	 * ═══════════════════════════════════════════════════════════════════════ */
 
 	/**
@@ -267,7 +267,7 @@ class ZL_TSA_Bridge {
 	 * Returns the same envelope as lookup_for_tsa but `leads[]` is the filtered
 	 * set and `resolved`/`pipeline_stage` are null/empty. On kiosk this returns
 	 * an *aggregate-leaning* view: counts + non-contact facts only (the bounded
-	 * form), so "is there an open lead in 92065" works without exposing a name's
+	 * form), so "is there an open lead in 12345" works without exposing a name's
 	 * contact path.
 	 *
 	 * @param array $payload
@@ -649,7 +649,7 @@ class ZL_TSA_Bridge {
 	}
 
 	/* ═══════════════════════════════════════════════════════════════════════
-	 * INTERNALS — name resolution (confidence-gated, mirrors TSEC)
+	 * INTERNALS — name resolution (confidence-gated, mirrors Estimates)
 	 * ═══════════════════════════════════════════════════════════════════════ */
 
 	/**
@@ -792,7 +792,7 @@ class ZL_TSA_Bridge {
 
 		// Work/interest summary identifies the job. On kiosk we keep it but scrub
 		// any address-bearing line and any dollar figure (belt-and-suspenders with
-		// the money flag), matching the TSEC kiosk "scrub address-like lines" rule.
+		// the money flag), matching the Estimates kiosk "scrub address-like lines" rule.
 		$summary = (string) ( $row['purchase_summary'] ?? '' );
 		if ( $summary !== '' ) {
 			if ( ! $show_money ) {

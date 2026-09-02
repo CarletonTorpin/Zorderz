@@ -68,7 +68,7 @@ class ZKV_Mailbox {
 				'interval' => 300,
 				// Plain string, NOT __(): cron_schedules can fire before textdomains load
 				// (same lesson as the scheduler's five-minute schedule).
-				'display'  => 'Every 5 Minutes (TS Knowledge Vault mail)',
+				'display'  => 'Every 5 Minutes (Zorderz Knowledge Vault mail)',
 			);
 		}
 		return $schedules;

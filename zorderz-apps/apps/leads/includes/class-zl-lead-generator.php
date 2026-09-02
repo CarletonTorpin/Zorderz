@@ -361,13 +361,13 @@ class ZL_Lead_Generator {
 	 * Initialize API clients from settings / shared credentials.
 	 *
 	 * Attempts to load credentials for FreshBooks, Nutshell, and Poe AI.
-	 * Includes fallback logic to share credentials with the TS Satisfaction Surveys plugin.
+	 * Includes fallback logic to share credentials with the Satisfaction Surveys plugin.
 	 *
 	 * @throws Exception If required credentials (FreshBooks or Nutshell) are missing.
 	 */
 	public function init_clients() {
 		// ── FreshBooks ───────────────────────────────────────
-		// Retrieve shared options, falling back to TS Surveys plugin if needed
+		// Retrieve shared options, falling back to the legacy Surveys plugin if needed
 		$fb_client_id     = ZL_Admin::get_shared_option( 'zl_fb_client_id', 'ts_surveys_fb_client_id' );
 		$fb_client_secret = ZL_Admin::decrypt_shared( 'zl_fb_client_secret', 'ts_surveys_fb_client_secret' );
 		$fb_account_id    = ZL_Admin::get_shared_option( 'zl_fb_account_id', 'ts_surveys_fb_account_id' );
@@ -1049,7 +1049,7 @@ class ZL_Lead_Generator {
 	 *
 	 * BUSINESS CONTEXT:
 	 * Some FreshBooks invoices store the customer's phone number on the second
-	 * address line (e.g., "619-572-2948") instead of in the dedicated phone fields.
+	 * address line (e.g., "555-572-2948") instead of in the dedicated phone fields.
 	 * This helper detects if p_street2 looks like a phone number so we can capture
 	 * it for the salesperson's call list.
 	 * This is the last resort in the phone extraction cascade after all
@@ -1095,11 +1095,11 @@ class ZL_Lead_Generator {
 	 * Normalize a phone number to a clean format for Nutshell.
 	 *
 	 * Handles various FreshBooks phone formats:
-	 *   "(760)612-9190"  → "(760) 612-9190"
-	 *   "760-612-9190"   → "(760) 612-9190"
-	 *   "7606129190"     → "(760) 612-9190"
-	 *   "17606129190"    → "(760) 612-9190"
-	 *   "+1 7606129190"  → "(760) 612-9190"
+	 *   "(555)612-9190"  → "(555) 612-9190"
+	 *   "555-612-9190"   → "(555) 612-9190"
+	 *   "5556129190"     → "(555) 612-9190"
+	 *   "15556129190"    → "(555) 612-9190"
+	 *   "+1 5556129190"  → "(555) 612-9190"
 	 *
 	 * @since 1.3.0
 	 * @param string $phone Raw phone number string.

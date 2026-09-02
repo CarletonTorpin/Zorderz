@@ -7,17 +7,17 @@
  * ZIM_Preview_Cards pattern for FreshBooks #NNNNN references.
  *
  * Detection patterns (any of these trigger a vault card):
- *   - [VAULT-{id}]         — Brain Bot citation format
+ *   - [VAULT-{id}]         — the assistant citation format
  *   - /vault/{slug}        — pretty URL path
  *   - your site's /vault/{slug} — full URL
  *
- * Data comes from TSKV's REST endpoint `/zorderz/v1/vault/preview/{id}`
+ * Data comes from Knowledge Vault's REST endpoint `/zorderz/v1/vault/preview/{id}`
  * via internal REST dispatch (no external HTTP). Graceful fallback
- * when TSKV isn't active.
+ * when Knowledge Vault isn't active.
  *
  * v1.0.20: Initial implementation.
  *
- * @package TSIM
+ * @package Messaging
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -51,7 +51,7 @@ class ZIM_Vault_Cards {
 			return $cached;
 		}
 
-		// TSKV REST endpoint available?
+		// Knowledge Vault REST endpoint available?
 		$card = self::fetch_via_rest( $doc_id );
 
 		if ( is_wp_error( $card ) ) {
@@ -68,8 +68,8 @@ class ZIM_Vault_Cards {
 	/**
 	 * Resolve a vault slug to a document ID.
 	 *
-	 * Falls back to a direct DB query against the TSKV documents table.
-	 * Returns 0 if not found or TSKV tables don't exist.
+	 * Falls back to a direct DB query against the Knowledge Vault documents table.
+	 * Returns 0 if not found or Knowledge Vault tables don't exist.
 	 *
 	 * @param string $slug Vault document slug.
 	 * @return int Document ID, or 0 if not found.
@@ -77,9 +77,9 @@ class ZIM_Vault_Cards {
 	public static function resolve_slug( $slug ) {
 		global $wpdb;
 		$slug  = sanitize_title( $slug );
-		$table = $wpdb->prefix . 'tskv_documents';
+		$table = $wpdb->prefix . 'zkv_documents';
 
-		// Guard: table might not exist if TSKV is deactivated.
+		// Guard: table might not exist if Knowledge Vault is deactivated.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$exists = $wpdb->get_var(
 			$wpdb->prepare( "SHOW TABLES LIKE %s", $table )
@@ -96,7 +96,7 @@ class ZIM_Vault_Cards {
 	}
 
 	/**
-	 * Call TSKV's REST preview endpoint via internal dispatch.
+	 * Call Knowledge Vault's REST preview endpoint via internal dispatch.
 	 */
 	private static function fetch_via_rest( $doc_id ) {
 		$req  = new WP_REST_Request( 'GET', '/zorderz/v1/vault/preview/' . $doc_id );
@@ -123,7 +123,7 @@ class ZIM_Vault_Cards {
 	}
 
 	/**
-	 * Normalize the TSKV response into the compact form our renderer expects.
+	 * Normalize the Knowledge Vault response into the compact form our renderer expects.
 	 *
 	 * v1.0.21: Use the vault PAGE URL (/vault/{slug}) instead of the raw
 	 * file_url. The file_url points to the physical upload (PDF/DOCX) which

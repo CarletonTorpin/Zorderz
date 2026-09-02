@@ -130,7 +130,7 @@ These changes came out of the first real end-to-end install: a fictional company
 
 ## Still true, still not done
 
-`Zorderz - TS -` remains in several individual app headers and the "TS Scheduler" label; the Stock admin page is gated separately; chat turns are synchronous (a slow one can hit a managed-host origin timeout, the 502; async is the next hardening); and the manual PDF import of an existing business's estimates/invoices is designed and endpoint-ready but not yet built.
+`Zorderz - TS -` remains in several individual app headers and the "Zorderz Scheduler" label; the Stock admin page is gated separately; chat turns are synchronous (a slow one can hit a managed-host origin timeout, the 502; async is the next hardening); and the manual PDF import of an existing business's estimates/invoices is designed and endpoint-ready but not yet built.
 
 ---
 

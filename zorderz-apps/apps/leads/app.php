@@ -86,7 +86,7 @@
  * 7. Finalize (AI batch summary, mark complete)
  * v1.5.0 — Full-parity inline widget, permission system (role + username gating).
  * v2.3.0 — Orchestrator interop (L1 read bridge). Adds ZL_TSA_Bridge so the
- *          cross-app operator bot (TSA/"Brain Bot") can look up a person's
+ *          cross-app operator bot (the assistant) can look up a person's
  *          leads/pipeline status and find leads by filter, server-side, with
  *          tier/kiosk redaction enforced in the bridge (never by the model).
  *          Read-only; conforms to ORCHESTRATOR-INTEROP-CONTRACT-v1.md. Verbs are
@@ -124,7 +124,7 @@
  *          could act on any lead" gap). Idempotent migration backfills ownership from each
  *          lead's batch salesperson code; unresolved rows stay NULL (admin-only). New AJAX:
  *          zl_assign_leads, zl_get_assignable_users, zl_my_leads_count. Nutshell stays
- *          DECOUPLED — assignment is TS-owned; the CRM is enrichment only. (Dashboard tile +
+ *          DECOUPLED — assignment is app-owned; the CRM is enrichment only. (Dashboard tile +
  *          rep-mode widget = Phase 2; WP↔Nutshell user mapping = Phase 3; rigorous
  *          stage-advance engine = Phase 4. See ZL-PER-USER-LEADS-AND-PIPELINE-PLAN-v1.md.)
  * v2.5.0 — Salesperson dashboard tile + rep-mode widget (Phase 2). The plugin SIDE:
@@ -763,7 +763,7 @@ function zl_maybe_upgrade() {
     // The new assigned_user_id/assigned_at/assigned_by columns were added by the
     // dbDelta above. Here we BACKFILL ownership for existing rows by resolving
     // each lead's batch salesperson CODE (zl_batches.assigned_to, e.g. "NW")
-    // to a TS WP user via the explicit map in ZL_Lead_Assignment. This is a
+    // to a WP user via the explicit map in ZL_Lead_Assignment. This is a
     // one-time seed only: it runs solely for rows still NULL, never overwrites an
     // explicit assignment, and leaves rows NULL when the code can't be resolved
     // (NULL = unassigned, visible to admins only). Fuzzy resolution is acceptable
@@ -1251,8 +1251,8 @@ add_action( 'after_setup_theme', function() {
  * already L4-native with zero further code. We declare the security posture
  * honestly here (kiosk + side_effect) so the central gate is correct from day one.
  *
- * NOTE: the orchestrator HOST side — the `[ZL_LOOKUP]` marker handler in TSA's
- * engine and the bot's two-signal intent rule — is owned by the TSA maintainer
+ * NOTE: the orchestrator HOST side — the `[ZL_LOOKUP]` marker handler in Analytics's
+ * engine and the bot's two-signal intent rule — is owned by the Analytics maintainer
  * (CONTRACT §2.2). It is documented as a coordination hand-off in
  * INTEROP-ZL-sales-leads-v1.md; this plugin ships everything that belongs to ZL.
  */

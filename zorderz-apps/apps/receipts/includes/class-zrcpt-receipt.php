@@ -682,7 +682,7 @@ final class ZRCPT_Receipt {
         );
 
         // Dashboard page for Zorderz iframe bridge
-        // Uses 'read' capability so non-admin TS roles (ts_sales, ts_operator) can access it.
+        // Uses 'read' capability so non-admin app roles (ts_sales, ts_operator) can access it.
         // Hidden from the admin menu (null parent) — accessed via direct URL or SPA bridge.
         add_submenu_page(
             null,
@@ -999,7 +999,7 @@ final class ZRCPT_Receipt {
     /* =====================================================================
        Zorderz DASHBOARD PAGE
        Renders the receipt form in a standalone admin page accessible by all
-       TS roles. Detects ts_mobile=1 to hide WP Admin chrome when loaded
+       app roles. Detects ts_mobile=1 to hide WP Admin chrome when loaded
        inside the Zorderz SPA bottom sheet iframe.
        ===================================================================== */
 
@@ -4462,7 +4462,7 @@ final class ZRCPT_Receipt {
     /**
      * AJAX — zrcpt_lookup. Search FB for an estimate/invoice by number/name/phone.
      * Delegates to ZRCPT_FreshBooks::search() which prefers ZPREP_FreshBooks if
-     * the the Prep module plugin is active.
+     * the Prep module plugin is active.
      */
     public function ajax_lookup() {
         $this->zrcpt_ajax_guard();
@@ -4668,7 +4668,7 @@ final class ZRCPT_Receipt {
             return [ 'type' => 'email', 'value' => $trimmed, 'raw' => $input ];
         }
 
-        // Phone: 7+ digits total in the string (catches 760-518-3209, (858) 555-1212, etc.)
+        // Phone: 7+ digits total in the string (catches 555-518-3209, (858) 555-1212, etc.)
         $all_digits = preg_replace( '/[^0-9]/', '', $trimmed );
         if ( strlen( $all_digits ) >= 7 && strlen( $all_digits ) <= 15 ) {
             return [ 'type' => 'phone', 'value' => $trimmed, 'raw' => $input ];
@@ -4857,7 +4857,7 @@ final class ZRCPT_Receipt {
      * what's included — it was just never being READ as install context:
      *   "(4) units. White Color."  → product, count, color
      *   "Tax and Installation Included."   → scope wording
-     *   Reference "92029-EM"               → job/category code
+     *   Reference "12345-EM"               → job/category code
      * We pass the substantive line text through verbatim (the bot is good at
      * reading prose) plus the computed unit count, and skip pure plumbing
      * (the receipt-link line, URLs, empty/zero rows' boilerplate).

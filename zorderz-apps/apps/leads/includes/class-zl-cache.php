@@ -24,7 +24,7 @@
  *   salespeople_v    — Nutshell "Salesperson" picklist. Bump on re-sync.
  *                       ~10 entries; 24h TTL.
  *   company_facts_v  — Mirror of the analytics module's facts version. Bump via theme
- *                       or cross-plugin hook when TSA edits facts.
+ *                       or cross-plugin hook when Analytics edits facts.
  *   existing_tags_v  — Cached list of all ZL-applied tags on Nutshell.
  *                       Bump whenever ZL writes a new tag.
  *   dicts_v          — Umbrella bump for ALL dict caches. Use sparingly —

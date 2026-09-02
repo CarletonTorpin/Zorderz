@@ -1851,7 +1851,7 @@ class ZL_Dashboard {
 	}
 
 	/**
-	 * v2.4.0 — Admin/operator assigns one or more leads to a TS user.
+	 * v2.4.0 — Admin/operator assigns one or more leads to an app user.
 	 * Authoritative, explicit, audited (see ZL_Lead_Assignment::assign).
 	 * Salespeople cannot call this (only admins/operators assign).
 	 */

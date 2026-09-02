@@ -1,5 +1,5 @@
 /**
- * TS Knowledge Vault — Document Scanner
+ * Zorderz Knowledge Vault — Document Scanner
  *
  * Mobile-friendly document scanner that:
  * 1. Opens camera (rear, high-res) via getUserMedia

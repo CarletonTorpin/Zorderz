@@ -4,13 +4,13 @@
  *
  * Detects #NNNNN tokens in message bodies and, on demand, renders a small
  * preview card (number, kind, customer, amount, status, link). The actual
- * data comes from TSA via its REST endpoint `/zorderz/v1/freshbooks-preview/{id}`
+ * data comes from Analytics via its REST endpoint `/zorderz/v1/freshbooks-preview/{id}`
  * — we never talk to FreshBooks directly (Trap 2 — no external API clients
  * in this plugin).
  *
  * Graceful degradation:
- *   • TSA loaded          → proxy through TSA_Analytics_Engine, cache 5 min.
- *   • TSA not loaded      → return a lightweight fallback card that just
+ *   • Analytics loaded          → proxy through TSA_Analytics_Engine, cache 5 min.
+ *   • Analytics not loaded      → return a lightweight fallback card that just
  *                           links to the FreshBooks search URL. No error.
  *
  * Rendering is client-driven: the composer JS parses for #NNNNN, inserts a
@@ -18,7 +18,7 @@
  * the placeholder scrolls into view. This avoids a preview-call storm on
  * initial scrollback of a long conversation.
  *
- * @package TSIM
+ * @package Messaging
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -85,8 +85,8 @@ class ZIM_Preview_Cards {
 			return $cached;
 		}
 
-		// TSA not active? Return a minimal fallback card with no caching —
-		// if TSA is enabled later in the same session, the next request will
+		// Analytics not active? Return a minimal fallback card with no caching —
+		// if Analytics is enabled later in the same session, the next request will
 		// upgrade to a real card.
 		if ( ! class_exists( 'TSA_Analytics_Engine' ) ) {
 			return self::fallback_card( $number );
@@ -96,7 +96,7 @@ class ZIM_Preview_Cards {
 
 		if ( is_wp_error( $card ) ) {
 			// Cache the miss briefly so a pasted-then-deleted typo doesn't
-			// hammer TSA on every poll tick.
+			// hammer Analytics on every poll tick.
 			if ( 'zim_preview_not_found' === $card->get_error_code() ) {
 				set_transient( $key, array( '__miss' => true ), self::NEG_CACHE_TTL );
 			}
@@ -110,7 +110,7 @@ class ZIM_Preview_Cards {
 	/**
 	 * Call the analytics app's REST endpoint via internal dispatch — no external HTTP.
 	 *
-	 * TSA is expected to expose GET /zorderz/v1/freshbooks-preview/{id} returning
+	 * Analytics is expected to expose GET /zorderz/v1/freshbooks-preview/{id} returning
 	 * { id, number, kind, customer_name, total, currency, status, url }.
 	 * The coordinated patch doc (patches/tsa-v1.11.4-preview-endpoint.md)
 	 * defines the contract; until that ships we return a WP_Error that
@@ -118,7 +118,7 @@ class ZIM_Preview_Cards {
 	 */
 	private static function fetch_via_tsa( $number ) {
 		$req = new WP_REST_Request( 'GET', '/zorderz/v1/freshbooks-preview/' . $number );
-		// Dispatch in-process — permission checks on the TSA side still run
+		// Dispatch in-process — permission checks on the Analytics side still run
 		// against the current user.
 		$resp = rest_do_request( $req );
 
@@ -130,20 +130,20 @@ class ZIM_Preview_Cards {
 			}
 			return new WP_Error(
 				'zim_preview_tsa_error',
-				$err ? $err->get_error_message() : 'TSA preview failed.'
+				$err ? $err->get_error_message() : 'Analytics preview failed.'
 			);
 		}
 
 		$data = $resp->get_data();
 		if ( ! is_array( $data ) || empty( $data['id'] ) ) {
-			return new WP_Error( 'zim_preview_bad_payload', 'TSA returned no data.' );
+			return new WP_Error( 'zim_preview_bad_payload', 'Analytics returned no data.' );
 		}
 
 		return self::normalize_card( $data );
 	}
 
 	/**
-	 * Shape the TSA payload into the compact form our card renderer expects.
+	 * Shape the Analytics payload into the compact form our card renderer expects.
 	 * Defensive against schema drift — unknown fields are dropped.
 	 */
 	private static function normalize_card( $data ) {
@@ -165,7 +165,7 @@ class ZIM_Preview_Cards {
 	}
 
 	/**
-	 * Minimal card for when TSA isn't available. The link goes to the
+	 * Minimal card for when Analytics isn't available. The link goes to the
 	 * user's own FreshBooks search — no guarantee the number is real.
 	 */
 	private static function fallback_card( $number ) {

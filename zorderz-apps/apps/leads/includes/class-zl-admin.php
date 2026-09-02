@@ -16,7 +16,7 @@
  * 
  * CREDENTIAL SHARING:
  * To prevent duplicate data entry, this plugin attempts to read API credentials from the
- * "TS Satisfaction Surveys" plugin's wp_options if its own fields are blank.
+ * "Satisfaction Surveys" plugin's wp_options if its own fields are blank.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -538,7 +538,7 @@ class ZL_Admin {
 
             <?php if ( $has_survey ) : ?>
             <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 20px;margin:16px 0;">
-                <strong>🔗 TS Satisfaction Surveys detected.</strong> API credentials are shared automatically. Override below if needed.
+                <strong>🔗 Satisfaction Surveys detected.</strong> API credentials are shared automatically. Override below if needed.
             </div>
             <?php endif; ?>
 
@@ -662,7 +662,7 @@ class ZL_Admin {
                 <!-- ── API Credentials ──────────────────────────── -->
 
                 <h2>🔑 FreshBooks API</h2>
-                <p class="description">Leave blank to use credentials from TS Satisfaction Surveys plugin (if installed).</p>
+                <p class="description">Leave blank to use credentials from Satisfaction Surveys plugin (if installed).</p>
                 <table class="form-table">
                     <tr>
                         <th>Client ID</th>
@@ -792,7 +792,7 @@ class ZL_Admin {
                 <hr>
                 <h2>🔑 Nutshell CRM API</h2>
 
-                <p class="description">Leave blank to use credentials from TS Satisfaction Surveys plugin.</p>
+                <p class="description">Leave blank to use credentials from Satisfaction Surveys plugin.</p>
 
                 <table class="form-table">
                     <tr>
@@ -857,7 +857,7 @@ class ZL_Admin {
             <h2>🔐 Widget Permissions</h2>
             <p class="description">
                 Control which features each role or specific username can access in the frontend dashboard widget.
-                <br>These settings apply to the the app inline widget — the backend WP Admin dashboard is always fully accessible to administrators.
+                <br>These settings apply to the app inline widget — the backend WP Admin dashboard is always fully accessible to administrators.
             </p>
 
             <?php
