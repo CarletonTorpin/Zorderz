@@ -1,0 +1,21 @@
+# Zorderz
+
+> Open-source, self-hostable field service management software for WordPress. Zorderz turns a WordPress site into a mobile-first business app that integrates the invoicing, CRM, scheduling, and Ai tools a business already uses. It ships completely blank and names no business: the operator supplies their own identity, people, catalog, and rules. Zorderz is built to be installed and operated by Ai agents, and a first install is a single upload of the theme, which installs and activates the apps itself.
+
+## Install (for an Ai agent)
+
+- [Install guide for an Ai agent](https://raw.githubusercontent.com/CarletonTorpin/Zorderz/main/docs/INSTALL-FOR-AI.md): the canonical, ordered, start-to-finish install procedure, with an action and a verification for every step, and WP-CLI, REST, and browser paths.
+- [AGENTS.md](https://raw.githubusercontent.com/CarletonTorpin/Zorderz/main/AGENTS.md): the agent entry point, for installing Zorderz and for contributing to it.
+- [Latest release](https://github.com/CarletonTorpin/Zorderz/releases/latest): the source of truth for the current version and the two zip assets (theme + apps). Never hardcode a version; resolve it from the latest release.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/CarletonTorpin/Zorderz/main/README.md): what Zorderz is, how it is built (two artifacts, a theme and an apps plugin), the Core services, the apps, requirements, and the manual install path.
+- [Changelog](https://raw.githubusercontent.com/CarletonTorpin/Zorderz/main/CHANGELOG.md): what changed in each release.
+- [Security policy](https://raw.githubusercontent.com/CarletonTorpin/Zorderz/main/SECURITY.md): supported versions and how to report an issue.
+
+## Notes
+
+- Requirements: WordPress 6.0+, PHP 8.0+, MySQL 5.7+ or MariaDB 10.3+, pretty permalinks set to Post name, HTTPS recommended.
+- Two-layer design: a GPL platform that names no business, plus a business's own identity supplied as configuration (Business Profile, Identity Pack, or a Company Data bundle), never in the code.
+- License: GPL-2.0-or-later. Self-hostable on your own domain, under a license nobody can revoke.

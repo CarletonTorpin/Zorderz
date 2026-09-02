@@ -42,7 +42,7 @@ A release is two files. The theme carries a copy of the apps, so a **first insta
 | Artifact | Zip | What it is |
 |---|---|---|
 | **Theme** | `zorderz-theme-<version>.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
-| **Apps** | `zorderz-apps-<version>.zip` | The 19 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
+| **Apps** | `zorderz-apps-<version>.zip` | The 20 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
 
 The theme is the platform; the plugin is the apps that plug into it. **The theme must be active first**: it defines the roles, the shared media store, the plugin registration API and the `zorderz/v1` REST namespace that every app builds on. Install the plugin first and the apps load but have nowhere to appear (you'll get a plain admin notice telling you so).
 
@@ -65,7 +65,7 @@ Everything below ships empty or neutral. A fresh install names no business anywh
 
 ---
 
-## The 19 apps
+## The 20 apps
 
 Bundled in `zorderz-apps-<version>.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
 
@@ -90,6 +90,7 @@ Bundled in `zorderz-apps-<version>.zip`. An app whose dependencies aren't presen
 | **Commission** | Compensation and commission calculation. Ships no pay data. |
 | **Chat** | The Ai assistant, gated by Answer Authority and grounded in the Business Profile, catalog, roster and rule set. |
 | **Dot Plot** | Plots work-item history from the Flow event log, behind a report-spec validator and an Answer-Authority entitlement gate. Renders whatever sources a business registers; ships with none. |
+| **Inbox** | An email assistant: connect your own mailbox (Microsoft 365) and it reads to surface and tag work-related mail and draft replies for your review. Read-only, never sends, and off until you connect an account. |
 
 ---
 
