@@ -104,7 +104,7 @@ class ZDZ_Personal_Records {
 		$count = isset( $meta['month_count'] ) ? (int) $meta['month_count'] : null;
 		if ( null === $count ) {
 			global $wpdb;
-			$table = $wpdb->prefix . 'tsec_estimates';
+			$table = $wpdb->prefix . 'zest_estimates';
 			if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table}'" ) === $table ) {
 				$count = (int) $wpdb->get_var( $wpdb->prepare(
 					"SELECT COUNT(*) FROM {$table} WHERE created_by = %d AND created_at >= %s",

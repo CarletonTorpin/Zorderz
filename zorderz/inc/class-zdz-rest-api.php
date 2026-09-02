@@ -39,7 +39,7 @@ class ZDZ_Rest_API {
 			'permission_callback' => [ $this, 'check_permission' ],
 		] );
 
-		// v2.11.0: Front-end OAuth authorize flow — allow non-admin Zorderz users
+		// v2.11.0: Front-end OAuth authorize flow — allow non-admin app users
 		// (zdz_sales / zdz_operator / zdz_mfg / zdz_tech) to authorize FreshBooks
 		// from the Settings view without needing wp-admin access.
 		register_rest_route( 'zorderz/v1', '/fb-auth-start', [
@@ -48,7 +48,7 @@ class ZDZ_Rest_API {
 			'permission_callback' => [ $this, 'check_authorize_permission' ],
 		] );
 
-		// Status endpoint — stays open to any logged-in Zorderz user so the
+		// Status endpoint — stays open to any logged-in app user so the
 		// front-end can render the 'Connected (company account)' state
 		// for all roles.
 		register_rest_route( 'zorderz/v1', '/app-authorizations', [
@@ -58,7 +58,7 @@ class ZDZ_Rest_API {
 		] );
 
 		// v2.13.0: Nutshell is now COMPANY-WIDE. Only administrators may
-		// set/update the company credentials. Regular Zorderz users just inherit
+		// set/update the company credentials. Regular app users just inherit
 		// the connection — they never hit this endpoint.
 		register_rest_route( 'zorderz/v1', '/ns-auth-save', [
 			'methods'             => WP_REST_Server::CREATABLE,
@@ -124,7 +124,7 @@ class ZDZ_Rest_API {
 		// v2.22.0: Orchestrate — the dashboard "ask" field's deterministic, Poe-free
 		// intent classifier. Returns either inline read-verb data (contact / document
 		// lookup, resolved via the capability bridges) or route:'chat' to hand the
-		// query to the full Brain Bot. Replaces the brittle JS-only intent detection
+		// query to the full assistant. Replaces the brittle JS-only intent detection
 		// with one server-authoritative classifier.
 		register_rest_route( 'zorderz/v1', '/orchestrate', [
 			'methods'             => WP_REST_Server::READABLE,
@@ -230,7 +230,7 @@ class ZDZ_Rest_API {
 	 */
 	public function handle_fb_auth_start( WP_REST_Request $request ) {
 		if ( ! class_exists( 'TSEC_Admin' ) || ! class_exists( 'TSEC_FreshBooks' ) ) {
-			return new WP_Error( 'plugin_missing', 'Zorderz Est Maker plugin is not active.', [ 'status' => 503 ] );
+			return new WP_Error( 'plugin_missing', 'Estimate Creator plugin is not active.', [ 'status' => 503 ] );
 		}
 
 		$admin = new TSEC_Admin();
@@ -328,12 +328,12 @@ class ZDZ_Rest_API {
 	 * v2.13.0: Save company-wide Nutshell credentials. Admin-gated by the
 	 * route's permission_callback, so this method does not have to re-check
 	 * — but the logic is identical to the previous per-user flow: encrypt
-	 * the API key with TSEC_Admin::encrypt() and cascade to sibling Zorderz
+	 * the API key with TSEC_Admin::encrypt() and cascade to sibling app
 	 * plugins so Estimates / Surveys / Leads / Analytics all pick it up.
 	 */
 	public function handle_ns_auth_save( WP_REST_Request $request ) {
 		if ( ! class_exists( 'TSEC_Admin' ) ) {
-			return new WP_Error( 'plugin_missing', 'Zorderz Est Maker plugin is not active.', [ 'status' => 503 ] );
+			return new WP_Error( 'plugin_missing', 'Estimate Creator plugin is not active.', [ 'status' => 503 ] );
 		}
 
 		$email   = sanitize_email( (string) $request->get_param( 'email' ) );
@@ -701,7 +701,7 @@ class ZDZ_Rest_API {
 	 * read verbs we can answer in place (contact / document lookup) and resolves
 	 * them through the capability bridges, or returns route:'chat' for everything
 	 * else. The dashboard renders inline cards for 'inline' routes and opens the
-	 * full Brain Bot chat for 'chat'.
+	 * full assistant chat for 'chat'.
 	 *
 	 * @param WP_REST_Request $request
 	 * @return WP_REST_Response

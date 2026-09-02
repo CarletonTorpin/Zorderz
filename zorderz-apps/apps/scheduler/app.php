@@ -308,7 +308,7 @@
  *   - Carries the v1.0.7 availability fix (source coalesces to 'manual' before
  *     the insert — see includes/class-zsch-availability.php) so painting a day
  *     "open" logs reliably once this build is genuinely live.
- *   - Pairs with Analytics engine v1.19.1 + Brain Bot v1.23.0, which wire the bridge's
+ *   - Pairs with Analytics engine v1.19.1 + the assistant v1.23.0, which wire the bridge's
  *     [ZSCH_AVAIL]/[ZSCH_SCHED]/[ZSCH_BOOK] markers into chat. No DB change.
  *
  * v1.0.9 (shared month view polish — overlap + per-person clarity):

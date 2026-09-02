@@ -159,13 +159,13 @@ Part of the platform-wide "General Account Hardening" effort. The shop iPad is l
   - **Model chokepoint**: `ZIM_Messages::post()` refuses read-only authors. Every write funnels through `post()` (AJAX `zim_post`, the REST `/post` route, any future caller), so no forgotten higher-layer gate can re-open a send path.
   - **Conversation creation**: `ZIM_DMs::get_or_create_conversation()` refuses a read-only initiator. No DMs, no self-DM "notes."
   - **AJAX**: a new `gate_write()` guards `zim_post`, `zim_edit`, `zim_delete`, `zim_bulk_delete`, `zim_upload`, and `zim_dm_open`; `gate_admin()` (channel-create, member-add) also refuses read-only roles.
-  - **REST**: the `tsim/v1/post` route (the cross-plugin "post to #channel" surface Brain Bot uses) returns a clean `403 zim_read_only` for read-only users.
+  - **REST**: the `tsim/v1/post` route (the cross-plugin "post to #channel" surface the assistant uses) returns a clean `403 zim_read_only` for read-only users.
 - **Security note**: this closes the messaging-side write back-door behind the Session 406 autonomous-posting incident. For the most-shared account the send capability is *removed*, not merely discouraged at the prompt layer: the structural fix the platform learned it needed.
 - **Changed (UI)**: for the kiosk, the message composer is **not rendered into the DOM at all** (removed, not disabled). A muted read-only notice ("Read-only on this shared device…") shows in its place once a conversation is opened. The "New DM" affordance is hidden. `zimData.isReadOnly` drives client behavior: `sendMessage()`, `openNewDm()`, and the Analytics-embed DM-route/auto-send are all short-circuited. (These are courtesy UX; the server blocks are the guarantee.)
 - **Changed**: `zdz_general` added to the app-registration role lists so the Messages tile is visible on the workshop iPad.
 - **No DB migration**: read-only behavior is entirely role-derived; existing `#announcements` auto-join already provides the kiosk's read access.
 
-> **Scope note**: the other halves of the kiosk hardening (greeting alias, dashboard KPI suppression, ephemeral chat, EXIF media provenance, the Brain Bot kiosk prompt block, and the server-side Messaging-marker strip in the analytics response pipeline) live in the theme and `zdz-sales-analytics`. This release covers only the Internal Messaging plugin's part: read-only announcements with zero send capability.
+> **Scope note**: the other halves of the kiosk hardening (greeting alias, dashboard KPI suppression, ephemeral chat, EXIF media provenance, the assistant kiosk prompt block, and the server-side Messaging-marker strip in the analytics response pipeline) live in the theme and `zdz-sales-analytics`. This release covers only the Internal Messaging plugin's part: read-only announcements with zero send capability.
 
 ### 1.0.18, 2026-04
 
@@ -178,7 +178,7 @@ iPad UX hardening + icon system overhaul.
 - **Fixed**: on iPad (especially in iframe embed mode), the software keyboard could dismiss when the user scrolled or tapped outside the textarea, and then refuse to reopen on subsequent taps. This is a longstanding iOS WebKit focus-management bug inside iframes. Three mitigations added: (a) a `touchstart` handler on the composer area that re-focuses the textarea when the user taps back into it; (b) `touch-action: manipulation` + `-webkit-appearance: none` on the textarea to prevent iOS gesture conflicts; (c) a `visualViewport` resize listener that re-scrolls the message list to the bottom when the keyboard dismisses, preventing the "messages jumped and I lost my place" disorientation.
 - **Changed**: back button redesigned with inline SVG chevron (was a CSS pseudo-element `‹` character) and larger 44px touch target per Apple HIG minimum. Hover/focus-visible state matches the rest of the icon button system. The button text reads "Messages" (was previously bare text with a character prefix) so it's clearly a navigation action, not a browser back button, addressing the user confusion reported when using the browser's own back/forward nav alongside the in-app back button.
 
-> **Note**: the "Self-Check" feature mentioned on the board is a Zorderz Sales Analytics (Analytics) feature, not an Internal Messaging feature. Self-Check is the analytics app's AI self-review system (v1.13.1) that optionally validates its own answers before displaying them. It has no counterpart in Messaging.
+> **Note**: the "Self-Check" feature mentioned on the board is a the Analytics app feature, not an Internal Messaging feature. Self-Check is the analytics app's AI self-review system (v1.13.1) that optionally validates its own answers before displaying them. It has no counterpart in Messaging.
 
 ### 1.0.17, 2026-04
 

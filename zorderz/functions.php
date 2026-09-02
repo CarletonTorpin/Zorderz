@@ -446,7 +446,7 @@ add_action( 'wp_enqueue_scripts', function() {
 		'logoDark'       => $logo_dark,
 		'logoVertical'   => $logo_vertical,  // v2.14.4 A5
 		'reviewBridge'   => ( new ZDZ_Core_ReviewBridge() )->is_configured(), // v2.14.5
-		'gameAvailable'  => class_exists( 'TSG_App' ) && defined( 'TSG_PLUGIN_URL' ), // v2.14.6: Zorderz Game embed flag — lets app.js/bridge.js offer the game during chat wait times without DOM sniffing
+		'gameAvailable'  => class_exists( 'ZG_App' ) && defined( 'TSG_PLUGIN_URL' ), // v2.14.6: Game embed flag — lets app.js/bridge.js offer the game during chat wait times without DOM sniffing
 		'dataPermissions' => class_exists( 'ZDZ_Data_Permissions' ) ? ZDZ_Data_Permissions::resolve( $user_id ) : [], // v2.17.0: Cross-plugin data permissions for frontend gating
 		// v2.21.0: Kiosk / Demo mode flags. These are computed against the
 		// REAL (cookie-authenticated) administrator — NOT the switched runtime
@@ -751,7 +751,7 @@ add_filter( 'script_loader_tag', function( $tag, $handle ) {
 	$defer_handles = [
 		'zdz-bug-reporter-js',
 		'zdz-dashboard-personalization-js',
-		'tsg-game-js',  // v2.14.6: Zorderz Game block-breaker
+		'tsg-game-js',  // v2.14.6: Game block-breaker
 	];
 	if ( in_array( $handle, $defer_handles, true ) && false === strpos( $tag, 'defer' ) ) {
 		$tag = str_replace( ' src=', ' defer src=', $tag );
@@ -794,7 +794,7 @@ add_filter( 'script_loader_tag', function( $tag, $handle ) {
  * its page analysis. We only defer secondary/plugin CSS that NitroPack
  * might not recognise as non-critical.
  *
- * Zorderz plugin CSS (tsa-*, zim-*, etc.) is also deferred via prefix match —
+ * app plugin CSS (tsa-*, zim-*, etc.) is also deferred via prefix match —
  * these plugins' styles are only needed when their specific sub-view is
  * active, well after first paint.
  */
@@ -811,7 +811,7 @@ add_filter( 'style_loader_tag', function( $tag, $handle ) {
 		'zdz-dashboard-personalization-css',
 		'tsg-game-css',
 	];
-	// Also catch Zorderz plugin CSS by prefix (tsa-*, zim-*, tsg-*, tsec-*, etc.)
+	// Also catch app plugin CSS by prefix (tsa-*, zim-*, tsg-*, tsec-*, etc.)
 	$is_lazy = in_array( $handle, $lazy_handles, true )
 		|| preg_match( '/^(tsa-|zim-|tsg-|tsec-|tss-|tsl-|tsic-)/', $handle );
 	if ( $is_lazy ) {
@@ -978,7 +978,7 @@ add_action( 'after_switch_theme', function() {
  *   TSEC_Admin::handle_oauth_callback runs on admin_init. It calls
  *     wp_redirect( admin_url( 'admin.php?page=tsec-settings&connected=1' ) )
  *   on success, or ...&error=oauth_failed on failure — which drops the
- *   user in the WordPress backend. Non-admin Zorderz users shouldn't see
+ *   user in the WordPress backend. Non-admin app users shouldn't see
  *   wp-admin at all, and even admins shouldn't be deposited there after a
  *   front-end authorize action.
  *

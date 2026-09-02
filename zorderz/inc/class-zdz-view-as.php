@@ -10,7 +10,7 @@
  *   ?zdz_view_as=zdz_operator   → preview as Operator
  *   ?zdz_view_as=zdz_sales      → preview as Salesperson
  *   ?zdz_view_as=zdz_tech       → preview as Field Tech
- *   ?zdz_view_as=zdz_admin      → preview as Zorderz Admin (sees all apps)
+ *   ?zdz_view_as=zdz_admin      → preview as an app admin (sees all apps)
  *   ?zdz_view_as=reset         → exit preview, return to real admin view
  *
  * UI surfaces (v2.14.0):
@@ -198,7 +198,7 @@ class ZDZ_View_As {
 		$reset_url     = esc_url( add_query_arg( 'zdz_view_as', 'reset' ) );
 		?>
 
-		<!-- Zorderz View-As active-session banner (admin only, only while emulating) -->
+		<!-- View-As active-session banner (admin only, only while emulating) -->
 		<div id="zdz-view-as" style="
 			position: fixed;
 			top: 0; left: 0; right: 0;
