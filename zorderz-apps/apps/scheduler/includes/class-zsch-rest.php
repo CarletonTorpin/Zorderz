@@ -239,7 +239,7 @@ class ZSCH_REST {
 			return false;
 		}
 		// Customer-facing hide → 404 (handled in the callbacks; gate stays true
-		// so we control the status code, like TSIM).
+		// so we control the status code, like Messaging).
 		return true;
 	}
 

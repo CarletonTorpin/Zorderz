@@ -286,7 +286,7 @@ class ZDZ_Alert_Router {
 
 		if ( empty( $channels ) ) {
 			error_log( sprintf(
-				'TS Alert Router: Alert [%s] for user %d — all channels disabled, skipping.',
+				'Zorderz Alert Router: Alert [%s] for user %d — all channels disabled, skipping.',
 				$type, $recipient_id
 			) );
 			return [];
@@ -349,7 +349,7 @@ class ZDZ_Alert_Router {
 		], [ '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' ] );
 
 		if ( ! $inserted ) {
-			error_log( 'TS Alert Router: deliver_in_app DB error: ' . $wpdb->last_error );
+			error_log( 'Zorderz Alert Router: deliver_in_app DB error: ' . $wpdb->last_error );
 			return false;
 		}
 
@@ -457,7 +457,7 @@ class ZDZ_Alert_Router {
 	private function deliver_email( int $user_id, string $type, string $title, string $message, array $source ): bool {
 		$user = get_userdata( $user_id );
 		if ( ! $user || empty( $user->user_email ) ) {
-			error_log( 'TS Alert Router: deliver_email — no email for user ' . $user_id );
+			error_log( 'Zorderz Alert Router: deliver_email — no email for user ' . $user_id );
 			return false;
 		}
 
@@ -486,7 +486,7 @@ class ZDZ_Alert_Router {
 		$sent = wp_mail( $user->user_email, $subject, $body, $headers );
 
 		if ( ! $sent ) {
-			error_log( sprintf( 'TS Alert Router: deliver_email FAILED for user %d (%s)', $user_id, $user->user_email ) );
+			error_log( sprintf( 'Zorderz Alert Router: deliver_email FAILED for user %d (%s)', $user_id, $user->user_email ) );
 		}
 
 		return $sent;

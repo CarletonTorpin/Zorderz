@@ -1,5 +1,5 @@
 /* ==============================================================
-   TS Internal Messaging — inline widget styles
+   Zorderz Internal Messaging — inline widget styles
    v1.0.21
    All classes prefixed zim-w-*.
    All colours use Zorderz design tokens (--sys-*, --ref-*)
@@ -522,7 +522,7 @@
 }
 
 /* ── v1.0.24: Rich HTML in messages ──────────────────────────────
-   TSA v1.18.1 Brain Bot now sends HTML in DM/channel posts:
+   Analytics v1.18.1 the assistant now sends HTML in DM/channel posts:
    <a>, <strong>, <em>, <br>, <ul>, <ol>, <li>, <p> tags.
    Previously all messages were plain text. These rules style the
    HTML elements inside message bubbles for all four theme modes.
@@ -584,7 +584,7 @@
 	color: #3730A3;
 }
 
-/* ── Lists (AI-generated bullet/numbered content from Brain Bot) ── */
+/* ── Lists (AI-generated bullet/numbered content from the assistant) ── */
 .zim-w-msg-text ul,
 .zim-w-msg-text ol {
 	margin: 4px 0;
@@ -596,7 +596,7 @@
 	margin-bottom: 2px;
 	line-height: 1.4;
 }
-/* Nested lists (Brain Bot sometimes nests) */
+/* Nested lists (the assistant sometimes nests) */
 .zim-w-msg-text li > ul,
 .zim-w-msg-text li > ol {
 	margin: 2px 0;
@@ -1497,7 +1497,7 @@
 }
 
 /* v1.0.21: Pull-to-refresh indicator.
-   Consistent with TSA v1.13.7 pattern. Sits above the messages area
+   Consistent with Analytics v1.13.7 pattern. Sits above the messages area
    and animates in as the user pulls down. */
 .zim-w-pull-indicator {
 	display: flex;

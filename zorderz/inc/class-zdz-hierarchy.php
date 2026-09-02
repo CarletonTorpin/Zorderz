@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Hierarchy - Crew Lead relationships & the oversight gate.
+ * Zorderz Hierarchy - Crew Lead relationships & the oversight gate.
  *
  * -----------------------------------------------------------------------------
  * WHAT THIS IS (the "one person in charge" model)

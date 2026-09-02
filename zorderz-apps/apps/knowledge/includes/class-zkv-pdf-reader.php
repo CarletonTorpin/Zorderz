@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Knowledge Vault — PDF Image Extractor
+ * Zorderz Knowledge Vault — PDF Image Extractor
  *
  * Many PDFs (especially "Print to PDF" from browsers) store pages as
  * full-page images with NO text layer. This class extracts those images

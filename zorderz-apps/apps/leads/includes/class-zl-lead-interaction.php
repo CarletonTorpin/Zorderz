@@ -368,7 +368,7 @@ class ZL_Lead_Interaction {
 	/**
 	 * Get team members for the forward dropdown.
 	 *
-	 * Returns all users with TS roles, excluding the current user.
+	 * Returns all users with app roles, excluding the current user.
 	 * Cached in a 10-minute transient.
 	 */
 	public function ajax_get_team_members() {

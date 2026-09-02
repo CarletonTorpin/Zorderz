@@ -1,5 +1,5 @@
 /**
- * TS Media EXIF — front-end Details panel.
+ * Zorderz Media EXIF — front-end Details panel.
  *
  * A framework-agnostic, collapsed-by-default metadata panel for a photo.
  * Drop one anchor element into any photo viewer (Media app, camera "My Photos",

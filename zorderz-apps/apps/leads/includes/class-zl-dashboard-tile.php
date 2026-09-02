@@ -29,7 +29,7 @@
  *    assignment rows (ZL_Lead_Assignment). The UI never decides what a rep may
  *    see; the server scopes it. (RBAC defense-in-depth: the UI adapts for
  *    usability, the server enforces.)
- *  • DECOUPLED from Nutshell. Everything here reads TS's own tables; no CRM call.
+ *  • DECOUPLED from Nutshell. Everything here reads the app's own tables; no CRM call.
  *
  * @package Zorderz\Leads
  * @since   2.5.0

@@ -707,7 +707,7 @@
 				banner = '<div class="zkv-transcript-banner zkv-tb-shared"><i data-lucide="eye"></i> <div><strong>Shared with you by '
 					+ esc(d.shared_by_name||'a party') + '</strong> · view only · '
 					+ (d.share_expires_at ? 'expires '+fmtDate(d.share_expires_at) : 'no expiry')
-					+ '.<br><span class="zkv-tb-parties">You can read it here; it never appears in your Brain Bot, and you can\'t share it onward.</span></div></div>';
+					+ '.<br><span class="zkv-tb-parties">You can read it here; it never appears in your assistant, and you can\'t share it onward.</span></div></div>';
 			}
 			detailBody.insertAdjacentHTML('afterbegin', banner);
 
@@ -786,7 +786,7 @@
 				+ '<div style="display:flex;gap:8px;">'
 				+ '<button class="zkv-btn zkv-btn-primary" id="zkv-share-create">Share</button>'
 				+ '<button class="zkv-btn zkv-btn-cancel" id="zkv-share-cancel">Cancel</button></div>'
-				+ '<span class="zkv-hint">View only. They can\'t re-share it, and it never enters their Brain Bot. You can revoke any time.</span>'
+				+ '<span class="zkv-hint">View only. They can\'t re-share it, and it never enters their assistant. You can revoke any time.</span>'
 				+ '</div></div>';
 			detailBody.insertAdjacentHTML('beforeend', sharesHtml);
 

@@ -51,6 +51,23 @@ for z in "${zips[@]}"; do
   unzip -q -o "$z" -d "$work/$(basename "$z" .zip)"
 done
 
+# Recursively extract any NESTED zips (e.g. a bundled sample-data seed shipped
+# inside the artifact). A data bundle carried inside the release must be held to
+# the same no-PII standard as the code, but a plain unzip leaves it as an opaque
+# binary the scan below would skip. Extract each nested zip beside itself, then
+# repeat until none remain (bounded, so a crafted zip bomb cannot loop forever).
+for _pass in 1 2 3 4 5; do
+  found=0
+  while IFS= read -r nz; do
+    dest="${nz%.zip}.extracted"
+    [ -d "$dest" ] && continue
+    mkdir -p "$dest"
+    unzip -q -o "$nz" -d "$dest" 2>/dev/null || true
+    found=1
+  done < <(find "$work" -type f -name '*.zip')
+  [ "$found" -eq 0 ] && break
+done
+
 # One fixed-string term per line; drop blanks. (Fixed strings, case-insensitive, matched on
 # WORD BOUNDARIES via grep -F -w: a real token — a name like "Geoff" or a code like "EM" — is
 # caught as a whole word, but NOT as a substring inside ordinary code such as "destroy",

@@ -33,9 +33,9 @@ class ZDZ_Data_Permissions {
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'allow',
 			'view_others_commissions'   => 'allow',
-			'run_commission_calculation' => 'allow',  // TSCC v2.0
-			'edit_cogs_catalog'         => 'allow',  // TSCC v2.0
-			'view_commission_audit_trail'=> 'allow',  // TSCC v2.0
+			'run_commission_calculation' => 'allow',  // Commissions v2.0
+			'edit_cogs_catalog'         => 'allow',  // Commissions v2.0
+			'view_commission_audit_trail'=> 'allow',  // Commissions v2.0
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'allow',
 			'upload_to_knowledge_vault' => 'allow',
@@ -47,9 +47,9 @@ class ZDZ_Data_Permissions {
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'allow',
 			'view_others_commissions'   => 'allow',
-			'run_commission_calculation' => 'allow',  // TSCC v2.0
-			'edit_cogs_catalog'         => 'allow',  // TSCC v2.0
-			'view_commission_audit_trail'=> 'allow',  // TSCC v2.0
+			'run_commission_calculation' => 'allow',  // Commissions v2.0
+			'edit_cogs_catalog'         => 'allow',  // Commissions v2.0
+			'view_commission_audit_trail'=> 'allow',  // Commissions v2.0
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'allow',
 			'upload_to_knowledge_vault' => 'allow',
@@ -61,9 +61,9 @@ class ZDZ_Data_Permissions {
 			'view_others_data'          => 'deny',
 			'view_own_commission'       => 'allow',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'allow',  // TSCC v2.0
-			'edit_cogs_catalog'         => 'deny',   // TSCC v2.0
-			'view_commission_audit_trail'=> 'deny',   // TSCC v2.0
+			'run_commission_calculation' => 'allow',  // Commissions v2.0
+			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
+			'view_commission_audit_trail'=> 'deny',   // Commissions v2.0
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'deny',
 			'upload_to_knowledge_vault' => 'deny',
@@ -78,9 +78,9 @@ class ZDZ_Data_Permissions {
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'deny',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'allow',  // TSCC v2.0
-			'edit_cogs_catalog'         => 'deny',   // TSCC v2.0
-			'view_commission_audit_trail'=> 'allow',  // TSCC v2.0
+			'run_commission_calculation' => 'allow',  // Commissions v2.0
+			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
+			'view_commission_audit_trail'=> 'allow',  // Commissions v2.0
 			'access_web_research'       => 'deny',
 			'access_deep_research'      => 'deny',
 			'upload_to_knowledge_vault' => 'deny',
@@ -93,9 +93,9 @@ class ZDZ_Data_Permissions {
 			'view_others_data'          => 'deny',
 			'view_own_commission'       => 'deny',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'deny',   // TSCC v2.0
-			'edit_cogs_catalog'         => 'deny',   // TSCC v2.0
-			'view_commission_audit_trail'=> 'deny',   // TSCC v2.0
+			'run_commission_calculation' => 'deny',   // Commissions v2.0
+			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
+			'view_commission_audit_trail'=> 'deny',   // Commissions v2.0
 			'access_web_research'       => 'deny',
 			'access_deep_research'      => 'deny',
 			'upload_to_knowledge_vault' => 'deny',
@@ -108,9 +108,9 @@ class ZDZ_Data_Permissions {
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'deny',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'deny',   // TSCC v2.0
-			'edit_cogs_catalog'         => 'deny',   // TSCC v2.0
-			'view_commission_audit_trail'=> 'deny',   // TSCC v2.0
+			'run_commission_calculation' => 'deny',   // Commissions v2.0
+			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
+			'view_commission_audit_trail'=> 'deny',   // Commissions v2.0
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'allow',
 			'upload_to_knowledge_vault' => 'allow',
@@ -124,7 +124,7 @@ class ZDZ_Data_Permissions {
 		// denied: no revenue, no other-user data, no commission anything, no
 		// COGS editing, no web/deep research (no open web from a shared
 		// device), and no Knowledge Vault uploads. This all-deny profile is the
-		// single source of truth that the Brain Bot redaction, the dashboard
+		// single source of truth that the assistant redaction, the dashboard
 		// KPI gate (class-zdz-kpi-metrics.php), and the analytics kiosk tier all
 		// read through the v2.17.0 bridge - so least privilege cascades from
 		// here without scattered per-account checks.
@@ -150,9 +150,9 @@ class ZDZ_Data_Permissions {
 		'view_others_data',
 		'view_own_commission',
 		'view_others_commissions',
-		'run_commission_calculation',     // TSCC v2.0
-		'edit_cogs_catalog',             // TSCC v2.0
-		'view_commission_audit_trail',   // TSCC v2.0
+		'run_commission_calculation',     // Commissions v2.0
+		'edit_cogs_catalog',             // Commissions v2.0
+		'view_commission_audit_trail',   // Commissions v2.0
 		'access_web_research',
 		'access_deep_research',
 		'upload_to_knowledge_vault',

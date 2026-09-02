@@ -519,7 +519,7 @@ class ZRCPT_FreshBooks {
 			return [ 'type' => 'email', 'value' => $raw, 'raw' => $raw ];
 		}
 
-		// Phone: 7+ total digits (check before number to avoid 760-518-3209 → "760")
+		// Phone: 7+ total digits (check before number to avoid 555-518-3209 → "760")
 		$all_digits = preg_replace( '/[^0-9]/', '', $raw );
 		if ( strlen( $all_digits ) >= 7 && strlen( $all_digits ) <= 15 ) {
 			return [ 'type' => 'phone', 'value' => $raw, 'raw' => $raw ];

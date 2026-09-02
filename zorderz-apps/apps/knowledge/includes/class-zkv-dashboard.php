@@ -603,7 +603,7 @@ class ZKV_Dashboard {
 	}
 
 	/**
-	 * AJAX: Upload a document from Brain Bot chat interface.
+	 * AJAX: Upload a document from the assistant chat interface.
 	 * Accepts base64-encoded file data + metadata.
 	 * Creates document record and schedules AI indexing.
 	 *
@@ -1328,7 +1328,7 @@ Respond with ONLY the JSON object.";
 				$doc['shares'] = $shares;
 			} else {
 				// Whole-doc sharee: banner data only — no party list, no
-				// share controls, and never any Brain Bot involvement.
+				// share controls, and never any the assistant involvement.
 				$grantor = null;
 				global $wpdb;
 				$now = esc_sql( current_time( 'mysql' ) );
@@ -1406,7 +1406,7 @@ Respond with ONLY the JSON object.";
 			ZKV_ACL::reset_cache();
 		}
 
-		// v1.2.6: Invalidate the TSA bridge inventory cache so Brain Bot
+		// v1.2.6: Invalidate the Analytics bridge inventory cache so the assistant
 		// sees the updated document list on the next query.
 		if ( class_exists( 'ZKV_TSA_Bridge' ) && method_exists( 'ZKV_TSA_Bridge', 'invalidate_cache' ) ) {
 			ZKV_TSA_Bridge::invalidate_cache();

@@ -18,7 +18,7 @@
  *
  * ASSET LOADING:
  *   widget.css + widget.js + marked.js + DOMPurify (reuse the theme's
- *   marked + purify loadout from TSA v1.11.3 — same CDN pins for cache
+ *   marked + purify loadout from Analytics v1.11.3 — same CDN pins for cache
  *   alignment).
  *
  * PUBLIC-KEY LOCALIZATION:
@@ -54,12 +54,12 @@ class ZIM_Widget {
 			return false;
 		}
 
-		// Check TSA customer-facing flag. Several possible code paths depending
-		// on which TSA version is active:
+		// Check Analytics customer-facing flag. Several possible code paths depending
+		// on which Analytics version is active:
 		//   v1.11.4+  — TSA_Customer_Facing::is_active_for_user( $user_id )
 		//               (the coordinated patch shipped alongside this plugin)
 		//   v1.11.0+  — transient 'tsa_customer_mode_{user_id}'
-		//   TSA absent — render.
+		//   Analytics absent — render.
 		if ( class_exists( 'TSA_Customer_Facing' )
 		     && is_callable( array( 'TSA_Customer_Facing', 'is_active_for_user' ) ) ) {
 			if ( TSA_Customer_Facing::is_active_for_user( $user_id ) ) {
@@ -67,7 +67,7 @@ class ZIM_Widget {
 				return false;
 			}
 		} elseif ( class_exists( 'TSA_Analytics_Engine' ) ) {
-			// Fall back to the transient TSA v1.11.3 writes.
+			// Fall back to the transient Analytics v1.11.3 writes.
 			$active = (bool) get_transient( 'tsa_customer_mode_' . $user_id );
 			if ( $active ) {
 				$cached = false;
@@ -99,7 +99,7 @@ class ZIM_Widget {
 			ZIM_VERSION
 		);
 
-		// marked.js + DOMPurify — pin same versions TSA v1.11.3 uses so the
+		// marked.js + DOMPurify — pin same versions Analytics v1.11.3 uses so the
 		// browser can reuse the CDN cache across plugins.
 		wp_enqueue_script(
 			'marked-js',

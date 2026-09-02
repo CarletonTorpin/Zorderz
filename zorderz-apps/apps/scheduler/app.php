@@ -283,7 +283,7 @@
  *   the central resolver exists the filter just adds rows nobody reads; when it
  *   lands the Scheduler is L4-native with no further code. No behavior change —
  *   the bridge verbs, kiosk-bounded reads, and preview-and-confirm create are
- *   unchanged. (The [ZSCH_*] engine marker handlers remain a TSA-side hand-off.)
+ *   unchanged. (The [ZSCH_*] engine marker handlers remain a Analytics-side hand-off.)
  *
  * v1.1.1 (availability render + paint-toggle fix):
  *   - FIX: marking a day "open"/"busy" appeared to save nothing and the day
@@ -308,7 +308,7 @@
  *   - Carries the v1.0.7 availability fix (source coalesces to 'manual' before
  *     the insert — see includes/class-zsch-availability.php) so painting a day
  *     "open" logs reliably once this build is genuinely live.
- *   - Pairs with TSA engine v1.19.1 + Brain Bot v1.23.0, which wire the bridge's
+ *   - Pairs with Analytics engine v1.19.1 + the assistant v1.23.0, which wire the bridge's
  *     [ZSCH_AVAIL]/[ZSCH_SCHED]/[ZSCH_BOOK] markers into chat. No DB change.
  *
  * v1.0.9 (shared month view polish — overlap + per-person clarity):
@@ -583,7 +583,7 @@ function zsch_user_can_write( $user_id = null ) {
 /**
  * Does the user have access to the scheduler?
  *
- * Dual capability check (matches TSIM/TSA): WordPress admin (manage_options)
+ * Dual capability check (matches Messaging/Analytics): WordPress admin (manage_options)
  * OR Zorderz custom (zdz_access_app). Read-only roles are admitted here
  * too (write paths are blocked separately).
  *
@@ -687,7 +687,7 @@ add_filter( 'cron_schedules', function ( $schedules ) {
 			// Plain string, NOT __(): the cron_schedules filter fires before
 			// `init`, so a translation call here trips WP 6.7+'s
 			// "_load_textdomain_just_in_time" notice (which can corrupt the
-			// TSA chat's AJAX JSON). Admin-only label; no early i18n needed.
+			// Analytics chat's AJAX JSON). Admin-only label; no early i18n needed.
 			'display'  => 'Every 5 minutes (Zorderz Scheduler)',
 		);
 	}
@@ -796,11 +796,11 @@ function zsch_load_includes() {
 	// filter merely adds rows nobody reads; when it lands, the Scheduler is L4-
 	// native with zero further code. We pull straight from the descriptor so the
 	// registration can never drift from the bridge's own declared posture.
-	// (Mirrors TS Sales Leads' registration pattern.)
+	// (Mirrors Zorderz Sales Leads' registration pattern.)
 	//
 	// HOST hand-off (not owned here): the [ZSCH_AVAIL]/[ZSCH_SCHED]/[ZSCH_BOOK]
-	// marker handlers in TSA's engine + the bot's RULE ZZ kiosk line live with the
-	// TSA maintainer per CONTRACT §2.2; this plugin ships everything that is ZSCH's.
+	// marker handlers in Analytics's engine + the bot's RULE ZZ kiosk line live with the
+	// Analytics maintainer per CONTRACT §2.2; this plugin ships everything that is ZSCH's.
 	add_filter( 'zdz_register_capabilities', function ( $caps ) {
 		if ( class_exists( 'ZSCH_TSA_Bridge' )
 			&& method_exists( 'ZSCH_TSA_Bridge', 'get_capability_descriptor' ) ) {
@@ -1054,7 +1054,7 @@ function zsch_maybe_render_full_page() {
 
 /**
  * Render the theme's "not available" fallback. 200, not 403 — never leak
- * existence (matches TSIM).
+ * existence (matches Messaging).
  */
 function zsch_render_unavailable() {
 	status_header( 200 );

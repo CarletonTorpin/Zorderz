@@ -1,5 +1,5 @@
 /**
- * TS Scheduler — calendar widget.
+ * Zorderz Scheduler — calendar widget.
  *
  * Vanilla JS (no build step, matches the platform). Talks to zorderz/v1/scheduler REST.
  * Three views share one month grid surface:

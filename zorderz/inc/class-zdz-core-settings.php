@@ -400,7 +400,7 @@ class ZDZ_Core_Settings {
 	/**
 	 * Build a formatted text block suitable for injection into an AI system prompt.
 	 *
-	 * This is the cross-plugin contract: TSA and TSEC both call this method to get
+	 * This is the cross-plugin contract: Analytics and Estimates both call this method to get
 	 * a ready-to-inject prompt section. The theme owns the formatting; the plugins
 	 * just inject the returned string into their system prompts.
 	 *

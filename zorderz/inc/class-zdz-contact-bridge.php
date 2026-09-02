@@ -1,6 +1,6 @@
 <?php
 /**
- * TS Contact Bridge — shared "contact lookup" capability provider.
+ * Zorderz Contact Bridge — shared "contact lookup" capability provider.
  *
  * Part of the cross-app orchestrator (Orchestrator Interop Contract §2 — the
  * CAPABILITY layer). Exposes a single read-only verb the operator bot can call
@@ -8,7 +8,7 @@
  * platform data (not owned by any one app), so the bridge lives in the theme
  * alongside the ZDZ_Core_* data clients rather than in a plugin.
  *
- * CALLED BY: TSA Analytics Engine (class-tsa-analytics-engine.php), the
+ * CALLED BY: the Analytics engine, the
  *            [ZDZ_CONTACT] marker handler. Mirrors TSEC_TSA_Bridge::lookup_for_tsa().
  *
  * DATA SOURCES (Seam 1, shared clients only — no private API client):
@@ -346,7 +346,7 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
-	 * FreshBooks client resolution, confidence-gated. Mirrors TSEC's proven
+	 * FreshBooks client resolution, confidence-gated. Mirrors Estimates's proven
 	 * resolve_customer(): single candidate → accept; several → accept only when
 	 * exactly one shares the spoken last name; otherwise ambiguous → [].
 	 *
@@ -372,7 +372,7 @@ class ZDZ_Contact_Bridge {
 			$lname = end( $parts );
 		}
 
-		// Use the SAME proven query the TSA chat path uses (search_clients):
+		// Use the SAME proven query the Analytics chat path uses (search_clients):
 		// search[user_like] is a broad fuzzy search across all name fields AND
 		// returns FULL client objects (phone/email/contacts populated) —
 		// search[lname] returns leaner rows AND only exact-ish last names, which is
@@ -527,7 +527,7 @@ class ZDZ_Contact_Bridge {
 	/**
 	 * Pull the salesperson INITIALS attached to a FreshBooks customer by reading
 	 * the codes off their recent invoices/estimates. Reuses the same parenthesized
-	 * "(GT)" / "(GT/DT)" convention TSCC parses for commission splits.
+	 * "(GT)" / "(GT/DT)" convention Commissions parses for commission splits.
 	 *
 	 * @param array $fb_client
 	 * @return array Upper-cased initials, e.g. ['GT','DT'].
@@ -574,7 +574,7 @@ class ZDZ_Contact_Bridge {
 	 * Robustly pull an email from a FreshBooks client object. Mirrors
 	 * TSA_FreshBooks::extract_client_email(): top-level email → contacts sub-array
 	 * → username-if-email → pref_email. Kept local so the theme has no hard
-	 * dependency on the TSA plugin.
+	 * dependency on the Analytics plugin.
 	 *
 	 * @param array $client
 	 * @return string
@@ -664,7 +664,7 @@ class ZDZ_Contact_Bridge {
 
 	/**
 	 * The requester's salesperson initials, from their commission profile meta
-	 * (set in TSCC), with a ZDZ_Core_Settings fallback.
+	 * (set in Commissions), with a ZDZ_Core_Settings fallback.
 	 *
 	 * @param int $uid
 	 * @return string

@@ -213,7 +213,7 @@ class ZDZ_Core_FreshBooks {
 	/**
 	 * Fetch a single client's invoices within a recent date window.
 	 *
-	 * Shared convenience used by the cross-app orchestrator (the Brain Bot
+	 * Shared convenience used by the cross-app orchestrator (the assistant
 	 * customer-document lookup, e.g. "estimate for Sam Rivera" — the invoice
 	 * half of that lookup). Centralizing it here means every consumer reads
 	 * invoices through ONE implementation rather than each plugin shipping its
@@ -222,7 +222,7 @@ class ZDZ_Core_FreshBooks {
 	 *
 	 * NOTE: This does NOT decide what is "open" or apply any redaction — it is a
 	 * neutral data read. Status interpretation ("not paid yet") and any kiosk
-	 * redaction are the caller's responsibility (TSEC bridge), so this method
+	 * redaction are the caller's responsibility (Estimates bridge), so this method
 	 * stays a pure source accessor with no policy baked in.
 	 *
 	 * @since 2.21.1 (cross-app orchestrator — Stage 0)

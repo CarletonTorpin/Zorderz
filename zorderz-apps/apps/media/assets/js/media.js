@@ -1,5 +1,5 @@
 /**
- * TS Media — shared controller v2.3.3 (v2.3.3 makes the dashboard WIDGET
+ * Zorderz Media — shared controller v2.3.3 (v2.3.3 makes the dashboard WIDGET
  * browsable on its own: a larger first page + a "Load more" button that appends
  * pages in place, so users don't have to open "See All" to see beyond the
  * recent slice. v2.3.0 added the admin-only "All" scope: browse every photo

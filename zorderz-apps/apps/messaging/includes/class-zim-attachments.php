@@ -126,7 +126,7 @@ class ZIM_Attachments {
 		}
 		$metadata = wp_generate_attachment_metadata( $attachment_id, $result['file'] );
 		wp_update_attachment_metadata( $attachment_id, $metadata );
-		// Tag as TSIM-owned so the media-library filter can exclude them.
+		// Tag as Messaging-owned so the media-library filter can exclude them.
 		update_post_meta( $attachment_id, '_tsim_chat_attachment', '1' );
 
 		// Record in our own table for cheap message-join queries and for

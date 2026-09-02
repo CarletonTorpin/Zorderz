@@ -203,7 +203,7 @@
 /* v2.1.0 — Roll <select>: the native dropdown arrow is invisible in dark
    mode (it inherits a dark glyph on a dark surface). We suppress it with
    appearance:none and paint our own chevron as a background SVG. Per the
-   TSCC iOS lesson, use background-color + background-image SEPARATELY
+   Commissions iOS lesson, use background-color + background-image SEPARATELY
    (never the `background` shorthand, which iOS Safari tiles/duplicates).
    The default chevron is the DARK one (for light/sunlight). Dark + system
    (prefers dark) override to a LIGHT chevron so it's always visible. */

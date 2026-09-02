@@ -1,5 +1,5 @@
 /**
- * TS Camera — Durable Upload Queue (zcam-queue.js)
+ * Zorderz Camera — Durable Upload Queue (zcam-queue.js)
  *
  * IndexedDB-backed queue that is the SOURCE OF TRUTH for photo uploads.
  * The original camera file (Blob/File) is persisted the instant the shutter

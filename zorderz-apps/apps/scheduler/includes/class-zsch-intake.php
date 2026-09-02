@@ -35,7 +35,7 @@
  *
  * Ships EMPTY: names no company/person/product/place/provider; seeds nothing.
  *
- * @since 1.9.0 (handoff port; scheduler 1.7.1 → 1.8.0 in the TS arc)
+ * @since 1.9.0 (handoff port; scheduler 1.7.1 → 1.8.0 in the Zorderz arc)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

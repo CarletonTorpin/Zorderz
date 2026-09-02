@@ -67,7 +67,7 @@ class ZIM_Messages {
 
 		// v1.0.24 — Read-only roles (the shared kiosk `zdz_general`) can never
 		// post. This is the single model-layer chokepoint every write funnels
-		// through (AJAX zim_post, the REST /post route used by Brain Bot's
+		// through (AJAX zim_post, the REST /post route used by the assistant's
 		// "post to #channel", and any future caller), so a forgotten gate at a
 		// higher layer cannot re-open a send path for the shared account. This
 		// is the structural fix the platform learned it needed after the

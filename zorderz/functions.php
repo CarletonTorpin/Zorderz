@@ -446,7 +446,7 @@ add_action( 'wp_enqueue_scripts', function() {
 		'logoDark'       => $logo_dark,
 		'logoVertical'   => $logo_vertical,  // v2.14.4 A5
 		'reviewBridge'   => ( new ZDZ_Core_ReviewBridge() )->is_configured(), // v2.14.5
-		'gameAvailable'  => class_exists( 'TSG_App' ) && defined( 'TSG_PLUGIN_URL' ), // v2.14.6: TS Game embed flag — lets app.js/bridge.js offer the game during chat wait times without DOM sniffing
+		'gameAvailable'  => class_exists( 'ZG_App' ) && defined( 'TSG_PLUGIN_URL' ), // v2.14.6: Game embed flag — lets app.js/bridge.js offer the game during chat wait times without DOM sniffing
 		'dataPermissions' => class_exists( 'ZDZ_Data_Permissions' ) ? ZDZ_Data_Permissions::resolve( $user_id ) : [], // v2.17.0: Cross-plugin data permissions for frontend gating
 		// v2.21.0: Kiosk / Demo mode flags. These are computed against the
 		// REAL (cookie-authenticated) administrator — NOT the switched runtime
@@ -582,7 +582,7 @@ add_action( 'wp_footer', function () {
 	// subscriptions. Flipping registration on now would make the two workers
 	// REPLACE each other on alternating page loads (feature flap: network-first
 	// shell vs push). The Phase-1 E-addendum merges them (theme SW absorbs push,
-	// TSA defers); until then set option zdz_sw_register='on' only for testing.
+	// Analytics defers); until then set option zdz_sw_register='on' only for testing.
 	$zdz_sw_on = ( 'on' === get_option( 'zdz_sw_register', 'off' ) );
 	?>
 	<script>
@@ -716,7 +716,7 @@ add_action( 'wp_footer', function () {
 }, 99 );
 
 /* ── v2.23.1: Logged-in HTML must never be cached by the device ──
- * The TS Camera nonce saga (Jun 2026) proved devices reuse a CACHED dashboard
+ * The Zorderz Camera nonce saga (Jun 2026) proved devices reuse a CACHED dashboard
  * shell for days: the iOS home-screen PWA kept serving its locally cached
  * HTML — with a long-stale baked nonce and old ?ver= script URLs — so plugin
  * updates and fresh nonces never reached the device (server-side purges
@@ -744,14 +744,14 @@ add_action( 'send_headers', function () {
  * on them for initial routing.
  *
  * v2.14.6: Added tsg-game-js — the block-breaker game is purely interactive
- * and never needed for initial render (either as a dashboard tile or TSA
+ * and never needed for initial render (either as a dashboard tile or Analytics
  * chat embed). The game plugin enqueues its own script; we just defer it.
  */
 add_filter( 'script_loader_tag', function( $tag, $handle ) {
 	$defer_handles = [
 		'zdz-bug-reporter-js',
 		'zdz-dashboard-personalization-js',
-		'tsg-game-js',  // v2.14.6: TS Game block-breaker
+		'tsg-game-js',  // v2.14.6: Game block-breaker
 	];
 	if ( in_array( $handle, $defer_handles, true ) && false === strpos( $tag, 'defer' ) ) {
 		$tag = str_replace( ' src=', ' defer src=', $tag );
@@ -794,7 +794,7 @@ add_filter( 'script_loader_tag', function( $tag, $handle ) {
  * its page analysis. We only defer secondary/plugin CSS that NitroPack
  * might not recognise as non-critical.
  *
- * TS plugin CSS (tsa-*, zim-*, etc.) is also deferred via prefix match —
+ * app plugin CSS (tsa-*, zim-*, etc.) is also deferred via prefix match —
  * these plugins' styles are only needed when their specific sub-view is
  * active, well after first paint.
  */
@@ -811,7 +811,7 @@ add_filter( 'style_loader_tag', function( $tag, $handle ) {
 		'zdz-dashboard-personalization-css',
 		'tsg-game-css',
 	];
-	// Also catch TS plugin CSS by prefix (tsa-*, zim-*, tsg-*, tsec-*, etc.)
+	// Also catch app plugin CSS by prefix (tsa-*, zim-*, tsg-*, tsec-*, etc.)
 	$is_lazy = in_array( $handle, $lazy_handles, true )
 		|| preg_match( '/^(tsa-|zim-|tsg-|tsec-|tss-|tsl-|tsic-)/', $handle );
 	if ( $is_lazy ) {
@@ -978,19 +978,19 @@ add_action( 'after_switch_theme', function() {
  *   TSEC_Admin::handle_oauth_callback runs on admin_init. It calls
  *     wp_redirect( admin_url( 'admin.php?page=tsec-settings&connected=1' ) )
  *   on success, or ...&error=oauth_failed on failure — which drops the
- *   user in the WordPress backend. Non-admin TS users shouldn't see
+ *   user in the WordPress backend. Non-admin app users shouldn't see
  *   wp-admin at all, and even admins shouldn't be deposited there after a
  *   front-end authorize action.
  *
  *   v2.14.0 tried to gate this on the INCOMING request URL (looking for
  *   ?page=tsec or tsec_oauth=1). That never matched — inspecting the
- *   shipped TSEC plugin proves its redirect URI is the CLEAN
+ *   shipped Estimates plugin proves its redirect URI is the CLEAN
  *   site_url('/wp-admin/admin.php') with no query params, so neither
  *   marker is ever present on the callback request. The filter always
  *   short-circuited and the user ended up on wp-admin anyway.
  *
- * FIX: Gate on the OUTGOING $location — the URL TSEC is trying to
- * wp_redirect() to. TSEC's handle_oauth_callback only ever redirects to
+ * FIX: Gate on the OUTGOING $location — the URL Estimates is trying to
+ * wp_redirect() to. Estimates's handle_oauth_callback only ever redirects to
  * one of two URLs after completing the token exchange:
  *     admin.php?page=tsec-settings&connected=1        (success)
  *     admin.php?page=tsec-settings&error=oauth_failed (failure)
@@ -1006,15 +1006,15 @@ add_action( 'after_switch_theme', function() {
  *      returns the FreshBooks authorize URL.
  *   2. User is redirected to FreshBooks, approves, FB redirects to
  *      wp-admin/admin.php?code=XXX&state=YYY.
- *   3. TSEC's admin_init handler runs the token exchange, then calls
+ *   3. Estimates's admin_init handler runs the token exchange, then calls
  *      wp_redirect( admin.php?page=tsec-settings&connected=1 ).
  *   4. THIS filter fires, sees the transient marker, recognises the
- *      outbound URL as TSEC's post-OAuth redirect, consumes the marker,
+ *      outbound URL as Estimates's post-OAuth redirect, consumes the marker,
  *      and rewrites to home_url( '/?zdz_authorized=freshbooks' ) (or
  *      ?zdz_auth_error=... on failure).
  *   5. The existing app.js handler on the homepage picks up the flag,
  *      shows a toast, and switches to the Settings view.
- * No TSEC plugin change required.
+ * No Estimates plugin change required.
  */
 add_filter( 'wp_redirect', 'zdz_frontend_oauth_bounce', 1, 2 );
 function zdz_frontend_oauth_bounce( $location, $status ) {
@@ -1023,7 +1023,7 @@ function zdz_frontend_oauth_bounce( $location, $status ) {
 	}
 
 	// Match on the OUTGOING redirect target, not the incoming request URL.
-	// TSEC builds these two exclusively in its post-OAuth handler.
+	// Estimates builds these two exclusively in its post-OAuth handler.
 	$loc_has_tsec = ( strpos( $location, 'page=tsec-settings' ) !== false );
 	$is_success   = $loc_has_tsec && ( strpos( $location, 'connected=1' )      !== false );
 	$is_error     = $loc_has_tsec && ( strpos( $location, 'error=oauth_failed' ) !== false );
@@ -1033,7 +1033,7 @@ function zdz_frontend_oauth_bounce( $location, $status ) {
 
 	// Only rewrite if this user started the flow from the front-end. If the
 	// transient isn't set, the user launched authorize from wp-admin and
-	// we leave TSEC's redirect alone.
+	// we leave Estimates's redirect alone.
 	$uid = get_current_user_id();
 	$key = 'zdz_fb_auth_origin_' . $uid;
 	if ( get_transient( $key ) !== 'frontend' ) {
@@ -1042,7 +1042,7 @@ function zdz_frontend_oauth_bounce( $location, $status ) {
 	delete_transient( $key );
 
 	if ( $is_error ) {
-		// TSEC stashes the detail message in its own transient — surface
+		// Estimates stashes the detail message in its own transient — surface
 		// whatever's there to the user so they don't see a bare "failed".
 		$detail  = get_transient( 'tsec_oauth_error' );
 		$err_val = $detail ? (string) $detail : 'oauth_failed';
@@ -1053,14 +1053,14 @@ function zdz_frontend_oauth_bounce( $location, $status ) {
 
 /**
  * v2.14.3.1: Safety net — if the wp_redirect filter above didn't fire
- * (e.g., TSEC changed its redirect URL pattern, or the redirect was
+ * (e.g., Estimates changed its redirect URL pattern, or the redirect was
  * handled differently), catch the user in wp-admin and bounce them home.
  *
- * CRITICAL: Must run AFTER TSEC's handle_oauth_callback (priority 10)
+ * CRITICAL: Must run AFTER Estimates's handle_oauth_callback (priority 10)
  * so the code exchange completes first. We fire at priority 99.
- * Also must NOT fire when ?code= is present — that means TSEC hasn't
+ * Also must NOT fire when ?code= is present — that means Estimates hasn't
  * processed the callback yet (or failed to redirect), so we let
- * TSEC finish first. We only intercept the POST-exchange redirect
+ * Estimates finish first. We only intercept the POST-exchange redirect
  * (connected=1 or page=tsec-settings).
  */
 add_action( 'admin_init', function () {
@@ -1076,16 +1076,16 @@ add_action( 'admin_init', function () {
 
 	$request = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
 
-	// Do NOT intercept when ?code= is still in the URL — that means TSEC's
+	// Do NOT intercept when ?code= is still in the URL — that means Estimates's
 	// handle_oauth_callback already ran (at priority 10) but its wp_redirect
 	// didn't fire or was blocked. If ?code= is present AND we're at priority 99,
-	// TSEC already had its chance. But to be safe, only intercept the
+	// Estimates already had its chance. But to be safe, only intercept the
 	// post-exchange "connected=1" redirect.
 	if ( strpos( $request, 'code=' ) !== false ) {
-		return; // Let TSEC handle the code exchange
+		return; // Let Estimates handle the code exchange
 	}
 
-	// Only intercept the TSEC settings page landing (post-exchange redirect
+	// Only intercept the Estimates settings page landing (post-exchange redirect
 	// that the wp_redirect filter should have caught but didn't).
 	$is_post_exchange = ( strpos( $request, 'connected=1' ) !== false )
 		|| ( strpos( $request, 'page=tsec-settings' ) !== false );
@@ -1111,7 +1111,7 @@ add_action( 'admin_init', function () {
 /* ── PHASE 4 · G2 (v2.30.0): fresh-nonce endpoint for widget keepalive ──
  * Installed PWAs hold their auth cookie for days, but WP nonces expire in
  * 12–24h — the root of the "mysteriously logged out / quietly stopped
- * saving" class. Widgets (scheduler v1.5.1+, TSA has its own twin) call
+ * saving" class. Widgets (scheduler v1.5.1+, Analytics has its own twin) call
  * this on a 6h timer + on foreground to keep a live REST nonce. Cookie-auth
  * only; minting a nonce for the logged-in user is exactly what a page load
  * does, so this exposes nothing new. */
@@ -1137,7 +1137,7 @@ add_action( 'after_password_reset', function ( $user ) {
 	if ( $user instanceof WP_User ) {
 		$manager = WP_Session_Tokens::get_instance( $user->ID );
 		$manager->destroy_all(); // includes the resetting device — they just got a new password; one fresh login is the safe trade.
-		error_log( 'TS Theme G5: destroyed all sessions for user #' . $user->ID . ' after password reset.' );
+		error_log( 'Zorderz Theme G5: destroyed all sessions for user #' . $user->ID . ' after password reset.' );
 	}
 }, 10, 1 );
 
