@@ -113,12 +113,12 @@ class ZIB_Admin {
 		) );
 
 		if ( isset( $_POST['internal_domains'] ) ) {
-			ZIB_Settings::set_internal_domains( (string) wp_unslash( $_POST['internal_domains'] ) );
+			ZIB_Settings::set_internal_domains( sanitize_textarea_field( wp_unslash( $_POST['internal_domains'] ) ) );
 		}
 
 		// Secret: only overwrite when a non-empty value is submitted (blank =
 		// leave unchanged). A literal "-" clears it.
-		$secret = (string) wp_unslash( $_POST['client_secret'] ?? '' );
+		$secret = sanitize_text_field( wp_unslash( $_POST['client_secret'] ?? '' ) );
 		if ( '-' === trim( $secret ) ) {
 			ZIB_Settings::set_secret( '' );
 		} elseif ( '' !== trim( $secret ) ) {
