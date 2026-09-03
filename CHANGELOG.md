@@ -11,15 +11,53 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.8.1] - 2026-09-02
+
+Point release: adds explicit input sanitizers to five administrator-only mailbox settings fields and brings the PHP_CodeSniffer security gate back to green. No user-facing, database, schema, or REST changes. A straight upgrade over 1.8.0.
+
+### Security
+- **Boundary sanitizers on five admin-only mailbox inputs.** Five `manage_options` / `edit_users`, nonce-gated admin form reads in the new mail apps now pass their value through an explicit WordPress sanitizer at the point of read: Inbox settings (`ZIB_Admin::save`) `internal_domains` and `client_secret`, and Exchange identity (`ZMI_Admin`) `zmi_upn`, `zmi_aliases`, and `zmi_services`. Every value was already unslashed and parsed downstream, so this is defense in depth, not a fix for an exploitable issue, and there is no behavior change. Nothing in 1.8.0 was exploitable: all queries are parameterized through `$wpdb->prepare()` and there is no unauthenticated data path.
+
+### Notes
+- The changed-lines security gate flagged these five reads because the new mail code did not sanitize at the boundary. Its other findings were false positives on safe code (parameterized SQL with interpolated table names, a nonce verified inside a shared helper, integer casts, and pre-escaped output), on lines this release does not touch.
+- Theme and apps bundle move to 1.8.1 in lockstep.
+
+---
+
+## [1.8.0] - 2026-09-02
+
+The mail wave. Adds a per-user mailbox connect and assistant as the 20th app, generalizes the analytics and chat assistant so Core still names no business, ships a one-click sample company for evaluation, and completes a round of generalization and functional hardening.
+
+### Added
+- **Email (Inbox), the 20th app.** A per-user mailbox connect and assistant tile in the `Personal` category. Each user connects their own Microsoft 365 mailbox through Microsoft Graph delegated OAuth, read-only (`Mail.Read`, no send), with a two-stage read (metadata first, message body only for in-scope mail), an encrypted token vault, single-flight refresh, and the shared kiosk denied outright. Ships dark and connect-your-own, behind a new Core interface `Zorderz\Mailbox_Connector`.
+- **Mailbox identity module** (`ZDZ_Mailbox_Identity`). A roster resolver for mailbox owners. Ships empty and registers no tile of its own.
+- **One-click sample company (TestCo).** A scrubbed demo dataset (`zorderz/sample-data/testco.zip`, clean through the PII gate) ships in the theme. Tools -> Zorderz Data -> "Load TestCo sample data" populates every app with a fictional company for evaluation. The seed omits the owner user and the WordPress site settings, so loading it never replaces the loader's account or reconfigures their site.
+
+### Changed
+- **Analytics and chat assistant generalized.** The prompt builder now assembles the system prompt at runtime from Core services (Business Profile, Item Engine, `ZDZ_Party`, Data Permissions, and Rule Governance) with no hardcoded company, person, product, or price. It ships empty, with the company-facts data omitted. Output markers emit renamed tokens, with the legacy tokens kept only as deprecated back-compat.
+- **Source-tenant naming removed.** The assistant's former tenant brand name is scrubbed from user-visible strings and comments to "the assistant". Uppercase app abbreviations and the bare source-tenant prefix are replaced with real app names across module headers, comments, log prefixes, and labels. The deliberate migration back-compat (lowercase cascades, rename maps, deprecated markers, the external bridge-key header, and the changelog rename history) is preserved. User-visible labels corrected ("Integration Health" and the Estimate Creator REST errors).
+- **PII gate now recurses into nested zips**, so the bundled sample-data seed is scanned too.
+
+### Fixed
+- **Jobs-to-estimate "Send as job(s)" handoff repaired.** Added an ownership-scoped `zest_detail` endpoint and rewired the estimate bridge after the estimate app's rename and DOM restructure. An estimate line now creates a job end to end.
+- **Two stale table references corrected** (fail-safe but dead): personal-records reads repointed to `zest_estimates`, and vault-card reads to `zkv_documents`.
+- **Integration Health stale class references corrected.** A fresh install now reports 9 of 11 (the two remaining are connect-your-own integration checks).
+
+### Notes
+- Every value the mail wave touched is generalized: Core ships each one empty, and a business supplies its own through the Business Profile or an Identity Pack.
+- Theme and apps bundle move to 1.8.0 in lockstep.
+
+---
+
 ## [1.7.2] - 2026-08-25
 
-Point release: repairs the in-place-upgrade path for the apps bundle and closes three version and configuration congruence gaps found in review. No database, schema or REST changes — a straight upgrade over 1.7.1.
+Point release: repairs the in-place-upgrade path for the apps bundle and closes three version and configuration congruence gaps found in review. No database, schema or REST changes. A straight upgrade over 1.7.1.
 
 ### Fixed
 - **In-place apps upgrade skipped its re-activation step.** The bundle re-runs every app's activation on `plugins_loaded` when its version changes, because uploading a new apps zip over an existing install does not fire WordPress activation. The version marker `ZDZ_APPS_VERSION` had been left at `1.6.1` since that release, so on a 1.6.1 → 1.7.x in-place upgrade the marker still equalled the stored value and the re-activation was silently skipped. `ZDZ_APPS_VERSION` now derives from the plugin's own `Version:` header, so it tracks every release and cannot drift again. Fresh installs were never affected (they run activation directly), and per-app database migrations were never affected (each guards itself on its own DB version).
 
 ### Changed
-- Declared PHP floor aligned to **8.0** everywhere — `composer.json` and both phpcs rulesets — to match the theme and apps `Requires PHP: 8.0` headers.
+- Declared PHP floor aligned to **8.0** everywhere (`composer.json` and both phpcs rulesets) to match the theme and apps `Requires PHP: 8.0` headers.
 - `SECURITY.md` supported-versions note corrected (Zorderz is past 1.0, not "pre-1.x").
 - Theme and apps bundle move to 1.7.2 in lockstep.
 
@@ -27,10 +65,10 @@ Point release: repairs the in-place-upgrade path for the apps bundle and closes 
 
 ## [1.7.1] - 2026-08-24
 
-Point release: display fix found during live functional verification of 1.7.0. No database, schema or REST changes — a straight upgrade over 1.7.0.
+Point release: display fix found during live functional verification of 1.7.0. No database, schema or REST changes. A straight upgrade over 1.7.0.
 
 ### Fixed
-- **Estimates widget rendered dark-on-dark.** The widget styled its text with a `--zdz-*` CSS-variable namespace the theme never defines, so on the dark dashboard it fell back to hardcoded light-mode colors — the customer name, every line item and price, the typed textarea text and the open/history cards were all near-invisible. Repointed to the theme's real `--sys-*` tokens (theme-aware across light/dark/sunlight/system). Isolated to this one widget.
+- **Estimates widget rendered dark-on-dark.** The widget styled its text with a `--zdz-*` CSS-variable namespace the theme never defines, so on the dark dashboard it fell back to hardcoded light-mode colors. The customer name, every line item and price, the typed textarea text and the open/history cards were all near-invisible. Repointed to the theme's real `--sys-*` tokens (theme-aware across light/dark/sunlight/system). Isolated to this one widget.
 
 ### Changed
 - Apps-bundle plugin header corrected to **19 apps** (adds Dot Plot) and brought into 1.7.x lockstep with the theme.
@@ -42,22 +80,22 @@ Point release: display fix found during live functional verification of 1.7.0. N
 
 ## [1.7.0] - 2026-08-24
 
-The workflow release. Ported the delta between the source app's V9.15 and V9.25.14 as four build waves, generalizing every tenant-specific value as it went so Core still names no business. Adds a workflow spine and the apps that ride on it, an update path for estimates, a schedule-inference service and a visualization app — plus the reliability fix that ends the worker-exhaustion 502s.
+The workflow release. Ported the delta between the source app's V9.15 and V9.25.14 as four build waves, generalizing every tenant-specific value as it went so Core still names no business. Adds a workflow spine and the apps that ride on it, an update path for estimates, a schedule-inference service and a visualization app, plus the reliability fix that ends the worker-exhaustion 502s.
 
 ### Added
 - **Flow substrate + Projects.** A workflow spine (`Zdz_Flow`) with a single state-writer, keyed references, logged dispositions and an event outbox. Every estimate becomes a trackable Project with a Record panel; a fresh install ships with no Projects data.
-- **Dot Plot** (19th app) — plots work-item history from the Flow outbox, behind a report-spec validator and an Answer-Authority entitlement gate. Renders whatever sources a business registers; ships with none.
-- **Update an existing estimate** — a two-phase preview→commit path with document-preservation, zero-regression and conflict guards, plus vision-on-update. With no billing provider connected, estimates still convert to trackable invoices.
-- **Schedule inference + handoff** — an install-date resolver, a Schedule-Job intake, real participants from the Party roster and a CRON inference service that reads without writing.
-- **Geo/media location** — a forward geocoder and a media-location classifier that expose only a categorical status to the client; coordinates never leave the server, and media serves through a token proxy.
-- **Reliability substrate** — a request guard, service breaker and budgeted sweep that end the worker-exhaustion 502s; alias-tolerant passwordless login; one-click recovery of a lead that failed to reach the CRM; and a Vimeo chapter embed in messaging with the player origin hard-fixed.
+- **Dot Plot** (19th app). Plots work-item history from the Flow outbox, behind a report-spec validator and an Answer-Authority entitlement gate. Renders whatever sources a business registers; ships with none.
+- **Update an existing estimate**. A two-phase preview→commit path with document-preservation, zero-regression and conflict guards, plus vision-on-update. With no billing provider connected, estimates still convert to trackable invoices.
+- **Schedule inference + handoff**. An install-date resolver, a Schedule-Job intake, real participants from the Party roster and a CRON inference service that reads without writing.
+- **Geo/media location**. A forward geocoder and a media-location classifier that expose only a categorical status to the client; coordinates never leave the server, and media serves through a token proxy.
+- **Reliability substrate**. A request guard, service breaker and budgeted sweep that end the worker-exhaustion 502s; alias-tolerant passwordless login; one-click recovery of a lead that failed to reach the CRM; and a Vimeo chapter embed in messaging with the player origin hard-fixed.
 
 ### Changed
 - The AI client is repaired and routed through the Model Registry (no vendor name in Core); every app now calls the one shared gateway instead of its own model client.
 - Map links, address linkifying and the commission-coverage view are unified behind shared, generalized helpers.
 
 ### Fixed
-- **Leads privacy gate.** A generalization rename left a permission check pointing at a class that no longer exists, so it defaulted open — any viewer could see others' lead data and revenue in the dashboard. Corrected to the real permissions class.
+- **Leads privacy gate.** A generalization rename left a permission check pointing at a class that no longer exists, so it defaulted open. Any viewer could see others' lead data and revenue in the dashboard. Corrected to the real permissions class.
 - **Activity telemetry (`/track`) returned 401.** The front-end used `navigator.sendBeacon`, which cannot carry the REST nonce, so events were rejected. It now uses `fetch({keepalive:true})` with the nonce and records correctly.
 
 ### Notes
