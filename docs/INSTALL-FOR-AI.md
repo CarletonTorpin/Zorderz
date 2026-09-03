@@ -79,7 +79,7 @@ If any check fails, stop: this environment cannot run Zorderz yet.
 # together in lockstep, so they always share one version.
 VER="$(curl -fsSL https://api.github.com/repos/CarletonTorpin/Zorderz/releases/latest \
   | grep -oE '"tag_name": *"v?[0-9]+\.[0-9]+\.[0-9]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
-echo "$VER"     # e.g. 1.7.1 — whatever the current release is
+echo "$VER"     # e.g. 1.7.1, whatever the current release is
 ```
 
 **Action:** Download both assets from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed there.
