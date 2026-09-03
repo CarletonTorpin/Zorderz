@@ -54,19 +54,19 @@ These are `CODEOWNERS`-protected. A change to any of them must preserve its inva
 
 Every PR runs (see `.github/workflows/security.yml`):
 
-1. **Sentinel** (`.github/scripts/security-sentinel.sh`) — scans the added lines of the diff for
+1. **Sentinel** (`.github/scripts/security-sentinel.sh`) scans the added lines of the diff for
    the tells above and fails on the unambiguous ones (bare `unserialize`, `eval`, `extractTo`,
    `move_uploaded_file`, shell exec without `escapeshellarg`, `is_admin()` in the auto-installer,
    `__return_true` permission callbacks) and warns on the fuzzier ones. To consciously override a
-   line, append `// sentinel:allow <reason>` — used rarely, and the reason shows up in review.
-2. **Unit tests** (`tests/unit`) — pin the security invariants that need no database: the export
+   line, append `// sentinel:allow <reason>`, used rarely, and the reason shows up in review.
+2. **Unit tests** (`tests/unit`) pin the security invariants that need no database: the export
    never emits a credential (by name, suffix, or nested value), the importer never writes outside
    uploads, revenue is withheld from a non-privileged KPI view, and the share-link HMAC is
    domain-separated, id-bound, and constant-time. If one fails, a known vulnerability class has
    been re-opened. Fix the code, not the test.
 3. **PHP lint** and **PHP_CodeSniffer** (`WordPress.Security`, `WordPress.DB.PreparedSQL` as
-   errors) — broad coverage for escaping, nonces, and SQL.
-4. **Integration tests** (`tests/integration`, WordPress harness) — the invariants that need
+   errors): broad coverage for escaping, nonces, and SQL.
+4. **Integration tests** (`tests/integration`, WordPress harness) cover the invariants that need
    roles, options, and `$wpdb`: unknown role resolves to all-deny, and a non-privileged user's
    KPI response carries no revenue figure.
 
