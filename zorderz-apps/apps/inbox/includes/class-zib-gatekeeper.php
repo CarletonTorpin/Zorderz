@@ -394,6 +394,146 @@ class ZIB_Gatekeeper {
 	}
 
 	/**
+	 * Strip a leading "from:" / "sender:" / "by:" prefix down to the bare contact (e.g. "from:Alex"
+	 * → "Alex") so sender_match and the render lead never carry the prefix into the match. A real name
+	 * that merely starts with those letters is untouched — the prefix needs a colon or a following
+	 * space plus a whole word. Pure.
+	 */
+	public static function normalize_sender( string $q ): string {
+		$q = trim( (string) $q );
+		$q = preg_replace( '/^\s*(?:from|sender|by)\s*:\s*/i', '', $q );
+		$q = preg_replace( '/^\s*(?:from|by)\s+/i', '', $q );
+		return trim( (string) $q, " \t\n\r\0\x0B:?.,\"'" );
+	}
+
+	/**
+	 * SENDER match — the received twin of recipient_match. Same name→address resolution (with the
+	 * known-user preference and mailbox-derived addresses), but the predicate is scoped to the message's
+	 * OWN from columns — (from_name LIKE OR from_addr LIKE) per term — not parties_text. On INBOUND mail
+	 * the person we mean is the SENDER; matching parties_text would also catch mail where they were merely
+	 * cc'd. Owner-scoped. Returns array( sql_fragment, args ) ('' if the name is generic / unresolvable).
+	 * Deliberately duplicates recipient_match's resolution rather than refactoring it, so the tested SENT
+	 * path stays unchanged.
+	 */
+	private static function sender_match( int $actor, string $name, array $aliases = array() ): array {
+		global $wpdb;
+		$name  = self::normalize_sender( $name );
+		$named = ( '' !== $name && ! self::is_generic_recipient( $name ) );
+		$terms = array();
+		if ( $named ) {
+			$rows = $wpdb->get_results( $wpdb->prepare(
+				'SELECT addr, MAX(is_internal) AS internal FROM ' . self::t_party() . '
+				 WHERE owner_user_id = %d AND addr <> %s AND name LIKE %s
+				 GROUP BY addr LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- sender resolution: parties only, never the body
+				$actor, '', '%' . $wpdb->esc_like( $name ) . '%', 25
+			) );
+			$internal = array();
+			$external = array();
+			foreach ( (array) $rows as $r ) {
+				$a = strtolower( trim( (string) $r->addr ) );
+				if ( '' === $a ) { continue; }
+				if ( 1 === (int) $r->internal ) { $internal[ $a ] = $a; } else { $external[ $a ] = $a; }
+			}
+			if ( ! empty( $internal ) ) {
+				$terms = $internal;                       // known-user preference (same as recipient_match)
+			} else {
+				$terms[ strtolower( $name ) ] = $name;    // broad name + every external address it used
+				$terms = array_merge( $terms, $external );
+			}
+		}
+		foreach ( (array) $aliases as $a ) {
+			$a = trim( (string) $a );
+			if ( '' !== $a ) { $terms[ strtolower( $a ) ] = $a; }
+		}
+		if ( empty( $terms ) ) {
+			return array( '', array() );
+		}
+		$ors  = array();
+		$args = array();
+		foreach ( $terms as $t ) {
+			$like   = '%' . $wpdb->esc_like( $t ) . '%';
+			$ors[]  = '(from_name LIKE %s OR from_addr LIKE %s)';
+			$args[] = $like;
+			$args[] = $like;
+		}
+		return array( ' AND (' . implode( ' OR ', $ors ) . ')', $args );
+	}
+
+	/**
+	 * "WHAT DID <person> SEND ME [today/this week]" — the RECEIVED twin of owner_told. A windowed,
+	 * SENDER-scoped INBOUND read that returns the sender's composed text (quoted-reply/forward chains
+	 * stripped) for the same [ZIB_MAIL] expandable card — so a customer who emailed a photo can be pulled
+	 * up in chat, attachments and all. direction='in'; the sender is matched on the message's OWN from_*
+	 * columns (sender_match), never the body; received_at is filtered to a site-local day window. Owner-
+	 * forced, kiosk-denied, capped, recency-first, deduped exactly like owner_told. The card item carries
+	 * 'from' (the sender via fmt_addr) where the sent card carries 'to'.
+	 *
+	 * @param string $sender  sender name/addr; '' matches anyone (a pure "what did I receive today").
+	 * @param string $since,$until  YYYY-MM-DD site-local dates; '' = unbounded.
+	 * @return array { ok, results:[ { id, subject, received_at, from, composed, has_attachments } ], sender, since, until }
+	 */
+	public static function owner_received( int $actor, string $sender, string $since = '', string $until = '', int $limit = self::MAX_CHAT_HITS, array $aliases = array() ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_received', 'deny', 'not permitted', '', 0 );
+			return array( 'ok' => false, 'results' => array() );
+		}
+		global $wpdb;
+		$limit  = max( 1, min( self::MAX_CHAT_HITS, $limit ) );
+		$sender = trim( $sender );
+		$since  = self::sane_date( $since );
+		$until  = self::sane_date( $until );
+
+		$where = 'owner_user_id = %d AND direction = %s';
+		$args  = array( $actor, 'in' );
+		list( $ssql, $sargs ) = self::sender_match( $actor, $sender, $aliases );
+		if ( '' !== $ssql ) { $where .= $ssql; $args = array_merge( $args, $sargs ); }
+		if ( '' !== $since ) { $where .= ' AND received_at >= %s'; $args[] = self::local_date_to_utc( $since, false ); }
+		if ( '' !== $until ) { $where .= ' AND received_at <= %s'; $args[] = self::local_date_to_utc( $until, true ); }
+
+		// Over-fetch + dedup, identical to owner_told: all-folder sync can surface one inbound email from
+		// several folders (Inbox + a filed copy), and a re-send can arrive twice. Collapse by RFC
+		// Message-ID, falling back to a content signature (subject + composed body + send minute).
+		$fetch = min( 60, max( $limit, $limit * 4 ) );
+		$rows  = $wpdb->get_results( $wpdb->prepare(
+			'SELECT id, received_at, subject, from_addr, from_name, ms_internet_message_id, has_attachments, body_enc, body_format
+			 FROM ' . self::t_msg() . ' WHERE ' . $where . '
+			 ORDER BY received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- sender lives in from_*, never the body
+			array_merge( $args, array( $fetch ) )
+		) );
+
+		$out  = array();
+		$seen = array();
+		foreach ( (array) $rows as $r ) {
+			$text     = self::body_to_text( ZIB_Crypto::decrypt( (string) $r->body_enc ), (string) $r->body_format );
+			$composed = self::strip_quoted( $text );
+
+			$mid  = strtolower( trim( (string) $r->ms_internet_message_id ) );
+			$mkey = ( '' !== $mid ) ? 'm:' . $mid : '';
+			$csig = 'c:' . strtolower( trim( (string) $r->subject ) ) . '|'
+				. substr( (string) $r->received_at, 0, 16 ) . '|' . $composed;
+			if ( ( '' !== $mkey && isset( $seen[ $mkey ] ) ) || isset( $seen[ $csig ] ) ) {
+				continue;
+			}
+			if ( '' !== $mkey ) { $seen[ $mkey ] = true; }
+			$seen[ $csig ] = true;
+
+			$out[] = array(
+				'id'              => (int) $r->id,
+				'subject'         => (string) $r->subject,
+				'received_at'     => $r->received_at ? (string) $r->received_at : '',
+				'from'            => self::fmt_addr( (string) $r->from_name, (string) $r->from_addr ),
+				'composed'        => $composed,
+				'has_attachments' => (int) ( $r->has_attachments ?? 0 ),
+			);
+			if ( count( $out ) >= $limit ) {
+				break;
+			}
+		}
+		self::log( $actor, $actor, 'owner_received', 'allow', 'recv:' . ( '' !== $since ? $since : '*' ) . '..' . ( '' !== $until ? $until : '*' ), substr( sha1( $sender ), 0, 16 ), count( $out ) );
+		return array( 'ok' => true, 'results' => $out, 'sender' => $sender, 'since' => $since, 'until' => $until );
+	}
+
+	/**
 	 * v0.9.13 "WHAT DID I TELL <person> [today/this week]" — a windowed, recipient-scoped SENT read
 	 * that returns WHAT THE OWNER WROTE (composed text, quoted reply/forward chains stripped) for the
 	 * [ZIB_MAIL] expandable card. direction='out'; the addressee is matched in parties_text ONLY, never
