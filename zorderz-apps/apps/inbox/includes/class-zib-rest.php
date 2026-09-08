@@ -108,9 +108,108 @@ class ZIB_REST {
 				'offset' => array( 'sanitize_callback' => 'absint' ),
 			),
 		) );
+		// Mail view — folder nav (degrades to empty until the all-folder sync populates folders).
+		register_rest_route( $ns, '/folders', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'folders' ),
+			'permission_callback' => $perm,
+		) );
+		// Mail-list browse (by folder hash / coarse bucket / all). Owner-scoped in the Gatekeeper.
+		register_rest_route( $ns, '/browse', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'browse' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'folder' => array( 'sanitize_callback' => 'sanitize_text_field' ),
+				'limit'  => array( 'sanitize_callback' => 'absint' ),
+				'offset' => array( 'sanitize_callback' => 'absint' ),
+			),
+		) );
+		// Phase 2 — owner SEND (INV-SEND). POST only; the body/comment are NOT sanitize_text_field'd
+		// (that would flatten an email body); identity is forced to the current user in the Gatekeeper.
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/reply', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'send_reply' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'      => array( 'sanitize_callback' => 'absint' ),
+				'comment' => array( 'required' => true ),
+				'all'     => array(),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/forward', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'send_forward' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'      => array( 'sanitize_callback' => 'absint' ),
+				'to'      => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+				'comment' => array(),
+			),
+		) );
+		register_rest_route( $ns, '/send', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'send_new' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'to'      => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+				'cc'      => array( 'sanitize_callback' => 'sanitize_text_field' ),
+				'subject' => array( 'sanitize_callback' => 'sanitize_text_field' ),
+				'body'    => array(),
+			),
+		) );
+		// Triage write routes (INV-WRITE): mark-read + move. Same owner gate; identity forced to the
+		// current user; the move destination is allow-listed in the Gatekeeper.
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/mark-read', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'mark_read' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'   => array( 'sanitize_callback' => 'absint' ),
+				'read' => array(),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/move', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'move_msg' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id' => array( 'sanitize_callback' => 'absint' ),
+				'to' => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+			),
+		) );
 		register_rest_route( $ns, '/message/(?P<id>\\d+)', array(
 			'methods'             => 'GET',
 			'callback'            => array( __CLASS__, 'get_message' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id' => array( 'sanitize_callback' => 'absint' ),
+			),
+		) );
+
+		// On-demand attachments for a message. Same owner gate as /message; the render gate (image-only,
+		// non-inline, capped) lives in the Gatekeeper. /attachments lists what's offerable (metadata only);
+		// /attachment?att= returns ONE image's bytes (base64); /inline returns embedded cid: images.
+		register_rest_route( $ns, '/message/(?P<id>\\d+)/attachments', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'get_attachments' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id' => array( 'sanitize_callback' => 'absint' ),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>\\d+)/attachment', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'get_attachment' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'  => array( 'sanitize_callback' => 'absint' ),
+				'att' => array( 'required' => true, 'validate_callback' => array( __CLASS__, 'valid_att_id' ) ),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>\\d+)/inline', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'get_inline_images' ),
 			'permission_callback' => $perm,
 			'args'                => array(
 				'id' => array( 'sanitize_callback' => 'absint' ),
@@ -261,11 +360,145 @@ class ZIB_REST {
 		) );
 	}
 
+	public static function folders( WP_REST_Request $req ): WP_REST_Response {
+		return rest_ensure_response( ZIB_Gatekeeper::owner_folders( get_current_user_id() ) );
+	}
+
+	public static function browse( WP_REST_Request $req ): WP_REST_Response {
+		return rest_ensure_response( ZIB_Gatekeeper::owner_browse(
+			get_current_user_id(),
+			(string) $req->get_param( 'folder' ),
+			(int) ( $req->get_param( 'limit' ) ?: 30 ),
+			(int) ( $req->get_param( 'offset' ) ?: 0 )
+		) );
+	}
+
 	public static function get_message( WP_REST_Request $req ) {
 		$r = ZIB_Gatekeeper::owner_get_message( get_current_user_id(), (int) $req->get_param( 'id' ) );
 		if ( empty( $r['ok'] ) ) {
 			return new WP_Error( 'zib_not_found', 'Not found.', array( 'status' => 404 ) );
 		}
 		return rest_ensure_response( $r );
+	}
+
+	// ── Send path (INV-SEND: every send is human-confirmed; no auto-send) ──
+
+	public static function send_reply( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_send_reply(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'comment' ),
+			(bool) $req->get_param( 'all' )
+		) );
+	}
+
+	public static function send_forward( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_send_forward(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'comment' ),
+			(string) $req->get_param( 'to' )
+		) );
+	}
+
+	public static function send_new( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_send_new(
+			get_current_user_id(),
+			(string) $req->get_param( 'to' ),
+			(string) $req->get_param( 'cc' ),
+			(string) $req->get_param( 'subject' ),
+			(string) $req->get_param( 'body' )
+		) );
+	}
+
+	// ── Triage callbacks (INV-WRITE: identity forced to the current user) ──
+
+	public static function mark_read( WP_REST_Request $req ) {
+		$read    = $req->get_param( 'read' );
+		$is_read = ( null === $read ) ? true : (bool) filter_var( $read, FILTER_VALIDATE_BOOLEAN );
+		return self::send_response( ZIB_Gatekeeper::owner_mark_read(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			$is_read
+		) );
+	}
+
+	public static function move_msg( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_move(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'to' )
+		) );
+	}
+
+	// ── Attachment callbacks (owner-gated; render gate lives in the Gatekeeper) ──
+
+	public static function get_attachments( WP_REST_Request $req ) {
+		$r = ZIB_Gatekeeper::owner_list_attachments( get_current_user_id(), (int) $req->get_param( 'id' ) );
+		if ( empty( $r['ok'] ) ) {
+			$reason = (string) ( $r['reason'] ?? 'err' );
+			$status = ( 'graph' === $reason ) ? 502 : 404;
+			return new WP_Error( 'zib_attach_' . $reason, 'Attachments unavailable.', array( 'status' => $status ) );
+		}
+		return rest_ensure_response( $r );
+	}
+
+	/** Embedded (cid:) images for one owner-scoped message, keyed by Content-ID. */
+	public static function get_inline_images( WP_REST_Request $req ) {
+		$r = ZIB_Gatekeeper::owner_list_inline_images( get_current_user_id(), (int) $req->get_param( 'id' ) );
+		if ( empty( $r['ok'] ) ) {
+			$reason = (string) ( $r['reason'] ?? 'err' );
+			$status = ( 'graph' === $reason ) ? 502 : 404;
+			return new WP_Error( 'zib_inline_' . $reason, 'Inline images unavailable.', array( 'status' => $status ) );
+		}
+		return rest_ensure_response( $r );
+	}
+
+	/** Fetch ONE image attachment's bytes (base64) from one of the caller's own messages. */
+	public static function get_attachment( WP_REST_Request $req ) {
+		$r = ZIB_Gatekeeper::owner_get_attachment(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'att' )
+		);
+		if ( empty( $r['ok'] ) ) {
+			$reason = (string) ( $r['reason'] ?? 'err' );
+			if ( 'graph' === $reason ) {
+				$status = 502;
+			} elseif ( 'not-found' === $reason || 'gone' === $reason ) {
+				$status = 404;
+			} else {
+				$status = 415; // not a servable image (inline / non-image / too-large / no-bytes / bad-id)
+			}
+			return new WP_Error( 'zib_attach_' . $reason, 'Attachment not available.', array( 'status' => $status ) );
+		}
+		return rest_ensure_response( $r );
+	}
+
+	/** Graph attachment ids are long base64url-ish tokens; accept a bounded, safe charset only. */
+	public static function valid_att_id( $val ): bool {
+		$val = (string) $val;
+		return '' !== $val && strlen( $val ) <= 2048 && (bool) preg_match( '#^[A-Za-z0-9_\\-=+/.:%]+$#', $val );
+	}
+
+	private static function send_response( array $r ) {
+		if ( ! empty( $r['ok'] ) ) {
+			return rest_ensure_response( array( 'ok' => true ) );
+		}
+		$reason = (string) ( $r['reason'] ?? 'error' );
+		if ( 'denied' === $reason ) {
+			$status = 403;
+		} elseif ( 'not-found' === $reason ) {
+			$status = 404;
+		} elseif ( 'reconnect' === $reason || 'auth' === $reason ) {
+			$status = 409;
+		} elseif ( 'busy' === $reason ) {
+			$status = 503;
+		} elseif ( in_array( $reason, array( 'empty', 'no-recipients', 'not-connected', 'bad-dest' ), true ) ) {
+			$status = 422;
+		} else {
+			$status = 502;
+		}
+		return new WP_Error( 'zib_write_' . $reason, 'Action failed.', array( 'status' => $status, 'reason' => $reason ) );
 	}
 }

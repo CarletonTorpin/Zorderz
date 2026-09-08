@@ -381,8 +381,44 @@ class ZIB_Enrich {
 		return self::clip( trim( substr( $hay, max( 0, $offset - 8 ), 96 ) ), 160 );
 	}
 
+	/**
+	 * UTF-8-safe clamp for a DB-bound / JSON-bound short field. The byte-based clip() can slice
+	 * through a multi-byte character, leaving an invalid UTF-8 tail that BOTH wp_json_encode()
+	 * (returns false) and MySQL (wpdb: "contains invalid data") reject — a cause of gist-write
+	 * failures that leave messages stuck unenriched and re-selected on every cron tick. Repairs
+	 * ill-formed bytes and truncates on a CHARACTER boundary, so the result is always valid UTF-8
+	 * within $max characters. PURE.
+	 */
+	public static function clip_utf8( string $s, int $max ): string {
+		if ( function_exists( 'mb_scrub' ) ) {
+			$s = mb_scrub( $s, 'UTF-8' );
+		} elseif ( function_exists( 'mb_convert_encoding' ) ) {
+			$s = (string) mb_convert_encoding( $s, 'UTF-8', 'UTF-8' );
+		}
+		if ( function_exists( 'mb_substr' ) ) {
+			if ( mb_strlen( $s, 'UTF-8' ) > $max ) {
+				$s = mb_substr( $s, 0, $max, 'UTF-8' );
+			}
+			return rtrim( $s );
+		}
+		// No mbstring (rare): byte-clip, then drop any trailing partial multi-byte sequence so the
+		// stored tail is never a split character.
+		if ( strlen( $s ) > $max ) {
+			$s = substr( $s, 0, $max );
+			while ( '' !== $s && ( ord( $s[ strlen( $s ) - 1 ] ) & 0xC0 ) === 0x80 ) {
+				$s = substr( $s, 0, -1 );
+			}
+			if ( '' !== $s && ( ord( $s[ strlen( $s ) - 1 ] ) & 0x80 ) !== 0 ) {
+				$s = substr( $s, 0, -1 );
+			}
+		}
+		return rtrim( $s );
+	}
+
 	private static function clip( string $s, int $len ): string {
-		return ( strlen( $s ) > $len ) ? rtrim( substr( $s, 0, $len ) ) : $s;
+		// char-safe — the old byte substr() could split a multi-byte character, leaving an invalid
+		// UTF-8 tail that broke wp_json_encode() and the DB write. Delegate to the safe clamp.
+		return self::clip_utf8( $s, $len );
 	}
 
 	// ════════════════════════════════════════════════════════════════
@@ -429,11 +465,11 @@ class ZIB_Enrich {
 				'tags'      => $tags,
 			) );
 
-			$wpdb->update(
+			$ok = $wpdb->update(
 				self::t_msg(),
 				array(
 					'body_clean_text' => $clean,
-					'gist'            => self::clip( $gist, 512 ),
+					'gist'            => self::clip_utf8( $gist, 512 ),
 					'card_enc'        => ZIB_Crypto::encrypt( (string) $card ),
 					'enrich_ver'      => self::ENRICH_VER,
 					'enriched_at'     => gmdate( 'Y-m-d H:i:s' ),
@@ -442,6 +478,13 @@ class ZIB_Enrich {
 				array( '%s', '%s', '%s', '%d', '%s' ),
 				array( '%d' )
 			);
+			// A SILENT update failure (wpdb::update returns false without throwing) would leave
+			// enrich_ver unchanged, so this row is re-selected on EVERY cron tick — an invisible,
+			// non-converging backfill loop that still logs a positive "backfilled" count. Name the DB
+			// cause when it happens.
+			if ( false === $ok && defined( 'WP_DEBUG' ) && WP_DEBUG && '' !== (string) $wpdb->last_error ) {
+				error_log( 'ZIB Enrich: message ' . $message_id . ' UPDATE failed (enrich_ver NOT advanced): ' . $wpdb->last_error );
+			}
 
 			self::persist_extracts( $message_id, $owner, $account, (string) ( $ctx['received_at'] ?? null ), $facts );
 
@@ -484,7 +527,15 @@ class ZIB_Enrich {
 			$n++;
 		}
 		if ( $n > 0 && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( 'ZIB Enrich: backfilled ' . $n . ' message(s) to enrich_ver ' . self::ENRICH_VER );
+			// Log the REMAINING unenriched count so convergence is observable at a glance — a shrinking
+			// number is a healthy backlog draining; a number that stays FLAT tick after tick means the
+			// same rows are being re-processed (a stuck loop — see the UPDATE-failed log above for the DB
+			// cause). Indexed by idx_enrich_ver, so this is cheap.
+			$remaining = (int) $wpdb->get_var( $wpdb->prepare(
+				'SELECT COUNT(*) FROM ' . self::t_msg() . ' WHERE enrich_ver < %d AND body_enc IS NOT NULL AND body_enc <> \'\'', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				self::ENRICH_VER
+			) );
+			error_log( 'ZIB Enrich: backfilled ' . $n . ' message(s) to enrich_ver ' . self::ENRICH_VER . '; ' . $remaining . ' still unenriched' );
 		}
 		return $n;
 	}
