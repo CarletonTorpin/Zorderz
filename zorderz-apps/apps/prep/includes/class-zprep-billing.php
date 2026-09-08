@@ -350,4 +350,92 @@ class ZPREP_Billing {
 		update_option( 'zprep_billing_promotions', $map, false );
 		return $out;
 	}
+
+	/* ================================================================
+	 * INVOICE ARM — recent queue invoices (for the de-dup pass)
+	 * ================================================================ */
+
+	/** Flatten a FreshBooks doc (notes + line name/description) to plain searchable text. */
+	public static function estimate_text( array $doc ): string {
+		$parts = array( (string) ( $doc['notes'] ?? '' ) );
+		foreach ( (array) ( $doc['lines'] ?? array() ) as $ln ) {
+			$parts[] = trim( (string) ( $ln['name'] ?? '' ) . ' ' . (string) ( $ln['description'] ?? '' ) );
+		}
+		return trim( implode( "\n", array_filter( $parts ) ) );
+	}
+
+	/** Does the doc text carry a receipt link — i.e. the job is done (installed + receipted)? */
+	public static function text_has_receipt_link( string $text ): bool {
+		if ( '' === $text ) {
+			return false;
+		}
+		return ( false !== stripos( $text, '/receipt/' ) ) || ( false !== stripos( $text, 'receipt link' ) );
+	}
+
+	/**
+	 * Recent QUEUE invoices, read directly from FreshBooks (not via the estimate query),
+	 * so a job whose estimate never read accepted/invoiced — but that HAS an invoice —
+	 * still surfaces on the Approved-to-Cut queue. Each carries the receipt-link (installed)
+	 * + scheduled-date signals so the de-dup pass can fold or surface it. Queue membership
+	 * uses the generalized reference tag (ZPREP_Settings::job_in_queue), never a hardcoded
+	 * code. The mesh bar is left null here — the source's mesh summary is trade-specific
+	 * (a fixed dark/light material taxonomy) and is not part of this generalized de-dup port;
+	 * a card with no mesh simply shows no bar, exactly as the source degrades a detail-less card.
+	 *
+	 * @return array[] { invoice_number, customer_name, customer_id, amount, estimateid,
+	 *                   reference, created_at, installed, scheduled, mesh }
+	 */
+	public function list_recent_queue_invoices( int $days = 90 ): array {
+		if ( ! $this->is_ready() ) {
+			return array();
+		}
+		$days      = (int) apply_filters( 'zprep_atc_invoice_lookback_days', max( 14, $days ) );
+		$cache_key = 'zprep_fb_qinv_' . max( 7, $days );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$date_min = gmdate( 'Y-m-d', time() - ( $days * DAY_IN_SECONDS ) );
+		$out = array(); $page = 1; $pages = 1;
+		do {
+			$resp = $this->get( '/invoices/invoices', array(
+				'search[date_min]' => $date_min,
+				'include[]'        => 'lines',
+				'per_page'         => 100,
+				'page'             => $page,
+			) );
+			if ( '' !== $this->last_error || ! is_array( $resp ) ) {
+				break;
+			}
+			$invs  = $resp['response']['result']['invoices'] ?? array();
+			$pages = max( 1, (int) ( $resp['response']['result']['pages'] ?? 1 ) );
+			foreach ( $invs as $inv ) {
+				$cust = trim( (string) ( $inv['fname'] ?? '' ) . ' ' . (string) ( $inv['lname'] ?? '' ) );
+				if ( '' === $cust ) {
+					$cust = (string) ( $inv['organization'] ?? '' );
+				}
+				if ( ! ZPREP_Settings::job_in_queue( (string) ( $inv['po_number'] ?? '' ), $cust ) ) {
+					continue;
+				}
+				$text = self::estimate_text( $inv );
+				$out[] = array(
+					'invoice_number' => (string) ( $inv['invoice_number'] ?? $inv['invoiceid'] ?? '' ),
+					'customer_name'  => $cust,
+					'customer_id'    => (string) ( $inv['customerid'] ?? '' ),
+					'amount'         => (float) ( $inv['amount']['amount'] ?? 0 ),
+					'estimateid'     => (string) ( $inv['estimateid'] ?? '' ),
+					'reference'      => (string) ( $inv['po_number'] ?? '' ),
+					'created_at'     => (string) ( $inv['create_date'] ?? $inv['created_at'] ?? $inv['date'] ?? '' ),
+					'installed'      => self::text_has_receipt_link( $text ),
+					'scheduled'      => class_exists( 'ZPREP_Install_Fallback' ) ? ZPREP_Install_Fallback::from_text( $text ) : null,
+					'mesh'           => null,
+				);
+			}
+			$page++;
+		} while ( $page <= min( $pages, 3 ) ); // sanity cap: 300 invoices/window
+
+		set_transient( $cache_key, $out, MINUTE_IN_SECONDS );
+		return $out;
+	}
 }
