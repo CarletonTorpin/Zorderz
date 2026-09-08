@@ -343,4 +343,137 @@ class ZIB_Graph {
 			'format'  => $fmt,
 		);
 	}
+
+	/** @var int Seconds Graph asked us to wait after the last throttle (429/5xx), for the caller's backoff. */
+	private static $last_retry_after = 0;
+
+	/** Seconds Graph asked us to wait after the last write throttle (0 = none). */
+	public static function retry_after(): int {
+		return (int) self::$last_retry_after;
+	}
+
+	/**
+	 * Authenticated Graph POST (JSON). Write twin of graph_get. Used by the send path.
+	 *
+	 * @return array|WP_Error Decoded JSON, or array() for an empty 2xx (e.g. 202 from sendMail).
+	 */
+	public static function graph_post( int $account_id, string $url, array $body, array $extra_headers = array() ) {
+		return self::graph_write( 'POST', $account_id, $url, $body, $extra_headers );
+	}
+
+	/**
+	 * Authenticated Graph PATCH (JSON). Used by the triage path — e.g. { isRead } — and by the send
+	 * path to set a draft's body/recipients before sending.
+	 *
+	 * @return array|WP_Error Decoded JSON, or array() for an empty 2xx.
+	 */
+	public static function graph_patch( int $account_id, string $url, array $body, array $extra_headers = array() ) {
+		return self::graph_write( 'PATCH', $account_id, $url, $body, $extra_headers );
+	}
+
+	/** Shared JSON-write core for graph_post/graph_patch — one token + error ladder. */
+	private static function graph_write( string $method, int $account_id, string $url, array $body, array $extra_headers = array() ) {
+		self::$last_retry_after = 0;
+		$token = ZIB_Vault::get_access_token( $account_id );
+		if ( is_wp_error( $token ) ) {
+			return $token;
+		}
+		$headers = array_merge(
+			array(
+				'Authorization' => 'Bearer ' . $token,
+				'Accept'        => 'application/json',
+				'Content-Type'  => 'application/json',
+			),
+			$extra_headers
+		);
+		$resp = wp_remote_request( $url, array(
+			'method'  => $method,
+			'timeout' => 25,
+			'headers' => $headers,
+			'body'    => wp_json_encode( $body ),
+		) );
+		if ( is_wp_error( $resp ) ) {
+			return new WP_Error( 'zib_net', $resp->get_error_message() );
+		}
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		$json = json_decode( (string) wp_remote_retrieve_body( $resp ), true );
+		if ( $code >= 200 && $code < 300 ) {
+			return is_array( $json ) ? $json : array(); // 200/201/202 / empty body = success
+		}
+		if ( 401 === $code ) {
+			return new WP_Error( 'zib_graph_401', 'Graph rejected the token.' );
+		}
+		if ( 403 === $code ) {
+			// Missing Mail.Send / Mail.ReadWrite consent lands here — the caller maps it to "reconnect".
+			return new WP_Error( 'zib_graph_403', 'Graph denied the write (permission not granted — reconnect to enable it).' );
+		}
+		if ( 429 === $code || $code >= 500 ) {
+			$ra = wp_remote_retrieve_header( $resp, 'retry-after' );
+			if ( '' !== (string) $ra ) {
+				self::$last_retry_after = is_numeric( $ra ) ? max( 0, (int) $ra ) : max( 0, (int) ( strtotime( (string) $ra ) - time() ) );
+			}
+			return new WP_Error( 'zib_graph_transient', 'Graph is throttling or unavailable (' . $code . ').' );
+		}
+		$gmsg = ( is_array( $json ) && isset( $json['error']['message'] ) ) ? (string) $json['error']['message'] : '';
+		return new WP_Error( 'zib_graph_' . $code, 'Graph error ' . $code . ( '' !== $gmsg ? ': ' . $gmsg : '.' ) );
+	}
+
+	/** Send a BRAND-NEW message. POST /me/sendMail (202, empty body). No message id → no Prefer header. */
+	public static function send_new( int $account_id, array $message, bool $save_to_sent = true ) {
+		return self::graph_post( $account_id, self::GRAPH . '/me/sendMail', array(
+			'message'         => $message,
+			'saveToSentItems' => (bool) $save_to_sent,
+		) );
+	}
+
+	/**
+	 * REPLY / REPLY-ALL preserving the owner's spacing. Graph's /reply action collapses a comment's blank
+	 * lines, so instead: createReply(All) → the draft carries the quoted original as HTML → PREPEND the
+	 * owner's spacing-preserving HTML above the quote → send the draft. Threading (In-Reply-To /
+	 * References) is set by createReply and survives the body PATCH.
+	 */
+	public static function send_reply_html( int $account_id, string $ms_message_id, string $comment_html, bool $all = false, bool $immutable = false ) {
+		$hdr   = $immutable ? self::immutable_headers() : array();
+		$verb  = $all ? 'createReplyAll' : 'createReply';
+		$draft = self::graph_post( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $ms_message_id ) . '/' . $verb, array(), $hdr );
+		if ( is_wp_error( $draft ) ) { return $draft; }
+		$draft_id = (string) ( $draft['id'] ?? '' );
+		if ( '' === $draft_id ) { return new WP_Error( 'zib_graph_draft', 'Reply draft was not created.' ); }
+		$body  = self::prepend_into_body( $comment_html, (string) ( $draft['body']['content'] ?? '' ) );
+		$patch = self::graph_patch( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $draft_id ), array( 'body' => array( 'contentType' => 'HTML', 'content' => $body ) ), $hdr );
+		if ( is_wp_error( $patch ) ) { return $patch; }
+		return self::graph_post( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $draft_id ) . '/send', array(), $hdr );
+	}
+
+	/**
+	 * FORWARD preserving the owner's spacing. Same shape as send_reply_html: createForward → prepend the
+	 * owner's HTML above the quoted original AND set toRecipients on the draft → send.
+	 */
+	public static function send_forward_html( int $account_id, string $ms_message_id, string $comment_html, array $to_recipients, bool $immutable = false ) {
+		$hdr   = $immutable ? self::immutable_headers() : array();
+		$draft = self::graph_post( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $ms_message_id ) . '/createForward', array(), $hdr );
+		if ( is_wp_error( $draft ) ) { return $draft; }
+		$draft_id = (string) ( $draft['id'] ?? '' );
+		if ( '' === $draft_id ) { return new WP_Error( 'zib_graph_draft', 'Forward draft was not created.' ); }
+		$body  = self::prepend_into_body( $comment_html, (string) ( $draft['body']['content'] ?? '' ) );
+		$patch = self::graph_patch( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $draft_id ), array( 'body' => array( 'contentType' => 'HTML', 'content' => $body ), 'toRecipients' => $to_recipients ), $hdr );
+		if ( is_wp_error( $patch ) ) { return $patch; }
+		return self::graph_post( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $draft_id ) . '/send', array(), $hdr );
+	}
+
+	/** Insert the owner's HTML comment at the top of the reply/forward's visible body (just after the
+	 *  <body> tag, or prepended if there is none). The quoted original stays beneath it. */
+	private static function prepend_into_body( string $comment_html, string $original_html ): string {
+		if ( '' === $original_html ) { return $comment_html; }
+		if ( preg_match( '/<body[^>]*>/i', $original_html, $m, PREG_OFFSET_CAPTURE ) ) {
+			$pos = (int) $m[0][1] + strlen( (string) $m[0][0] );
+			return substr( $original_html, 0, $pos ) . $comment_html . substr( $original_html, $pos );
+		}
+		return $comment_html . $original_html;
+	}
+
+	/** The per-request Prefer header asking Graph for immutable ids (stable across folder moves). */
+	private static function immutable_headers(): array {
+		return array( 'Prefer' => 'IdType="ImmutableId"' );
+	}
 }
