@@ -3,9 +3,9 @@
  * ZIB_ZANA_Bridge — the ONE seam between the Brain-Bot / Analytics engine and the
  * sealed mail store. Egress path #1 ("owner's own Brain-Bot queries").
  *
- * House pattern: like ZEST_ZANA_Bridge / ZDZ_Jobs_ZANA_Bridge / ZCC_ZANA_Bridge,
- * this is a public static class the engine calls IN-PROCESS, guarded by
- * class_exists + is_available(). It follows the platform's READ-MARKER contract
+ * House pattern: like the other apps' analytics bridges, this is a public static
+ * class the engine calls IN-PROCESS, guarded by class_exists + is_available(). It
+ * follows the platform's READ-MARKER contract
  * exactly (the [ZDZ_PROJECT] / [ZEST_LOOKUP] shape):
  *
  *   1. Brain-Bot emits  [ZIB_SEARCH]{"q":"recent supplier orders"}
@@ -68,8 +68,8 @@ class ZIB_ZANA_Bridge {
 	const MAX_SOURCES_SHOWN = 6;
 
 	/**
-	 * Is the mail-chat egress wired up at all? The engine's guard, mirroring
-	 * ZEST_ZANA_Bridge::is_available(). Feature-level only — per-caller permission
+	 * Is the mail-chat egress wired up at all? The engine's guard, mirroring the
+	 * other apps' analytics bridges. Feature-level only — per-caller permission
 	 * (owner? kiosk?) is the Gatekeeper's job, resolved from the real user id.
 	 */
 	public static function is_available(): bool {
