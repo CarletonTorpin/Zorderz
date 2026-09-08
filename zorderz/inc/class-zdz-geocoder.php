@@ -87,6 +87,13 @@ class ZDZ_Geocoder {
 			return $cached;
 		}
 
+		// Cache-only callers (e.g. a budgeted backfill draining the cheap majority
+		// before spending any network budget) opt out of the resolve path entirely:
+		// a miss is a plain null, no filter and no networked provider is consulted.
+		if ( ! empty( $opts['cache_only'] ) ) {
+			return null;
+		}
+
 		/**
 		 * Filter: zdz_media_forward_geocode
 		 *

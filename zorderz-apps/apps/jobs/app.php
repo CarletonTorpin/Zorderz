@@ -8,7 +8,7 @@
  *   photo-gated completion, with a recorded single-party attestation path for a solo
  *   operator. Consumes the theme's crew-lead hierarchy (ZDZ_Hierarchy), party roster
  *   (ZDZ_Party), media store (ZDZ_User_Media) and geocoder (ZDZ_Media_Geocoder).
- * Version:     1.17.0
+ * Version:     1.18.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -45,7 +45,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZJOB_VERSION', '1.17.0' );
+define( 'ZJOB_VERSION', '1.18.0' );
 define( 'ZJOB_FILE', __FILE__ );
 define( 'ZJOB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZJOB_URL', plugin_dir_url( __FILE__ ) );
@@ -157,6 +157,7 @@ require_once ZJOB_DIR . 'includes/class-zjob-project.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-visibility.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-resolver.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-sweep.php';
+require_once ZJOB_DIR . 'includes/class-zjob-geo-backfill.php';
 // Wave C (C-01) — install-date resolver + INV-8 published boundary + compose_context handoff.
 require_once ZJOB_DIR . 'includes/class-zjob-install-date.php';
 require_once ZJOB_DIR . 'includes/class-zjob-appointment-link.php';
@@ -169,6 +170,9 @@ if ( class_exists( 'Zjob_Install_Date' ) && method_exists( 'Zjob_Install_Date', 
 }
 if ( class_exists( 'Zjob_Schedule_Context' ) && method_exists( 'Zjob_Schedule_Context', 'init' ) ) {
 	Zjob_Schedule_Context::init();
+}
+if ( class_exists( 'Zjob_Geo_Backfill' ) && method_exists( 'Zjob_Geo_Backfill', 'init' ) ) {
+	Zjob_Geo_Backfill::init();
 }
 
 /**

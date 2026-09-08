@@ -55,7 +55,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZPREP_VERSION', '2.3.0' );
+define( 'ZPREP_VERSION', '2.4.0' );
 define( 'ZPREP_FILE', __FILE__ );
 define( 'ZPREP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZPREP_URL', plugin_dir_url( __FILE__ ) );
@@ -129,6 +129,7 @@ function zprep_asset_ver( $rel ) {
 // after_setup_theme, once \Zorderz\Widget_App_Interface exists.
 require_once ZPREP_DIR . 'includes/class-zprep-settings.php';
 require_once ZPREP_DIR . 'includes/class-zprep-install-date.php';
+require_once ZPREP_DIR . 'includes/class-zprep-install-fallback.php';
 require_once ZPREP_DIR . 'includes/class-zprep-leftovers.php';
 require_once ZPREP_DIR . 'includes/class-zprep-nesting.php';
 require_once ZPREP_DIR . 'includes/class-zprep-engine.php';

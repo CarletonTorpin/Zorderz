@@ -33,7 +33,7 @@
  * One constant now feeds all of them. Keep in lock-step with style.css.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '1.6.1' );
+	define( 'ZDZ_THEME_VER_FLOOR', '1.9.0' );
 }
 /**
  * The REST namespace, in exactly one place.
@@ -325,7 +325,8 @@ add_action( 'wp_enqueue_scripts', function() {
 	// NitroPack analyzes real page loads and generates optimal preload
 	// hints automatically. Manual preloads would duplicate its work.
 
-	wp_enqueue_script( 'zdz-app-js', get_template_directory_uri() . '/assets/js/app.js', ['zdz-lucide'], $asset_ver( '/assets/js/app.js' ), true );
+	wp_enqueue_script( 'zdz-overlay-escape-js', get_template_directory_uri() . '/assets/js/overlay-escape.js', [], $asset_ver( '/assets/js/overlay-escape.js' ), true );
+	wp_enqueue_script( 'zdz-app-js', get_template_directory_uri() . '/assets/js/app.js', ['zdz-lucide', 'zdz-overlay-escape-js'], $asset_ver( '/assets/js/app.js' ), true );
 	wp_enqueue_script( 'zdz-bridge-js', get_template_directory_uri() . '/assets/js/bridge.js', ['zdz-app-js'], $asset_ver( '/assets/js/bridge.js' ), true );
 	wp_enqueue_script( 'zdz-bug-reporter-js', get_template_directory_uri() . '/assets/js/bug-reporter.js', ['zdz-app-js'], $asset_ver( '/assets/js/bug-reporter.js' ), true );
 
