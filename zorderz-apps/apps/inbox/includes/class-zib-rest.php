@@ -181,6 +181,35 @@ class ZIB_REST {
 			),
 		) );
 
+		// On-demand attachments for a message. Same owner gate as /message; the render gate (image-only,
+		// non-inline, capped) lives in the Gatekeeper. /attachments lists what's offerable (metadata only);
+		// /attachment?att= returns ONE image's bytes (base64); /inline returns embedded cid: images.
+		register_rest_route( $ns, '/message/(?P<id>\\d+)/attachments', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'get_attachments' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id' => array( 'sanitize_callback' => 'absint' ),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>\\d+)/attachment', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'get_attachment' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'  => array( 'sanitize_callback' => 'absint' ),
+				'att' => array( 'required' => true, 'validate_callback' => array( __CLASS__, 'valid_att_id' ) ),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>\\d+)/inline', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'get_inline_images' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id' => array( 'sanitize_callback' => 'absint' ),
+			),
+		) );
+
 		// P4 — admin read of a STAFF mailbox. Route guarded by can_admin (reader);
 		// the per-mailbox gate is still enforced inside the Gatekeeper.
 		register_rest_route( $ns, '/admin/search', array(
@@ -390,6 +419,56 @@ class ZIB_REST {
 			(int) $req->get_param( 'id' ),
 			(string) $req->get_param( 'to' )
 		) );
+	}
+
+	// ── Attachment callbacks (owner-gated; render gate lives in the Gatekeeper) ──
+
+	public static function get_attachments( WP_REST_Request $req ) {
+		$r = ZIB_Gatekeeper::owner_list_attachments( get_current_user_id(), (int) $req->get_param( 'id' ) );
+		if ( empty( $r['ok'] ) ) {
+			$reason = (string) ( $r['reason'] ?? 'err' );
+			$status = ( 'graph' === $reason ) ? 502 : 404;
+			return new WP_Error( 'zib_attach_' . $reason, 'Attachments unavailable.', array( 'status' => $status ) );
+		}
+		return rest_ensure_response( $r );
+	}
+
+	/** Embedded (cid:) images for one owner-scoped message, keyed by Content-ID. */
+	public static function get_inline_images( WP_REST_Request $req ) {
+		$r = ZIB_Gatekeeper::owner_list_inline_images( get_current_user_id(), (int) $req->get_param( 'id' ) );
+		if ( empty( $r['ok'] ) ) {
+			$reason = (string) ( $r['reason'] ?? 'err' );
+			$status = ( 'graph' === $reason ) ? 502 : 404;
+			return new WP_Error( 'zib_inline_' . $reason, 'Inline images unavailable.', array( 'status' => $status ) );
+		}
+		return rest_ensure_response( $r );
+	}
+
+	/** Fetch ONE image attachment's bytes (base64) from one of the caller's own messages. */
+	public static function get_attachment( WP_REST_Request $req ) {
+		$r = ZIB_Gatekeeper::owner_get_attachment(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'att' )
+		);
+		if ( empty( $r['ok'] ) ) {
+			$reason = (string) ( $r['reason'] ?? 'err' );
+			if ( 'graph' === $reason ) {
+				$status = 502;
+			} elseif ( 'not-found' === $reason || 'gone' === $reason ) {
+				$status = 404;
+			} else {
+				$status = 415; // not a servable image (inline / non-image / too-large / no-bytes / bad-id)
+			}
+			return new WP_Error( 'zib_attach_' . $reason, 'Attachment not available.', array( 'status' => $status ) );
+		}
+		return rest_ensure_response( $r );
+	}
+
+	/** Graph attachment ids are long base64url-ish tokens; accept a bounded, safe charset only. */
+	public static function valid_att_id( $val ): bool {
+		$val = (string) $val;
+		return '' !== $val && strlen( $val ) <= 2048 && (bool) preg_match( '#^[A-Za-z0-9_\\-=+/.:%]+$#', $val );
 	}
 
 	private static function send_response( array $r ) {
