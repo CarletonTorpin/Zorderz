@@ -816,6 +816,32 @@ class ZIB_Gatekeeper {
 		);
 	}
 
+	/**
+	 * The owner's Mail folder nav — their tracked, non-empty folders (folder_hash + name + count).
+	 * Owner-gated; degrades to an empty list until the all-folder sync populates the folders table.
+	 *
+	 * @return array { ok:bool, folders:array<{hash,name,well_known,count}> }
+	 */
+	public static function owner_folders( int $actor ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_folders', 'deny', 'not permitted', '', 0 );
+			return array( 'ok' => false, 'folders' => array() );
+		}
+		$rows = ZIB_Ingest::owner_folder_list( $actor );
+		$out  = array();
+		foreach ( (array) $rows as $f ) {
+			$name  = trim( (string) ( $f['display_name'] ?? '' ) );
+			$out[] = array(
+				'hash'       => (string) ( $f['folder_hash'] ?? '' ),
+				'name'       => ( '' !== $name ) ? $name : 'Folder',
+				'well_known' => (string) ( $f['well_known'] ?? '' ),
+				'count'      => (int) ( $f['indexed_count'] ?? 0 ),
+			);
+		}
+		self::log( $actor, $actor, 'owner_folders', 'allow', '', '', count( $out ) );
+		return array( 'ok' => true, 'folders' => $out );
+	}
+
 	// ── Attachments (read) — list / bytes / inline cid: images (owner-gated live Graph read) ──
 
 	/** Max attachment bytes served inline. Phone photos fit; a bigger file is NAMED, not shown. */

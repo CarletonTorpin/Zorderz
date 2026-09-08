@@ -40,10 +40,34 @@ class ZIB_Ingest {
 	private static function t_msg(): string { global $wpdb; return $wpdb->prefix . 'zib_messages'; }
 	private static function t_party(): string { global $wpdb; return $wpdb->prefix . 'zib_participants'; }
 	private static function t_seen(): string { global $wpdb; return $wpdb->prefix . 'zib_seen'; }
+	private static function t_folders(): string { global $wpdb; return $wpdb->prefix . 'zib_folders'; }
 
 	/** Is the per-folder (all-folder) sync path enabled? Default OFF — the inbox/sent loop runs. */
 	public static function allfolder_enabled(): bool {
 		return '1' === (string) get_option( self::ALLFOLDER_OPTION, '' );
+	}
+
+	/**
+	 * The owner's TRACKED, non-empty folders for the Mail view — the folder NAV list. Returns only
+	 * folders with indexed mail and carries the folder_hash the /browse route filters on. Owner-scoped
+	 * by the accounts join; the Gatekeeper gates the caller. Well-known/biggest first, then by name.
+	 * Empty until the all-folder sync populates zib_folders + stamps folder_hash on messages.
+	 *
+	 * @return array<int,array{folder_hash:string,display_name:string,well_known:string,indexed_count:int}>
+	 */
+	public static function owner_folder_list( int $owner_user_id ): array {
+		global $wpdb;
+		return (array) $wpdb->get_results( $wpdb->prepare(
+			'SELECT f.folder_hash, f.display_name, f.well_known,
+			        ( SELECT COUNT(*) FROM ' . self::t_msg() . ' m
+			          WHERE m.owner_user_id = a.owner_user_id AND m.folder_hash = f.folder_hash ) AS indexed_count
+			 FROM ' . self::t_folders() . ' f
+			 INNER JOIN ' . self::t_acct() . ' a ON a.id = f.account_id
+			 WHERE a.owner_user_id = %d AND f.is_tracked = 1
+			 HAVING indexed_count > 0
+			 ORDER BY ( f.well_known IS NOT NULL AND f.well_known <> %s ) DESC, f.total_items DESC, f.display_name ASC', // phpcs:ignore WordPress.DB.PreparedSQL
+			$owner_user_id, ''
+		), ARRAY_A );
 	}
 
 	// ── cron entry ──────────────────────────────────────────────────
