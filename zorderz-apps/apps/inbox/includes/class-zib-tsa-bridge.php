@@ -3,9 +3,9 @@
  * ZIB_TSA_Bridge — the ONE seam between the Brain-Bot / Analytics engine and the
  * sealed mail store. Egress path #1 ("owner's own Brain-Bot queries").
  *
- * House pattern: like TSEC_TSA_Bridge / TS_Jobs_TSA_Bridge / TSCC_TSA_Bridge,
- * this is a public static class the engine calls IN-PROCESS, guarded by
- * class_exists + is_available(). It follows the platform's READ-MARKER contract
+ * House pattern: like the other apps' analytics bridges, this is a public static
+ * class the engine calls IN-PROCESS, guarded by class_exists + is_available(). It
+ * follows the platform's READ-MARKER contract
  * exactly (the [TS_PROJECT] / [TSEC_LOOKUP] shape):
  *
  *   1. Brain-Bot emits  [ZIB_SEARCH]{"q":"recent supplier orders"}
@@ -68,8 +68,8 @@ class ZIB_TSA_Bridge {
 	const MAX_SOURCES_SHOWN = 6;
 
 	/**
-	 * Is the mail-chat egress wired up at all? The engine's guard, mirroring
-	 * TSEC_TSA_Bridge::is_available(). Feature-level only — per-caller permission
+	 * Is the mail-chat egress wired up at all? The engine's guard, mirroring the
+	 * other apps' analytics bridges. Feature-level only — per-caller permission
 	 * (owner? kiosk?) is the Gatekeeper's job, resolved from the real user id.
 	 */
 	public static function is_available(): bool {
@@ -93,12 +93,20 @@ class ZIB_TSA_Bridge {
 	 * @return array { ok:bool, permitted:bool, count:int, render:string }
 	 */
 	public static function handle_marker( $payload, int $viewer_id = 0, string $ask = '' ): array {
-		return self::search(
-			self::query_from_payload( $payload ),
-			$viewer_id,
-			self::detect_intent( $ask ),
-			self::detect_direction( $ask )
-		);
+		$query = self::query_from_payload( $payload );
+		$dir   = self::detect_direction( $ask );
+		// "what did I tell <person> [today/this week]" — cite the composed text as an expandable
+		// [ZIB_MAIL] card, date- and recipient-scoped. Only on a SENT content ask.
+		if ( 'sent' === $dir && self::detect_told_intent( $ask ) ) {
+			return self::told( ZIB_Gatekeeper::normalize_recipient( $query ), $viewer_id, self::detect_window( $ask ), self::aliases_from_payload( $payload ) );
+		}
+		// The RECEIVED twin — "what did <person> send me [today/this week]" / "show me the emails from
+		// <person>" — cite the SENDER's composed text as the same expandable card, so an incoming
+		// customer email (photo attachments and all) can be pulled up. Sender-scoped, INBOUND.
+		if ( 'received' === $dir && self::detect_heard_intent( $ask ) ) {
+			return self::heard( ZIB_Gatekeeper::normalize_sender( $query ), $viewer_id, self::detect_window( $ask ), self::aliases_from_payload( $payload ) );
+		}
+		return self::search( $query, $viewer_id, self::detect_intent( $ask ), $dir );
 	}
 
 	/**
@@ -1185,5 +1193,313 @@ class ZIB_TSA_Bridge {
 			$visible = preg_replace( '/\[\/' . $m . '\]/i', '', (string) $visible );
 		}
 		return trim( (string) preg_replace( "/\n{3,}/", "\n\n", (string) $visible ) );
+	}
+
+	/**
+	 * Pull an optional { "aliases": [...] } list out of the payload — CRM-resolved alternate names /
+	 * addresses / company names for the queried contact. These only WIDEN which of the OWNER'S OWN
+	 * messages match, never whose mailbox is read. Pure.
+	 */
+	public static function aliases_from_payload( $payload ): array {
+		if ( is_string( $payload ) ) {
+			$d = json_decode( $payload, true );
+			$payload = is_array( $d ) ? $d : array();
+		}
+		if ( ! is_array( $payload ) || ! isset( $payload['aliases'] ) || ! is_array( $payload['aliases'] ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $payload['aliases'] as $a ) {
+			if ( is_string( $a ) && '' !== trim( $a ) ) { $out[] = trim( $a ); }
+		}
+		return array_slice( array_values( array_unique( $out ) ), 0, 20 );
+	}
+
+	/**
+	 * True when the ask is a "what did I tell / say to / write to / send <person>" CONTENT question —
+	 * the trigger (on a SENT ask) for the expandable [ZIB_MAIL] card that cites the owner's composed
+	 * text. A count question ("how many did I send") has no "what", so it stays on the normal path. Pure.
+	 */
+	public static function detect_told_intent( string $ask ): bool {
+		$a = ' ' . strtolower( trim( $ask ) ) . ' ';
+		if ( ' ' === $a ) {
+			return false;
+		}
+		return (bool) (
+			preg_match( '/\bwhat\b[^?.!]{0,30}\bi\b[^?.!]{0,20}\b(?:tell|told|say|said|write|wrote|send|sent|message|messaged)\b/', $a )
+			|| preg_match( '/\b(?:recap|summar(?:y|ise|ize)|show me|what were)\b[^?.!]{0,30}\bi\b[^?.!]{0,20}\b(?:tell|told|say|said|wrote|sent)\b/', $a )
+			|| preg_match( '/\bwhat did i (?:tell|say to|write to|send)\b/', $a )
+		);
+	}
+
+	/**
+	 * RECEIVED twin of detect_told_intent — true when the ask is "what did <person> send/tell/email me",
+	 * "show me the emails from <person>", or "what did <person> send" (a CONTENT recall of INBOUND mail
+	 * from a person, the trigger for the received [ZIB_MAIL] card). NOT "I"-locked (the subject is the
+	 * sender). Only consulted when detect_direction() already returned 'received'. Pure.
+	 */
+	public static function detect_heard_intent( string $ask ): bool {
+		$a = ' ' . strtolower( trim( $ask ) ) . ' ';
+		if ( ' ' === $a ) {
+			return false;
+		}
+		return (bool) (
+			preg_match( '/\bwhat\b[^?.!]{0,40}\b(?:did|has|have|does|do)\b[^?.!]{0,24}\b(?:tell|told|say|said|write|wrote|send|sent|e-?mail(?:ed)?|message|messaged)\b[^?.!]{0,14}\bme\b/', $a )
+			|| preg_match( '/\b(?:show me|what were|what was|recap|summar(?:y|ise|ize)|pull up|read me)\b[^?.!]{0,30}\b(?:e-?mails?|messages?|notes?|repl(?:y|ies))\b[^?.!]{0,12}\bfrom\b/', $a )
+			|| preg_match( '/\bwhat did \w+ (?:send|sent|e-?mail(?:ed)?|write|wrote|say|said|tell|told)\b/', $a )
+		);
+	}
+
+	/**
+	 * Resolve a temporal qualifier in the ask to a SITE-LOCAL [since, until] window (+ a friendly
+	 * phrase), timezone-aware via wp_timezone (paired with the gatekeeper's local_date_to_utc). No
+	 * qualifier → empty window (all-time).
+	 *
+	 * @return array{since:string,until:string,phrase:string}
+	 */
+	public static function detect_window( string $ask ): array {
+		$a  = ' ' . strtolower( trim( $ask ) ) . ' ';
+		$tz = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
+		try {
+			$now = new DateTimeImmutable( 'now', $tz );
+		} catch ( Exception $e ) {
+			return array( 'since' => '', 'until' => '', 'phrase' => '' );
+		}
+		$f     = static function ( DateTimeImmutable $d ): string { return $d->format( 'Y-m-d' ); };
+		$today = $f( $now );
+		if ( preg_match( '/\btoday\b/', $a ) ) {
+			return array( 'since' => $today, 'until' => $today, 'phrase' => 'today' );
+		}
+		if ( preg_match( '/\byesterday\b/', $a ) ) {
+			$y = $now->modify( '-1 day' );
+			return array( 'since' => $f( $y ), 'until' => $f( $y ), 'phrase' => 'yesterday' );
+		}
+		if ( preg_match( '/\blast\s+week\b/', $a ) ) {
+			return array( 'since' => $f( $now->modify( '-13 days' ) ), 'until' => $f( $now->modify( '-7 days' ) ), 'phrase' => 'last week' );
+		}
+		if ( preg_match( '/\b(?:this|past)\s+week\b/', $a ) || preg_match( '/\bthis\s+wk\b/', $a ) ) {
+			return array( 'since' => $f( $now->modify( '-6 days' ) ), 'until' => $today, 'phrase' => 'this week' );
+		}
+		if ( preg_match( '/\blast\s+month\b/', $a ) ) {
+			$fd = $now->modify( 'first day of last month' );
+			$ld = $now->modify( 'last day of last month' );
+			return array( 'since' => $f( $fd ), 'until' => $f( $ld ), 'phrase' => 'last month' );
+		}
+		if ( preg_match( '/\bthis\s+month\b/', $a ) ) {
+			return array( 'since' => $now->format( 'Y-m-01' ), 'until' => $today, 'phrase' => 'this month' );
+		}
+		return array( 'since' => '', 'until' => '', 'phrase' => '' );
+	}
+
+	/**
+	 * "WHAT DID I TELL <person> [window]" handler — returns the composed text the owner wrote, as an
+	 * expandable [ZIB_MAIL] card. $window is detect_window()'s.
+	 */
+	public static function told( string $recipient, int $viewer_id = 0, array $window = array(), array $aliases = array() ): array {
+		$uid = $viewer_id > 0
+			? $viewer_id
+			: (int) ( function_exists( 'get_current_user_id' ) ? get_current_user_id() : 0 );
+		$since  = (string) ( $window['since'] ?? '' );
+		$until  = (string) ( $window['until'] ?? '' );
+		$phrase = (string) ( $window['phrase'] ?? '' );
+
+		$res = ZIB_Gatekeeper::owner_told( $uid, $recipient, $since, $until, ZIB_Gatekeeper::MAX_CHAT_HITS, $aliases );
+		if ( empty( $res['ok'] ) ) {
+			return array(
+				'ok'        => false,
+				'permitted' => false,
+				'count'     => 0,
+				'render'    => "I can't look at your email right now — it isn't set up for your account. Let me help another way.",
+			);
+		}
+		$items = ( isset( $res['results'] ) && is_array( $res['results'] ) ) ? $res['results'] : array();
+		return array(
+			'ok'        => true,
+			'permitted' => true,
+			'count'     => count( $items ),
+			'render'    => self::render_told( $items, $recipient, $phrase ),
+		);
+	}
+
+	/**
+	 * RECEIVED twin of told(): pull the owner's INBOUND mail from a sender and render it as the same
+	 * [ZIB_MAIL] card (via owner_received / render_received). Owner-scoped, kiosk-denied inside the
+	 * Gatekeeper; identity is the engine-passed viewer id, never the payload.
+	 */
+	public static function heard( string $sender, int $viewer_id = 0, array $window = array(), array $aliases = array() ): array {
+		$uid = $viewer_id > 0
+			? $viewer_id
+			: (int) ( function_exists( 'get_current_user_id' ) ? get_current_user_id() : 0 );
+		$since  = (string) ( $window['since'] ?? '' );
+		$until  = (string) ( $window['until'] ?? '' );
+		$phrase = (string) ( $window['phrase'] ?? '' );
+
+		$res = ZIB_Gatekeeper::owner_received( $uid, $sender, $since, $until, ZIB_Gatekeeper::MAX_CHAT_HITS, $aliases );
+		if ( empty( $res['ok'] ) ) {
+			return array(
+				'ok'        => false,
+				'permitted' => false,
+				'count'     => 0,
+				'render'    => "I can't look at your email right now — it isn't set up for your account. Let me help another way.",
+			);
+		}
+		$items = ( isset( $res['results'] ) && is_array( $res['results'] ) ) ? $res['results'] : array();
+		return array(
+			'ok'        => true,
+			'permitted' => true,
+			'count'     => count( $items ),
+			'render'    => self::render_received( $items, $sender, $phrase ),
+		);
+	}
+
+	/**
+	 * Render composed messages as a lead line + a [ZIB_MAIL] card the front-end turns into an expandable
+	 * list (each message = an "Expand" disclosure revealing the full text). EVERY mail-derived field is
+	 * neutralised first; the body keeps line breaks (neutralize_card). Honest empty (INV-12).
+	 */
+	public static function render_told( array $items, string $recipient, string $phrase = '' ): string {
+		$who = self::neutralize( trim( $recipient ) );
+		$w   = ( '' !== $phrase ) ? ' ' . $phrase : '';
+		$n   = count( $items );
+
+		if ( 0 === $n ) {
+			return ( '' !== $who )
+				? "📬 I don't see anything you sent to {$who}{$w} in your indexed mail."
+				: "📬 I don't see anything you sent{$w} in your indexed mail.";
+		}
+
+		$lead  = ( '' !== $who )
+			? "📬 Here's what you told **{$who}**{$w}"
+			: "📬 Here's what you sent{$w}";
+		$lead .= ( 1 === $n ? ':' : " — {$n} messages:" );
+
+		$cards = array();
+		foreach ( $items as $it ) {
+			$cards[] = array(
+				// the stored message id, so the front-end card can fetch the COMPLETE body on demand
+				// (GET /zorderz/v1/message/{id} → owner_get_message, owner-scoped + audited). The card
+				// 'body' below is the strip_quoted PREVIEW; "View full email" loads the whole original.
+				'id'      => (int) ( $it['id'] ?? 0 ),
+				'subject' => self::neutralize( (string) ( $it['subject'] ?? '' ) ),
+				'date'    => self::local_stamp( (string) ( $it['received_at'] ?? '' ) ),
+				'to'      => self::neutralize( (string) ( $it['to'] ?? '' ) ),
+				'body'    => self::neutralize_card( (string) ( $it['composed'] ?? '' ) ),
+				// 1 when the message has real (non-inline) attachments, so the card can offer "View
+				// attachments" — the live, image-only, on-demand fetch (GET .../message/{id}/attachments).
+				'att'     => (int) ( $it['has_attachments'] ?? 0 ),
+			);
+		}
+		$json = function_exists( 'wp_json_encode' ) ? wp_json_encode( array( 'open' => ( 1 === $n ), 'items' => $cards ) ) : json_encode( array( 'open' => ( 1 === $n ), 'items' => $cards ) );
+		if ( ! is_string( $json ) || '' === $json ) {
+			$json = '{"items":[]}';
+		}
+		return $lead . "\n\n[ZIB_MAIL]" . $json . "[/ZIB_MAIL]\n\n_Only your own indexed mail is shown here, and only to you._";
+	}
+
+	/**
+	 * RECEIVED twin of render_told — the same [ZIB_MAIL] card for INBOUND mail from a person. Lead reads
+	 * "Here's what {who} sent you"; each item carries a 'from' field (the sender) where the sent card
+	 * carries 'to'. Everything else — the id/subject/date/body/att schema, the neutralisation, the
+	 * envelope, the [ZIB_MAIL] wrapper — is identical, so the front-end capture, "View full email", and
+	 * "View attachments" all work unchanged. Honest empty (INV-12).
+	 */
+	public static function render_received( array $items, string $sender, string $phrase = '' ): string {
+		$who = self::neutralize( trim( $sender ) );
+		$w   = ( '' !== $phrase ) ? ' ' . $phrase : '';
+		$n   = count( $items );
+
+		if ( 0 === $n ) {
+			return ( '' !== $who )
+				? "📬 I don't see anything from {$who}{$w} in your indexed mail."
+				: "📬 I don't see anything you received{$w} in your indexed mail.";
+		}
+
+		$lead  = ( '' !== $who )
+			? "📬 Here's what **{$who}** sent you{$w}"
+			: "📬 Here's what you received{$w}";
+		$lead .= ( 1 === $n ? ':' : " — {$n} messages:" );
+
+		$cards = array();
+		foreach ( $items as $it ) {
+			$cards[] = array(
+				'id'      => (int) ( $it['id'] ?? 0 ),
+				'subject' => self::neutralize( (string) ( $it['subject'] ?? '' ) ),
+				'date'    => self::local_stamp( (string) ( $it['received_at'] ?? '' ) ),
+				// received card: the party is the SENDER; the front-end shows "from X" when 'from' is set.
+				'from'    => self::neutralize( (string) ( $it['from'] ?? '' ) ),
+				'body'    => self::neutralize_card( (string) ( $it['composed'] ?? '' ) ),
+				'att'     => (int) ( $it['has_attachments'] ?? 0 ),
+			);
+		}
+		$json = function_exists( 'wp_json_encode' ) ? wp_json_encode( array( 'open' => ( 1 === $n ), 'items' => $cards ) ) : json_encode( array( 'open' => ( 1 === $n ), 'items' => $cards ) );
+		if ( ! is_string( $json ) || '' === $json ) {
+			$json = '{"items":[]}';
+		}
+		return $lead . "\n\n[ZIB_MAIL]" . $json . "[/ZIB_MAIL]\n\n_Only your own indexed mail is shown here, and only to you._";
+	}
+
+	/**
+	 * Multi-line neutraliser for the card BODY: defangs markers / code-spans / URL schemes and strips
+	 * control chars like neutralize(), but KEEPS newlines + tabs so the composed text stays readable
+	 * when expanded. The front-end renders it as textContent (never HTML); that plus the bracket defang
+	 * (no mailed-in [/ZIB_MAIL] can break the card) is the containment.
+	 */
+	public static function neutralize_card( string $s ): string {
+		$s = self::strip_invisibles( $s );
+		$s = str_replace( array( '[', ']' ), array( '(', ')' ), $s );
+		$s = str_replace( array( '`', "\xE2\x9F\xA6", "\xE2\x9F\xA7" ), array( "'", '(', ')' ), $s );
+		$s = preg_replace( '#\bhttps?(?=://)#i', 'hxxp', (string) $s );
+		$s = preg_replace( '#\b(?:javascript|vbscript|data|file)(?=\s*:)#i', '$0_', (string) $s );
+		$s = str_replace( "\r", '', (string) $s );
+		$s = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/', ' ', (string) $s );
+		$s = preg_replace( '/[ \t]{2,}/', ' ', (string) $s );
+		$s = preg_replace( '/\n{3,}/', "\n\n", (string) $s );
+		return trim( (string) $s );
+	}
+
+	/**
+	 * Remove invisible / deceptive Unicode (zero-width, bidi override, Tags-block instruction smuggling,
+	 * BOM, interlinear, line/para separators → space) before defanging. PURE; null-safe on invalid UTF-8
+	 * (coerces then retries, never blanks the field).
+	 */
+	public static function strip_invisibles( string $s ): string {
+		if ( '' === $s ) {
+			return $s;
+		}
+		// Line / paragraph separators -> space (byte-exact, always safe: can't start a new block).
+		$s = str_replace( array( "\xE2\x80\xA8", "\xE2\x80\xA9" ), ' ', $s );
+		$re  = '/[\x{00AD}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{206F}\x{FEFF}\x{FFF9}-\x{FFFB}\x{E0000}-\x{E007F}]/u';
+		$out = preg_replace( $re, '', $s );
+		if ( null === $out ) {
+			// Invalid UTF-8 makes the /u pass bail. Coerce to valid UTF-8 and retry once; never blank.
+			if ( function_exists( 'mb_convert_encoding' ) ) {
+				$out = preg_replace( $re, '', (string) @mb_convert_encoding( $s, 'UTF-8', 'UTF-8' ) );
+			}
+			if ( ! is_string( $out ) ) {
+				$out = $s;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * SITE-LOCAL stamp for a UTC received_at ("Aug 31, 8:05pm"), so the card reads in the owner's
+	 * timezone (mail sent 8pm local isn't shown as the next UTC day). Empty in → empty out.
+	 */
+	public static function local_stamp( string $sql ): string {
+		if ( '' === trim( $sql ) ) {
+			return '';
+		}
+		$ts = strtotime( $sql . ' UTC' );
+		if ( ! $ts ) {
+			return self::neutralize( $sql );
+		}
+		if ( function_exists( 'wp_date' ) ) {
+			$s = wp_date( 'M j, g:ia', $ts );
+			if ( is_string( $s ) ) {
+				return $s;
+			}
+		}
+		return gmdate( 'M j, g:ia', $ts );
 	}
 }

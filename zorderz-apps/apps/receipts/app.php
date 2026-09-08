@@ -52,7 +52,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZRCPT_VERSION', '3.10.0' );
+define( 'ZRCPT_VERSION', '3.11.0' );
 define( 'ZRCPT_FILE', __FILE__ );
 define( 'ZRCPT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZRCPT_URL', plugin_dir_url( __FILE__ ) );

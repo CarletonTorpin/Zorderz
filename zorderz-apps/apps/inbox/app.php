@@ -2,7 +2,7 @@
 /**
  * Module: Zorderz — Inbox
  * Description: Per-user mailbox connect + assistant for the Zorderz dashboard; dark by default.
- * Version:     0.9.12
+ * Version:     0.20.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -50,7 +50,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIB_VERSION', '0.9.12' );
+define( 'ZIB_VERSION', '0.20.0' );
 define( 'ZIB_PLUGIN_FILE', __FILE__ );
 define( 'ZIB_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIB_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -128,6 +128,20 @@ function zib_activate() {
 	ZIB_Migrate_1_2_0::run();
 	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.3.0.php';
 	ZIB_Migrate_1_3_0::run();
+	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.4.0.php';
+	ZIB_Migrate_1_4_0::run();
+	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.5.0.php';
+	ZIB_Migrate_1_5_0::run();
+	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.6.0.php';
+	ZIB_Migrate_1_6_0::run();
+	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.7.0.php';
+	ZIB_Migrate_1_7_0::run();
+	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.8.0.php';
+	ZIB_Migrate_1_8_0::run();
+	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.9.0.php';
+	ZIB_Migrate_1_9_0::run();
+	require_once ZIB_PLUGIN_DIR . 'db/migrate-1.10.0.php';
+	ZIB_Migrate_1_10_0::run();
 	zib_grant_tile_to_all_eligible_users();
 	if ( ! wp_next_scheduled( 'zib_cron_sync' ) ) {
 		wp_schedule_event( time() + 120, 'zib_every_ten_minutes', 'zib_cron_sync' );
@@ -221,6 +235,20 @@ function zib_maybe_upgrade() {
 		ZIB_Migrate_1_2_0::run();
 		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.3.0.php';
 		ZIB_Migrate_1_3_0::run();
+		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.4.0.php';
+		ZIB_Migrate_1_4_0::run();
+		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.5.0.php';
+		ZIB_Migrate_1_5_0::run();
+		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.6.0.php';
+		ZIB_Migrate_1_6_0::run();
+		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.7.0.php';
+		ZIB_Migrate_1_7_0::run();
+		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.8.0.php';
+		ZIB_Migrate_1_8_0::run();
+		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.9.0.php';
+		ZIB_Migrate_1_9_0::run();
+		require_once ZIB_PLUGIN_DIR . 'db/migrate-1.10.0.php';
+		ZIB_Migrate_1_10_0::run();
 		update_option( 'zib_db_version', ZIB_VERSION );
 		if ( ! wp_next_scheduled( 'zib_cron_sync' ) ) {
 			wp_schedule_event( time() + 120, 'zib_every_ten_minutes', 'zib_cron_sync' );

@@ -343,6 +343,58 @@ class ZPREP_Dashboard {
 			}
 		}
 
+		// INVOICE ARM — fold recent QUEUE invoices in, deduped against the CRM cards. A job that
+		// HAS an invoice but whose estimate never read accepted/invoiced still surfaces, and never
+		// as a second card for a job already shown (classify_invoice_card). An invoice dedupes only
+		// against OTHER-SOURCE (CRM) cards by customer, and against another invoice only when they
+		// share a billing estimate id — so two distinct invoices for one customer stay two cards.
+		// Degrades to nothing when billing is not configured (list returns []). The mesh bar and the
+		// install chip are left off invoice cards in this generalized port (the source's mesh summary
+		// is trade-specific; fb_note carries the invoiced/possible state either way).
+		$fbc       = new ZPREP_Billing();
+		$seen_cust = array();
+		$shown     = array(); // [ name, cid ] pairs for the fuzzy fallback
+		$seen_est  = array(); // billing estimate ids shown by the invoice arm (invoice-vs-invoice de-dup)
+		foreach ( $jobs as $j ) {
+			$cid0 = (string) ( $j['customer_id'] ?? '' );
+			if ( '' !== $cid0 ) { $seen_cust[ 'c:' . $cid0 ] = true; }
+			$nm0 = self::norm_name( (string) ( $j['customer'] ?? '' ) );
+			if ( '' !== $nm0 ) { $seen_cust[ 'n:' . $nm0 ] = true; }
+			$shown[] = array( (string) ( $j['customer'] ?? '' ), $cid0 );
+		}
+		$possible_days = (int) apply_filters( 'zprep_atc_possible_days', 30 );
+		foreach ( $fbc->list_recent_queue_invoices() as $inv ) {
+			$inum = (string) ( $inv['invoice_number'] ?? '' );
+			$cid  = (string) ( $inv['customer_id'] ?? '' );
+			$name = (string) ( $inv['customer_name'] ?? '' );
+			$nm   = self::norm_name( $name );
+			$eid  = (string) ( $inv['estimateid'] ?? '' );
+			if ( ! empty( $inv['installed'] ) ) { continue; } // done (receipted) — drop
+			$rel = self::classify_invoice_card( $name, $cid, $nm, $eid, $seen_cust, $shown, $seen_est );
+			if ( 'other_source' === $rel || 'dup_invoice' === $rel ) { continue; } // deduped
+			$possible = empty( $inv['scheduled'] );
+			if ( $possible && $possible_days > 0 ) {
+				$age = self::invoice_age_days( (string) ( $inv['created_at'] ?? '' ) );
+				if ( $age !== null && $age > $possible_days ) { continue; } // stale possible — drop
+			}
+			if ( '' !== $eid ) { $seen_est[ $eid ] = true; }
+			$jobs[] = array(
+				'lead_id'          => 0,
+				'customer'         => $name,
+				'customer_id'      => $cid,
+				'description'      => 'Invoice #' . $inum . ' — ' . $name,
+				'estimate_number'  => $inum, // tap/lookup key — an invoice # resolves too
+				'city'             => '',
+				'date'             => '',
+				'screen_count'     => 0,
+				'mesh'             => null,
+				'fb_pending'       => true,
+				'fb_possible'      => $possible,
+				'install_fallback' => null,
+				'fb_note'          => $possible ? 'Possible — not yet approved' : 'Invoiced · not yet cut',
+			);
+		}
+
 		// FIRST-PAINT SERVER BAKE (S5-11): resolve the install date for the whole queue via the
 		// two published resolver arms (both lead + estimate keys) and write install_fallback onto
 		// each card, so the install chip paints on first render with no second async round trip.
@@ -465,5 +517,86 @@ class ZPREP_Dashboard {
 			wp_send_json_error( array( 'message' => __( 'Admin only.', 'zorderz' ) ), 403 );
 		}
 		ZPREP_Leftovers::stream_csv( array() );
+	}
+
+	/* ================================================================
+	 * INVOICE DE-DUP — pure deciders (no WP/network; unit-tested)
+	 * ================================================================ */
+
+	/** Normalise a customer name for de-duplication (lower, single-spaced). */
+	public static function norm_name( string $n ): string {
+		return strtolower( trim( (string) preg_replace( '/\s+/', ' ', $n ) ) );
+	}
+
+	/**
+	 * A { surname, givens[] } signature for fuzzy same-customer matching. A billing
+	 * invoice may bill "Alex Rivera" while the CRM lead / estimate reads "Alex / Sam
+	 * Rivera" (a paired household). Split on the pair separators and keep the LAST
+	 * token as the surname and the rest as given names, so the two still match.
+	 */
+	public static function customer_signature( string $name ): array {
+		$n = strtolower( trim( (string) $name ) );
+		$n = str_replace( array( '/', '&', '+', ',' ), ' ', $n );
+		$n = (string) preg_replace( '/\b(?:and|und)\b/', ' ', $n );
+		$toks = array_values( array_filter( preg_split( '/\s+/', $n ), static function ( $t ) { return $t !== ''; } ) );
+		if ( ! $toks ) { return array( 'surname' => '', 'givens' => array() ); }
+		$surname = (string) end( $toks );
+		$givens  = array_values( array_unique( array_slice( $toks, 0, count( $toks ) - 1 ) ) );
+		return array( 'surname' => $surname, 'givens' => $givens );
+	}
+
+	/**
+	 * Do two names denote the same customer? An exact billing customer id wins
+	 * outright; otherwise the names must share a surname AND either share a given name
+	 * or one side is surname-only. This catches "Alex / Sam Rivera" == "Alex Rivera"
+	 * WITHOUT merging "Jordan Rivera" into "Alex Rivera" — different given names on the
+	 * same surname stay distinct.
+	 */
+	public static function same_customer( string $name_a, string $cid_a, string $name_b, string $cid_b ): bool {
+		if ( $cid_a !== '' && $cid_b !== '' ) { return $cid_a === $cid_b; }
+		$a = self::customer_signature( $name_a );
+		$b = self::customer_signature( $name_b );
+		if ( $a['surname'] === '' || $a['surname'] !== $b['surname'] ) { return false; }
+		if ( ! $a['givens'] || ! $b['givens'] ) { return true; } // one side is surname-only
+		return (bool) array_intersect( $a['givens'], $b['givens'] );
+	}
+
+	/**
+	 * How does an invoice-sourced card relate to what is already shown?
+	 *
+	 * The Approved-to-Cut queue folds recent queue invoices in AFTER the CRM /
+	 * approved-estimate pass. An invoice that bills a job ALREADY shown from one of
+	 * those sources folds into it (dedupe). But two DISTINCT invoices for the SAME
+	 * customer are two different jobs and must each surface — so an invoice dedupes
+	 * ONLY against the OTHER-SOURCE cards (customer match), and against another INVOICE
+	 * only when they share a billing estimate id. Pure + unit-testable.
+	 *
+	 *   'other_source' — same customer as a CRM/estimate card: dedupe
+	 *   'dup_invoice'  — same estimate id as an invoice already shown this pass: dedupe
+	 *   'new'          — a distinct job: show it
+	 *
+	 * @param array $seen_cust keys 'c:<id>' / 'n:<norm name>' seeded from NON-invoice cards only
+	 * @param array $shown     [name,cid] pairs from those same non-invoice cards (fuzzy fallback)
+	 * @param array $seen_est  estimate ids already shown by the invoice arm this pass
+	 */
+	public static function classify_invoice_card( string $name, string $cid, string $nm, string $estimate_id, array $seen_cust, array $shown, array $seen_est ): string {
+		$dup = ( '' !== $cid && isset( $seen_cust[ 'c:' . $cid ] ) ) || ( '' !== $nm && isset( $seen_cust[ 'n:' . $nm ] ) );
+		if ( ! $dup ) {
+			foreach ( $shown as $sc ) {
+				if ( self::same_customer( $name, $cid, (string) ( $sc[0] ?? '' ), (string) ( $sc[1] ?? '' ) ) ) { $dup = true; break; }
+			}
+		}
+		if ( $dup ) { return 'other_source'; }
+		if ( '' !== $estimate_id && isset( $seen_est[ $estimate_id ] ) ) { return 'dup_invoice'; }
+		return 'new';
+	}
+
+	/** Age of a billing document in whole days, or null when unparseable. */
+	private static function invoice_age_days( string $date ): ?int {
+		$date = trim( $date );
+		if ( $date === '' ) { return null; }
+		$ts = strtotime( $date );
+		if ( ! $ts ) { return null; }
+		return (int) floor( ( time() - $ts ) / DAY_IN_SECONDS );
 	}
 }
