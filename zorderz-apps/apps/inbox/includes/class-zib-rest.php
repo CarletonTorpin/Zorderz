@@ -119,6 +119,39 @@ class ZIB_REST {
 				'offset' => array( 'sanitize_callback' => 'absint' ),
 			),
 		) );
+		// Phase 2 — owner SEND (INV-SEND). POST only; the body/comment are NOT sanitize_text_field'd
+		// (that would flatten an email body); identity is forced to the current user in the Gatekeeper.
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/reply', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'send_reply' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'      => array( 'sanitize_callback' => 'absint' ),
+				'comment' => array( 'required' => true ),
+				'all'     => array(),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/forward', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'send_forward' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'      => array( 'sanitize_callback' => 'absint' ),
+				'to'      => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+				'comment' => array(),
+			),
+		) );
+		register_rest_route( $ns, '/send', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'send_new' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'to'      => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+				'cc'      => array( 'sanitize_callback' => 'sanitize_text_field' ),
+				'subject' => array( 'sanitize_callback' => 'sanitize_text_field' ),
+				'body'    => array(),
+			),
+		) );
 		register_rest_route( $ns, '/message/(?P<id>\\d+)', array(
 			'methods'             => 'GET',
 			'callback'            => array( __CLASS__, 'get_message' ),
@@ -287,5 +320,56 @@ class ZIB_REST {
 			return new WP_Error( 'zib_not_found', 'Not found.', array( 'status' => 404 ) );
 		}
 		return rest_ensure_response( $r );
+	}
+
+	// ── Send path (INV-SEND: every send is human-confirmed; no auto-send) ──
+
+	public static function send_reply( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_send_reply(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'comment' ),
+			(bool) $req->get_param( 'all' )
+		) );
+	}
+
+	public static function send_forward( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_send_forward(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'comment' ),
+			(string) $req->get_param( 'to' )
+		) );
+	}
+
+	public static function send_new( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_send_new(
+			get_current_user_id(),
+			(string) $req->get_param( 'to' ),
+			(string) $req->get_param( 'cc' ),
+			(string) $req->get_param( 'subject' ),
+			(string) $req->get_param( 'body' )
+		) );
+	}
+
+	private static function send_response( array $r ) {
+		if ( ! empty( $r['ok'] ) ) {
+			return rest_ensure_response( array( 'ok' => true ) );
+		}
+		$reason = (string) ( $r['reason'] ?? 'error' );
+		if ( 'denied' === $reason ) {
+			$status = 403;
+		} elseif ( 'not-found' === $reason ) {
+			$status = 404;
+		} elseif ( 'reconnect' === $reason || 'auth' === $reason ) {
+			$status = 409;
+		} elseif ( 'busy' === $reason ) {
+			$status = 503;
+		} elseif ( in_array( $reason, array( 'empty', 'no-recipients', 'not-connected', 'bad-dest' ), true ) ) {
+			$status = 422;
+		} else {
+			$status = 502;
+		}
+		return new WP_Error( 'zib_write_' . $reason, 'Action failed.', array( 'status' => $status, 'reason' => $reason ) );
 	}
 }
