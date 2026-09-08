@@ -1576,6 +1576,14 @@ body.app-active #view-main{pointer-events:none}
     overflow: clip;
     overflow-clip-margin: 0;
   }
+  /* Overlay-escape contract (overlay-escape.js): while a card hosts a visible
+     full-screen overlay (position:fixed; z-index >= 1000), ZDZOverlay drops THIS
+     card's isolation so the overlay's z-index reaches the root and clears the
+     bottom nav. The class comes off the moment the overlay hides, restoring the
+     seal for normal scrolling. Inert above 1200px (the isolation rule stops). */
+  .dash-widget-container.zdz-overlay-host {
+    isolation: auto;
+  }
 }
 
 /* 4. BOTTOM NAV — ONLY phones + iPad mini (<820px).
