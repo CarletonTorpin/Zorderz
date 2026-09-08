@@ -205,17 +205,24 @@ class ZIB_Graph {
 	 * @param string $url Absolute Graph URL (or a nextLink/deltaLink).
 	 * @return array|WP_Error Decoded JSON.
 	 */
-	public static function graph_get( int $account_id, string $url ) {
+	public static function graph_get( int $account_id, string $url, array $extra_headers = array() ) {
+		self::$last_retry_after = 0;
 		$token = ZIB_Vault::get_access_token( $account_id );
 		if ( is_wp_error( $token ) ) {
 			return $token;
 		}
-		$resp = wp_remote_get( $url, array(
-			'timeout' => 25,
-			'headers' => array(
+		// $extra_headers lets a caller opt in to e.g. Prefer: IdType="ImmutableId" (attachment /
+		// folder discovery) without changing message-ingest calls. Default empty = behaviour unchanged.
+		$headers = array_merge(
+			array(
 				'Authorization' => 'Bearer ' . $token,
 				'Accept'        => 'application/json',
 			),
+			$extra_headers
+		);
+		$resp = wp_remote_get( $url, array(
+			'timeout' => 25,
+			'headers' => $headers,
 		) );
 		if ( is_wp_error( $resp ) ) {
 			return new WP_Error( 'zib_net', $resp->get_error_message() );
@@ -470,6 +477,56 @@ class ZIB_Graph {
 			return substr( $original_html, 0, $pos ) . $comment_html . substr( $original_html, $pos );
 		}
 		return $comment_html . $original_html;
+	}
+
+	/** Set an indexed message's read state. PATCH /me/messages/{id} { isRead }. */
+	public static function set_read( int $account_id, string $ms_message_id, bool $is_read, bool $immutable = false ) {
+		$url = self::GRAPH . '/me/messages/' . rawurlencode( $ms_message_id );
+		return self::graph_patch( $account_id, $url, array( 'isRead' => (bool) $is_read ), $immutable ? self::immutable_headers() : array() );
+	}
+
+	/**
+	 * MOVE an indexed message to another folder. POST /me/messages/{id}/move { destinationId }.
+	 * $destination is a well-known name ('deleteditems' | 'archive' | 'junkemail' | 'inbox' | …) or a
+	 * concrete mailFolder id. Graph returns the moved message (new id) on 201; we only need success.
+	 */
+	public static function move_message( int $account_id, string $ms_message_id, string $destination, bool $immutable = false ) {
+		$url = self::GRAPH . '/me/messages/' . rawurlencode( $ms_message_id ) . '/move';
+		return self::graph_post( $account_id, $url, array( 'destinationId' => $destination ), $immutable ? self::immutable_headers() : array() );
+	}
+
+	/**
+	 * Attachment metadata list for a message. $select lists only BASE attachment properties —
+	 * contentId lives on the fileAttachment subtype, not the base type, so selecting it 400s the
+	 * whole polymorphic list; the cid is read from the full object (get_attachment) instead.
+	 *
+	 * @return array|WP_Error Graph attachment metadata objects (the value[] array), or WP_Error.
+	 */
+	public static function list_attachments( int $account_id, string $ms_message_id, bool $immutable = false ) {
+		$url  = self::GRAPH . '/me/messages/' . rawurlencode( $ms_message_id )
+			. '/attachments?$select=' . rawurlencode( 'id,name,contentType,size,isInline' );
+		$json = self::graph_get( $account_id, $url, $immutable ? self::immutable_headers() : array() );
+		if ( is_wp_error( $json ) ) {
+			return $json;
+		}
+		return ( isset( $json['value'] ) && is_array( $json['value'] ) ) ? $json['value'] : array();
+	}
+
+	/**
+	 * Fetch ONE attachment in full — a fileAttachment carries contentBytes (base64). The caller
+	 * re-classifies the full object (type / isInline / contentType / size) before serving any bytes;
+	 * this method is a thin authenticated GET, nothing more.
+	 *
+	 * @return array|WP_Error The Graph attachment object, or WP_Error.
+	 */
+	public static function get_attachment( int $account_id, string $ms_message_id, string $att_id, bool $immutable = false ) {
+		$url  = self::GRAPH . '/me/messages/' . rawurlencode( $ms_message_id )
+			. '/attachments/' . rawurlencode( $att_id );
+		$json = self::graph_get( $account_id, $url, $immutable ? self::immutable_headers() : array() );
+		if ( is_wp_error( $json ) ) {
+			return $json;
+		}
+		return is_array( $json ) ? $json : array();
 	}
 
 	/** The per-request Prefer header asking Graph for immutable ids (stable across folder moves). */

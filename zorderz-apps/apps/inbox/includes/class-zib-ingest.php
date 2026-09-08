@@ -33,12 +33,18 @@ class ZIB_Ingest {
 	const PRIME_BUDGET                = 120;  // v0.9.4: wall-clock seconds for one prime_all pass
 	const PRIME_DELAY                 = 75;   // v0.9.4: seconds between bursts (< the ~9-min skiptoken TTL)
 	const FOLDERS                     = array( 'inbox', 'sent' );
+	const ALLFOLDER_OPTION            = 'zib_allfolder_sync'; // per-folder (all-folder) sync switch; default OFF.
 
 	// ── tables ──────────────────────────────────────────────────────
 	private static function t_acct(): string { global $wpdb; return $wpdb->prefix . 'zib_accounts'; }
 	private static function t_msg(): string { global $wpdb; return $wpdb->prefix . 'zib_messages'; }
 	private static function t_party(): string { global $wpdb; return $wpdb->prefix . 'zib_participants'; }
 	private static function t_seen(): string { global $wpdb; return $wpdb->prefix . 'zib_seen'; }
+
+	/** Is the per-folder (all-folder) sync path enabled? Default OFF — the inbox/sent loop runs. */
+	public static function allfolder_enabled(): bool {
+		return '1' === (string) get_option( self::ALLFOLDER_OPTION, '' );
+	}
 
 	// ── cron entry ──────────────────────────────────────────────────
 
