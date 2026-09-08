@@ -394,6 +394,60 @@ class ZIB_Gatekeeper {
 	}
 
 	/**
+	 * Browse the actor's OWN indexed mail by folder, most-recent first, paginated. Summaries only.
+	 * $folder: a 32-hex folder_hash (a real Graph folder), a coarse bucket ('inbox'|'sent'|'other'),
+	 * or '' for all mail. Owner-forced, kiosk-denied, capped.
+	 *
+	 * @return array { ok, results:[ {id, folder, folder_name, direction, from, subject, snippet, received_at, has_attachments, unread} ], folder }
+	 */
+	public static function owner_browse( int $actor, string $folder = '', int $limit = 30, int $offset = 0 ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_browse', 'deny', 'not permitted', '', 0 );
+			return array( 'ok' => false, 'results' => array() );
+		}
+		global $wpdb;
+		$limit  = max( 1, min( self::MAX_LIMIT, $limit ) );
+		$offset = max( 0, $offset );
+		$folder = trim( $folder );
+		$cols   = 'id, folder, folder_name, direction, from_addr, from_name, received_at, subject, snippet, has_attachments, is_read';
+
+		$where = 'owner_user_id = %d';
+		$args  = array( $actor );
+		if ( preg_match( '/^[a-f0-9]{32}$/i', $folder ) ) {
+			$where .= ' AND folder_hash = %s';           // a real Graph folder, keyed by md5(ms_folder_id)
+			$args[] = strtolower( $folder );
+		} elseif ( in_array( strtolower( $folder ), array( 'inbox', 'sent', 'other' ), true ) ) {
+			$where .= ' AND folder = %s';                // a coarse bucket
+			$args[] = strtolower( $folder );
+		}
+		// else '' / unrecognised → all indexed mail (no folder predicate)
+
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			'SELECT ' . $cols . ' FROM ' . self::t_msg() . ' WHERE ' . $where . '
+			 ORDER BY received_at DESC LIMIT %d OFFSET %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- summaries only, never the body
+			array_merge( $args, array( $limit, $offset ) )
+		) );
+
+		$out = array();
+		foreach ( (array) $rows as $r ) {
+			$out[] = array(
+				'id'              => (int) $r->id,
+				'folder'          => (string) $r->folder,
+				'folder_name'     => (string) ( $r->folder_name ?? '' ),
+				'direction'       => (string) $r->direction,
+				'from'            => self::fmt_addr( (string) $r->from_name, (string) $r->from_addr ),
+				'subject'         => (string) $r->subject,
+				'snippet'         => (string) $r->snippet,
+				'received_at'     => $r->received_at ? (string) $r->received_at : '',
+				'has_attachments' => (int) $r->has_attachments,
+				'unread'          => ( 1 === (int) $r->is_read ) ? 0 : 1, // Mail-list unread bolding
+			);
+		}
+		self::log( $actor, $actor, 'owner_browse', 'allow', 'browse:' . ( '' !== $folder ? substr( $folder, 0, 12 ) : '*' ), '', count( $out ) );
+		return array( 'ok' => true, 'results' => $out, 'folder' => $folder );
+	}
+
+	/**
 	 * Strip a leading "from:" / "sender:" / "by:" prefix down to the bare contact (e.g. "from:Alex"
 	 * → "Alex") so sender_match and the render lead never carry the prefix into the match. A real name
 	 * that merely starts with those letters is untouched — the prefix needs a colon or a following

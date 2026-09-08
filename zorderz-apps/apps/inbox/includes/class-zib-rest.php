@@ -108,6 +108,17 @@ class ZIB_REST {
 				'offset' => array( 'sanitize_callback' => 'absint' ),
 			),
 		) );
+		// Mail-list browse (by folder hash / coarse bucket / all). Owner-scoped in the Gatekeeper.
+		register_rest_route( $ns, '/browse', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'browse' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'folder' => array( 'sanitize_callback' => 'sanitize_text_field' ),
+				'limit'  => array( 'sanitize_callback' => 'absint' ),
+				'offset' => array( 'sanitize_callback' => 'absint' ),
+			),
+		) );
 		register_rest_route( $ns, '/message/(?P<id>\\d+)', array(
 			'methods'             => 'GET',
 			'callback'            => array( __CLASS__, 'get_message' ),
@@ -256,6 +267,15 @@ class ZIB_REST {
 		return rest_ensure_response( ZIB_Gatekeeper::owner_search(
 			get_current_user_id(),
 			(string) $req->get_param( 'q' ),
+			(int) ( $req->get_param( 'limit' ) ?: 30 ),
+			(int) ( $req->get_param( 'offset' ) ?: 0 )
+		) );
+	}
+
+	public static function browse( WP_REST_Request $req ): WP_REST_Response {
+		return rest_ensure_response( ZIB_Gatekeeper::owner_browse(
+			get_current_user_id(),
+			(string) $req->get_param( 'folder' ),
 			(int) ( $req->get_param( 'limit' ) ?: 30 ),
 			(int) ( $req->get_param( 'offset' ) ?: 0 )
 		) );
