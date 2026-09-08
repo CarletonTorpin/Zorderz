@@ -108,6 +108,12 @@ class ZIB_REST {
 				'offset' => array( 'sanitize_callback' => 'absint' ),
 			),
 		) );
+		// Mail view — folder nav (degrades to empty until the all-folder sync populates folders).
+		register_rest_route( $ns, '/folders', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'folders' ),
+			'permission_callback' => $perm,
+		) );
 		// Mail-list browse (by folder hash / coarse bucket / all). Owner-scoped in the Gatekeeper.
 		register_rest_route( $ns, '/browse', array(
 			'methods'             => 'GET',
@@ -352,6 +358,10 @@ class ZIB_REST {
 			(int) ( $req->get_param( 'limit' ) ?: 30 ),
 			(int) ( $req->get_param( 'offset' ) ?: 0 )
 		) );
+	}
+
+	public static function folders( WP_REST_Request $req ): WP_REST_Response {
+		return rest_ensure_response( ZIB_Gatekeeper::owner_folders( get_current_user_id() ) );
 	}
 
 	public static function browse( WP_REST_Request $req ): WP_REST_Response {
