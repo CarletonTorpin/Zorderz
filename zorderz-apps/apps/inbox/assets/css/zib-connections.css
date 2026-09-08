@@ -1,4 +1,4 @@
-/* Zorderz Inbox — connection card (P0). Uses the theme's --sys-* tokens with
+/* Inbox — connection card (P0). Uses the theme's --sys-* tokens with
    fallbacks so it reads correctly in light, dark, system and sunlight modes. */
 .zib-card {
 	font: inherit;
@@ -8,7 +8,16 @@
 	border-radius: 14px;
 	padding: 16px 18px;
 	max-width: 520px;
+	/* v0.20.5: semantic-text tints. Defaults follow the theme's --sys-* tokens (which adapt in
+	   light/sunlight). The dark + system-dark overrides below swap in AA-legible tints because
+	   --sys-danger (#EF4444 = 2.75:1) and --sys-success (#10B981 = 4.08:1) fail WCAG AA as small
+	   text on the dark reader/list surfaces (#334155 / #1E293B). See the v0.20.4 audit note. */
+	--zib-danger-text: var(--sys-danger, #b3261e);
+	--zib-success-text: var(--sys-success, #0a7d33);
 }
+/* v0.20.5: AA-legible danger/success TEXT, scoped to dark so light + sunlight keep the adaptive token. */
+:root[data-theme="dark"] .zib-card { --zib-danger-text: #FCA5A5; --zib-success-text: #34D399; }
+@media (prefers-color-scheme: dark) { :root[data-theme="system"] .zib-card { --zib-danger-text: #FCA5A5; --zib-success-text: #34D399; } }
 .zib-loading { opacity: .7; }
 .zib-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .zib-title { font-weight: 700; font-size: 15px; }
@@ -29,16 +38,16 @@
 	background: var(--sys-surface, #fff); color: inherit;
 }
 .zib-btn.zib-primary {
-	background: var(--sys-tint-accent-bg, #7C3AED);
+	background: var(--sys-primary, #4796F7);
 	color: var(--sys-tint-accent-fg, #fff);
 	border-color: transparent;
 }
-.zib-btn.zib-danger { color: var(--sys-danger, #b3261e); }
+.zib-btn.zib-danger { color: var(--zib-danger-text); }
 .zib-chip {
 	font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
 	border: 1px solid var(--sys-outline-variant, #d7dbe3);
 }
-.zib-chip.zib-ok { color: var(--sys-success, #0a7d33); border-color: currentColor; }
+.zib-chip.zib-ok { color: var(--zib-success-text); border-color: currentColor; }
 .zib-chip.zib-warn { color: var(--sys-warning, #9a6700); border-color: currentColor; }
 
 /* P2 — search + reader */
@@ -56,12 +65,29 @@
 	background: var(--sys-surface, #fff); color: inherit; font: inherit;
 	border: 1px solid var(--sys-outline-variant, #d7dbe3); border-radius: 10px; padding: 9px 12px;
 }
-.zib-hit:hover { border-color: var(--sys-tint-accent-bg, #7C3AED); }
+.zib-hit:hover { border-color: var(--sys-primary, #4796F7); }
 .zib-hit-top { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; opacity: .8; }
 .zib-hit-from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zib-hit-date { white-space: nowrap; }
 .zib-hit-subj { font-weight: 600; font-size: 14px; }
 .zib-hit-snip { font-size: 12px; opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* v0.13.0: unread mail — out-weighs the (already semibold) read rows. Inset rail = no layout shift
+   vs a real left border, so read/unread rows don't jump by a pixel as state changes.
+   THEME-SAFE tint: keep the row's own --sys-surface and overlay a TRANSLUCENT accent on top, so it
+   reads as a faint accent wash on BOTH light and dark themes. (An opaque light tint made the light
+   dark-mode text invisible — caught in the first live QA on the dark theme.) */
+.zib-hit.zib-unread {
+	background: color-mix(in srgb, var(--sys-primary, #4796F7) 10%, var(--sys-surface, #fff));
+	box-shadow: inset 3px 0 0 0 var(--sys-primary, #4796F7);
+}
+.zib-hit.zib-unread .zib-hit-top { opacity: 1; }
+.zib-hit.zib-unread .zib-hit-from { font-weight: 800; }
+.zib-hit.zib-unread .zib-hit-subj { font-weight: 800; }
+.zib-hit.zib-unread .zib-hit-snip { opacity: .9; }
+.zib-hit.zib-unread .zib-hit-from::before {
+	content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px;
+	border-radius: 50%; background: var(--sys-primary, #4796F7); vertical-align: middle;
+}
 .zib-reader { margin-top: 10px; }
 .zib-back { margin-bottom: 10px; }
 .zib-r-subj { margin: 4px 0; font-size: 16px; }
@@ -71,3 +97,462 @@
 	white-space: pre-wrap; word-wrap: break-word; font: inherit; font-size: 13px; line-height: 1.5;
 	max-height: 420px; overflow-y: auto; margin: 0;
 }
+
+/* ── Mail view (v0.9.35) — folders → list → sandboxed reader ───────────────── */
+.zib-mailtop { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.zib-mailbox { flex: 1; min-width: 0; font-size: 12px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zib-gear {
+	appearance: none; cursor: pointer; font: inherit; font-size: 16px; line-height: 1;
+	background: transparent; border: 0; color: inherit; opacity: .7; padding: 4px; border-radius: 8px;
+}
+.zib-gear:hover { opacity: 1; background: var(--sys-surface, rgba(127,127,127,.08)); }
+.zib-settings { border: 1px solid var(--sys-outline-variant, #d7dbe3); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.zib-mailview { min-height: 120px; }
+
+.zib-mailsearch { margin-bottom: 10px; }
+.zib-folders { display: flex; flex-direction: column; gap: 4px; }
+.zib-folder {
+	display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left;
+	cursor: pointer; font: inherit; color: inherit; background: var(--sys-surface, #fff);
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); border-radius: 10px; padding: 10px 12px;
+}
+.zib-folder:hover { border-color: var(--sys-primary, #4796F7); }
+.zib-folder-nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zib-folder-ct { font-size: 12px; opacity: .6; font-variant-numeric: tabular-nums; }
+
+.zib-mailbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.zib-mailbar-nm { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zib-more { margin-top: 10px; text-align: center; }
+.zib-clip { opacity: .7; }
+
+.zib-r-bodywrap { margin: 4px 0; }
+.zib-imgbar {
+	display: flex; align-items: center; gap: 10px; font-size: 12px; opacity: .85; margin-bottom: 8px;
+	padding: 6px 10px; border-radius: 8px; background: var(--sys-surface, rgba(127,127,127,.06));
+	border: 1px solid var(--sys-outline-variant, #d7dbe3);
+}
+.zib-imgbar .zib-btn { padding: 4px 10px; font-size: 12px; }
+.zib-r-frame { width: 100%; height: min(70vh, 560px); border: 1px solid var(--sys-outline-variant, #d7dbe3);
+	border-radius: 8px; background: #fff; display: block; }
+
+.zib-r-attach { margin-top: 12px; }
+.zib-attbtn { font-size: 13px; }
+.zib-atts { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.zib-att-fig { margin: 0; }
+.zib-att-img { display: block; max-width: 100%; max-height: 360px; width: auto; height: auto;
+	border-radius: 8px; border: 1px solid var(--sys-outline-variant, #d7dbe3); object-fit: contain;
+	background: var(--sys-surface, rgba(127,127,127,.06)); cursor: zoom-in; }
+.zib-att-cap { margin-top: 4px; font-size: 12px; opacity: .7; word-break: break-word; }
+.zib-att-cap.zib-att-err { color: var(--zib-danger-text); opacity: 1; }
+.zib-att-name { font-size: 12px; opacity: .7; }
+
+.zib-img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center;
+	justify-content: center; z-index: 2147483000; cursor: zoom-out; padding: 20px; }
+.zib-img-overlay-img { max-width: 96vw; max-height: 96vh; width: auto; height: auto; object-fit: contain;
+	border-radius: 6px; box-shadow: 0 8px 40px rgba(0,0,0,.5); }
+
+/* ── Phase 2 (v0.10.0) — compose / send ───────────────────────────────────── */
+.zib-composebar { margin-bottom: 10px; }
+.zib-newbtn { font-size: 13px; }
+.zib-replybar { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px;
+	border-bottom: 1px solid var(--sys-outline-variant, #d7dbe3); padding-bottom: 10px; }
+.zib-rbtn { font-size: 13px; padding: 6px 12px; }
+.zib-c-ctx { font-size: 12px; opacity: .8; margin: 4px 0 10px; padding: 8px 10px; border-radius: 8px;
+	background: var(--sys-surface, rgba(127,127,127,.06)); border: 1px solid var(--sys-outline-variant, #d7dbe3); }
+.zib-compose { display: flex; flex-direction: column; gap: 8px; }
+.zib-c-row { display: flex; align-items: center; gap: 8px; }
+.zib-c-row > span { flex: 0 0 60px; font-size: 13px; opacity: .8; }
+.zib-c-row input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; font: inherit; color: inherit;
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff); }
+.zib-c-body { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; font: inherit;
+	color: inherit; line-height: 1.5; resize: vertical; min-height: 140px;
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff); }
+.zib-c-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.zib-c-status { font-size: 12px; opacity: .85; }
+.zib-c-status.zib-c-err { color: var(--zib-danger-text); opacity: 1; }
+.zib-sent { margin-top: 14px; font-size: 15px; color: var(--zib-success-text); font-weight: 600; }
+
+/* ── Phase 3 (v0.11.0) — triage (mark unread / archive / spam / delete / move) ───────────── */
+.zib-triagebar { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.zib-tbtn { font-size: 12px; padding: 5px 11px; }
+.zib-tbtn.zib-tri-danger { color: var(--zib-danger-text); }
+.zib-tbtn.zib-tri-danger:hover { border-color: var(--zib-danger-text); }
+.zib-movepick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+.zib-move-sel { padding: 6px 8px; border-radius: 8px; font: inherit; color: inherit; max-width: 60%;
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff); }
+.zib-tri-status { font-size: 12px; opacity: .85; min-height: 16px; margin-bottom: 4px; }
+.zib-tri-status.zib-c-err { color: var(--zib-danger-text); opacity: 1; }
+
+/* ── v0.12.0 — two-pane Mail layout + reader polish ─────────────────────────── */
+.zib-card.zib-wide { max-width: 1040px; }
+.zib-panes { display: flex; gap: 18px; align-items: flex-start; }
+.zib-nav { flex: 0 0 360px; min-width: 0; }
+.zib-read { flex: 1 1 auto; min-width: 0; }
+.zib-read-empty { opacity: .5; font-size: 13px; text-align: center; padding: 44px 12px;
+	border: 1px dashed var(--sys-outline-variant, #d7dbe3); border-radius: 12px; }
+.zib-nav .zib-results { max-height: 60vh; }               /* taller list in the pane */
+.zib-r-frame { box-shadow: 0 1px 8px rgba(0,0,0,.12); }    /* soften the white sheet into a card */
+@media (max-width: 880px) {
+	.zib-card.zib-wide { max-width: 520px; }               /* stack + drill-down on phone/iPad-portrait */
+	.zib-panes { display: block; }
+	.zib-panes:not(.zib-reading) .zib-read { display: none; }
+	.zib-panes.zib-reading .zib-nav { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v0.14.0 — Mail UI reorganization: horizontal toolbar (no rail — the app shell
+   already provides one), sender-first list rows with monograms, a density
+   control (spacing only; fonts still inherit the theme's large scale), a compact
+   reader with an overflow action menu, optimistic send, and fit-to-width HTML.
+   Appended last so these rules win over the earlier P0–v0.13 declarations.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── horizontal toolbar ──────────────────────────────────────────────────── */
+.zib-toolbar {
+	display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+	padding: 4px 0 12px; margin-bottom: 12px;
+	border-bottom: 1px solid var(--sys-outline-variant, #d7dbe3);
+}
+.zib-tb-btn {
+	appearance: none; cursor: pointer; font: inherit; font-weight: 700;
+	padding: 9px 16px; border-radius: 999px; white-space: nowrap;
+	border: 1px solid var(--sys-outline-variant, #d7dbe3);
+	background: var(--sys-surface, #fff); color: inherit;
+}
+.zib-tb-compose {
+	background: var(--sys-primary, #4796F7); color: var(--sys-tint-accent-fg, #fff); border-color: transparent;
+}
+.zib-tb-fold { display: inline-flex; align-items: center; gap: 8px; }
+.zib-tb-lbl { font-size: 12px; opacity: .65; }
+.zib-folsel {
+	font: inherit; color: inherit; padding: 8px 10px; border-radius: 10px; max-width: 260px;
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff);
+}
+.zib-tb-search {
+	display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 160px;
+	padding: 8px 12px; border-radius: 999px;
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff);
+}
+.zib-tb-search svg { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; opacity: .55; }
+.zib-tb-search input { flex: 1; min-width: 0; border: 0; background: none; color: inherit; font: inherit; outline: none; }
+.zib-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px;
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff); }
+.zib-seg button { appearance: none; cursor: pointer; font: inherit; font-size: 15px; line-height: 1;
+	padding: 6px 10px; border: 0; border-radius: 7px; background: transparent; color: inherit; opacity: .6; }
+.zib-seg button[aria-pressed="true"] { background: var(--sys-primary, #4796F7); color: var(--sys-tint-accent-fg, #fff); opacity: 1; }
+
+/* ── shared monogram avatar ──────────────────────────────────────────────── */
+.zib-av { display: inline-grid; place-items: center; flex: none; color: #fff; font-weight: 800;
+	border-radius: 11px; width: 40px; height: 40px; font-size: 15px; letter-spacing: .01em; }
+
+/* ── list rows: monogram + sender-first + snippet + relative time ────────── */
+.zib-nav .zib-results { max-height: 62vh; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; overscroll-behavior: contain; }
+.zib-hit {
+	display: grid; grid-template-columns: 10px 40px 1fr; align-items: start; gap: 0 12px;
+	width: 100%; text-align: left; cursor: pointer; position: relative;
+	background: var(--sys-surface, #fff); color: inherit; font: inherit;
+	border: 1px solid transparent; border-radius: 12px; padding: 13px 13px;
+}
+.zib-hit:hover { background: var(--sys-surface-raised, rgba(127,127,127,.06)); }
+.zib-hit[aria-selected="true"] { background: var(--sys-surface-raised, rgba(127,127,127,.10)); border-color: var(--sys-outline-variant, #d7dbe3); }
+.zib-hit .zib-udot { grid-column: 1; align-self: center; width: 9px; height: 9px; border-radius: 50%; background: transparent; }
+.zib-hit .zib-hit-av { grid-column: 2; }
+.zib-hit .zib-hit-main { grid-column: 3; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.zib-hit .zib-hit-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.zib-hit .zib-hit-from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sys-text, inherit); opacity: .85; }
+.zib-hit .zib-hit-date { white-space: nowrap; font-size: 12px; opacity: .72; font-variant-numeric: tabular-nums; flex: none; }
+/* v0.20.4: was opacity .6, but it COMPOUNDS with .zib-hit-top's .8 → .48 effective = 4.25:1 on the
+   list pane (--sys-surface #1E293B), just under WCAG AA (4.5:1). .72 → .576 effective = 5.45:1, AA-legible
+   and still the dimmest element in the row. If you change .zib-hit-top's opacity, re-check this. */
+.zib-hit .zib-hit-subj { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zib-hit .zib-hit-snip { font-size: 13px; opacity: .62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: var(--zib-snip, block); }
+/* unread channel — a dot + a left rail + heavier weight (NOT the selection look) */
+.zib-hit.zib-unread { background: color-mix(in srgb, var(--sys-primary,#4796F7) 9%, var(--sys-surface,#fff)); }
+.zib-hit.zib-unread::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3.5px; border-radius: 0 4px 4px 0; background: var(--sys-primary, #4796F7); }
+.zib-hit.zib-unread .zib-udot { background: var(--sys-primary, #4796F7); box-shadow: 0 0 8px rgba(71,150,247,.7); }
+.zib-hit.zib-unread .zib-hit-from { opacity: 1; font-weight: 800; }
+.zib-hit.zib-unread .zib-hit-subj { font-weight: 800; }
+.zib-hit.zib-unread .zib-hit-snip { opacity: .85; }
+.zib-hit.zib-unread .zib-hit-from::before { content: none; }   /* supersede the v0.13 inline dot */
+
+/* ── density: spacing + snippet only. FONT SIZE NEVER CHANGES. ───────────── */
+.zib-card[data-zib-density="cozy"] .zib-hit { padding: 9px 13px; }
+.zib-card[data-zib-density="cozy"] .zib-hit .zib-hit-av { width: 34px; height: 34px; font-size: 13px; }
+.zib-card[data-zib-density="cozy"] .zib-hit { grid-template-columns: 10px 34px 1fr; }
+.zib-card[data-zib-density="compact"] { --zib-snip: none; }
+.zib-card[data-zib-density="compact"] .zib-hit { padding: 7px 12px; grid-template-columns: 10px 28px 1fr; align-items: center; }
+.zib-card[data-zib-density="compact"] .zib-hit .zib-hit-av { width: 28px; height: 28px; font-size: 12px; border-radius: 8px; }
+.zib-card[data-zib-density="compact"] .zib-hit .zib-hit-main { flex-direction: row; align-items: baseline; gap: 10px; }
+.zib-card[data-zib-density="compact"] .zib-hit .zib-hit-top { flex: 0 0 34%; min-width: 0; }
+.zib-card[data-zib-density="compact"] .zib-hit .zib-hit-subj { flex: 1; }
+
+/* ── compact reader header ───────────────────────────────────────────────── */
+.zib-rd { display: flex; flex-direction: column; }
+.zib-r-subj { margin: 2px 0 10px; font-size: 20px; font-weight: 800; line-height: 1.2; }
+.zib-rd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.zib-rd-av { width: 42px; height: 42px; }
+.zib-rd-id { flex: 1; min-width: 0; }
+.zib-rd-name { font-weight: 700; }
+.zib-rd-to { opacity: .6; }
+.zib-rd-exp { appearance: none; border: 0; background: none; cursor: pointer; font: inherit; font-size: 13px;
+	color: #74B4FA; font-weight: 700; padding: 0 0 0 4px; } /* v0.20.3: AA-legible blue for the details toggle on the dark reader */
+.zib-rd-when { font-size: 12px; opacity: .6; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+.zib-r-meta { white-space: pre-wrap; font: inherit; font-size: 12.5px; opacity: .8; margin: 0 0 10px;
+	background: var(--sys-surface, rgba(127,127,127,.05)); border: 1px solid var(--sys-outline-variant, #d7dbe3);
+	border-radius: 10px; padding: 10px 12px; }
+
+/* ── reader actions: primary Reply + overflow menu ───────────────────────── */
+.zib-rd-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+	border-bottom: 1px solid var(--sys-outline-variant, #d7dbe3); padding-bottom: 12px; }
+.zib-rbtn { font-size: 14px; padding: 8px 14px; }
+.zib-ovf { position: relative; margin-left: auto; }
+.zib-ovf-btn { font-size: 18px; line-height: 1; padding: 7px 12px; }
+.zib-ovf-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 200px;
+	background: var(--sys-surface-raised, var(--sys-surface, #fff)); border: 1px solid var(--sys-outline-variant, #d7dbe3);
+	border-radius: 12px; padding: 6px; box-shadow: 0 12px 34px rgba(0,0,0,.28); display: flex; flex-direction: column; gap: 1px; }
+.zib-ovf-item { appearance: none; cursor: pointer; font: inherit; text-align: left; width: 100%;
+	padding: 10px 12px; border: 0; border-radius: 8px; background: none; color: inherit; }
+.zib-ovf-item:hover { background: var(--sys-surface, rgba(127,127,127,.10)); }
+.zib-ovf-item.zib-ovf-danger { color: var(--zib-danger-text); }
+.zib-ovf-sep { height: 1px; background: var(--sys-outline-variant, #d7dbe3); margin: 4px 2px; }
+
+/* ── fit-to-width HTML email: contain overflow instead of clipping ───────── */
+.zib-r-framewrap { overflow-x: auto; overscroll-behavior-x: contain; border-radius: 8px; }
+.zib-r-frame { width: 100%; height: min(72vh, 620px); border: 1px solid var(--sys-outline-variant, #d7dbe3);
+	border-radius: 8px; background: #fff; display: block; box-shadow: 0 1px 8px rgba(0,0,0,.12); }
+
+/* ── optimistic send: non-blocking Undo window (replaces window.confirm) ──── */
+.zib-sendpending { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+	padding: 16px; border-radius: 12px; background: var(--sys-surface, rgba(127,127,127,.06));
+	border: 1px solid var(--sys-outline-variant, #d7dbe3); font-size: 15px; margin-top: 8px; }
+.zib-sp-msg b { font-variant-numeric: tabular-nums; }
+.zib-linkbtn { border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff);
+	padding: 7px 14px; font-weight: 700; border-radius: 999px; }
+.zib-linkbtn:first-of-type { color: var(--sys-primary, #4796F7); border-color: currentColor; }
+.zib-spin { width: 18px; height: 18px; border-radius: 50%; flex: none;
+	border: 2.4px solid var(--sys-outline-variant, #d7dbe3); border-top-color: var(--sys-primary, #4796F7);
+	animation: zib-sp .7s linear infinite; }
+@keyframes zib-sp { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .zib-spin { animation-duration: 2.4s; } }
+.zib-sent { font-size: 17px; font-weight: 800; color: var(--zib-success-text); margin: 8px 0 14px; }
+
+/* ── the reader "back to list" shows only when the list isn't beside it ───── */
+.zib-rd-back { margin-bottom: 12px; display: none; }
+@media (max-width: 880px) {
+	.zib-rd-back { display: inline-flex; }
+	.zib-toolbar .zib-folsel { max-width: 150px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v0.14.1 — VISUAL POLISH, matched to the app: FLAT fills, the app's own
+   blue accent (--sys-primary, #4796F7), neutral depth. No gradients, no purple.
+   Layered last over the v0.14.0 block; large fonts still inherit the theme.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.zib-toolbar { gap: 12px; padding: 2px 0 14px; }
+.zib-tb-compose { padding: 11px 22px; font-weight: 800; }
+.zib-folsel { padding: 10px 12px; border-radius: 12px; }
+.zib-tb-search { padding: 10px 15px; border-radius: 999px; transition: border-color .15s, box-shadow .15s; }
+.zib-tb-search:focus-within { border-color: var(--sys-primary, #4796F7); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-primary, #4796F7) 22%, transparent); }
+.zib-seg { padding: 4px; border-radius: 12px; }
+.zib-seg button { padding: 7px 11px; font-size: 16px; }
+
+.zib-nav .zib-results { gap: 6px; padding: 2px 2px 8px; }
+.zib-hit { padding: 14px; border-radius: 14px; background: var(--sys-surface, #fff); transition: transform .12s ease, box-shadow .12s ease, background .12s ease; }
+.zib-hit:hover { background: var(--sys-surface-raised, rgba(127,127,127,.10)); transform: translateY(-1px); box-shadow: 0 8px 20px -14px rgba(0,0,0,.6); }
+.zib-hit[aria-selected="true"] { background: var(--sys-surface-raised, rgba(127,127,127,.12)); border-color: transparent; box-shadow: inset 0 0 0 1.5px var(--sys-primary, #4796F7); }
+.zib-av { border-radius: 12px; font-weight: 800; box-shadow: 0 2px 8px -4px rgba(0,0,0,.5); }
+.zib-hit .zib-hit-subj { font-weight: 700; }
+.zib-hit.zib-unread::before { width: 4px; top: 12px; bottom: 12px; }
+
+.zib-r-subj { font-size: 23px; letter-spacing: -.01em; margin: 2px 0 12px; }
+.zib-rd-av { width: 44px; height: 44px; border-radius: 13px; }
+.zib-rbtn { border-radius: 12px; }
+.zib-rbtn.zib-primary { padding: 9px 18px; }
+.zib-ovf-btn { border-radius: 12px; }
+.zib-ovf-menu { border-radius: 14px; padding: 7px; box-shadow: 0 18px 44px -18px rgba(0,0,0,.6); }
+.zib-ovf-item { padding: 11px 12px; font-weight: 600; }
+.zib-r-meta { border-radius: 12px; }
+.zib-r-frame { border-radius: 12px; box-shadow: 0 12px 34px -16px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.14); }
+.zib-sendpending { border-radius: 14px; padding: 18px; gap: 14px; }
+.zib-linkbtn { border-radius: 999px; }
+.zib-sent { font-size: 18px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v0.16.0 — UI POLISH from a live pass in the app (CSS + a JS menu rewrite; no
+   REST / scope / schema change). Fixes: (1) the ⋯ overflow menu rendered BEHIND
+   the app shell's sticky app-switcher bar (its z-index 30 lost to the shell's 35)
+   and could strand on scroll — lifted above all app chrome + flip-up near the
+   viewport bottom (dismissal/positioning handled in JS); (2) SCROLLBARS were the
+   OS default (macOS overlay: they float OVER content and auto-hide) — now themed,
+   space-reserving webkit scrollbars with a list gutter, and a thin scrollbar inside
+   the HTML-email sheet (frameDoc, in JS); (3) BUTTONS gained consistent hover /
+   active / focus-visible feedback and the density segmented control's inactive
+   options now read as buttons. Flat, blue (--sys-primary), no gradients; the large
+   fonts still inherit the theme scale.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* (1) overflow menu — sit above the app shell's sticky bars; flip up near the bottom.
+   Kept position:absolute (no transformed-ancestor surprises); a high z-index is enough
+   because the menu already competes at the shell's stacking level. */
+.zib-ovf-menu { z-index: 2147481000; max-height: min(72vh, 440px); overflow-y: auto; }
+.zib-ovf-menu.zib-flip-up { top: auto; bottom: calc(100% + 6px); }
+
+/* (2) themed, space-reserving scrollbars. Styling ::-webkit-scrollbar with an explicit
+   width forces a classic (space-reserving) bar instead of an overlay that sits over
+   content; the list also carries a small right gutter so an overlay bar (where the OS
+   still forces one) never lands on a timestamp. The email-sheet scrollbar is themed in
+   frameDoc() (JS), where a fresh document always reserves the width. */
+.zib-card .zib-results { padding-right: 6px; scrollbar-width: thin;
+	scrollbar-color: var(--sys-surface-raised, #334155) transparent; }
+.zib-card .zib-results::-webkit-scrollbar,
+.zib-card .zib-r-framewrap::-webkit-scrollbar,
+.zib-card .zib-movepick::-webkit-scrollbar { width: 10px; height: 10px; }
+.zib-card .zib-results::-webkit-scrollbar-thumb,
+.zib-card .zib-r-framewrap::-webkit-scrollbar-thumb,
+.zib-card .zib-movepick::-webkit-scrollbar-thumb {
+	background: var(--sys-surface-raised, #334155); border-radius: 8px;
+	border: 2px solid transparent; background-clip: padding-box; }
+.zib-card .zib-results::-webkit-scrollbar-thumb:hover,
+.zib-card .zib-r-framewrap::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--sys-primary, #4796F7) 42%, var(--sys-surface-raised, #334155)); }
+.zib-card .zib-results::-webkit-scrollbar-track,
+.zib-card .zib-r-framewrap::-webkit-scrollbar-track,
+.zib-card .zib-movepick::-webkit-scrollbar-track { background: transparent; }
+
+/* (3) buttons feel right: consistent hover / active / keyboard-focus feedback. */
+.zib-card button { transition: background .12s ease, filter .12s ease, opacity .12s ease, box-shadow .12s ease; }
+.zib-card button:focus-visible { outline: 2px solid var(--sys-primary, #4796F7); outline-offset: 2px; }
+.zib-btn:hover, .zib-tb-btn:hover { background: var(--sys-surface-raised, rgba(127,127,127,.10)); }
+.zib-btn:active, .zib-tb-btn:active, .zib-seg button:active { transform: translateY(1px); }
+.zib-btn.zib-primary:hover, .zib-tb-compose:hover { filter: brightness(1.07); }
+.zib-tb-compose:hover { background: var(--sys-primary, #4796F7); }
+/* reader action row: equal, self-evident buttons (Reply labelled; reply-all / forward square icons) */
+.zib-rd-actions .zib-rbtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; }
+.zib-rd-actions .zib-rbtn[data-act="replyall"], .zib-rd-actions .zib-rbtn[data-act="forward"] { min-width: 48px; font-size: 17px; }
+
+/* density segmented control: inactive options should read as buttons, not bare glyphs */
+.zib-seg button { min-width: 40px; display: inline-flex; align-items: center; justify-content: center; }
+.zib-seg button:not([aria-pressed="true"]) { opacity: .74; }
+.zib-seg button:not([aria-pressed="true"]):hover {
+	background: color-mix(in srgb, var(--sys-primary, #4796F7) 15%, transparent); opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v0.17.0 — KEYBOARD-DRIVEN, REVERSIBLE TRIAGE + field/accessibility polish
+   (research-driven: single-key shortcuts + auto-advance, salient Undo instead of
+   confirm dialogs, larger touch targets for gloved/field use, reduced-motion).
+   CSS for the Undo snackbar, the "?" shortcut sheet, and the touch/motion passes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Undo snackbar — a salient, transient bar; the whole triage-undo contract lives in JS */
+.zib-snackwrap { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+	z-index: 2147481200; pointer-events: none; }
+.zib-snackwrap:empty { display: none; }
+.zib-snack { display: inline-flex; align-items: center; gap: 14px; pointer-events: auto;
+	background: var(--sys-surface-raised, #334155); color: var(--sys-text, #F1F5F9);
+	border: 1px solid var(--sys-outline-variant, #475569); border-radius: 12px;
+	padding: 12px 16px; font-size: 15px; box-shadow: 0 14px 38px -12px rgba(0,0,0,.66);
+	animation: zib-snack-in .16s ease; }
+.zib-snack-msg { font-weight: 700; }
+.zib-snack-undo { appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+	font-weight: 800; color: var(--sys-primary, #4796F7); padding: 6px 8px; border-radius: 8px; min-height: 32px; }
+.zib-snack-undo:hover { background: color-mix(in srgb, var(--sys-primary, #4796F7) 18%, transparent); }
+.zib-snack-n { font-variant-numeric: tabular-nums; opacity: .6; font-size: 13px; min-width: 1.2em; text-align: center; }
+@keyframes zib-snack-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* "?" keyboard-shortcut sheet */
+.zib-kbhelp { position: fixed; inset: 0; z-index: 2147481300; display: grid; place-items: center;
+	background: rgba(2, 6, 23, .62); padding: 20px; }
+.zib-kbhelp-card { background: var(--sys-surface, #1E293B); color: var(--sys-text, #F1F5F9);
+	border: 1px solid var(--sys-outline-variant, #334155); border-radius: 16px; padding: 20px 22px;
+	max-width: 430px; width: 100%; box-shadow: 0 24px 64px -20px rgba(0,0,0,.72);
+	display: flex; flex-direction: column; gap: 9px; }
+.zib-kbhelp-h { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.zib-kb-row { display: flex; align-items: center; gap: 14px; }
+.zib-kb-row kbd { flex: 0 0 104px; text-align: center; font: inherit; font-size: 13px; font-weight: 700;
+	background: var(--sys-surface-raised, #334155); border: 1px solid var(--sys-outline-variant, #475569);
+	border-bottom-width: 2px; border-radius: 8px; padding: 5px 8px; }
+.zib-kb-row span { opacity: .85; }
+.zib-kbhelp-x { margin-top: 12px; align-self: flex-end; }
+
+/* discoverability hint on the empty reader */
+.zib-read-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+	min-height: 220px; opacity: .7; }
+.zib-kbhint { font-size: 13px; opacity: .8; }
+.zib-kbhint kbd { font: inherit; font-size: 12px; font-weight: 700; background: var(--sys-surface-raised, #334155);
+	border: 1px solid var(--sys-outline-variant, #475569); border-radius: 6px; padding: 1px 7px; }
+
+/* field / touch: larger targets on coarse pointers (gloves, sunlight, one-handed) */
+@media (pointer: coarse) {
+	.zib-card .zib-btn, .zib-card .zib-tb-btn, .zib-seg button, .zib-ovf-item,
+	.zib-folsel, .zib-rd-exp { min-height: 44px; }
+	.zib-rd-actions .zib-rbtn { min-width: 52px; }
+	.zib-hit { padding: 15px 14px; }
+}
+
+/* honor reduced-motion for every transition/animation this plugin adds */
+@media (prefers-reduced-motion: reduce) {
+	.zib-card button, .zib-hit, .zib-tb-search { transition: none !important; }
+	.zib-hit:hover { transform: none !important; }
+	.zib-snack { animation: none !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v0.18.0 — READER TYPOGRAPHY. Plain-text mail was one flat 13px block with the
+   quoted history inline; now it reads as paragraphs at a comfortable size and
+   measure, with clickable links and the quoted thread folded behind a "•••".
+   HTML mail keeps the sender's design; only quoted-reply containers get set off.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.zib-r-text { max-width: 70ch; font-size: 15.5px; line-height: 1.62; color: var(--sys-text, inherit);
+	max-height: 60vh; overflow-y: auto; padding-right: 6px; }
+.zib-r-p { margin: 0 0 14px; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.zib-r-p:last-child { margin-bottom: 0; }
+/* v0.20.3: a lighter tint of the brand blue — the #4796F7 brand blue is only 3.44:1 as small text on the
+   dark reader (fails WCAG AA); #74B4FA clears AA (4.76:1) while staying in the same blue family. Buttons,
+   which use #4796F7 as a background with white text, are unchanged. */
+.zib-r-link { color: #74B4FA; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+/* quoted reply history: a "•••" toggle, then a dimmed, left-bordered block */
+.zib-quote-toggle { appearance: none; cursor: pointer; font: inherit; font-weight: 800; letter-spacing: .1em;
+	line-height: 1; padding: 4px 14px; margin: 4px 0 10px; border-radius: 999px;
+	border: 1px solid var(--sys-outline-variant, #334155); background: var(--sys-surface-raised, #334155);
+	color: var(--sys-text-sec, #CBD5E1); }
+.zib-quote-toggle:hover { color: var(--sys-text, #F1F5F9); }
+.zib-quote { margin: 2px 0 0; padding: 4px 0 4px 14px; border-left: 3px solid var(--sys-outline-variant, #334155);
+	color: var(--sys-text-sec, #CBD5E1); font-size: 14.5px; }
+.zib-quote .zib-r-p { margin-bottom: 10px; }
+.zib-r-text::-webkit-scrollbar { width: 10px; }
+.zib-r-text::-webkit-scrollbar-thumb { background: var(--sys-surface-raised, #334155); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+.zib-r-text::-webkit-scrollbar-track { background: transparent; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v0.19.0 — COMPOSE: recipient chips + inline validation. To/Cc tokenize into
+   removable pills; malformed addresses flag red; the field re-assembles the
+   comma-separated string the send API expects. Flat, blue; no gradients.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.zib-chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+	padding: 6px 8px; border-radius: 10px; cursor: text; transition: border-color .15s, box-shadow .15s;
+	border: 1px solid var(--sys-outline-variant, #334155); background: var(--sys-surface, #1E293B); }
+.zib-chips:focus-within { border-color: var(--sys-primary, #4796F7);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-primary, #4796F7) 22%, transparent); }
+.zib-chip-input { flex: 1; min-width: 130px; border: 0; background: none; color: inherit; font: inherit; outline: none; padding: 3px 0; }
+.zib-chip-tag { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+	padding: 3px 6px 3px 11px; border-radius: 999px; font-size: 13.5px; border: 1px solid transparent;
+	background: color-mix(in srgb, var(--sys-primary, #4796F7) 16%, var(--sys-surface-raised, #334155));
+	color: var(--sys-text, #F1F5F9); }
+.zib-chip-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zib-chip-x { appearance: none; cursor: pointer; border: 0; background: none; color: inherit; font: inherit;
+	font-size: 16px; line-height: 1; padding: 0 3px; opacity: .65; border-radius: 50%; }
+.zib-chip-x:hover { opacity: 1; }
+.zib-chip-bad { border-color: var(--sys-danger, #EF4444);
+	background: color-mix(in srgb, var(--sys-danger, #EF4444) 16%, var(--sys-surface-raised, #334155)); }
+.zib-chip-bad .zib-chip-txt { color: var(--zib-danger-text); font-weight: 700; }
+@media (pointer: coarse) { .zib-chip-x { min-width: 28px; min-height: 28px; } .zib-chip-tag { font-size: 15px; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v0.19.1 — KILL THE OPEN-EMAIL LAYOUT SHIFT (CLS). The card booted as a ~60px
+   "Loading…" line and then ballooned to a full ~700px card once its data loaded;
+   on the dashboard's initial load that big height jump let the shell's scroll
+   anchor drift so a neighbouring app slid into view. Reserving the card's height
+   from the moment it mounts keeps it stable through load — no collapse→expand.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.zib-card { min-height: 62vh; }
+.zib-card > .zib-loading { min-height: 58vh; display: grid; place-items: center; text-align: center; }
