@@ -974,6 +974,92 @@ class ZIB_Gatekeeper {
 		return array( 'ok' => true );
 	}
 
+	// ── owner triage — mark-read / move (INV-WRITE: identity forced to the current user) ──
+
+	/**
+	 * Owner sets read / unread on one of their OWN indexed messages. Owner-forced, audited. The one
+	 * mark-read the UI fires automatically is on OPEN (the owner's own act of opening the message).
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_mark_read( int $actor, int $message_id, bool $is_read ): array {
+		global $wpdb;
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'markread not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'markread:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$res = ZIB_Graph::set_read( (int) $ref->account_id, (string) $ref->ms_message_id, $is_read, ZIB_Ingest::allfolder_enabled() );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'markread:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		// Graph is authoritative, but the index re-read lags ingest. Reflect the flip on the owner's OWN
+		// row immediately so a /browse refresh (e.g. after "Mark unread" → Back) agrees.
+		$wpdb->update( self::t_msg(), array( 'is_read' => $is_read ? 1 : 0 ), array( 'id' => (int) $message_id, 'owner_user_id' => $actor ), array( '%d' ), array( '%d', '%d' ) );
+		self::log( $actor, $actor, 'owner_triage', 'allow', ( $is_read ? 'markread:' : 'markunread:' ) . (int) $message_id, '', 0 );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Owner moves one of their OWN indexed messages to another folder — Delete (→ deleteditems),
+	 * Archive, Spam (→ junkemail), or a folder they picked. Owner-forced, audited. Reversible: every
+	 * destination is a real folder, never a purge.
+	 *
+	 * @param string $destination 'deleteditems' | 'archive' | 'junkemail' | 'inbox' | a 32-hex owned folder_hash.
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_move( int $actor, int $message_id, string $destination ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$dest = self::triage_destination( (int) $ref->account_id, $destination );
+		if ( '' === $dest ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move:bad-dest', '', 0 );
+			return array( 'ok' => false, 'reason' => 'bad-dest' );
+		}
+		$res = ZIB_Graph::move_message( (int) $ref->account_id, (string) $ref->ms_message_id, $dest, ZIB_Ingest::allfolder_enabled() );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_triage', 'allow', 'move:' . strtolower( trim( $destination ) ) . ':' . (int) $message_id, '', 0 );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Resolve a move destination to a Graph folder id. Well-known names pass through; a 32-hex
+	 * folder_hash is resolved to its stored ms_folder_id, owner-scoped by account. Anything else → ''.
+	 */
+	private static function triage_destination( int $account_id, string $dest ): string {
+		$k = strtolower( trim( $dest ) );
+		$wellknown = array( 'deleteditems' => 'deleteditems', 'archive' => 'archive', 'junkemail' => 'junkemail', 'inbox' => 'inbox' );
+		if ( isset( $wellknown[ $k ] ) ) {
+			return $wellknown[ $k ];
+		}
+		if ( preg_match( '/^[a-f0-9]{32}$/', $k ) ) {
+			global $wpdb;
+			$fid = $wpdb->get_var( $wpdb->prepare(
+				'SELECT ms_folder_id FROM ' . $wpdb->prefix . 'zib_folders WHERE account_id = %d AND folder_hash = %s', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$account_id, $k
+			) );
+			if ( $fid ) {
+				return (string) $fid;
+			}
+		}
+		return '';
+	}
+
 	// ── admin_search / admin_get_message (P4 — admin-provisioned read) ──
 
 	/**
