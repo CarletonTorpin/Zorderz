@@ -703,22 +703,116 @@ class ZIB_Gatekeeper {
 		}
 
 		$body = ZIB_Crypto::decrypt( (string) $row->body_enc );
+		// An HTML email also yields a sanitised, images-off body_html for the reading pane (rendered in a
+		// sandboxed iframe). A plain-text email has no HTML — body_text carries it.
+		$is_html = ( 'html' === strtolower( (string) $row->body_format ) );
+		$san     = $is_html ? self::sanitize_email_html( $body ) : array( 'html' => '', 'has_remote_images' => false, 'has_inline_images' => false );
 		self::log( $actor, $actor, 'owner_search', 'allow', 'open:' . (int) $message_id, '', 1 );
 
 		return array(
 			'ok'      => true,
 			'message' => array(
-				'id'              => (int) $row->id,
-				'subject'         => (string) $row->subject,
-				'from'            => self::fmt_addr( (string) $row->from_name, (string) $row->from_addr ),
-				'to'              => $to,
-				'cc'              => $cc,
-				'received_at'     => $row->received_at ? (string) $row->received_at : '',
-				'class'           => (string) $row->class,
-				'folder'          => (string) $row->folder,
-				'has_attachments' => (int) $row->has_attachments,
-				'body_text'       => self::body_to_text( $body, (string) $row->body_format ),
+				'id'                => (int) $row->id,
+				'subject'           => (string) $row->subject,
+				'from'              => self::fmt_addr( (string) $row->from_name, (string) $row->from_addr ),
+				'to'                => $to,
+				'cc'                => $cc,
+				'received_at'       => $row->received_at ? (string) $row->received_at : '',
+				'class'             => (string) $row->class,
+				'folder'            => (string) $row->folder,
+				'has_attachments'   => (int) $row->has_attachments,
+				'body_text'         => self::body_to_text( $body, (string) $row->body_format ),
+				'body_html'         => (string) $san['html'],
+				'has_remote_images' => (bool) $san['has_remote_images'],
+				'has_inline_images' => (bool) ( $san['has_inline_images'] ?? false ),
 			),
+		);
+	}
+
+	/**
+	 * Sanitise an email's HTML for the reading pane: drop dangerous elements/attributes, neutralise URL
+	 * schemes, force images OFF (stash <img src> into data-zib-src + blank src, tracking whether any remote
+	 * or cid: inline image was found), then run wp_kses with an email-safe allow-list. Rendered in a
+	 * sandboxed iframe (the real boundary); has_remote_images lets the UI show "Load images" only when
+	 * there is something to load.
+	 *
+	 * @return array { html:string, has_remote_images:bool, has_inline_images:bool }
+	 */
+	public static function sanitize_email_html( string $html ): array {
+		$has_remote = false;
+		$has_inline = false; // cid: (embedded) images are tracked separately from remote ones.
+
+		// 1. Drop dangerous element blocks WITH their content.
+		$html = (string) preg_replace( '#<(script|style|head|title|template|noscript)\b[^>]*>.*?</\1\s*>#is', '', $html );
+		// Any orphan opening/closing of those, plus framing/form/plugin elements.
+		$html = (string) preg_replace( '#</?(?:script|style|head|title|template|noscript|iframe|frame|frameset|object|embed|applet|form|input|button|select|option|optgroup|textarea|label|fieldset|legend|link|meta|base)\b[^>]*>#is', '', $html );
+		// 2. Strip HTML comments (can hide conditional / injected payloads).
+		$html = (string) preg_replace( '#<!--.*?-->#s', '', $html );
+		// 3. Strip event-handler attributes (on…=), quoted or bare.
+		$html = (string) preg_replace( '#\son[a-z]+\s*=\s*"[^"]*"#i', '', $html );
+		$html = (string) preg_replace( "#\son[a-z]+\s*=\s*'[^']*'#i", '', $html );
+		$html = (string) preg_replace( '#\son[a-z]+\s*=\s*[^\s>]+#i', '', $html );
+		// 4. Neutralise dangerous URL schemes anywhere in an attribute value.
+		$html = (string) preg_replace( '#(href|src|xlink:href|action|formaction)\s*=\s*(["\'])\s*(?:javascript|vbscript|data|file|about)\s*:[^"\']*\2#i', '$1="#"', $html );
+		// 5. IMAGES OFF: stash every <img src> into data-zib-src and blank src. A cid: reference is an
+		//    EMBEDDED (inline) part of this very message — not a remote fetch — so it flags has_inline, not
+		//    has_remote: the reader can resolve and show it without the tracking risk of a remote pull.
+		$html = (string) preg_replace_callback( '#<img\b([^>]*)>#is', function ( $m ) use ( &$has_remote, &$has_inline ) {
+			$attrs = $m[1];
+			if ( preg_match( '#\ssrc\s*=\s*(["\'])(.*?)\1#is', $attrs, $sm ) ) {
+				$url = trim( (string) $sm[2] );
+				if ( '' !== $url ) {
+					if ( 0 === stripos( $url, 'cid:' ) ) { $has_inline = true; } else { $has_remote = true; }
+				}
+				$attrs = str_replace( $sm[0], ' data-zib-src="' . self::attr_esc( $url ) . '"', $attrs );
+			}
+			return '<img' . $attrs . '>';
+		}, $html );
+		// 6. Neutralise url(...) / expression() / behavior in inline styles (background images, IE vectors).
+		$html = (string) preg_replace_callback( '#\sstyle\s*=\s*(["\'])(.*?)\1#is', function ( $m ) use ( &$has_remote ) {
+			$css = $m[2];
+			if ( preg_match( '#url\s*\(#i', $css ) ) { $has_remote = true; }
+			$css = (string) preg_replace( '#url\s*\([^)]*\)#i', 'none', $css );
+			$css = (string) preg_replace( '#(expression|behaviou?r|-moz-binding)\s*\([^)]*\)#i', '', $css );
+			return ' style="' . $css . '"';
+		}, $html );
+		// 7. Legacy background="url" attributes.
+		$html = (string) preg_replace( '#\sbackground\s*=\s*(["\']).*?\1#is', '', $html );
+
+		// 8. Production belt: a proper tokenising allow-list. (In unit tests wp_kses is absent, so the
+		//    pre-pass above must already be safe — that is what the tests assert.)
+		if ( function_exists( 'wp_kses' ) ) {
+			$html = wp_kses( $html, self::email_allowed_html(), array( 'http', 'https', 'mailto', 'tel' ) );
+		}
+
+		return array( 'html' => (string) $html, 'has_remote_images' => (bool) $has_remote, 'has_inline_images' => (bool) $has_inline );
+	}
+
+	/** esc_attr when WP is present, a safe fallback otherwise (so sanitize_email_html is unit-testable). */
+	private static function attr_esc( string $s ): string {
+		return function_exists( 'esc_attr' ) ? esc_attr( $s ) : htmlspecialchars( $s, ENT_QUOTES, 'UTF-8' );
+	}
+
+	/** Email-safe wp_kses allow-list: formatting + tables + neutralised <img> (data-zib-src), no
+	 *  script/style/form/framing. style/class/align kept so the mail still reads like the original. */
+	private static function email_allowed_html(): array {
+		$common = array( 'style' => true, 'class' => true, 'align' => true, 'dir' => true, 'title' => true );
+		$cell   = array_merge( $common, array( 'colspan' => true, 'rowspan' => true, 'valign' => true, 'width' => true, 'height' => true, 'bgcolor' => true, 'nowrap' => true ) );
+		return array(
+			'p' => $common, 'div' => $common, 'span' => $common, 'br' => array(), 'hr' => $common,
+			'a' => array_merge( $common, array( 'href' => true, 'target' => true, 'rel' => true, 'name' => true ) ),
+			'b' => $common, 'strong' => $common, 'i' => $common, 'em' => $common, 'u' => $common,
+			's' => $common, 'strike' => $common, 'sub' => $common, 'sup' => $common, 'small' => $common,
+			'big' => $common, 'mark' => $common, 'blockquote' => $common, 'pre' => $common, 'code' => $common,
+			'ul' => $common, 'ol' => array_merge( $common, array( 'start' => true, 'type' => true ) ), 'li' => $common,
+			'dl' => $common, 'dt' => $common, 'dd' => $common,
+			'h1' => $common, 'h2' => $common, 'h3' => $common, 'h4' => $common, 'h5' => $common, 'h6' => $common,
+			'table' => array_merge( $common, array( 'width' => true, 'height' => true, 'cellpadding' => true, 'cellspacing' => true, 'border' => true, 'bgcolor' => true ) ),
+			'thead' => $common, 'tbody' => $common, 'tfoot' => $common, 'caption' => $common,
+			'tr' => array_merge( $common, array( 'valign' => true, 'bgcolor' => true ) ), 'td' => $cell, 'th' => $cell, 'colgroup' => $common, 'col' => array_merge( $common, array( 'span' => true, 'width' => true ) ),
+			'img' => array( 'data-zib-src' => true, 'alt' => true, 'width' => true, 'height' => true, 'style' => true, 'class' => true, 'align' => true ),
+			'font' => array_merge( $common, array( 'color' => true, 'face' => true, 'size' => true ) ),
+			'center' => $common, 'figure' => $common, 'figcaption' => $common,
 		);
 	}
 
