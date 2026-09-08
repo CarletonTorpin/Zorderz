@@ -11,6 +11,22 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.9.0] - 2026-09-08
+
+The Inbox becomes a full in-app **mail client**, plus field-app hardening. Install the theme first, then the apps. New database migrations run automatically (Inbox folders/read-state/read-view indexes); no configuration changes are required, and every new surface degrades cleanly when its connector or Identity Pack value is absent.
+
+### Added
+- **Inbox — the in-app mail client.** Read (folder/list browse + search, a sanitized HTML reading pane with remote images off by default, inline `cid:` images resolved to data URIs, and attachments), compose/reply/forward with recipient chips, and triage (mark-read, move) with an undo snackbar — all behind the owner gate. Sending observes a platform invariant, **INV-SEND: the system never auto-sends** — every send is a human who has read the message in the composer and confirmed it, over the `Mail.Send` scope only. Microsoft Graph is reached through the Core mailbox connector; the internal/external sender split reads the Business Profile domain (ships empty). Folder navigation surfaces the owner's tracked folders and degrades to a flat list until the all-folder sync is enabled.
+- **Prep — invoice-arm de-dup.** The Approved-to-Cut queue now folds recent billing invoices in beside the CRM/estimate pass, so a job that has an invoice but no synced estimate still surfaces — and never as a second card for a job already shown. Two distinct invoices for one customer stay two cards; a re-billed same estimate folds. Fuzzy household-pair name matching ("Alex / Sam Rivera" == "Alex Rivera") without merging distinct given names.
+- **Jobs — GPS re-stamp backfill.** A budgeted hourly pass fills GPS on estimate photos whose address was not yet geocoded at finalize time (never a camera photo, never overwriting a recorded fix), through the shared geocoder's cache-key contract. Includes a 6-hour cooldown for un-geocodable addresses and a read-only operator worklist.
+- **Theme — overlay-escape contract.** Below 1200px, a widget card hosting a visible full-screen overlay (fixed, `z-index ≥ 1000`) has its stacking isolation dropped so the overlay clears the app-shell bottom nav — without re-parenting plugin markup. Fixes buttons in a plugin's modal being untappable on small screens.
+
+### Changed
+- **Receipts — Approve & Send reachable on mobile / Large Text.** The review modal is lifted out of the widget card's stacking context so the bottom nav can no longer cover its action row.
+- **Core geocoder** gains a `cache_only` resolve option (a cached-or-null read that consults no networked provider), for budgeted backfills that drain cached addresses before spending any network budget.
+
+---
+
 ## [1.7.2] - 2026-08-25
 
 Point release: repairs the in-place-upgrade path for the apps bundle and closes three version and configuration congruence gaps found in review. No database, schema or REST changes — a straight upgrade over 1.7.1.
