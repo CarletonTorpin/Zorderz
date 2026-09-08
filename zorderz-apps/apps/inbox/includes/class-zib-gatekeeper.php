@@ -394,6 +394,200 @@ class ZIB_Gatekeeper {
 	}
 
 	/**
+	 * Browse the actor's OWN indexed mail by folder, most-recent first, paginated. Summaries only.
+	 * $folder: a 32-hex folder_hash (a real Graph folder), a coarse bucket ('inbox'|'sent'|'other'),
+	 * or '' for all mail. Owner-forced, kiosk-denied, capped.
+	 *
+	 * @return array { ok, results:[ {id, folder, folder_name, direction, from, subject, snippet, received_at, has_attachments, unread} ], folder }
+	 */
+	public static function owner_browse( int $actor, string $folder = '', int $limit = 30, int $offset = 0 ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_browse', 'deny', 'not permitted', '', 0 );
+			return array( 'ok' => false, 'results' => array() );
+		}
+		global $wpdb;
+		$limit  = max( 1, min( self::MAX_LIMIT, $limit ) );
+		$offset = max( 0, $offset );
+		$folder = trim( $folder );
+		$cols   = 'id, folder, folder_name, direction, from_addr, from_name, received_at, subject, snippet, has_attachments, is_read';
+
+		$where = 'owner_user_id = %d';
+		$args  = array( $actor );
+		if ( preg_match( '/^[a-f0-9]{32}$/i', $folder ) ) {
+			$where .= ' AND folder_hash = %s';           // a real Graph folder, keyed by md5(ms_folder_id)
+			$args[] = strtolower( $folder );
+		} elseif ( in_array( strtolower( $folder ), array( 'inbox', 'sent', 'other' ), true ) ) {
+			$where .= ' AND folder = %s';                // a coarse bucket
+			$args[] = strtolower( $folder );
+		}
+		// else '' / unrecognised → all indexed mail (no folder predicate)
+
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			'SELECT ' . $cols . ' FROM ' . self::t_msg() . ' WHERE ' . $where . '
+			 ORDER BY received_at DESC LIMIT %d OFFSET %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- summaries only, never the body
+			array_merge( $args, array( $limit, $offset ) )
+		) );
+
+		$out = array();
+		foreach ( (array) $rows as $r ) {
+			$out[] = array(
+				'id'              => (int) $r->id,
+				'folder'          => (string) $r->folder,
+				'folder_name'     => (string) ( $r->folder_name ?? '' ),
+				'direction'       => (string) $r->direction,
+				'from'            => self::fmt_addr( (string) $r->from_name, (string) $r->from_addr ),
+				'subject'         => (string) $r->subject,
+				'snippet'         => (string) $r->snippet,
+				'received_at'     => $r->received_at ? (string) $r->received_at : '',
+				'has_attachments' => (int) $r->has_attachments,
+				'unread'          => ( 1 === (int) $r->is_read ) ? 0 : 1, // Mail-list unread bolding
+			);
+		}
+		self::log( $actor, $actor, 'owner_browse', 'allow', 'browse:' . ( '' !== $folder ? substr( $folder, 0, 12 ) : '*' ), '', count( $out ) );
+		return array( 'ok' => true, 'results' => $out, 'folder' => $folder );
+	}
+
+	/**
+	 * Strip a leading "from:" / "sender:" / "by:" prefix down to the bare contact (e.g. "from:Alex"
+	 * → "Alex") so sender_match and the render lead never carry the prefix into the match. A real name
+	 * that merely starts with those letters is untouched — the prefix needs a colon or a following
+	 * space plus a whole word. Pure.
+	 */
+	public static function normalize_sender( string $q ): string {
+		$q = trim( (string) $q );
+		$q = preg_replace( '/^\s*(?:from|sender|by)\s*:\s*/i', '', $q );
+		$q = preg_replace( '/^\s*(?:from|by)\s+/i', '', $q );
+		return trim( (string) $q, " \t\n\r\0\x0B:?.,\"'" );
+	}
+
+	/**
+	 * SENDER match — the received twin of recipient_match. Same name→address resolution (with the
+	 * known-user preference and mailbox-derived addresses), but the predicate is scoped to the message's
+	 * OWN from columns — (from_name LIKE OR from_addr LIKE) per term — not parties_text. On INBOUND mail
+	 * the person we mean is the SENDER; matching parties_text would also catch mail where they were merely
+	 * cc'd. Owner-scoped. Returns array( sql_fragment, args ) ('' if the name is generic / unresolvable).
+	 * Deliberately duplicates recipient_match's resolution rather than refactoring it, so the tested SENT
+	 * path stays unchanged.
+	 */
+	private static function sender_match( int $actor, string $name, array $aliases = array() ): array {
+		global $wpdb;
+		$name  = self::normalize_sender( $name );
+		$named = ( '' !== $name && ! self::is_generic_recipient( $name ) );
+		$terms = array();
+		if ( $named ) {
+			$rows = $wpdb->get_results( $wpdb->prepare(
+				'SELECT addr, MAX(is_internal) AS internal FROM ' . self::t_party() . '
+				 WHERE owner_user_id = %d AND addr <> %s AND name LIKE %s
+				 GROUP BY addr LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- sender resolution: parties only, never the body
+				$actor, '', '%' . $wpdb->esc_like( $name ) . '%', 25
+			) );
+			$internal = array();
+			$external = array();
+			foreach ( (array) $rows as $r ) {
+				$a = strtolower( trim( (string) $r->addr ) );
+				if ( '' === $a ) { continue; }
+				if ( 1 === (int) $r->internal ) { $internal[ $a ] = $a; } else { $external[ $a ] = $a; }
+			}
+			if ( ! empty( $internal ) ) {
+				$terms = $internal;                       // known-user preference (same as recipient_match)
+			} else {
+				$terms[ strtolower( $name ) ] = $name;    // broad name + every external address it used
+				$terms = array_merge( $terms, $external );
+			}
+		}
+		foreach ( (array) $aliases as $a ) {
+			$a = trim( (string) $a );
+			if ( '' !== $a ) { $terms[ strtolower( $a ) ] = $a; }
+		}
+		if ( empty( $terms ) ) {
+			return array( '', array() );
+		}
+		$ors  = array();
+		$args = array();
+		foreach ( $terms as $t ) {
+			$like   = '%' . $wpdb->esc_like( $t ) . '%';
+			$ors[]  = '(from_name LIKE %s OR from_addr LIKE %s)';
+			$args[] = $like;
+			$args[] = $like;
+		}
+		return array( ' AND (' . implode( ' OR ', $ors ) . ')', $args );
+	}
+
+	/**
+	 * "WHAT DID <person> SEND ME [today/this week]" — the RECEIVED twin of owner_told. A windowed,
+	 * SENDER-scoped INBOUND read that returns the sender's composed text (quoted-reply/forward chains
+	 * stripped) for the same [ZIB_MAIL] expandable card — so a customer who emailed a photo can be pulled
+	 * up in chat, attachments and all. direction='in'; the sender is matched on the message's OWN from_*
+	 * columns (sender_match), never the body; received_at is filtered to a site-local day window. Owner-
+	 * forced, kiosk-denied, capped, recency-first, deduped exactly like owner_told. The card item carries
+	 * 'from' (the sender via fmt_addr) where the sent card carries 'to'.
+	 *
+	 * @param string $sender  sender name/addr; '' matches anyone (a pure "what did I receive today").
+	 * @param string $since,$until  YYYY-MM-DD site-local dates; '' = unbounded.
+	 * @return array { ok, results:[ { id, subject, received_at, from, composed, has_attachments } ], sender, since, until }
+	 */
+	public static function owner_received( int $actor, string $sender, string $since = '', string $until = '', int $limit = self::MAX_CHAT_HITS, array $aliases = array() ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_received', 'deny', 'not permitted', '', 0 );
+			return array( 'ok' => false, 'results' => array() );
+		}
+		global $wpdb;
+		$limit  = max( 1, min( self::MAX_CHAT_HITS, $limit ) );
+		$sender = trim( $sender );
+		$since  = self::sane_date( $since );
+		$until  = self::sane_date( $until );
+
+		$where = 'owner_user_id = %d AND direction = %s';
+		$args  = array( $actor, 'in' );
+		list( $ssql, $sargs ) = self::sender_match( $actor, $sender, $aliases );
+		if ( '' !== $ssql ) { $where .= $ssql; $args = array_merge( $args, $sargs ); }
+		if ( '' !== $since ) { $where .= ' AND received_at >= %s'; $args[] = self::local_date_to_utc( $since, false ); }
+		if ( '' !== $until ) { $where .= ' AND received_at <= %s'; $args[] = self::local_date_to_utc( $until, true ); }
+
+		// Over-fetch + dedup, identical to owner_told: all-folder sync can surface one inbound email from
+		// several folders (Inbox + a filed copy), and a re-send can arrive twice. Collapse by RFC
+		// Message-ID, falling back to a content signature (subject + composed body + send minute).
+		$fetch = min( 60, max( $limit, $limit * 4 ) );
+		$rows  = $wpdb->get_results( $wpdb->prepare(
+			'SELECT id, received_at, subject, from_addr, from_name, ms_internet_message_id, has_attachments, body_enc, body_format
+			 FROM ' . self::t_msg() . ' WHERE ' . $where . '
+			 ORDER BY received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- sender lives in from_*, never the body
+			array_merge( $args, array( $fetch ) )
+		) );
+
+		$out  = array();
+		$seen = array();
+		foreach ( (array) $rows as $r ) {
+			$text     = self::body_to_text( ZIB_Crypto::decrypt( (string) $r->body_enc ), (string) $r->body_format );
+			$composed = self::strip_quoted( $text );
+
+			$mid  = strtolower( trim( (string) $r->ms_internet_message_id ) );
+			$mkey = ( '' !== $mid ) ? 'm:' . $mid : '';
+			$csig = 'c:' . strtolower( trim( (string) $r->subject ) ) . '|'
+				. substr( (string) $r->received_at, 0, 16 ) . '|' . $composed;
+			if ( ( '' !== $mkey && isset( $seen[ $mkey ] ) ) || isset( $seen[ $csig ] ) ) {
+				continue;
+			}
+			if ( '' !== $mkey ) { $seen[ $mkey ] = true; }
+			$seen[ $csig ] = true;
+
+			$out[] = array(
+				'id'              => (int) $r->id,
+				'subject'         => (string) $r->subject,
+				'received_at'     => $r->received_at ? (string) $r->received_at : '',
+				'from'            => self::fmt_addr( (string) $r->from_name, (string) $r->from_addr ),
+				'composed'        => $composed,
+				'has_attachments' => (int) ( $r->has_attachments ?? 0 ),
+			);
+			if ( count( $out ) >= $limit ) {
+				break;
+			}
+		}
+		self::log( $actor, $actor, 'owner_received', 'allow', 'recv:' . ( '' !== $since ? $since : '*' ) . '..' . ( '' !== $until ? $until : '*' ), substr( sha1( $sender ), 0, 16 ), count( $out ) );
+		return array( 'ok' => true, 'results' => $out, 'sender' => $sender, 'since' => $since, 'until' => $until );
+	}
+
+	/**
 	 * v0.9.13 "WHAT DID I TELL <person> [today/this week]" — a windowed, recipient-scoped SENT read
 	 * that returns WHAT THE OWNER WROTE (composed text, quoted reply/forward chains stripped) for the
 	 * [ZIB_MAIL] expandable card. direction='out'; the addressee is matched in parties_text ONLY, never
@@ -509,23 +703,737 @@ class ZIB_Gatekeeper {
 		}
 
 		$body = ZIB_Crypto::decrypt( (string) $row->body_enc );
+		// An HTML email also yields a sanitised, images-off body_html for the reading pane (rendered in a
+		// sandboxed iframe). A plain-text email has no HTML — body_text carries it.
+		$is_html = ( 'html' === strtolower( (string) $row->body_format ) );
+		$san     = $is_html ? self::sanitize_email_html( $body ) : array( 'html' => '', 'has_remote_images' => false, 'has_inline_images' => false );
 		self::log( $actor, $actor, 'owner_search', 'allow', 'open:' . (int) $message_id, '', 1 );
 
 		return array(
 			'ok'      => true,
 			'message' => array(
-				'id'              => (int) $row->id,
-				'subject'         => (string) $row->subject,
-				'from'            => self::fmt_addr( (string) $row->from_name, (string) $row->from_addr ),
-				'to'              => $to,
-				'cc'              => $cc,
-				'received_at'     => $row->received_at ? (string) $row->received_at : '',
-				'class'           => (string) $row->class,
-				'folder'          => (string) $row->folder,
-				'has_attachments' => (int) $row->has_attachments,
-				'body_text'       => self::body_to_text( $body, (string) $row->body_format ),
+				'id'                => (int) $row->id,
+				'subject'           => (string) $row->subject,
+				'from'              => self::fmt_addr( (string) $row->from_name, (string) $row->from_addr ),
+				'to'                => $to,
+				'cc'                => $cc,
+				'received_at'       => $row->received_at ? (string) $row->received_at : '',
+				'class'             => (string) $row->class,
+				'folder'            => (string) $row->folder,
+				'has_attachments'   => (int) $row->has_attachments,
+				'body_text'         => self::body_to_text( $body, (string) $row->body_format ),
+				'body_html'         => (string) $san['html'],
+				'has_remote_images' => (bool) $san['has_remote_images'],
+				'has_inline_images' => (bool) ( $san['has_inline_images'] ?? false ),
 			),
 		);
+	}
+
+	/**
+	 * Sanitise an email's HTML for the reading pane: drop dangerous elements/attributes, neutralise URL
+	 * schemes, force images OFF (stash <img src> into data-zib-src + blank src, tracking whether any remote
+	 * or cid: inline image was found), then run wp_kses with an email-safe allow-list. Rendered in a
+	 * sandboxed iframe (the real boundary); has_remote_images lets the UI show "Load images" only when
+	 * there is something to load.
+	 *
+	 * @return array { html:string, has_remote_images:bool, has_inline_images:bool }
+	 */
+	public static function sanitize_email_html( string $html ): array {
+		$has_remote = false;
+		$has_inline = false; // cid: (embedded) images are tracked separately from remote ones.
+
+		// 1. Drop dangerous element blocks WITH their content.
+		$html = (string) preg_replace( '#<(script|style|head|title|template|noscript)\b[^>]*>.*?</\1\s*>#is', '', $html );
+		// Any orphan opening/closing of those, plus framing/form/plugin elements.
+		$html = (string) preg_replace( '#</?(?:script|style|head|title|template|noscript|iframe|frame|frameset|object|embed|applet|form|input|button|select|option|optgroup|textarea|label|fieldset|legend|link|meta|base)\b[^>]*>#is', '', $html );
+		// 2. Strip HTML comments (can hide conditional / injected payloads).
+		$html = (string) preg_replace( '#<!--.*?-->#s', '', $html );
+		// 3. Strip event-handler attributes (on…=), quoted or bare.
+		$html = (string) preg_replace( '#\son[a-z]+\s*=\s*"[^"]*"#i', '', $html );
+		$html = (string) preg_replace( "#\son[a-z]+\s*=\s*'[^']*'#i", '', $html );
+		$html = (string) preg_replace( '#\son[a-z]+\s*=\s*[^\s>]+#i', '', $html );
+		// 4. Neutralise dangerous URL schemes anywhere in an attribute value.
+		$html = (string) preg_replace( '#(href|src|xlink:href|action|formaction)\s*=\s*(["\'])\s*(?:javascript|vbscript|data|file|about)\s*:[^"\']*\2#i', '$1="#"', $html );
+		// 5. IMAGES OFF: stash every <img src> into data-zib-src and blank src. A cid: reference is an
+		//    EMBEDDED (inline) part of this very message — not a remote fetch — so it flags has_inline, not
+		//    has_remote: the reader can resolve and show it without the tracking risk of a remote pull.
+		$html = (string) preg_replace_callback( '#<img\b([^>]*)>#is', function ( $m ) use ( &$has_remote, &$has_inline ) {
+			$attrs = $m[1];
+			if ( preg_match( '#\ssrc\s*=\s*(["\'])(.*?)\1#is', $attrs, $sm ) ) {
+				$url = trim( (string) $sm[2] );
+				if ( '' !== $url ) {
+					if ( 0 === stripos( $url, 'cid:' ) ) { $has_inline = true; } else { $has_remote = true; }
+				}
+				$attrs = str_replace( $sm[0], ' data-zib-src="' . self::attr_esc( $url ) . '"', $attrs );
+			}
+			return '<img' . $attrs . '>';
+		}, $html );
+		// 6. Neutralise url(...) / expression() / behavior in inline styles (background images, IE vectors).
+		$html = (string) preg_replace_callback( '#\sstyle\s*=\s*(["\'])(.*?)\1#is', function ( $m ) use ( &$has_remote ) {
+			$css = $m[2];
+			if ( preg_match( '#url\s*\(#i', $css ) ) { $has_remote = true; }
+			$css = (string) preg_replace( '#url\s*\([^)]*\)#i', 'none', $css );
+			$css = (string) preg_replace( '#(expression|behaviou?r|-moz-binding)\s*\([^)]*\)#i', '', $css );
+			return ' style="' . $css . '"';
+		}, $html );
+		// 7. Legacy background="url" attributes.
+		$html = (string) preg_replace( '#\sbackground\s*=\s*(["\']).*?\1#is', '', $html );
+
+		// 8. Production belt: a proper tokenising allow-list. (In unit tests wp_kses is absent, so the
+		//    pre-pass above must already be safe — that is what the tests assert.)
+		if ( function_exists( 'wp_kses' ) ) {
+			$html = wp_kses( $html, self::email_allowed_html(), array( 'http', 'https', 'mailto', 'tel' ) );
+		}
+
+		return array( 'html' => (string) $html, 'has_remote_images' => (bool) $has_remote, 'has_inline_images' => (bool) $has_inline );
+	}
+
+	/** esc_attr when WP is present, a safe fallback otherwise (so sanitize_email_html is unit-testable). */
+	private static function attr_esc( string $s ): string {
+		return function_exists( 'esc_attr' ) ? esc_attr( $s ) : htmlspecialchars( $s, ENT_QUOTES, 'UTF-8' );
+	}
+
+	/** Email-safe wp_kses allow-list: formatting + tables + neutralised <img> (data-zib-src), no
+	 *  script/style/form/framing. style/class/align kept so the mail still reads like the original. */
+	private static function email_allowed_html(): array {
+		$common = array( 'style' => true, 'class' => true, 'align' => true, 'dir' => true, 'title' => true );
+		$cell   = array_merge( $common, array( 'colspan' => true, 'rowspan' => true, 'valign' => true, 'width' => true, 'height' => true, 'bgcolor' => true, 'nowrap' => true ) );
+		return array(
+			'p' => $common, 'div' => $common, 'span' => $common, 'br' => array(), 'hr' => $common,
+			'a' => array_merge( $common, array( 'href' => true, 'target' => true, 'rel' => true, 'name' => true ) ),
+			'b' => $common, 'strong' => $common, 'i' => $common, 'em' => $common, 'u' => $common,
+			's' => $common, 'strike' => $common, 'sub' => $common, 'sup' => $common, 'small' => $common,
+			'big' => $common, 'mark' => $common, 'blockquote' => $common, 'pre' => $common, 'code' => $common,
+			'ul' => $common, 'ol' => array_merge( $common, array( 'start' => true, 'type' => true ) ), 'li' => $common,
+			'dl' => $common, 'dt' => $common, 'dd' => $common,
+			'h1' => $common, 'h2' => $common, 'h3' => $common, 'h4' => $common, 'h5' => $common, 'h6' => $common,
+			'table' => array_merge( $common, array( 'width' => true, 'height' => true, 'cellpadding' => true, 'cellspacing' => true, 'border' => true, 'bgcolor' => true ) ),
+			'thead' => $common, 'tbody' => $common, 'tfoot' => $common, 'caption' => $common,
+			'tr' => array_merge( $common, array( 'valign' => true, 'bgcolor' => true ) ), 'td' => $cell, 'th' => $cell, 'colgroup' => $common, 'col' => array_merge( $common, array( 'span' => true, 'width' => true ) ),
+			'img' => array( 'data-zib-src' => true, 'alt' => true, 'width' => true, 'height' => true, 'style' => true, 'class' => true, 'align' => true ),
+			'font' => array_merge( $common, array( 'color' => true, 'face' => true, 'size' => true ) ),
+			'center' => $common, 'figure' => $common, 'figcaption' => $common,
+		);
+	}
+
+	/**
+	 * The owner's Mail folder nav — their tracked, non-empty folders (folder_hash + name + count).
+	 * Owner-gated; degrades to an empty list until the all-folder sync populates the folders table.
+	 *
+	 * @return array { ok:bool, folders:array<{hash,name,well_known,count}> }
+	 */
+	public static function owner_folders( int $actor ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_folders', 'deny', 'not permitted', '', 0 );
+			return array( 'ok' => false, 'folders' => array() );
+		}
+		$rows = ZIB_Ingest::owner_folder_list( $actor );
+		$out  = array();
+		foreach ( (array) $rows as $f ) {
+			$name  = trim( (string) ( $f['display_name'] ?? '' ) );
+			$out[] = array(
+				'hash'       => (string) ( $f['folder_hash'] ?? '' ),
+				'name'       => ( '' !== $name ) ? $name : 'Folder',
+				'well_known' => (string) ( $f['well_known'] ?? '' ),
+				'count'      => (int) ( $f['indexed_count'] ?? 0 ),
+			);
+		}
+		self::log( $actor, $actor, 'owner_folders', 'allow', '', '', count( $out ) );
+		return array( 'ok' => true, 'folders' => $out );
+	}
+
+	// ── Attachments (read) — list / bytes / inline cid: images (owner-gated live Graph read) ──
+
+	/** Max attachment bytes served inline. Phone photos fit; a bigger file is NAMED, not shown. */
+	const MAX_ATTACH_BYTES = 12582912; // 12 MiB (decoded)
+
+	/** v0.20.0: cap how many embedded (cid:) images one message can resolve, to bound the Graph fan-out. */
+	const MAX_INLINE_COUNT = 20;
+
+	/** Browser-native raster types we will render. image/svg+xml is DELIBERATELY absent (script vector). */
+	private static function attach_image_types(): array {
+		return array( 'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp' );
+	}
+
+	// ── v0.20.0: HEIC/HEIF — Apple's photo format. Browsers (Chrome/Firefox) can't decode it, so it is
+	// NOT a directly-renderable type; instead, when the host has an Imagick built with libheif, we
+	// transcode it to JPEG server-side and serve THAT. On a host without the decoder it degrades to a
+	// named, non-rendered attachment (never a broken box). All checks are local (no network).
+
+	/** HEIC/HEIF media types (parameters already stripped by the caller). */
+	private static function heic_types(): array {
+		return array( 'image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence' );
+	}
+
+	/** True when a (media-type-only) content type is HEIC/HEIF. */
+	public static function is_heic_type( string $ctype ): bool {
+		return in_array( strtolower( trim( $ctype ) ), self::heic_types(), true );
+	}
+
+	/** True when this host can transcode HEIC/HEIF → JPEG (Imagick compiled with libheif). Cached. */
+	public static function can_transcode_heic(): bool {
+		static $cap = null;
+		if ( null !== $cap ) { return $cap; }
+		$cap = false;
+		if ( class_exists( 'Imagick' ) ) {
+			try {
+				$fmts = @\Imagick::queryFormats( 'HE*' ); // HEIC, HEIF, HEIC-…
+				$cap  = is_array( $fmts ) && ! empty( $fmts );
+			} catch ( \Throwable $e ) { $cap = false; }
+		}
+		return $cap;
+	}
+
+	/**
+	 * Transcode a HEIC/HEIF byte string to JPEG. Returns raw JPEG bytes, or false if the host can't or
+	 * the decode fails. Metadata is stripped (privacy + size); resource limits guard a decompression bomb.
+	 *
+	 * @param string $raw Decoded (binary) HEIC bytes.
+	 * @return string|false
+	 */
+	public static function heic_to_jpeg( string $raw ) {
+		if ( ! self::can_transcode_heic() || '' === $raw ) { return false; }
+		try {
+			$im = new \Imagick();
+			// Cap decode work so a crafted file can't exhaust memory/CPU.
+			if ( defined( '\Imagick::RESOURCETYPE_MEMORY' ) ) { $im->setResourceLimit( \Imagick::RESOURCETYPE_MEMORY, 256 * 1024 * 1024 ); }
+			if ( defined( '\Imagick::RESOURCETYPE_MAP' ) )    { $im->setResourceLimit( \Imagick::RESOURCETYPE_MAP, 512 * 1024 * 1024 ); }
+			$im->readImageBlob( $raw );
+			$im->setImageFormat( 'jpeg' );
+			$im->setImageCompressionQuality( 82 );
+			if ( method_exists( $im, 'stripImage' ) ) { $im->stripImage(); }
+			$out = (string) $im->getImageBlob();
+			$im->clear();
+			if ( method_exists( $im, 'destroy' ) ) { $im->destroy(); }
+			return ( '' !== $out ) ? $out : false;
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * PURE classifier for ONE Graph attachment object (list item OR full object). No I/O — unit-tested.
+	 * Decides the safe display name, whether it is a real file attachment, whether it is a renderable
+	 * image, and (when not) why. On a LIST projection the @odata.type discriminator may be dropped; an
+	 * unknown type is treated as a file CANDIDATE here and authoritatively re-checked by the bytes GET
+	 * (whose full object always carries @odata.type + contentBytes), so a non-file can never be served.
+	 *
+	 * @param array $att A Graph attachment array.
+	 * @return array { att_id, name, content_type, size, is_file, is_inline, is_image, renderable, reason }
+	 */
+	public static function classify_attachment( array $att ): array {
+		$odata     = strtolower( (string) ( $att['@odata.type'] ?? '' ) );
+		$is_inline = ! empty( $att['isInline'] );
+		if ( '' !== $odata ) {
+			$is_file = ( false !== strpos( $odata, 'fileattachment' ) );
+		} else {
+			// List projection can omit the type discriminator; treat as a file candidate — the bytes
+			// GET re-classifies the full object (which always carries @odata.type) before serving.
+			$is_file = true;
+		}
+		$ctype = strtolower( trim( (string) ( $att['contentType'] ?? '' ) ) );
+		// contentType may carry parameters ("image/jpeg; name=x"); keep the media type only.
+		$semi = strpos( $ctype, ';' );
+		if ( false !== $semi ) { $ctype = trim( substr( $ctype, 0, $semi ) ); }
+		$size     = max( 0, (int) ( $att['size'] ?? 0 ) );
+		$name     = self::safe_filename( (string) ( $att['name'] ?? '' ) );
+		$is_image = in_array( $ctype, self::attach_image_types(), true );
+		$is_heic  = self::is_heic_type( $ctype ); // browser can't render it directly — transcoded when served
+
+		$renderable = true;
+		$reason     = '';
+		if ( ! $is_file ) {
+			$renderable = false; $reason = 'not-a-file';
+		} elseif ( $is_inline ) {
+			$renderable = false; $reason = 'inline';            // HTML/ad layer — never rendered
+		} elseif ( ! $is_image ) {
+			$renderable = false; $reason = 'not-image';
+		} elseif ( $size > self::MAX_ATTACH_BYTES ) {
+			$renderable = false; $reason = 'too-large';
+		}
+
+		return array(
+			'att_id'       => (string) ( $att['id'] ?? '' ),
+			'name'         => $name,
+			'content_type' => $ctype,
+			'size'         => $size,
+			'is_file'      => $is_file,
+			'is_inline'    => $is_inline,
+			'is_image'     => $is_image,
+			'is_heic'      => $is_heic,
+			'renderable'   => $renderable,
+			'reason'       => $reason,
+		);
+	}
+
+	/** Neutralise a filename for display: drop path segments + control chars, cap length. Never HTML. */
+	public static function safe_filename( string $name ): string {
+		$name = str_replace( array( "\\", '/' ), array( ' ', ' ' ), $name ); // no path segments
+		$name = preg_replace( '/[\x00-\x1F\x7F]+/', ' ', (string) $name );    // control chars
+		$name = preg_replace( '/\s{2,}/', ' ', (string) $name );
+		$name = trim( (string) $name );
+		if ( '' === $name ) { $name = 'attachment'; }
+		if ( mb_strlen( $name ) > 120 ) { $name = mb_substr( $name, 0, 117 ) . '…'; }
+		return $name;
+	}
+
+
+	/** Map a Graph WP_Error to a short, non-leaky reason for the client. */
+	private static function graph_reason( $err ): string {
+		$code = is_wp_error( $err ) ? (string) $err->get_error_code() : '';
+		if ( 'zib_graph_transient' === $code ) { return 'busy'; }
+		if ( 'zib_graph_401' === $code )       { return 'auth'; }
+		if ( 'zib_graph_404' === $code )       { return 'gone'; }
+		return 'error';
+	}
+
+	/**
+	 * List the RENDERABLE (image) + NAMED (other real file) attachments of one of the actor's own
+	 * messages, via a live Graph read. Owner-gated exactly like owner_get_message. Inline images and
+	 * non-file parts are omitted entirely. Never returns bytes — only what to offer.
+	 *
+	 * @return array { ok:bool, images:array[], others:array[], reason?:string }
+	 */
+	public static function owner_list_attachments( int $actor, int $message_id ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'list not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'list:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$list = ZIB_Graph::list_attachments( (int) $ref->account_id, (string) $ref->ms_message_id, ZIB_Ingest::allfolder_enabled() );
+		if ( is_wp_error( $list ) ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'list:graph:' . $list->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => 'graph', 'detail' => self::graph_reason( $list ) );
+		}
+		$images = array();
+		$others = array();
+		$heic_ok = self::can_transcode_heic();
+		foreach ( (array) $list as $att ) {
+			$c = self::classify_attachment( (array) $att );
+			// v0.20.0: a non-inline HEIC/HEIF photo is renderable when the host can transcode it to JPEG.
+			$heic_renderable = ( $c['is_heic'] && $c['is_file'] && ! $c['is_inline'] && $heic_ok && $c['size'] <= self::MAX_ATTACH_BYTES );
+			if ( $c['renderable'] || $heic_renderable ) {
+				$images[] = array(
+					'att_id'       => $c['att_id'],
+					'name'         => $c['name'],
+					// HEIC is served transcoded, so the browser receives image/jpeg.
+					'content_type' => $heic_renderable ? 'image/jpeg' : $c['content_type'],
+					'size'         => $c['size'],
+				);
+			} elseif ( $c['is_file'] && ! $c['is_inline'] ) {
+				// A real, non-inline attachment we won't render (non-image, image too large, or HEIC on a
+				// host without a decoder): name it, with a clear reason.
+				$reason = ( $c['is_heic'] && ! $heic_ok ) ? 'heic-no-decoder' : $c['reason'];
+				$others[] = array(
+					'name'         => $c['name'],
+					'content_type' => $c['content_type'],
+					'size'         => $c['size'],
+					'reason'       => $reason,
+				);
+			}
+			// inline images / non-file parts: silently omitted here (handled by owner_list_inline_images).
+		}
+		self::log( $actor, $actor, 'owner_attach', 'allow', 'list:' . (int) $message_id, '', count( $images ) );
+		return array( 'ok' => true, 'images' => $images, 'others' => $others );
+	}
+
+	/**
+	 * Fetch ONE image attachment's bytes (base64) for inline rendering. Re-classifies the FULL object
+	 * server-side and refuses anything that is not a non-inline, allow-listed, in-cap image — plus a
+	 * belt check that contentBytes is actually present (an itemAttachment carries none). The att_id is
+	 * addressed only within the owner-scoped message, so it cannot reach another mailbox.
+	 *
+	 * @return array { ok:bool, name?, content_type?, data_b64?, reason? }
+	 */
+	public static function owner_get_attachment( int $actor, int $message_id, string $att_id ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'get not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$att_id = trim( $att_id );
+		if ( '' === $att_id ) {
+			return array( 'ok' => false, 'reason' => 'bad-id' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'get:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$att = ZIB_Graph::get_attachment( (int) $ref->account_id, (string) $ref->ms_message_id, $att_id, ZIB_Ingest::allfolder_enabled() );
+		if ( is_wp_error( $att ) ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'get:graph:' . $att->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => 'graph', 'detail' => self::graph_reason( $att ) );
+		}
+		$c = self::classify_attachment( (array) $att );
+		// v0.20.0: a non-inline HEIC/HEIF file passes the gate only when this host can transcode it.
+		$heic_ok = ( $c['is_heic'] && $c['is_file'] && ! $c['is_inline'] && self::can_transcode_heic() && $c['size'] <= self::MAX_ATTACH_BYTES );
+		if ( ! $c['renderable'] && ! $heic_ok ) {
+			$reason = ( $c['is_heic'] && ! self::can_transcode_heic() ) ? 'heic-no-decoder' : ( '' !== $c['reason'] ? $c['reason'] : 'blocked' );
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'get:blocked:' . $reason, '', 0 );
+			return array( 'ok' => false, 'reason' => $reason );
+		}
+		$bytes = (string) ( $att['contentBytes'] ?? '' );
+		if ( '' === $bytes ) {
+			return array( 'ok' => false, 'reason' => 'no-bytes' );
+		}
+		// Belt: cap the ENCODED length too (base64 ≈ 4/3 of decoded), so a mislabelled size can't slip a
+		// huge payload through the byte gate.
+		if ( strlen( $bytes ) > (int) ( self::MAX_ATTACH_BYTES * 1.4 ) ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'get:blocked:too-large', '', 0 );
+			return array( 'ok' => false, 'reason' => 'too-large' );
+		}
+		$content_type = $c['content_type'];
+		if ( $heic_ok ) {
+			// Decode → transcode HEIC to JPEG → re-encode. On any failure, refuse (never a broken image).
+			$raw  = base64_decode( $bytes, true );
+			$jpeg = ( false !== $raw && '' !== $raw ) ? self::heic_to_jpeg( $raw ) : false;
+			if ( false === $jpeg || strlen( $jpeg ) > self::MAX_ATTACH_BYTES ) {
+				self::log( $actor, $actor, 'owner_attach', 'deny', 'get:blocked:heic-decode', '', 0 );
+				return array( 'ok' => false, 'reason' => 'heic-decode-failed' );
+			}
+			$bytes        = base64_encode( $jpeg );
+			$content_type = 'image/jpeg';
+		}
+		self::log( $actor, $actor, 'owner_attach', 'allow', 'get:' . (int) $message_id, '', 1 );
+		return array(
+			'ok'           => true,
+			'name'         => $c['name'],
+			'content_type' => $content_type,
+			'data_b64'     => $bytes, // Graph returns contentBytes already base64-encoded (JPEG re-encoded for HEIC)
+		);
+	}
+
+	/**
+	 * v0.20.0 — resolve a message's EMBEDDED (inline, cid:) images to bytes for the reading pane.
+	 *
+	 * iPhone/Outlook/etc. embed a photo as an inline attachment referenced by the HTML as
+	 * <img src="cid:CONTENT-ID">. A cid: URL can't resolve inside the sandboxed reader iframe, so those
+	 * images render as a broken box. This returns each inline image's bytes keyed by its Content-ID, so
+	 * the reader can swap cid:… for a data: URI. Unlike remote images (a tracking pull), inline parts are
+	 * already inside the message — no network fetch on display — so showing them carries no tracking risk.
+	 *
+	 * Owner-gated exactly like owner_get_message / owner_list_attachments. Each part is re-classified from
+	 * its FULL Graph object before any bytes are returned; a part is resolved when it is a raster image (or
+	 * HEIC transcoded to JPEG on a capable host) that carries a Content-ID — the marker that the HTML can
+	 * reference it as cid:… — each under the size cap, up to MAX_INLINE_COUNT. Keyed on Content-ID rather
+	 * than the isInline flag, which some clients (iPhone Mail) leave unset on a cid-referenced photo.
+	 *
+	 * @return array { ok:bool, images:array<{cid,content_type,data_b64,name}>, heic_capable:bool, reason?:string }
+	 */
+	public static function owner_list_inline_images( int $actor, int $message_id ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'inline not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'inline:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$immutable = ZIB_Ingest::allfolder_enabled();
+		$list      = ZIB_Graph::list_attachments( (int) $ref->account_id, (string) $ref->ms_message_id, $immutable );
+		if ( is_wp_error( $list ) ) {
+			self::log( $actor, $actor, 'owner_attach', 'deny', 'inline:graph:' . $list->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => 'graph', 'detail' => self::graph_reason( $list ) );
+		}
+		$heic_ok = self::can_transcode_heic();
+		$images  = array();
+		$total   = 0;
+		// Resolve image parts that carry a Content-ID — the marker of a cid:-referenceable part — INLINE
+		// parts first (the usual embed), then any remaining image parts, because some clients (e.g. iPhone
+		// Mail) reference a photo by cid: WITHOUT setting isInline. contentId lives only on the FULL object,
+		// so candidates are fetched in full and gated on a non-empty Content-ID. Bounded by count + a running
+		// size total; the client only calls this when the body actually carries a cid: image.
+		foreach ( array( true, false ) as $want_inline ) {
+			foreach ( (array) $list as $att ) {
+				if ( count( $images ) >= self::MAX_INLINE_COUNT ) { break 2; }
+				$c = self::classify_attachment( (array) $att );
+				if ( (bool) $c['is_inline'] !== $want_inline ) { continue; } // handle this pass's disposition only
+				if ( ! ( $c['is_image'] || ( $c['is_heic'] && $heic_ok ) ) ) { continue; }
+				if ( $c['size'] > self::MAX_ATTACH_BYTES ) { continue; }
+
+				$full = ZIB_Graph::get_attachment( (int) $ref->account_id, (string) $ref->ms_message_id, $c['att_id'], $immutable );
+				if ( is_wp_error( $full ) ) { continue; }
+				$fc = self::classify_attachment( (array) $full ); // authoritative re-check of the FULL object
+				if ( ! $fc['is_file'] ) { continue; }
+				$is_heic = $fc['is_heic'];
+				if ( ! ( $fc['is_image'] || ( $is_heic && $heic_ok ) ) ) { continue; }
+
+				// Only a part with a Content-ID can be referenced as cid: in the HTML; that is what we resolve.
+				$cid = trim( trim( (string) ( $full['contentId'] ?? '' ) ), '<>' );
+				if ( '' === $cid ) { continue; }
+
+				$bytes = (string) ( $full['contentBytes'] ?? '' );
+				if ( '' === $bytes || strlen( $bytes ) > (int) ( self::MAX_ATTACH_BYTES * 1.4 ) ) { continue; }
+				$ctype = $fc['content_type'];
+				if ( $is_heic ) {
+					$raw  = base64_decode( $bytes, true );
+					$jpeg = ( false !== $raw && '' !== $raw ) ? self::heic_to_jpeg( $raw ) : false;
+					if ( false === $jpeg || strlen( $jpeg ) > self::MAX_ATTACH_BYTES ) { continue; }
+					$bytes = base64_encode( $jpeg );
+					$ctype = 'image/jpeg';
+				}
+				$total += strlen( $bytes );
+				if ( $total > (int) ( self::MAX_ATTACH_BYTES * 1.6 ) ) { break 2; } // running cap across all imgs
+
+				$images[] = array(
+					'cid'          => $cid,
+					'content_type' => $ctype,
+					'data_b64'     => $bytes,
+					'name'         => $fc['name'],
+				);
+			}
+		}
+		self::log( $actor, $actor, 'owner_attach', 'allow', 'inline:' . (int) $message_id, '', count( $images ) );
+		return array( 'ok' => true, 'images' => $images, 'heic_capable' => $heic_ok );
+	}
+
+	// ── Phase 2 — owner SEND (INV-SEND) ────────────────────────────────
+	//
+	// The owner-composed WRITE path. Each method re-gates the owner (gate_owner), resolves the target
+	// SERVER-SIDE (owner_msg_ref for reply/forward — the ms_message_id is never taken from the client),
+	// validates recipients, calls the Graph send, and AUDITS via log('owner_send'). Fired ONLY by the
+	// owner's explicit Send of a composed message; no chat/marker/one-click path may reach here (INV-SEND).
+
+	/** Owner-scoped resolve of a message's Graph coordinates. Null if not found / not owned. */
+	private static function owner_msg_ref( int $actor, int $message_id ) {
+		global $wpdb;
+		return $wpdb->get_row( $wpdb->prepare(
+			'SELECT account_id, ms_message_id, has_attachments FROM ' . self::t_msg() . ' WHERE id = %d AND owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$message_id, $actor
+		) );
+	}
+
+	/** The owner's own mailbox account id — for a NEW message, which has no source message row. */
+	private static function owner_account_id( int $actor ): int {
+		global $wpdb;
+		$id = $wpdb->get_var( $wpdb->prepare(
+			'SELECT id FROM ' . $wpdb->prefix . 'zib_accounts WHERE owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$actor
+		) );
+		return $id ? (int) $id : 0;
+	}
+
+	/** Parse a comma/semicolon/newline-separated recipient string into Graph recipient objects; invalid
+	 *  addresses are dropped and reported. Accepts "Name <addr>" and bare "addr". Pure; unit-tested. */
+	public static function parse_recipients( string $raw ): array {
+		$parts   = preg_split( '/[,;\n]+/', (string) $raw );
+		$rcpt    = array();
+		$invalid = array();
+		$seen    = array();
+		foreach ( (array) $parts as $p ) {
+			$p = trim( $p );
+			if ( '' === $p ) { continue; }
+			$addr = ( preg_match( '/<([^>]+)>/', $p, $m ) ) ? trim( $m[1] ) : $p;
+			$addr = strtolower( trim( $addr ) );
+			$ok   = function_exists( 'is_email' ) ? (bool) is_email( $addr ) : (bool) filter_var( $addr, FILTER_VALIDATE_EMAIL );
+			if ( ! $ok ) { $invalid[] = $p; continue; }
+			if ( isset( $seen[ $addr ] ) ) { continue; }
+			$seen[ $addr ] = true;
+			$rcpt[]        = array( 'emailAddress' => array( 'address' => $addr ) );
+		}
+		return array( 'recipients' => $rcpt, 'invalid' => $invalid, 'count' => count( $rcpt ) );
+	}
+
+	/** Map a send WP_Error to a short, client-safe reason (403 → reconnect: Mail.Send not granted). */
+	private static function send_reason( $err ): string {
+		$code = is_wp_error( $err ) ? (string) $err->get_error_code() : '';
+		if ( 'zib_graph_403' === $code )       { return 'reconnect'; }
+		if ( 'zib_graph_401' === $code )       { return 'auth'; }
+		if ( 'zib_graph_transient' === $code ) { return 'busy'; }
+		return 'error';
+	}
+
+	/**
+	 * Turn the owner's composed plain text into a minimal, safe HTML body that PRESERVES the spacing they
+	 * typed. A blank line between paragraphs has to survive into the delivered mail; sending as contentType
+	 * 'Text' does not carry it (mail clients collapse blank lines). So: escape first (no injection), turn
+	 * every newline into <br>, wrap in one plain <div>. No links auto-made, no remote resources, no scripts.
+	 */
+	private static function text_to_html( string $text ): string {
+		$text = str_replace( array( "\r\n", "\r" ), "\n", (string) $text );
+		$html = nl2br( esc_html( $text ), false ); // <br>, not <br />
+		return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;">' . $html . '</div>';
+	}
+
+	/**
+	 * Owner replies (or reply-alls) to one of their OWN indexed messages. $comment is the composed reply
+	 * body; Graph quotes the original beneath it. Owner-forced, audited. INV-SEND: explicit Send only.
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_send_reply( int $actor, int $message_id, string $comment, bool $all = false ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'reply not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$comment = trim( $comment );
+		if ( '' === $comment ) { return array( 'ok' => false, 'reason' => 'empty' ); }
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'reply:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		// immutable=false: without all-folder sync, ingest stores the default ms_message_id. Wire
+		// ZIB_Ingest::allfolder_enabled() here once the all-folder sync (immutable ids) is ported.
+		$res = ZIB_Graph::send_reply_html( (int) $ref->account_id, (string) $ref->ms_message_id, self::text_to_html( $comment ), $all, false );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'reply:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_send', 'allow', ( $all ? 'replyall:' : 'reply:' ) . (int) $message_id, '', 1 );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Owner forwards one of their OWN indexed messages to new recipients, with an optional note.
+	 * Owner-forced, audited. INV-SEND: explicit Send only.
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_send_forward( int $actor, int $message_id, string $comment, string $to_raw ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'forward not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'forward:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$to = self::parse_recipients( $to_raw );
+		if ( $to['count'] < 1 ) { return array( 'ok' => false, 'reason' => 'no-recipients' ); }
+		$res = ZIB_Graph::send_forward_html( (int) $ref->account_id, (string) $ref->ms_message_id, self::text_to_html( trim( $comment ) ), $to['recipients'], false );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'forward:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_send', 'allow', 'forward:' . (int) $message_id, '', $to['count'] );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Owner sends a BRAND-NEW message from their own mailbox. Owner-forced, audited. INV-SEND: explicit
+	 * Send only. Body is spacing-preserving HTML (text_to_html) so the owner's line breaks survive.
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_send_new( int $actor, string $to_raw, string $cc_raw, string $subject, string $body ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'new not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$acct = self::owner_account_id( $actor );
+		if ( $acct <= 0 ) { return array( 'ok' => false, 'reason' => 'not-connected' ); }
+		$to = self::parse_recipients( $to_raw );
+		if ( $to['count'] < 1 ) { return array( 'ok' => false, 'reason' => 'no-recipients' ); }
+		$cc      = self::parse_recipients( $cc_raw );
+		$subject = trim( $subject );
+		$body    = (string) $body;
+		if ( '' === trim( $body ) && '' === $subject ) { return array( 'ok' => false, 'reason' => 'empty' ); }
+		$message = array(
+			'subject'      => $subject,
+			'body'         => array( 'contentType' => 'HTML', 'content' => self::text_to_html( $body ) ),
+			'toRecipients' => $to['recipients'],
+		);
+		if ( $cc['count'] > 0 ) { $message['ccRecipients'] = $cc['recipients']; }
+		$res = ZIB_Graph::send_new( $acct, $message );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'new:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_send', 'allow', 'new:' . substr( sha1( $subject ), 0, 12 ), '', $to['count'] );
+		return array( 'ok' => true );
+	}
+
+	// ── owner triage — mark-read / move (INV-WRITE: identity forced to the current user) ──
+
+	/**
+	 * Owner sets read / unread on one of their OWN indexed messages. Owner-forced, audited. The one
+	 * mark-read the UI fires automatically is on OPEN (the owner's own act of opening the message).
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_mark_read( int $actor, int $message_id, bool $is_read ): array {
+		global $wpdb;
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'markread not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'markread:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$res = ZIB_Graph::set_read( (int) $ref->account_id, (string) $ref->ms_message_id, $is_read, ZIB_Ingest::allfolder_enabled() );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'markread:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		// Graph is authoritative, but the index re-read lags ingest. Reflect the flip on the owner's OWN
+		// row immediately so a /browse refresh (e.g. after "Mark unread" → Back) agrees.
+		$wpdb->update( self::t_msg(), array( 'is_read' => $is_read ? 1 : 0 ), array( 'id' => (int) $message_id, 'owner_user_id' => $actor ), array( '%d' ), array( '%d', '%d' ) );
+		self::log( $actor, $actor, 'owner_triage', 'allow', ( $is_read ? 'markread:' : 'markunread:' ) . (int) $message_id, '', 0 );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Owner moves one of their OWN indexed messages to another folder — Delete (→ deleteditems),
+	 * Archive, Spam (→ junkemail), or a folder they picked. Owner-forced, audited. Reversible: every
+	 * destination is a real folder, never a purge.
+	 *
+	 * @param string $destination 'deleteditems' | 'archive' | 'junkemail' | 'inbox' | a 32-hex owned folder_hash.
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_move( int $actor, int $message_id, string $destination ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$dest = self::triage_destination( (int) $ref->account_id, $destination );
+		if ( '' === $dest ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move:bad-dest', '', 0 );
+			return array( 'ok' => false, 'reason' => 'bad-dest' );
+		}
+		$res = ZIB_Graph::move_message( (int) $ref->account_id, (string) $ref->ms_message_id, $dest, ZIB_Ingest::allfolder_enabled() );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_triage', 'deny', 'move:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_triage', 'allow', 'move:' . strtolower( trim( $destination ) ) . ':' . (int) $message_id, '', 0 );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Resolve a move destination to a Graph folder id. Well-known names pass through; a 32-hex
+	 * folder_hash is resolved to its stored ms_folder_id, owner-scoped by account. Anything else → ''.
+	 */
+	private static function triage_destination( int $account_id, string $dest ): string {
+		$k = strtolower( trim( $dest ) );
+		$wellknown = array( 'deleteditems' => 'deleteditems', 'archive' => 'archive', 'junkemail' => 'junkemail', 'inbox' => 'inbox' );
+		if ( isset( $wellknown[ $k ] ) ) {
+			return $wellknown[ $k ];
+		}
+		if ( preg_match( '/^[a-f0-9]{32}$/', $k ) ) {
+			global $wpdb;
+			$fid = $wpdb->get_var( $wpdb->prepare(
+				'SELECT ms_folder_id FROM ' . $wpdb->prefix . 'zib_folders WHERE account_id = %d AND folder_hash = %s', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$account_id, $k
+			) );
+			if ( $fid ) {
+				return (string) $fid;
+			}
+		}
+		return '';
 	}
 
 	// ── admin_search / admin_get_message (P4 — admin-provisioned read) ──

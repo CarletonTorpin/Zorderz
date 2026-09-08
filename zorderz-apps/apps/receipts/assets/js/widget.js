@@ -3202,6 +3202,39 @@
       });
   }
 
+  /* Lift the review modal out of the widget card's stacking context (to
+     document.body) so the app-shell bottom nav can no longer cover — and swallow
+     taps on — Approve / Send on mobile / Large Text. Theme tokens (--sys-*, --ref-*)
+     are declared on :root, so the modal keeps its colours and spacing after the move.
+     Runs once at init, before the modal is ever opened. */
+  function portalApproveModal() {
+    var modal = modalEl('zrcpt-w-approve-modal');
+    if (!modal || !document.body) return;
+    if (modal.parentNode === document.body) return;   // already portalled
+    try {
+      document.body.appendChild(modal);
+      modal.setAttribute('data-zrcpt-portalled', '1');
+    } catch (e) {
+      // Could not move it. Fall back to keeping the footer clear of the nav by
+      // measuring the nav and insetting the modal above it — Approve is then
+      // reachable even while the nav still paints in front.
+      reserveBottomNav(modal);
+    }
+  }
+
+  /* Fallback belt for portalApproveModal(), and insurance against any future
+     app-shell chrome that outranks us: measure the bottom nav and hold the modal
+     above it. Height is read live (it changes with the safe-area inset and with
+     Large Text), so this stays correct across rotation. */
+  function reserveBottomNav(modal) {
+    try {
+      var nav = document.querySelector('.bnav');
+      if (!nav) return;
+      var h = Math.round(nav.getBoundingClientRect().height);
+      if (h > 0) modal.style.bottom = h + 'px';
+    } catch (e) {}
+  }
+
   function initApproveModal() {
     var chk = modalEl('zrcpt-w-approve-check');
     if (chk) {
@@ -3290,6 +3323,10 @@
   function init() {
     if (initialized) return;
     initialized = true;
+
+    // Lift the review modal out of the widget card's stacking context so the
+    // app-shell bottom nav can no longer cover Approve / Send. Before any open.
+    portalApproveModal();
 
     // Tab switching
     initTabs();
