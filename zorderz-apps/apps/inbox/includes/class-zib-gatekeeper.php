@@ -816,6 +816,164 @@ class ZIB_Gatekeeper {
 		);
 	}
 
+	// ── Phase 2 — owner SEND (INV-SEND) ────────────────────────────────
+	//
+	// The owner-composed WRITE path. Each method re-gates the owner (gate_owner), resolves the target
+	// SERVER-SIDE (owner_msg_ref for reply/forward — the ms_message_id is never taken from the client),
+	// validates recipients, calls the Graph send, and AUDITS via log('owner_send'). Fired ONLY by the
+	// owner's explicit Send of a composed message; no chat/marker/one-click path may reach here (INV-SEND).
+
+	/** Owner-scoped resolve of a message's Graph coordinates. Null if not found / not owned. */
+	private static function owner_msg_ref( int $actor, int $message_id ) {
+		global $wpdb;
+		return $wpdb->get_row( $wpdb->prepare(
+			'SELECT account_id, ms_message_id, has_attachments FROM ' . self::t_msg() . ' WHERE id = %d AND owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$message_id, $actor
+		) );
+	}
+
+	/** The owner's own mailbox account id — for a NEW message, which has no source message row. */
+	private static function owner_account_id( int $actor ): int {
+		global $wpdb;
+		$id = $wpdb->get_var( $wpdb->prepare(
+			'SELECT id FROM ' . $wpdb->prefix . 'zib_accounts WHERE owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$actor
+		) );
+		return $id ? (int) $id : 0;
+	}
+
+	/** Parse a comma/semicolon/newline-separated recipient string into Graph recipient objects; invalid
+	 *  addresses are dropped and reported. Accepts "Name <addr>" and bare "addr". Pure; unit-tested. */
+	public static function parse_recipients( string $raw ): array {
+		$parts   = preg_split( '/[,;\n]+/', (string) $raw );
+		$rcpt    = array();
+		$invalid = array();
+		$seen    = array();
+		foreach ( (array) $parts as $p ) {
+			$p = trim( $p );
+			if ( '' === $p ) { continue; }
+			$addr = ( preg_match( '/<([^>]+)>/', $p, $m ) ) ? trim( $m[1] ) : $p;
+			$addr = strtolower( trim( $addr ) );
+			$ok   = function_exists( 'is_email' ) ? (bool) is_email( $addr ) : (bool) filter_var( $addr, FILTER_VALIDATE_EMAIL );
+			if ( ! $ok ) { $invalid[] = $p; continue; }
+			if ( isset( $seen[ $addr ] ) ) { continue; }
+			$seen[ $addr ] = true;
+			$rcpt[]        = array( 'emailAddress' => array( 'address' => $addr ) );
+		}
+		return array( 'recipients' => $rcpt, 'invalid' => $invalid, 'count' => count( $rcpt ) );
+	}
+
+	/** Map a send WP_Error to a short, client-safe reason (403 → reconnect: Mail.Send not granted). */
+	private static function send_reason( $err ): string {
+		$code = is_wp_error( $err ) ? (string) $err->get_error_code() : '';
+		if ( 'zib_graph_403' === $code )       { return 'reconnect'; }
+		if ( 'zib_graph_401' === $code )       { return 'auth'; }
+		if ( 'zib_graph_transient' === $code ) { return 'busy'; }
+		return 'error';
+	}
+
+	/**
+	 * Turn the owner's composed plain text into a minimal, safe HTML body that PRESERVES the spacing they
+	 * typed. A blank line between paragraphs has to survive into the delivered mail; sending as contentType
+	 * 'Text' does not carry it (mail clients collapse blank lines). So: escape first (no injection), turn
+	 * every newline into <br>, wrap in one plain <div>. No links auto-made, no remote resources, no scripts.
+	 */
+	private static function text_to_html( string $text ): string {
+		$text = str_replace( array( "\r\n", "\r" ), "\n", (string) $text );
+		$html = nl2br( esc_html( $text ), false ); // <br>, not <br />
+		return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;">' . $html . '</div>';
+	}
+
+	/**
+	 * Owner replies (or reply-alls) to one of their OWN indexed messages. $comment is the composed reply
+	 * body; Graph quotes the original beneath it. Owner-forced, audited. INV-SEND: explicit Send only.
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_send_reply( int $actor, int $message_id, string $comment, bool $all = false ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'reply not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$comment = trim( $comment );
+		if ( '' === $comment ) { return array( 'ok' => false, 'reason' => 'empty' ); }
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'reply:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		// immutable=false: without all-folder sync, ingest stores the default ms_message_id. Wire
+		// ZIB_Ingest::allfolder_enabled() here once the all-folder sync (immutable ids) is ported.
+		$res = ZIB_Graph::send_reply_html( (int) $ref->account_id, (string) $ref->ms_message_id, self::text_to_html( $comment ), $all, false );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'reply:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_send', 'allow', ( $all ? 'replyall:' : 'reply:' ) . (int) $message_id, '', 1 );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Owner forwards one of their OWN indexed messages to new recipients, with an optional note.
+	 * Owner-forced, audited. INV-SEND: explicit Send only.
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_send_forward( int $actor, int $message_id, string $comment, string $to_raw ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'forward not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$ref = self::owner_msg_ref( $actor, $message_id );
+		if ( ! $ref ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'forward:not-owned', '', 0 );
+			return array( 'ok' => false, 'reason' => 'not-found' );
+		}
+		$to = self::parse_recipients( $to_raw );
+		if ( $to['count'] < 1 ) { return array( 'ok' => false, 'reason' => 'no-recipients' ); }
+		$res = ZIB_Graph::send_forward_html( (int) $ref->account_id, (string) $ref->ms_message_id, self::text_to_html( trim( $comment ) ), $to['recipients'], false );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'forward:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_send', 'allow', 'forward:' . (int) $message_id, '', $to['count'] );
+		return array( 'ok' => true );
+	}
+
+	/**
+	 * Owner sends a BRAND-NEW message from their own mailbox. Owner-forced, audited. INV-SEND: explicit
+	 * Send only. Body is spacing-preserving HTML (text_to_html) so the owner's line breaks survive.
+	 *
+	 * @return array { ok:bool, reason?:string }
+	 */
+	public static function owner_send_new( int $actor, string $to_raw, string $cc_raw, string $subject, string $body ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'new not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$acct = self::owner_account_id( $actor );
+		if ( $acct <= 0 ) { return array( 'ok' => false, 'reason' => 'not-connected' ); }
+		$to = self::parse_recipients( $to_raw );
+		if ( $to['count'] < 1 ) { return array( 'ok' => false, 'reason' => 'no-recipients' ); }
+		$cc      = self::parse_recipients( $cc_raw );
+		$subject = trim( $subject );
+		$body    = (string) $body;
+		if ( '' === trim( $body ) && '' === $subject ) { return array( 'ok' => false, 'reason' => 'empty' ); }
+		$message = array(
+			'subject'      => $subject,
+			'body'         => array( 'contentType' => 'HTML', 'content' => self::text_to_html( $body ) ),
+			'toRecipients' => $to['recipients'],
+		);
+		if ( $cc['count'] > 0 ) { $message['ccRecipients'] = $cc['recipients']; }
+		$res = ZIB_Graph::send_new( $acct, $message );
+		if ( is_wp_error( $res ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'new:graph:' . $res->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_send', 'allow', 'new:' . substr( sha1( $subject ), 0, 12 ), '', $to['count'] );
+		return array( 'ok' => true );
+	}
+
 	// ── admin_search / admin_get_message (P4 — admin-provisioned read) ──
 
 	/**
