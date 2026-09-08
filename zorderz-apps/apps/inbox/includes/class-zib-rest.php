@@ -152,6 +152,26 @@ class ZIB_REST {
 				'body'    => array(),
 			),
 		) );
+		// Triage write routes (INV-WRITE): mark-read + move. Same owner gate; identity forced to the
+		// current user; the move destination is allow-listed in the Gatekeeper.
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/mark-read', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'mark_read' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id'   => array( 'sanitize_callback' => 'absint' ),
+				'read' => array(),
+			),
+		) );
+		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/move', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'move_msg' ),
+			'permission_callback' => $perm,
+			'args'                => array(
+				'id' => array( 'sanitize_callback' => 'absint' ),
+				'to' => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+			),
+		) );
 		register_rest_route( $ns, '/message/(?P<id>\\d+)', array(
 			'methods'             => 'GET',
 			'callback'            => array( __CLASS__, 'get_message' ),
@@ -349,6 +369,26 @@ class ZIB_REST {
 			(string) $req->get_param( 'cc' ),
 			(string) $req->get_param( 'subject' ),
 			(string) $req->get_param( 'body' )
+		) );
+	}
+
+	// ── Triage callbacks (INV-WRITE: identity forced to the current user) ──
+
+	public static function mark_read( WP_REST_Request $req ) {
+		$read    = $req->get_param( 'read' );
+		$is_read = ( null === $read ) ? true : (bool) filter_var( $read, FILTER_VALIDATE_BOOLEAN );
+		return self::send_response( ZIB_Gatekeeper::owner_mark_read(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			$is_read
+		) );
+	}
+
+	public static function move_msg( WP_REST_Request $req ) {
+		return self::send_response( ZIB_Gatekeeper::owner_move(
+			get_current_user_id(),
+			(int) $req->get_param( 'id' ),
+			(string) $req->get_param( 'to' )
 		) );
 	}
 
