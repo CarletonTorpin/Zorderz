@@ -131,6 +131,7 @@ require_once get_template_directory() . '/inc/class-zdz-core-freshbooks.php';
 require_once get_template_directory() . '/inc/class-zdz-token-service.php'; // v1.1.0: Connections credential authority — provider-agnostic single-flight OAuth refresher (ZDZ_Token_Service). Self-boots; registers the bundled FreshBooks provider via zdz_token_providers. Consumed by ZDZ_Core_FreshBooks::refresh_token().
 require_once get_template_directory() . '/inc/class-zdz-core-nutshell.php';
 require_once get_template_directory() . '/inc/class-zdz-core-review-bridge.php'; // v2.14.5
+require_once get_template_directory() . '/inc/class-zdz-name-match.php'; // v1.10.0: ZDZ_Name_Match — shared soundalike/homophone name matcher (Core). Neutral general-English seed; a tenant's confirmed spellings load via the zdz_name_homophones_map filter.
 require_once get_template_directory() . '/inc/class-zdz-contact-bridge.php'; // v2.21.4: orchestrator contact-lookup capability ([ZDZ_CONTACT])
 require_once get_template_directory() . '/inc/class-zdz-orchestrator.php'; // v2.22.0: deterministic Poe-free dashboard intent classifier (/zorderz/v1/orchestrate)
 require_once get_template_directory() . '/inc/class-zdz-plugin-api.php';
