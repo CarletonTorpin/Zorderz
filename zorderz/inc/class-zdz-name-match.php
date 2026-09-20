@@ -87,7 +87,8 @@ class ZDZ_Name_Match {
 		if ( $a === '' || $b === '' ) return false;
 		$max = ( strlen( $a ) >= 6 || strlen( $b ) >= 6 ) ? 2 : 1;
 		if ( abs( strlen( $a ) - strlen( $b ) ) > $max ) return false;
-		return levenshtein( $a, $b ) <= $max;
+		$d = levenshtein( $a, $b ); // -1 when either arg > 255 bytes; treat as not-close
+		return $d >= 0 && $d <= $max;
 	}
 
 	public static function nickname_root( $name ) {
