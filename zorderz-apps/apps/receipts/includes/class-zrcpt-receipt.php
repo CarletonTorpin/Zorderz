@@ -1210,7 +1210,7 @@ final class ZRCPT_Receipt {
                 <p class="zrcpt-lookup-hint">Type an estimate #, invoice #, customer name, or phone.</p>
 
                 <div class="zrcpt-lookup-row">
-                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 5541 or Scott Meyer or 858-555-1212" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 5541 or Jordan Blake or 858-555-1212" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                     <button type="button" id="zrcpt-lookup-btn">Find</button>
                 </div>
 

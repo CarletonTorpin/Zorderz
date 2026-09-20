@@ -52,7 +52,7 @@
     { "sound": "brian",   "spellings": ["Brian", "Bryan", "Brien", "Bryon"], "type": "homophone" },
     { "sound": "catherine","spellings": ["Catherine", "Katherine", "Kathryn", "Katharine", "Cathryn", "Kathrine"], "type": "homophone" },
     { "sound": "philip",  "spellings": ["Philip", "Phillip", "Phillp", "Filip"], "type": "variant", "note": "single/double l; ph=f" },
-    { "sound": "geoff",   "spellings": ["Geoff", "Jeff", "Geof", "Jeoff"], "type": "homophone", "note": "Geoff = Jeff by sound; formal Geoffrey/Jeffrey" },
+    { "sound": "carl",    "spellings": ["Carl", "Karl", "Carle"], "type": "homophone", "note": "hard-C spelling variants" },
     { "sound": "jaime",   "spellings": ["Jaime", "Jamie", "Jayme", "Jaimie"], "type": "homophone" },
     { "sound": "hailey",  "spellings": ["Hailey", "Haley", "Haylee", "Hayley", "Haleigh"], "type": "homophone" },
     { "sound": "isabelle","spellings": ["Isabelle", "Isabel", "Isabell", "Izabel", "Ysabel"], "type": "homophone" },

@@ -892,7 +892,7 @@ class ZL_TSA_Bridge {
 	}
 
 	/**
-	 * Remove address-bearing lines (the "Location: 23944 Nectar Way" pattern the
+	 * Remove address-bearing lines (the "Location: 123 Main St" pattern the
 	 * contract calls out) while keeping the rest of the work description. We drop
 	 * any clause that looks like a street address or an explicit Location: tag.
 	 */
