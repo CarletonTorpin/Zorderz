@@ -293,7 +293,7 @@ class ZDZ_Business_Profile {
 	 * Used where there is room for two or three characters and no logo has been
 	 * supplied: the nav button, an avatar placeholder. Exists because the theme
 	 * shipped one company's initials as the hardcoded fallback, so every install
-	 * on earth would have shown "TS" until someone uploaded artwork.
+	 * on earth would have shown that company's two-letter code until someone uploaded artwork.
 	 */
 	public static function initials( $max = 3 ) {
 		$name  = (string) self::get( 'identity.short_name', self::name() );
