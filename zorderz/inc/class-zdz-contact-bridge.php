@@ -125,22 +125,13 @@ class ZDZ_Contact_Bridge {
 			return $result;
 		}
 
-		// ── §133: name-match confidence tier (recall + first-name PRECISION gate) ──
-		// resolve_freshbooks_client() accepts fuzzy/near-surname matches, so a divergent
-		// first name (asking "Steve Case" and resolving "Susan Casey") could surface a
-		// DIFFERENT person who merely shares a surname. Judge the resolved record against
-		// the asked name and gate disclosure by tier below: a WEAK match (surname related,
-		// first name diverges) discloses name+city ONLY — never full PII presented as the
-		// asked person. ZDZ_Name_Match supplies recall + linguistics when present; an
-		// inline precision fallback keeps the gate fail-closed when it is not (INV-9).
-		// Supersedes the v2.28.11 flag-only "closest match" guard, which still leaked PII.
-		$aq          = array_values( array_filter( preg_split( '/\s+/', trim( $query ) ) ) );
-		$asked_fname = count( $aq ) > 1 ? $aq[0] : '';
-		$asked_lname = count( $aq ) > 1 ? (string) end( $aq ) : (string) ( $aq[0] ?? '' );
-		$rq          = array_values( array_filter( preg_split( '/\s+/', trim( (string) ( $record['name'] ?? '' ) ) ) ) );
-		$res_fname   = count( $rq ) > 1 ? $rq[0] : '';
-		$res_lname   = count( $rq ) > 1 ? (string) end( $rq ) : (string) ( $rq[0] ?? '' );
-		$tier        = self::name_match_tier( $asked_fname, $asked_lname, $res_fname, $res_lname );
+		// ── §133 name-match confidence gate (recall + first-name PRECISION). ──
+		// full_disclosure_ok() decides whether we are confident the resolved record IS the
+		// asked person. If not, we disclose name + city only (below) — never the wrong
+		// person's phone/email/address. See the method for the confidence rule; it closes
+		// the tier-'none' and surname-only 'strong' full-PII paths an earlier weak-only
+		// gate let through (adversarial finding, 2026-09-20).
+		$full_ok = self::full_disclosure_ok( $query, (string) ( $record['name'] ?? '' ) );
 
 		// ── DISCLOSURE: kiosk gets name + city ONLY, regardless of scope ──
 		if ( $is_kiosk ) {
@@ -152,10 +143,8 @@ class ZDZ_Contact_Bridge {
 			return $result;
 		}
 
-		// ── §133 PRECISION: a WEAK match (surname related, first name diverges) is
-		//    disclosed as name + city ONLY, regardless of scope — never full PII, since
-		//    it may be a different person. The card labels it "closest match" + open-in-chat. ──
-		if ( $tier === 'weak' ) {
+		// ── §133 PRECISION GATE: a low-confidence match is name + city ONLY. ──
+		if ( ! $full_ok ) {
 			$result['closest_match'] = true;
 			$result['asked']         = $query;
 			$result['contact']       = array(
@@ -165,7 +154,7 @@ class ZDZ_Contact_Bridge {
 			$city              = (string) ( $record['city'] ?? '' );
 			$result['message'] = 'The closest customer I found is ' . $record['name']
 				. ( $city !== '' ? ' (' . $city . ')' : '' )
-				. ' — but the first name doesn\'t match "' . $query . '", so this may be a different person. Open it in chat to confirm before using their contact details.';
+				. ' — but it may be a different person than "' . $query . '". Open it in chat to confirm before using their contact details.';
 			return $result;
 		}
 
@@ -453,6 +442,52 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
+	 * §133 precision gate — may we disclose FULL contact PII for this query, given the
+	 * resolver's single resolved record? Full PII requires POSITIVE identity confidence;
+	 * a low-confidence resolution (an unrelated surname from a first-name/near fallback,
+	 * or a near surname with no corroborating first name) returns false so the caller
+	 * discloses name + city only. The point is to never hand back the WRONG person's
+	 * phone/email/address.
+	 *
+	 * Confident (true) when ANY of:
+	 *   (A) the resolved name CONTAINS every asked word (exact name, "Smith" -> "John
+	 *       Smith", or an organisation name) — substring, not fuzzy;
+	 *   (B) the surname is EXACT and the first name is compatible or was not asked;
+	 *   (C) a near/soundalike surname (recall) CORROBORATED by a present, compatible asked
+	 *       first name.
+	 * Pure and side-effect-free, so it is unit-tested directly
+	 * (tests/unit/test-contact-bridge-disclosure.php).
+	 *
+	 * @param string $query         The name the operator asked for.
+	 * @param string $resolved_name The single record the resolver returned.
+	 * @return bool True to disclose full contact; false to disclose name + city only.
+	 */
+	public static function full_disclosure_ok( string $query, string $resolved_name ): bool {
+		$aq          = array_values( array_filter( preg_split( '/\s+/', trim( $query ) ) ) );
+		$asked_fname = count( $aq ) > 1 ? $aq[0] : '';
+		$asked_lname = count( $aq ) > 1 ? (string) end( $aq ) : (string) ( $aq[0] ?? '' );
+		$rq          = array_values( array_filter( preg_split( '/\s+/', trim( $resolved_name ) ) ) );
+		$res_fname   = count( $rq ) > 1 ? $rq[0] : '';
+		$res_lname   = count( $rq ) > 1 ? (string) end( $rq ) : (string) ( $rq[0] ?? '' );
+		$tier        = self::name_match_tier( $asked_fname, $asked_lname, $res_fname, $res_lname );
+
+		$asked_l   = strtolower( trim( $asked_lname ) );
+		$res_l     = strtolower( trim( $res_lname ) );
+		$res_full  = strtolower( trim( $resolved_name ) );
+		$sig_toks  = array_values( array_filter( $aq, function ( $t ) { return strlen( $t ) > 1; } ) );
+		$contained = ! empty( $sig_toks );
+		foreach ( $sig_toks as $tok ) {
+			if ( strpos( $res_full, strtolower( $tok ) ) === false ) { $contained = false; break; }
+		}
+		$surname_exact   = ( $asked_l !== '' && $asked_l === $res_l );
+		$fn_corroborated = ( $asked_fname !== '' && $res_fname !== '' && self::first_name_compatible( $asked_fname, $res_fname ) );
+
+		return $contained
+			|| ( $surname_exact && ( $asked_fname === '' || $fn_corroborated ) )
+			|| ( $tier === 'strong' && $fn_corroborated );
+	}
+
+	/**
 	 * §133 — confidence tier for a resolved candidate vs the asked name.
 	 *   exact  — surname equal AND first name equal/compatible (or none asked)
 	 *   strong — surname related (typo/soundalike) AND first name compatible
@@ -508,7 +543,8 @@ class ZDZ_Contact_Bridge {
 		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) {
 			return true;
 		}
-		if ( levenshtein( $a, $b ) <= 2 ) {
+		$d = levenshtein( $a, $b ); // PHP returns -1 when either arg > 255 bytes; treat that as "not close"
+		if ( $d >= 0 && $d <= 2 ) {
 			return true;
 		}
 		if ( class_exists( 'ZDZ_Name_Match' ) ) {
@@ -543,7 +579,8 @@ class ZDZ_Contact_Bridge {
 		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) {
 			return true;
 		}
-		return levenshtein( $a, $b ) <= 1;
+		$d = levenshtein( $a, $b ); // -1 when either arg > 255 bytes; treat as not-compatible
+		return $d >= 0 && $d <= 1;
 	}
 
 	/**
