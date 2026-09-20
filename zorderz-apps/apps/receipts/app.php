@@ -6,7 +6,7 @@
  *   billing provider + CRM, attach the install photos from the shared media store, render a
  *   NEUTRAL letterhead template, and publish a token-gated public receipt page behind a
  *   reviewer Approve-&-Send gate. Ships with NO business data.
- * Version:     3.10.0
+ * Version:     3.11.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html

@@ -12,7 +12,7 @@
       "4. PHONE / ADDRESS corroboration.",
       "5. LAST RESORT. Use the most common spelling AND set needs_review; NEVER silently merge two distinct clients that only sound alike."
     ],
-    "engineering_note": "Best practice is two layers: an automatic phonetic key (PHP metaphone()/soundex(), or Double Metaphone) catches the long tail (many soundalikes such as Reed=Read or Duffy=Duffey map to the same key for free); this curated list handles what the algorithm gets wrong - near-homophones the key splits, cross-lingual ones, short-vowel pairs the length-gated Levenshtein misses (e.g. a five-letter name vs its four-letter variant), and pairs that MUST stay distinct."
+    "engineering_note": "Best practice is two layers: an automatic phonetic key (PHP metaphone()/soundex(), or Double Metaphone) catches the long tail (many soundalikes such as Reed=Read or Smith=Smyth map to the same key for free); this curated list handles what the algorithm gets wrong - near-homophones the key splits, cross-lingual ones, short-vowel pairs the length-gated Levenshtein misses (e.g. a five-letter name vs its four-letter variant), and pairs that MUST stay distinct."
   },
   "surnames": [
     { "sound": "bender",  "spellings": ["Bender", "Binder", "Bendar", "Bendter"], "type": "near-homophone", "note": "short-vowel confusable (Ben-der vs Bin-der); keep distinct unless email/phone confirms" },
@@ -46,7 +46,7 @@
     { "sound": "eric",    "spellings": ["Eric", "Erik", "Erick", "Erric"], "type": "homophone" },
     { "sound": "carey",   "spellings": ["Carey", "Cary", "Kerry", "Keri", "Kari", "Carrie", "Cari", "Kerri"], "type": "homophone", "note": "spans first-name and can collide with a surname" },
     { "sound": "steven",  "spellings": ["Steven", "Stephen", "Stevan", "Stephan"], "type": "homophone", "note": "v / ph" },
-    { "sound": "cathy",   "spellings": ["Cathy", "Kathy", "Cathi", "Kathi", "Cathie", "Kathie"], "type": "homophone" },
+    { "sound": "cathy",   "spellings": ["Cathy", "Kathy", "Cathi", "Kathi", "Cathie"], "type": "homophone" },
     { "sound": "sara",    "spellings": ["Sara", "Sarah", "Sarra"], "type": "homophone" },
     { "sound": "aaron",   "spellings": ["Aaron", "Aron", "Arron", "Aaren"], "type": "homophone", "note": "near-collision with Erin/Erron by ear" },
     { "sound": "brian",   "spellings": ["Brian", "Bryan", "Brien", "Bryon"], "type": "homophone" },

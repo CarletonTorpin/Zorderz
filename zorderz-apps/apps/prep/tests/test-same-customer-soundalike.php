@@ -7,9 +7,9 @@
  * soundalike surname with a divergent given name, or with surname-only on either side,
  * must stay DISTINCT — never merge two people on sound alone (INV-12).
  *
- * Uses a minimal ZDZ_Name_Match stand-in so the GATE is tested without the theme
- * present; the real matcher's linguistics are pinned separately in the theme's
- * tests/unit/test-name-match.php.
+ * Uses a minimal ZDZ_Name_Match stand-in (generic, non-customer surnames) so the GATE
+ * is tested without the theme present; the real matcher's linguistics are pinned in the
+ * theme's tests/unit/test-name-match.php.
  *
  * Run:  php tests/test-same-customer-soundalike.php
  */
@@ -18,12 +18,12 @@ if ( ! defined( 'ABSPATH' ) )        { define( 'ABSPATH', __DIR__ . '/' ); }
 if ( ! defined( 'DAY_IN_SECONDS' ) ) { define( 'DAY_IN_SECONDS', 86400 ); }
 if ( ! function_exists( 'apply_filters' ) ) { function apply_filters( $t, $v ) { return $v; } }
 
-// Minimal stand-in: only the surname pairs this test needs are declared soundalike.
+// Minimal stand-in: only these generic surname pairs are declared soundalike.
 if ( ! class_exists( 'ZDZ_Name_Match' ) ) {
 	class ZDZ_Name_Match {
 		public static function sounds_like( $a, $b ) {
 			$a = strtolower( trim( $a ) ); $b = strtolower( trim( $b ) );
-			foreach ( array( array( 'kase', 'case' ), array( 'duffy', 'duffey' ) ) as $g ) {
+			foreach ( array( array( 'reed', 'read' ), array( 'shaw', 'schau' ) ) as $g ) {
 				if ( in_array( $a, $g, true ) && in_array( $b, $g, true ) ) { return true; }
 			}
 			return $a === $b;
@@ -45,10 +45,10 @@ function ok( bool $c, string $m ): void {
 }
 function fold( string $a, string $b ): bool { return ZPREP_Dashboard::same_customer( $a, '', $b, '' ); }
 
-ok( fold( 'Steve Kase', 'Steve Case' ) === true,      'soundalike surname + same given -> FOLD (Kase/Case, both Steve)' );
-ok( fold( 'Steve Kase', 'John Case' ) === false,      'soundalike surname + different given -> distinct (never merge)' );
-ok( fold( 'Kase', 'Case' ) === false,                 'soundalike surname, surname-only -> distinct (never merge on sound alone)' );
-ok( fold( 'Steve Duffy', 'Steve Duffey' ) === true,   'second soundalike pair + same given -> FOLD' );
+ok( fold( 'Steve Reed', 'Steve Read' ) === true,      'soundalike surname + same given -> FOLD (Reed/Read, both Steve)' );
+ok( fold( 'Steve Reed', 'John Read' ) === false,      'soundalike surname + different given -> distinct (never merge)' );
+ok( fold( 'Reed', 'Read' ) === false,                 'soundalike surname, surname-only -> distinct (never merge on sound alone)' );
+ok( fold( 'Steve Shaw', 'Steve Schau' ) === true,     'second soundalike pair + same given -> FOLD' );
 ok( fold( 'Alex Rivera', 'Alex Rivera' ) === true,    'exact surname + given -> FOLD (unchanged)' );
 ok( fold( 'Jordan Rivera', 'Alex Rivera' ) === false, 'exact surname, different given -> distinct (unchanged)' );
 ok( fold( 'Rivera', 'Rivera' ) === true,              'exact surname-only -> FOLD (unchanged)' );
