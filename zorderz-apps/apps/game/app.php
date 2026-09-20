@@ -105,7 +105,7 @@ add_action(
 
 /**
  * Deprecated-alias rename map. The platform's Zdz_Rename_Migration renames the
- * old Total-Screen-era table and option to the `zg` names on activation so an
+ * legacy pre-rename table and option to the `zg` names on activation so an
  * existing install upgrades cleanly. Plugins declare; the kernel migrates.
  */
 add_filter(
