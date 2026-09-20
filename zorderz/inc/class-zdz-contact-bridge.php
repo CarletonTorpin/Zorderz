@@ -125,38 +125,22 @@ class ZDZ_Contact_Bridge {
 			return $result;
 		}
 
-		// ── v2.28.11: CLOSEST-MATCH GUARD (no silent wrong-person) ──
-		// resolve_freshbooks_client() accepts a fuzzy/typo last-name match and a
-		// last-name-only fallback, so an asked first name that matched NOBODY can
-		// still resolve to a different person who shares the surname (live: "who is
-		// Sam Rivera" resolved to Chris Rivera). Detect when the resolved name does
-		// not contain every token the user asked for, and flag it so the card can
-		// say "closest match" + offer chat — instead of presenting the wrong
-		// contact as exact. We only FLAG (never suppress): a closest match is still
-		// useful, it just must be labeled. Mirrors the chat path's confirm step.
-		$asked_tokens = array_values( array_filter( preg_split( '/\s+/', strtolower( trim( $query ) ) ), function ( $t ) {
-			return $t !== '' && strlen( $t ) > 1; // ignore initials/punctuation noise
-		} ) );
-		$resolved_lc  = strtolower( (string) ( $record['name'] ?? '' ) );
-		$is_closest   = false;
-		if ( ! empty( $asked_tokens ) && $resolved_lc !== '' ) {
-			foreach ( $asked_tokens as $tok ) {
-				// token present verbatim? then it matched. Otherwise, allow a near
-				// (<=1 edit) match against any word of the resolved name before
-				// declaring a mismatch, so genuine typos ('Rivera'->'Rivera') don't
-				// trip the flag but a wholly different given name ('Steve') does.
-				if ( strpos( $resolved_lc, $tok ) !== false ) { continue; }
-				$near = false;
-				foreach ( preg_split( '/\s+/', $resolved_lc ) as $rw ) {
-					if ( $rw !== '' && levenshtein( $rw, $tok ) <= 1 ) { $near = true; break; }
-				}
-				if ( ! $near ) { $is_closest = true; break; }
-			}
-		}
-		if ( $is_closest ) {
-			$result['closest_match'] = true;
-			$result['asked']         = $query;
-		}
+		// ── §133: name-match confidence tier (recall + first-name PRECISION gate) ──
+		// resolve_freshbooks_client() accepts fuzzy/near-surname matches, so a divergent
+		// first name (asking "Steve Case" and resolving "Susan Casey") could surface a
+		// DIFFERENT person who merely shares a surname. Judge the resolved record against
+		// the asked name and gate disclosure by tier below: a WEAK match (surname related,
+		// first name diverges) discloses name+city ONLY — never full PII presented as the
+		// asked person. ZDZ_Name_Match supplies recall + linguistics when present; an
+		// inline precision fallback keeps the gate fail-closed when it is not (INV-9).
+		// Supersedes the v2.28.11 flag-only "closest match" guard, which still leaked PII.
+		$aq          = array_values( array_filter( preg_split( '/\s+/', trim( $query ) ) ) );
+		$asked_fname = count( $aq ) > 1 ? $aq[0] : '';
+		$asked_lname = count( $aq ) > 1 ? (string) end( $aq ) : (string) ( $aq[0] ?? '' );
+		$rq          = array_values( array_filter( preg_split( '/\s+/', trim( (string) ( $record['name'] ?? '' ) ) ) ) );
+		$res_fname   = count( $rq ) > 1 ? $rq[0] : '';
+		$res_lname   = count( $rq ) > 1 ? (string) end( $rq ) : (string) ( $rq[0] ?? '' );
+		$tier        = self::name_match_tier( $asked_fname, $asked_lname, $res_fname, $res_lname );
 
 		// ── DISCLOSURE: kiosk gets name + city ONLY, regardless of scope ──
 		if ( $is_kiosk ) {
@@ -165,6 +149,23 @@ class ZDZ_Contact_Bridge {
 				'city' => $record['city'],
 			);
 			$result['message'] = 'On this shared device I can only show the customer name and city. Sign in on your own device for full contact details.';
+			return $result;
+		}
+
+		// ── §133 PRECISION: a WEAK match (surname related, first name diverges) is
+		//    disclosed as name + city ONLY, regardless of scope — never full PII, since
+		//    it may be a different person. The card labels it "closest match" + open-in-chat. ──
+		if ( $tier === 'weak' ) {
+			$result['closest_match'] = true;
+			$result['asked']         = $query;
+			$result['contact']       = array(
+				'name' => $record['name'],
+				'city' => $record['city'],
+			);
+			$city              = (string) ( $record['city'] ?? '' );
+			$result['message'] = 'The closest customer I found is ' . $record['name']
+				. ( $city !== '' ? ' (' . $city . ')' : '' )
+				. ' — but the first name doesn\'t match "' . $query . '", so this may be a different person. Open it in chat to confirm before using their contact details.';
 			return $result;
 		}
 
@@ -389,6 +390,18 @@ class ZDZ_Contact_Bridge {
 			$clients = self::fb_search_clients( $fb, $fname, 10 );
 		}
 
+		// §133 recall: when the literal search finds nothing, widen with the curated
+		// soundalike spellings of the surname (e.g. a client on file under a variant
+		// spelling). Guarded, so a missing matcher simply skips the widening (INV-9);
+		// precision is still enforced below (unambiguous surname-relation) and by the
+		// caller's tier gate.
+		if ( empty( $clients ) && $lname !== '' && class_exists( 'ZDZ_Name_Match' ) ) {
+			foreach ( \ZDZ_Name_Match::soundalike_variants( $lname ) as $variant ) {
+				$clients = self::fb_search_clients( $fb, $variant, 10 );
+				if ( ! empty( $clients ) ) { break; }
+			}
+		}
+
 		if ( empty( $clients ) ) {
 			return array();
 		}
@@ -425,9 +438,10 @@ class ZDZ_Contact_Bridge {
 		if ( $wantl !== '' ) {
 			$near = array_values( array_filter( $clients, function ( $c ) use ( $wantl ) {
 				$ln = strtolower( trim( (string) ( $c['lname'] ?? '' ) ) );
-				if ( $ln === '' ) { return false; }
-				if ( strpos( $ln, $wantl ) === 0 || strpos( $wantl, $ln ) === 0 ) { return true; }
-				return levenshtein( $ln, $wantl ) <= 2;
+				// §133: surname relatedness — exact / anchored prefix / edit<=2, plus the
+				// curated homophone + metaphone signals when the matcher is present. NOT
+				// sounds_like's substring rule (which would read "Ricks" as "Hendricks").
+				return $ln !== '' && self::surname_related( $ln, $wantl );
 			} ) );
 			if ( count( $near ) === 1 ) {
 				return $near[0];
@@ -436,6 +450,100 @@ class ZDZ_Contact_Bridge {
 
 		error_log( 'ZDZ_Contact_Bridge: ' . count( $clients ) . ' FreshBooks candidates for "' . $query . '"; ambiguous, deferring to clarify.' );
 		return array();
+	}
+
+	/**
+	 * §133 — confidence tier for a resolved candidate vs the asked name.
+	 *   exact  — surname equal AND first name equal/compatible (or none asked)
+	 *   strong — surname related (typo/soundalike) AND first name compatible
+	 *   weak   — surname related but the first name DIVERGES  → name+city only
+	 *   none   — surname unrelated
+	 * The bridge owns the policy (which tier discloses PII); ZDZ_Name_Match owns the
+	 * linguistics. Recall and the curated map come from the matcher when present; the
+	 * inline fallbacks in the two helpers below still enforce the PRECISION gate when it
+	 * is absent, so a theme deployed without the matcher degrades without leaking PII.
+	 *
+	 * @return string one of exact|strong|weak|none
+	 */
+	private static function name_match_tier( string $asked_fname, string $asked_lname, string $cand_fname, string $cand_lname ): string {
+		$af = strtolower( trim( $asked_fname ) );
+		$al = strtolower( trim( $asked_lname ) );
+		$cf = strtolower( trim( $cand_fname ) );
+		$cl = strtolower( trim( $cand_lname ) );
+		if ( $al === '' && $cl === '' ) {
+			return 'none';
+		}
+		if ( ! self::surname_related( $al, $cl ) ) {
+			return 'none';
+		}
+		// First name is "compatible" when either side is absent (a surname-only query
+		// cannot diverge), equal, or nickname/soundalike-equivalent.
+		$fn_ok = ( $af === '' || $cf === '' ) || $af === $cf || self::first_name_compatible( $af, $cf );
+		$surname_exact = ( $al !== '' && $al === $cl );
+		if ( $surname_exact && $fn_ok ) {
+			return 'exact';
+		}
+		if ( $fn_ok ) {
+			return 'strong';
+		}
+		return 'weak';
+	}
+
+	/**
+	 * Surname relatedness — PRECISE signals only: exact, anchored prefix, edit-distance
+	 * <= 2, and (when ZDZ_Name_Match is present) the curated homophone map + metaphone-key
+	 * equality. Deliberately NOT ZDZ_Name_Match::sounds_like(), whose substring clause
+	 * ("hendricks" contains "ricks") is right for recall but catastrophic as an equality
+	 * gate. Self-contained so the theme runs without the matcher (INV-9).
+	 */
+	private static function surname_related( string $a, string $b ): bool {
+		$a = strtolower( trim( $a ) );
+		$b = strtolower( trim( $b ) );
+		if ( $a === '' || $b === '' ) {
+			return false;
+		}
+		if ( $a === $b ) {
+			return true;
+		}
+		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) {
+			return true;
+		}
+		if ( levenshtein( $a, $b ) <= 2 ) {
+			return true;
+		}
+		if ( class_exists( 'ZDZ_Name_Match' ) ) {
+			if ( in_array( $b, \ZDZ_Name_Match::soundalike_variants( $a ), true ) ) {
+				return true;
+			}
+			$ka = \ZDZ_Name_Match::name_sound_key( $a );
+			if ( $ka !== '' && $ka === \ZDZ_Name_Match::name_sound_key( $b ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * First-name compatibility: absent on either side, equal, nickname-equivalent, or
+	 * soundalike. Uses ZDZ_Name_Match when present; an inline prefix/short-edit fallback
+	 * keeps the gate working (fail-closed on divergence) when it is not.
+	 */
+	private static function first_name_compatible( string $a, string $b ): bool {
+		$a = strtolower( trim( $a ) );
+		$b = strtolower( trim( $b ) );
+		if ( $a === '' || $b === '' ) {
+			return true;
+		}
+		if ( $a === $b ) {
+			return true;
+		}
+		if ( class_exists( 'ZDZ_Name_Match' ) ) {
+			return \ZDZ_Name_Match::first_names_equivalent( $a, $b ) || \ZDZ_Name_Match::sounds_like( $a, $b );
+		}
+		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) {
+			return true;
+		}
+		return levenshtein( $a, $b ) <= 1;
 	}
 
 	/**
