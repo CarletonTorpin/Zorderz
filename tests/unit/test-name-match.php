@@ -102,14 +102,17 @@ ok( 'parse_rule() names the sound-not-spelling principle', stripos($rule,'sound'
 ok( 'parse_rule() carries the [AMBIGUOUS] escape hatch', strpos($rule,'[AMBIGUOUS') !== false );
 ok( 'parse_rule() forbids merging soundalikes', stripos($rule,'never merge') !== false );
 
-/* ── generalization guard: the shipped class + seed name NO real business/customer ── */
-$src = file_get_contents( __DIR__ . '/../../zorderz/inc/class-zdz-name-match.php' )
-     . file_get_contents( __DIR__ . '/../../zorderz/inc/name-homophones.json' );
-$leaks = 0;
-foreach ( array('Total Screen','totalscreen','Torpin','seen_in_data','Evo Turf','Eco Turf','Kase','Marais','FreshBooks data') as $t ) {
-	if ( stripos( $src, $t ) !== false ) { $leaks++; $checks[] = "  \xE2\x9C\x97 LEAK: shipped matcher/seed contains '{$t}'"; }
-}
-ok( 'shipped matcher + seed carry no tenant identity', $leaks === 0 );
+/* generalization guard: the shipped seed is NEUTRAL. Structural checks only - the
+ * tenant-name string scan lives in the OFF-REPO PII gate (scripts/pii-gate.sh + a
+ * gitignored wordlist), never hardcoded here, so this committed test names no real
+ * customer, owner or business. */
+$seed = json_decode( file_get_contents( __DIR__ . '/../../zorderz/inc/name-homophones.json' ), true );
+$neutral =
+	   is_array( $seed )
+	&& ( $seed['distinct_but_confusable'] ?? null ) === array()
+	&& ( $seed['not_soundalike_flags'] ?? null ) === array()
+	&& stripos( (string) json_encode( $seed ), 'seen_in_data' ) === false;
+ok( 'shipped seed is neutral - empty tenant guard-lists, no seen_in_data provenance', $neutral );
 
 /* summary */
 echo implode("\n", $checks), "\n";
