@@ -35,7 +35,7 @@ ok( full( 'Riley Case', 'Rita Casey' ) === false,   'divergent first name (Riley
 ok( full( 'John Smith', 'John Ashby' ) === false, 'unrelated surname via first-name fallback -> NO full PII' );
 ok( full( 'Smith', 'John Ashby' ) === false,      'surname-only query, unrelated resolved -> NO full PII' );
 ok( full( 'Jones', 'Robert Jonah' ) === false,       'surname-only, near-but-different surname, no corroboration -> NO full PII' );
-ok( full( 'Steve Example Name', 'Craig Example Name' ) === false,  'divergent first name over an exact surname (Steve Example Name -> Craig Example Name) -> NO full PII' );
+ok( full( 'Steve Barrett', 'Craig Barrett' ) === false,  'divergent first name over an exact surname (Steve Barrett -> Craig Barrett) -> NO full PII' );
 ok( full( '', 'John Smith' ) === false,              'empty query -> NO full PII' );
 
 /* ── SHOULD be full disclosure (confident same person / org) ── */
@@ -44,7 +44,7 @@ ok( full( 'Jon Smith', 'John Smith' ) === true,      'nickname/soundalike first 
 ok( full( 'Steve Reed', 'Steve Read' ) === true,     'variant surname spelling + exact first (recall) -> full' );
 ok( full( 'Riley Case', 'Riley Casey' ) === true,    'near surname CORROBORATED by exact first name -> full' );
 ok( full( 'Smith', 'John Smith' ) === true,          'surname-only query contained in resolved name -> full' );
-ok( full( 'Example Name', 'Craig Example Name' ) === true,         'surname-only unique exact-surname match (scope-gated downstream) -> full' );
+ok( full( 'Barrett', 'Craig Barrett' ) === true,         'surname-only unique exact-surname match (scope-gated downstream) -> full' );
 ok( full( 'Westside', 'Westside Property Management' ) === true, 'organisation single token contained -> full' );
 
 echo $fail ? "\n$pass passed, $fail failed\n" : "\nAll {$pass} disclosure-gate assertions passed.\n";
