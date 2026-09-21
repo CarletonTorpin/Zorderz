@@ -88,7 +88,7 @@ class ZCC_REST {
 		if ( ! class_exists( 'ZCC_ZANA_Bridge' ) ) {
 			return new WP_Error( 'zcc_unavailable', 'Bridge unavailable.', [ 'status' => 503 ] );
 		}
-		return rest_ensure_response( ZCC_ZANA_Bridge::commission_calc_for_tsa( [
+		return rest_ensure_response( ZCC_ZANA_Bridge::commission_calc_for_zana( [
 			'subject'            => (string) $req->get_param( 'subject' ),
 			'period'             => (string) ( $req->get_param( 'period' ) ?: 'this_month' ),
 			'requesting_user_id' => get_current_user_id(),
@@ -99,7 +99,7 @@ class ZCC_REST {
 		if ( ! class_exists( 'ZCC_ZANA_Bridge' ) ) {
 			return new WP_Error( 'zcc_unavailable', 'Bridge unavailable.', [ 'status' => 503 ] );
 		}
-		return rest_ensure_response( ZCC_ZANA_Bridge::unit_counts_for_tsa( [
+		return rest_ensure_response( ZCC_ZANA_Bridge::unit_counts_for_zana( [
 			'period'             => (string) ( $req->get_param( 'period' ) ?: 'this_month' ),
 			'requesting_user_id' => get_current_user_id(),
 		] ) );

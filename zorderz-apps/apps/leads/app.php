@@ -1266,7 +1266,7 @@ add_filter( 'zdz_register_capabilities', function( $caps ) {
     $caps['lead.lookup'] = array(
         'provider'      => 'leads',
         'tier'          => 'sales',                                 // minimum tier
-        'callback'      => array( 'ZL_ZANA_Bridge', 'lookup_for_tsa' ),
+        'callback'      => array( 'ZL_ZANA_Bridge', 'lookup_for_zana' ),
         'kiosk'         => false,                                   // forbidden on kiosk…
         'kiosk_bounded' => true,                                    // …except the redacted variant
         'side_effect'   => false,                                   // read-only → composes freely
@@ -1276,7 +1276,7 @@ add_filter( 'zdz_register_capabilities', function( $caps ) {
     $caps['lead.find'] = array(
         'provider'      => 'leads',
         'tier'          => 'sales',
-        'callback'      => array( 'ZL_ZANA_Bridge', 'find_leads_for_tsa' ),
+        'callback'      => array( 'ZL_ZANA_Bridge', 'find_leads_for_zana' ),
         'kiosk'         => false,
         'kiosk_bounded' => true,
         'side_effect'   => false,
@@ -1288,7 +1288,7 @@ add_filter( 'zdz_register_capabilities', function( $caps ) {
     $caps['lead.create'] = array(
         'provider'      => 'leads',
         'tier'          => 'sales',
-        'callback'      => array( 'ZL_ZANA_Bridge', 'create_lead_from_tsa' ),
+        'callback'      => array( 'ZL_ZANA_Bridge', 'create_lead_from_zana' ),
         'kiosk'         => false,
         'kiosk_bounded' => false,
         'side_effect'   => true,                                    // → preview-and-confirm

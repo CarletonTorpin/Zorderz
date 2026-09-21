@@ -139,7 +139,7 @@ require_once ZCC_DIR . 'includes/class-zcc-calc-engine.php';
 require_once ZCC_DIR . 'includes/class-zcc-coverage.php';
 require_once ZCC_DIR . 'includes/class-zcc-installer-pay.php';
 require_once ZCC_DIR . 'includes/class-zcc-self-test.php';
-require_once ZCC_DIR . 'includes/class-zcc-tsa-bridge.php';
+require_once ZCC_DIR . 'includes/class-zcc-zana-bridge.php';
 require_once ZCC_DIR . 'includes/class-zcc-rest.php';
 require_once ZCC_DIR . 'includes/class-zcc-admin.php';
 
@@ -217,11 +217,11 @@ add_action( 'plugins_loaded', function () {
 	add_filter( 'zdz_register_capabilities', function ( $caps ) {
 		if ( class_exists( 'ZCC_ZANA_Bridge' ) ) {
 			$caps['commission.calc'] = [
-				'callable'   => [ 'ZCC_ZANA_Bridge', 'commission_calc_for_tsa' ],
+				'callable'   => [ 'ZCC_ZANA_Bridge', 'commission_calc_for_zana' ],
 				'descriptor' => ZCC_ZANA_Bridge::get_capability_descriptor(),
 			];
 			$caps['commission.units'] = [
-				'callable'   => [ 'ZCC_ZANA_Bridge', 'unit_counts_for_tsa' ],
+				'callable'   => [ 'ZCC_ZANA_Bridge', 'unit_counts_for_zana' ],
 				'descriptor' => ZCC_ZANA_Bridge::get_units_capability_descriptor(),
 			];
 		}

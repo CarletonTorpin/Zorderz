@@ -63,9 +63,9 @@ class ZDZ_Orchestrator {
 		$comm = self::detect_commission( $raw );
 		if ( $comm !== null ) {
 			if ( class_exists( 'ZCC_ZANA_Bridge' )
-				&& method_exists( 'ZCC_ZANA_Bridge', 'commission_calc_for_tsa' )
+				&& method_exists( 'ZCC_ZANA_Bridge', 'commission_calc_for_zana' )
 				&& ZCC_ZANA_Bridge::is_available() ) {
-				$res = ZCC_ZANA_Bridge::commission_calc_for_tsa( array(
+				$res = ZCC_ZANA_Bridge::commission_calc_for_zana( array(
 					'subject'            => $comm['subject'],
 					'period'             => $comm['period'],
 					'tier'               => '',
@@ -109,7 +109,7 @@ class ZDZ_Orchestrator {
 				$c_key = 'zdz_contact_' . md5( strtolower( $contact_name ) . '|' . $uid );
 				$res   = get_transient( $c_key );
 				if ( ! is_array( $res ) || empty( $res['success'] ) ) {
-					$res = ZDZ_Contact_Bridge::lookup_for_tsa( array(
+					$res = ZDZ_Contact_Bridge::lookup_for_zana( array(
 						'query'              => $contact_name,
 						'tier'               => '',
 						'is_kiosk'           => false,
@@ -136,9 +136,9 @@ class ZDZ_Orchestrator {
 		$doc_name = self::detect_doc_lookup( $raw );
 		if ( $doc_name !== '' ) {
 			if ( class_exists( 'ZEST_ZANA_Bridge' )
-				&& method_exists( 'ZEST_ZANA_Bridge', 'lookup_for_tsa' )
+				&& method_exists( 'ZEST_ZANA_Bridge', 'lookup_for_zana' )
 				&& ZEST_ZANA_Bridge::is_available() ) {
-				$res = ZEST_ZANA_Bridge::lookup_for_tsa( array(
+				$res = ZEST_ZANA_Bridge::lookup_for_zana( array(
 					'customer'    => $doc_name,
 					'window_days' => 90,
 					'tier'        => '',
@@ -474,7 +474,7 @@ class ZDZ_Orchestrator {
 	/**
 	 * Decide how the dashboard should render a document-lookup result.
 	 *
-	 * @param array $res ZEST_ZANA_Bridge::lookup_for_tsa result.
+	 * @param array $res ZEST_ZANA_Bridge::lookup_for_zana result.
 	 * @return string
 	 */
 	private static function doc_render_hint( array $res ): string {
@@ -500,7 +500,7 @@ class ZDZ_Orchestrator {
 	 *   message — fallback text
 	 *
 	 * @since theme v2.28.0
-	 * @param array $res ZCC_ZANA_Bridge::commission_calc_for_tsa result.
+	 * @param array $res ZCC_ZANA_Bridge::commission_calc_for_zana result.
 	 * @return string
 	 */
 	private static function commission_render_hint( array $res ): string {

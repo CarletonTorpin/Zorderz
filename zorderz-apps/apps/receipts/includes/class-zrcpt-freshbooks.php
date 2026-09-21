@@ -61,7 +61,7 @@ class ZRCPT_FreshBooks {
 	 * ================================================================ */
 
 	/**
-	 * Search FreshBooks across invoices AND estimates, filtered to EM refs.
+	 * Search FreshBooks across invoices AND estimates, optionally filtered to an item tag.
 	 *
 	 * v3.0.0: Self-sufficient implementation — works without the Prep module.
 	 *

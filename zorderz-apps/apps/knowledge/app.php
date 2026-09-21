@@ -1882,7 +1882,6 @@ add_filter( 'zdz_rename_map', function ( $map ) {
  */
 add_action( 'plugins_loaded', function () {
 	foreach ( array(
-		'ZKV_ZANA_Bridge' => 'ZKV_ZANA_Bridge',
 		'ZKV_Bridge'     => 'ZKV_Bridge',
 		'ZKV_Mailbox'    => 'ZKV_Mailbox',
 		'ZKV_ACL'        => 'ZKV_ACL',
