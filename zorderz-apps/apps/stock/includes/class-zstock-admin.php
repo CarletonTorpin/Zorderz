@@ -41,7 +41,7 @@ class ZSTOCK_Admin {
 	}
 
 	public static function register_settings() {
-		register_setting( self::GROUP, 'zstock_brain_bot', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( self::GROUP, 'zstock_assistant', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( self::GROUP, 'zstock_auto_sync', array( 'sanitize_callback' => array( __CLASS__, 'sanitize_bool' ) ) );
 		register_setting( self::GROUP, 'zstock_sync_interval', array( 'sanitize_callback' => array( __CLASS__, 'sanitize_interval' ) ) );
 		register_setting( self::GROUP, 'zstock_low_stock_email', array( 'sanitize_callback' => 'sanitize_email' ) );
@@ -104,10 +104,10 @@ class ZSTOCK_Admin {
 				<?php settings_fields( self::GROUP ); ?>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="zstock_brain_bot"><?php esc_html_e( 'Inventory bot name', 'zorderz' ); ?></label></th>
+						<th scope="row"><label for="zstock_assistant"><?php esc_html_e( 'Inventory bot name', 'zorderz' ); ?></label></th>
 						<td>
-							<input type="text" id="zstock_brain_bot" name="zstock_brain_bot" class="regular-text"
-								value="<?php echo esc_attr( get_option( 'zstock_brain_bot', '' ) ); ?>" />
+							<input type="text" id="zstock_assistant" name="zstock_assistant" class="regular-text"
+								value="<?php echo esc_attr( get_option( 'zstock_assistant', '' ) ); ?>" />
 							<p class="description"><?php esc_html_e( 'Optional Poe bot to answer inventory questions. Leave blank to use the platform’s default AI model with the built-in prompt template.', 'zorderz' ); ?></p>
 						</td>
 					</tr>

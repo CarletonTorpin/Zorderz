@@ -872,17 +872,18 @@ function openApp(appId, options) {
 
 // v2.21.0: External deep-link router.
 // The zdz-sales-analytics Daily/Weekly Digest (r4) emails an "Open this chat →"
-// button pointing at app_url() + '#tsa-session=<id>'. Clicked cold (or while the
+// button pointing at app_url() + '#zana-session=<id>'. Clicked cold (or while the
 // installed PWA is reactivated), the shell must route to the Analytics surface
 // instead of dumping the user on the dashboard. The theme's responsibility is to
 // open the right app and PRESERVE the hash; the Analytics widget reads
-// '#tsa-session=' to select the exact session (it already does this for in-chat
-// recall links). Guarded so it can never block boot and never fires for a user
-// who doesn't actually have the Analytics app (e.g. a forwarded link).
+// '#zana-session=' to select the exact session (it already does this for in-chat
+// recall links). The legacy '#tsa-session=' form is still accepted for old links.
+// Guarded so it can never block boot and never fires for a user who doesn't
+// actually have the Analytics app (e.g. a forwarded link).
 function zdzRouteDeepLink() {
   try {
     var hash = window.location.hash || '';
-    var m = hash.match(/#tsa-session=(\d+)/);
+    var m = hash.match(/#(?:zana|tsa)-session=(\d+)/);
     if (!m) return;
     var sessionId = parseInt(m[1], 10);
     if (!sessionId) return;
@@ -892,7 +893,7 @@ function zdzRouteDeepLink() {
       });
     if (!hasAnalytics) return;
     // Open Analytics; pass the session as an option (forward-compatible) and leave
-    // the hash intact so the widget can resolve '#tsa-session=' on init.
+    // the hash intact so the widget can resolve '#zana-session=' on init.
     openApp('sales-analytics', { session: sessionId, source: 'digest-deeplink' });
   } catch (e) { /* deep-link routing must never block boot */ }
 }
@@ -1845,7 +1846,7 @@ function initAppViewport() {
 // sub-view that triggers a full page reload.
 //
 // Does NOT conflict with plugin-level PTR (Analytics, Messaging) because those attach
-// to their own internal scroll containers (#tsa-w-messages, #zim-w-messages).
+// to their own internal scroll containers (.zana-messages, #zim-w-messages).
 // The theme PTR only fires when the .sub-view itself is at scrollTop 0.
 function initPullToRefresh() {
   const viewMain = document.getElementById('view-main');
@@ -1874,9 +1875,9 @@ function initPullToRefresh() {
     // Only activate when the sub-view is scrolled to its very top
     if (active.scrollTop <= 0) {
       // Don't activate if the touch originated inside a nested scrollable
-      // that has its own PTR (e.g., .tsa-w-messages, .zim-w-messages).
+      // that has its own PTR (e.g., .zana-messages, .zim-w-messages).
       // Those elements handle their own pull-to-refresh.
-      const nested = e.target.closest('.tsa-w-messages, #tsa-w-messages, .zim-w-messages, #zim-w-messages');
+      const nested = e.target.closest('.zana-messages, .zim-w-messages, #zim-w-messages');
       if (nested && nested.scrollTop <= 0) return; // let the plugin PTR handle it
       if (nested) return; // nested scroller not at top — let it scroll normally
 
@@ -3113,7 +3114,7 @@ function initCommandPalette() {
     // as a top-bar icon — but it IS still registered/active and must remain
     // reachable from search as "Ask the assistant". Keying on getVisibleApps() would
     // silently drop the row once Analytics left the springboard.
-    var hasBrainBot = (zdzData.apps || []).some(function(a) {
+    var hasAssistant = (zdzData.apps || []).some(function(a) {
       return a && (a.id === 'sales-analytics' || a.id === 'zdz-sales-analytics');
     });
     // v2.21.4 (cross-app orchestrator): consult the deterministic router first.
@@ -3138,7 +3139,7 @@ function initCommandPalette() {
         '<div class="ci-icon" style="background:' + route.color + '"><i data-lucide="' + route.icon + '"></i></div>' +
         '<div class="ci-text"><div class="ci-name">' + escapeHtml(route.name) + '</div><div class="ci-desc">' + escapeHtml(route.desc) + '</div></div>' +
         '<span class="ci-shortcut" style="font-size:11px;color:' + route.color + '">⏎</span></button>';
-    } else if (hasBrainBot) {
+    } else if (hasAssistant) {
       var truncated = q.trim().length > 50 ? q.trim().substring(0, 50) + '…' : q.trim();
 
       // Default the assistant row.
@@ -3344,7 +3345,7 @@ function renderInlineDocs(mount, res, route) {
   }).join('');
 
   // v2.28.11: CLOSEST-MATCH BANNER — the document card resolves the customer
-  // through TSEC_TSA_Bridge, which (like the contact bridge) can accept a match
+  // through ZEST_ZANA_Bridge, which (like the contact bridge) can accept a match
   // on a shared last name when the asked first name matched nobody (live:
   // "estimates for Sam Rivera" returned Chris Rivera's docs). When the bridge
   // flags closest_match, say so instead of presenting the wrong customer's
@@ -3383,7 +3384,7 @@ function renderInlineCommission(mount, res, route) {
   // v2.28.11: ALSO treat "no amount produced" as a non-figure state. The bridge
   // returns success:true WITHOUT an `amount` key when the named person isn't a
   // salesperson with a commission profile (it sets `message` instead) — see
-  // TSCC_TSA_Bridge::commission_calc_for_tsa. Previously this fell through to the
+  // ZCC_ZANA_Bridge::commission_calc_for_zana. Previously this fell through to the
   // card and money(undefined) rendered a misleading "$0.00 · Zachary", reading as
   // "earned $0" rather than "not a known rep". A real rep with genuinely zero
   // commission DOES carry amount:0, so this only catches the not-found case.
@@ -3852,7 +3853,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.__tsClearRecovery) window.__tsClearRecovery();
   refreshIcons();
 
-  // v2.21.0: route an external #tsa-session=<id> deep link (Analytics digest "Open this
+  // v2.21.0: route an external #zana-session=<id> deep link (Analytics digest "Open this
   // chat →") now that the shell + Bridge are ready, and again whenever the hash
   // changes (an installed PWA is reactivated rather than cold-booted on link tap).
   zdzRouteDeepLink();

@@ -6,8 +6,8 @@ business's own systems of record.
 
 Generalized from the internal analytics/chat plugin. App id kept as
 **`sales-analytics`** (the theme grants and labels it, and the dashboard KPI tiles +
-digest deep-link route to it). PHP prefix `zana` / `ZANA_` (from `tsa` / `TSA_`;
-the legacy slug is recorded as a deprecated alias in the rename map). Text domain
+digest deep-link route to it). PHP prefix `zana` / `ZANA_` (renamed from the legacy
+analytics prefix, which is recorded as a deprecated alias in the rename map). Text domain
 `zorderz`. GPL-2.0-or-later.
 
 ## Architecture

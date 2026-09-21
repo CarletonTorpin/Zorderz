@@ -79,7 +79,7 @@
  *     private→no title, pages nextPageToken).
  *   - READ INTEGRATION: ZSCH_Availability::team_grid() folds external busy into
  *     each member's blocks (busy-only, source:'external'; excluded for the
- *     read-only kiosk); ZSCH_TSA_Bridge::availability_lookup() adds external
+ *     read-only kiosk); ZSCH_ZANA_Bridge::availability_lookup() adds external
  *     busy to busy_events (never on kiosk); ZSCH_Appointments::create() gains
  *     the FIRST booking-conflict check — policy 'warn' (default) books + returns
  *     warnings[], policy 'block' refuses; total no-op when the feature is off or
@@ -91,7 +91,7 @@
  *     subscriptions (the channel_* columns) remain a future enhancement.
  *   FILES: NEW includes/class-zsch-sync.php; includes/class-zsch-graph-
  *   delegated.php + includes/class-zsch-google.php (fetch_events + dt helpers);
- *   includes/class-zsch-availability.php, includes/class-zsch-tsa-bridge.php,
+ *   includes/class-zsch-availability.php, includes/class-zsch-zana-bridge.php,
  *   includes/class-zsch-appointments.php, includes/class-zsch-rest.php,
  *   app.php (cron wire + version), assets/js/connections.js.
  *
@@ -278,7 +278,7 @@
  * v1.1.2 (interop — L4 capability registration). Publishes the bridge's already-
  *   shaped verbs (availability.lookup, schedule.lookup, appointment.create) via the
  *   `zdz_register_capabilities` filter, pulled straight from
- *   ZSCH_TSA_Bridge::get_capability_descriptor() so the registration can't drift
+ *   ZSCH_ZANA_Bridge::get_capability_descriptor() so the registration can't drift
  *   from the bridge's declared kiosk/side_effect posture. Safe to ship now: until
  *   the central resolver exists the filter just adds rows nobody reads; when it
  *   lands the Scheduler is L4-native with no further code. No behavior change —
@@ -466,7 +466,7 @@
  * the calendar runs local-first — it never errors because sync is absent.
  *
  * INTEROP (orchestrator):
- * Conforms to the orchestrator interop contract. Ships ZSCH_TSA_Bridge with
+ * Conforms to the orchestrator interop contract. Ships ZSCH_ZANA_Bridge with
  * read verbs (availability.lookup, schedule.lookup) + an action verb
  * (appointment.create, preview-and-confirm) so the operator bot can answer
  * "is a teammate free Thursday?" and "book me 2pm Tuesday". Tier/kiosk enforced
@@ -789,7 +789,7 @@ function zsch_load_includes() {
 
 	// ── v1.1.2: Register capabilities with the (future) orchestrator registry. ──
 	// CONTRACT §2.3 / §6 L4. The bridge already shapes its verbs in
-	// ZSCH_TSA_Bridge::get_capability_descriptor() (availability.lookup,
+	// ZSCH_ZANA_Bridge::get_capability_descriptor() (availability.lookup,
 	// schedule.lookup, appointment.create) with honest kiosk/side_effect flags;
 	// this just publishes them via the `zdz_register_capabilities` filter. SAFE TO
 	// SHIP NOW: until the central resolver (ZDZ_Capabilities::invoke) exists the
@@ -802,9 +802,9 @@ function zsch_load_includes() {
 	// marker handlers in Analytics's engine + the bot's RULE ZZ kiosk line live with the
 	// Analytics maintainer per CONTRACT §2.2; this plugin ships everything that is ZSCH's.
 	add_filter( 'zdz_register_capabilities', function ( $caps ) {
-		if ( class_exists( 'ZSCH_TSA_Bridge' )
-			&& method_exists( 'ZSCH_TSA_Bridge', 'get_capability_descriptor' ) ) {
-			foreach ( ZSCH_TSA_Bridge::get_capability_descriptor() as $verb => $descriptor ) {
+		if ( class_exists( 'ZSCH_ZANA_Bridge' )
+			&& method_exists( 'ZSCH_ZANA_Bridge', 'get_capability_descriptor' ) ) {
+			foreach ( ZSCH_ZANA_Bridge::get_capability_descriptor() as $verb => $descriptor ) {
 				$caps[ $verb ] = $descriptor;
 			}
 		}

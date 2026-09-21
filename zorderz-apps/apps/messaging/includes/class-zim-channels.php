@@ -39,7 +39,11 @@ class ZIM_Channels {
 	 * ZIM_Messages::post().
 	 */
 	public static function default_seed_spec() {
-		return array(
+		// The default channel set follows the Core role slugs (sales / ops / mfg /
+		// tech). A business with a different org shape overrides it via the
+		// `zim_default_channels` filter (or an org pack) — e.g. a firm with no fab
+		// shop drops #mfg. This is a Core default, not baked-in tenant identity.
+		return (array) apply_filters( 'zim_default_channels', array(
 			array(
 				'slug'             => 'announcements',
 				'name'             => '#announcements',
@@ -71,7 +75,7 @@ class ZIM_Channels {
 				'description' => 'Field techs.',
 				'roles'       => array( 'zdz_tech', 'zdz_admin', 'zdz_owner', 'administrator' ),
 			),
-		);
+		) );
 	}
 
 	/**

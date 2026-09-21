@@ -511,7 +511,7 @@ add_action( 'template_redirect', function () {
 	// created in v2.23.1 — and browsers REFUSE to register a service worker
 	// from a non-200 response. Net effect: the theme SW never actually
 	// registered on any device (verified live Jul 3 2026: GET /zdz-sw →
-	// status 404 + full v2.29.0 body), the analytics app's /tsa-sw (which does send 200)
+	// status 404 + full v2.29.0 body), another app's service worker (which does send 200)
 	// took the root scope, and the v2.22.0 network-first shell + v2.24.2
 	// self-heal flows never ran anywhere. status_header(200) closes it.
 	status_header( 200 );
@@ -548,11 +548,11 @@ add_action( 'template_redirect', function () {
 
 	$out = array( 'theme' => (string) $theme_ver );
 	foreach ( array(
-		'tsa'   => 'TSA_VERSION',
-		'tsec'  => 'TSEC_VERSION',
-		'tscc'  => 'TSCC_VERSION',
-		'tssch' => 'TSSCH_VERSION',
-		'tsim'  => 'ZIM_VERSION',
+		'zana' => 'ZANA_VERSION',
+		'zest' => 'ZEST_VERSION',
+		'zcc'  => 'ZCC_VERSION',
+		'zsch' => 'ZSCH_VERSION',
+		'zim'  => 'ZIM_VERSION',
 	) as $key => $const ) {
 		if ( defined( $const ) ) {
 			$out[ $key ] = (string) constant( $const );
@@ -580,7 +580,7 @@ add_action( 'wp_footer', function () {
 	}
 	// v2.29.1: theme-SW registration is FLAG-GATED (default off). Live testing
 	// (Jul 3) proved the theme SW has never registered (the 404-status bug fixed
-	// above), and the analytics app's /tsa-sw currently owns scope '/' carrying its push
+	// above), and another app's service worker may own scope '/' carrying its push
 	// subscriptions. Flipping registration on now would make the two workers
 	// REPLACE each other on alternating page loads (feature flap: network-first
 	// shell vs push). The Phase-1 E-addendum merges them (theme SW absorbs push,
@@ -796,7 +796,7 @@ add_filter( 'script_loader_tag', function( $tag, $handle ) {
  * its page analysis. We only defer secondary/plugin CSS that NitroPack
  * might not recognise as non-critical.
  *
- * app plugin CSS (tsa-*, zim-*, etc.) is also deferred via prefix match —
+ * app plugin CSS (zim-*, etc.) is also deferred via prefix match —
  * these plugins' styles are only needed when their specific sub-view is
  * active, well after first paint.
  */
@@ -813,9 +813,9 @@ add_filter( 'style_loader_tag', function( $tag, $handle ) {
 		'zdz-dashboard-personalization-css',
 		'tsg-game-css',
 	];
-	// Also catch app plugin CSS by prefix (tsa-*, zim-*, tsg-*, tsec-*, etc.)
+	// Also catch app plugin CSS by prefix (zim-*, tsg-*, tsec-*, etc.)
 	$is_lazy = in_array( $handle, $lazy_handles, true )
-		|| preg_match( '/^(tsa-|zim-|tsg-|tsec-|tss-|tsl-|tsic-)/', $handle );
+		|| preg_match( '/^(zim-|tsg-|tsec-|tss-|tsl-|tsic-)/', $handle );
 	if ( $is_lazy ) {
 		// Swap to print → all on load (Filament Group pattern)
 		$tag = str_replace(

@@ -34,17 +34,12 @@ class ZSCH_Widget {
 	 */
 	public static function should_render() {
 		$user_id = get_current_user_id();
-		// If the analytics app exposes a customer-facing flag, honour it. Support
-		// both method spellings the ecosystem has shipped (is_active_for_user is
-		// the current one, matching the messaging module's gate). Guarded, so a
-		// missing analytics app is not a hard dependency.
-		if ( class_exists( 'TSA_Customer_Facing' ) ) {
-			if ( is_callable( array( 'TSA_Customer_Facing', 'is_active_for_user' ) ) ) {
-				return ! TSA_Customer_Facing::is_active_for_user( $user_id );
-			}
-			if ( is_callable( array( 'TSA_Customer_Facing', 'is_active' ) ) ) {
-				return ! TSA_Customer_Facing::is_active( $user_id );
-			}
+		// Customer-facing ("kiosk display") mode is published by the analytics app
+		// through the `zdz_customer_facing_active` filter (default false). When active
+		// the scheduler hides entirely (never a visible refusal). No analytics app, or
+		// nothing hooking the filter → not customer-facing, so this stays visible.
+		if ( (bool) apply_filters( 'zdz_customer_facing_active', false, $user_id ) ) {
+			return false;
 		}
 		// Filter hook so the platform can force-hide without a hard dependency.
 		return (bool) apply_filters( 'zsch_should_render', true, $user_id );

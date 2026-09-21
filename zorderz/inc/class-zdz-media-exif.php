@@ -12,7 +12,7 @@
  *
  * Output (consumed by the REST endpoint / front-end panel):
  *   [
- *     'summary'    => 'Mar 14, 2026 · 1:17 PM · near La Mesa, CA',  // one line
+ *     'summary'    => 'Mar 14, 2026 · 1:17 PM · near Springfield, IL',  // one line
  *     'facts'      => [ { label, value, kind } ... ],  // interpreted, ordered
  *     'location'   => { lat, lng, place, geo_source, maps_url } | null,
  *     'verbatim'   => [ { section, rows:[ {key, value} ] } ... ], // raw EXIF

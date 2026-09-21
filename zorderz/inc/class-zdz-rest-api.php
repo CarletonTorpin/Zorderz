@@ -105,7 +105,7 @@ class ZDZ_Rest_API {
 		] );
 
 		// v2.21.5: Contact lookup — powers the dashboard "ask" field's inline
-		// contact card. Proxies ZDZ_Contact_Bridge::lookup_for_tsa() so the result
+		// contact card. Proxies ZDZ_Contact_Bridge::lookup_for_zana() so the result
 		// renders in-place on the dashboard (no Poe round-trip, no chat switch).
 		// All disclosure (kiosk = name+city) and scope (relationship / shared-job)
 		// are enforced inside the bridge against the CURRENT user — never the model.
@@ -666,7 +666,7 @@ class ZDZ_Rest_API {
 			] );
 		}
 
-		$result = ZDZ_Contact_Bridge::lookup_for_tsa( [
+		$result = ZDZ_Contact_Bridge::lookup_for_zana( [
 			'query'              => $query,
 			'tier'               => '',                       // bridge resolves tier from the user
 			'is_kiosk'           => false,                    // bridge re-derives kiosk most-restrictive-wins

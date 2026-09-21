@@ -1714,7 +1714,7 @@ class ZIB_Gatekeeper {
 	 *
 	 * Returns STRUCTURED data. The spotlighting fence that wraps it for the model,
 	 * and the neutralising of any fence delimiters an attacker mailed in, live in
-	 * ZIB_TSA_Bridge — the one engine-facing seam — so this reader stays pure DB.
+	 * ZIB_ZANA_Bridge — the one engine-facing seam — so this reader stays pure DB.
 	 *
 	 * @return array { ok:bool, reason?:string, results:array[] }
 	 */

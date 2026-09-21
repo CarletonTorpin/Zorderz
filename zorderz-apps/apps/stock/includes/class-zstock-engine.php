@@ -566,7 +566,7 @@ class ZSTOCK_Engine {
 
 	/**
 	 * Ask the inventory brain a question. The "built-in product catalog knowledge" is no longer an
-	 * off-repo bot's baked list — it is the in-repo neutral template (defaults/brain-prompt.md)
+	 * off-repo bot's baked list — it is the in-repo neutral template (defaults/assistant-prompt.md)
 	 * assembled at runtime with the live Item Engine catalog snapshot and sent through ZDZ_Core_Poe
 	 * using the configured bot name (blank ⇒ the platform default model).
 	 *
@@ -574,12 +574,12 @@ class ZSTOCK_Engine {
 	 * @param array  $context  Inventory data to ground the answer.
 	 * @return string
 	 */
-	public static function query_brain( $query, array $context = array() ) {
+	public static function query_assistant( $query, array $context = array() ) {
 		$poe = self::poe();
 		if ( ! $poe ) {
 			return __( 'AI client not configured. Add a Poe API key in Zorderz settings.', 'zorderz' );
 		}
-		$messages = array( array( 'role' => 'system', 'content' => self::brain_system_prompt() ) );
+		$messages = array( array( 'role' => 'system', 'content' => self::assistant_system_prompt() ) );
 		if ( ! empty( $context ) ) {
 			$messages[] = array(
 				'role'    => 'system',
@@ -588,10 +588,10 @@ class ZSTOCK_Engine {
 		}
 		$messages[] = array( 'role' => 'user', 'content' => (string) $query );
 
-		$response = $poe->query( $messages, 0.2, array(), zstock_brain_bot() );
+		$response = $poe->query( $messages, 0.2, array(), zstock_assistant() );
 
 		// Strip the answer sentinel (current constant + the deprecated legacy token).
-		foreach ( array( ZSTOCK_BRAIN_SENTINEL, ZSTOCK_BRAIN_SENTINEL_LEGACY ) as $sentinel ) {
+		foreach ( array( ZSTOCK_ASSISTANT_SENTINEL, ZSTOCK_ASSISTANT_SENTINEL_LEGACY ) as $sentinel ) {
 			$pos = strpos( $response, $sentinel );
 			if ( false !== $pos ) {
 				$response = trim( substr( $response, $pos + strlen( $sentinel ) ) );
@@ -605,8 +605,8 @@ class ZSTOCK_Engine {
 	 * Assemble the brain system prompt from the in-repo template + Business Profile + a compact
 	 * live catalog snapshot. Placeholders: {{business}}, {{catalog}}, {{sentinel}}.
 	 */
-	private static function brain_system_prompt() {
-		$template = @file_get_contents( ZSTOCK_DIR . 'defaults/brain-prompt.md' );
+	private static function assistant_system_prompt() {
+		$template = @file_get_contents( ZSTOCK_DIR . 'defaults/assistant-prompt.md' );
 		if ( ! is_string( $template ) || '' === trim( $template ) ) {
 			$template = "You are an inventory-intelligence assistant for {{business}}.\n"
 				. "Use only the catalog and inventory data provided; never invent products, SKUs or prices.\n"
@@ -618,7 +618,7 @@ class ZSTOCK_Engine {
 			array(
 				'{{business}}' => zstock_business_descriptor(),
 				'{{catalog}}'  => self::catalog_snapshot(),
-				'{{sentinel}}' => ZSTOCK_BRAIN_SENTINEL,
+				'{{sentinel}}' => ZSTOCK_ASSISTANT_SENTINEL,
 			)
 		);
 	}

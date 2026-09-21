@@ -9,7 +9,7 @@
  *   product minimums, per-party plans — ships EMPTY and is never seeded. Pure
  *   PHP math, zero LLM in any pay path. Consumes ZDZ_Core_FreshBooks for
  *   invoices, ZDZ_Party for the roster, ZDZ_Data_Permissions for tiered
- *   visibility, and publishes a cross-app bridge (ZCC_TSA_Bridge) so analytics
+ *   visibility, and publishes a cross-app bridge (ZCC_ZANA_Bridge) so analytics
  *   and the chat orchestrator can ask for a commission figure or a unit tally.
  * Version:     1.0.0
  * Author:      Zorderz
@@ -139,7 +139,7 @@ require_once ZCC_DIR . 'includes/class-zcc-calc-engine.php';
 require_once ZCC_DIR . 'includes/class-zcc-coverage.php';
 require_once ZCC_DIR . 'includes/class-zcc-installer-pay.php';
 require_once ZCC_DIR . 'includes/class-zcc-self-test.php';
-require_once ZCC_DIR . 'includes/class-zcc-tsa-bridge.php';
+require_once ZCC_DIR . 'includes/class-zcc-zana-bridge.php';
 require_once ZCC_DIR . 'includes/class-zcc-rest.php';
 require_once ZCC_DIR . 'includes/class-zcc-admin.php';
 
@@ -215,14 +215,14 @@ add_action( 'zcc_monthly_finalize', [ 'ZCC_Ledger', 'cron_finalize_prior_month' 
 // ── Orchestrator capability registration (chat verbs) ──────────────
 add_action( 'plugins_loaded', function () {
 	add_filter( 'zdz_register_capabilities', function ( $caps ) {
-		if ( class_exists( 'ZCC_TSA_Bridge' ) ) {
+		if ( class_exists( 'ZCC_ZANA_Bridge' ) ) {
 			$caps['commission.calc'] = [
-				'callable'   => [ 'ZCC_TSA_Bridge', 'commission_calc_for_tsa' ],
-				'descriptor' => ZCC_TSA_Bridge::get_capability_descriptor(),
+				'callable'   => [ 'ZCC_ZANA_Bridge', 'commission_calc_for_zana' ],
+				'descriptor' => ZCC_ZANA_Bridge::get_capability_descriptor(),
 			];
 			$caps['commission.units'] = [
-				'callable'   => [ 'ZCC_TSA_Bridge', 'unit_counts_for_tsa' ],
-				'descriptor' => ZCC_TSA_Bridge::get_units_capability_descriptor(),
+				'callable'   => [ 'ZCC_ZANA_Bridge', 'unit_counts_for_zana' ],
+				'descriptor' => ZCC_ZANA_Bridge::get_units_capability_descriptor(),
 			];
 		}
 		return $caps;

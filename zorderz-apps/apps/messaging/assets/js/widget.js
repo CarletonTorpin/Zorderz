@@ -82,7 +82,7 @@
 	 * Fullscreen image lightbox. Tap the overlay or close button to dismiss.
 	 * Used when a user taps an image attachment in a chat message.
 	 */
-	function tsimShowLightbox(url, alt) {
+	function zimShowLightbox(url, alt) {
 		// Remove any existing lightbox first.
 		var existing = document.getElementById('zim-lightbox');
 		if (existing) existing.remove();
@@ -487,19 +487,19 @@
 	// feedback loop (more polls → more PHP worker pressure → more 502s). The
 	// factor is shared across BOTH pollers so the whole widget eases off together,
 	// then snaps back to the base cadence on the first success.
-	var tsimPollFailures = 0;
-	function tsimNotePollResult(ok) {
-		tsimPollFailures = ok ? 0 : Math.min(tsimPollFailures + 1, 5);
+	var zimPollFailures = 0;
+	function zimNotePollResult(ok) {
+		zimPollFailures = ok ? 0 : Math.min(zimPollFailures + 1, 5);
 	}
 	// A response is a "failure" for backoff purposes on a 5xx (origin/gateway
 	// error) or a thrown/rejected fetch. 4xx (auth/nonce) is NOT a transient
 	// origin problem, so it doesn't trigger backoff.
-	function tsimPollOkFromStatus(status) {
+	function zimPollOkFromStatus(status) {
 		return !(status >= 500);
 	}
-	function tsimPollDelay(baseMs) {
+	function zimPollDelay(baseMs) {
 		// base, ×2, ×4, ×8, ×16, capped — e.g. 10s → 20 → 40 → 80 → 120 (cap).
-		var d = baseMs * Math.pow(2, tsimPollFailures);
+		var d = baseMs * Math.pow(2, zimPollFailures);
 		return Math.min(d, 120000);
 	}
 
@@ -518,7 +518,7 @@
 					try { tick(); } catch (e) { /* swallow — keep the loop healthy */ }
 				}
 				schedule(); // re-arm with the (possibly backed-off) delay
-			}, tsimPollDelay(intervalMs));
+			}, zimPollDelay(intervalMs));
 		}
 		function start() {
 			if (timer || destroyed) return;
@@ -603,7 +603,7 @@
 		this.searchMode = false;
 		this.selectMode = false;   // v1.0.21: bulk-delete select mode
 		this.selectedIds = {};     // v1.0.21: { messageId: true }
-		this.embedMode = (data.embedMode || '') === 'tsa' || (data.embedMode || '') === 'theme';
+		this.embedMode = (data.embedMode || '') === 'analytics' || (data.embedMode || '') === 'theme';
 
 		this.wireEvents();
 		this.setupPreviewObserver();
@@ -944,10 +944,10 @@
 			self.sidebarFetching = true;
 			ajax('zim_sidebar').then(function (r) {
 				self.sidebarFetching = false;
-				tsimNotePollResult(tsimPollOkFromStatus(r.status)); // v1.1.1 backoff signal
+				zimNotePollResult(zimPollOkFromStatus(r.status)); // v1.1.1 backoff signal
 				if (r.status === 404) { self.hideAll(); return; }
 				if (r.json && r.json.success) self.renderSidebar(r.json.data);
-			}).catch(function () { self.sidebarFetching = false; tsimNotePollResult(false); });
+			}).catch(function () { self.sidebarFetching = false; zimNotePollResult(false); });
 		};
 		// v1.1.1 — base 10s (server-provided, filterable), hard floor 8s; backoff
 		// stretches this further while the origin is failing.
@@ -1152,7 +1152,7 @@
 			self.mainFetching = true;
 			ajax('zim_poll', { conversation_id: self.active.id, since: self.lastSeenId }).then(function (r) {
 				self.mainFetching = false;
-				tsimNotePollResult(tsimPollOkFromStatus(r.status)); // v1.1.1 backoff signal
+				zimNotePollResult(zimPollOkFromStatus(r.status)); // v1.1.1 backoff signal
 				if (!r.json || !r.json.success) return;
 				var msgs = r.json.data.messages || [];
 				if (!msgs.length) return;
@@ -1160,7 +1160,7 @@
 				msgs.forEach(function (m) { self.appendMessage(m); });
 				self.lastSeenId = r.json.data.latest_id || self.lastSeenId;
 				if (wasAtBottom) { self.scrollToBottom(); self.markRead(); }
-			}).catch(function () { self.mainFetching = false; tsimNotePollResult(false); });
+			}).catch(function () { self.mainFetching = false; zimNotePollResult(false); });
 		};
 		// v1.1.1 — base 10s (server-provided, filterable), hard floor 8s; backoff
 		// stretches this further while the origin is failing.
@@ -1336,7 +1336,7 @@ ZIMController.prototype.renderMessageNode = function (m) {
 					img.style.cursor = 'pointer';
 					img.addEventListener('click', function (e) {
 						e.stopPropagation();
-						tsimShowLightbox(a.url, a.name || '');
+						zimShowLightbox(a.url, a.name || '');
 					});
 					wrap.appendChild(img);
 					atts.appendChild(wrap);

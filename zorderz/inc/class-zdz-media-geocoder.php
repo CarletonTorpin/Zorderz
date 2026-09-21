@@ -15,14 +15,14 @@
  *
  * Returned shape (or null if nothing could be resolved):
  *   [
- *     'label'        => 'Mount Helix, La Mesa, CA 91941',  // display string
- *     'neighborhood' => 'Mount Helix'  | '',
- *     'city'         => 'La Mesa'       | '',
- *     'admin1'       => 'CA'            | '',   // state / principal subdivision
- *     'postcode'     => '91941'         | '',   // shown only when confident
+ *     'label'        => 'Uptown, Springfield, IL 62704',  // display string
+ *     'neighborhood' => 'Uptown'       | '',
+ *     'city'         => 'Springfield'  | '',
+ *     'admin1'       => 'IL'            | '',   // state / principal subdivision
+ *     'postcode'     => '62704'         | '',   // shown only when confident
  *     'country'      => 'US'            | '',
  *     'distance_km'  => 1.7,                    // to the matched place centroid
- *     'provider'     => 'offline-sdcounty',     // provenance
+ *     'provider'     => 'offline-local',        // provenance
  *     'resolved_at'  => '2026-05-29 20:41:00',  // provenance (UTC, mysql fmt)
  *   ]
  *
@@ -159,14 +159,14 @@ class ZDZ_Media_Geocoder {
 			'postcode'     => $postcode,
 			'country'      => $best['country'],
 			'distance_km'  => round( $best_km, 2 ),
-			'provider'     => 'offline-sdcounty',
+			'provider'     => 'offline-local',
 			'resolved_at'  => gmdate( 'Y-m-d H:i:s' ),
 		];
 	}
 
 	/**
-	 * Build a human label, e.g. "Mount Helix, La Mesa, CA 91941" or
-	 * "El Cajon, CA". Empty parts are skipped.
+	 * Build a human label, e.g. "Uptown, Springfield, IL 62704" or
+	 * "Springfield, IL". Empty parts are skipped.
 	 */
 	private static function compose_label( string $neighborhood, string $city, string $admin1, string $postcode ): string {
 		$primary = [];
@@ -199,12 +199,16 @@ class ZDZ_Media_Geocoder {
 
 		/**
 		 * Filter: zdz_media_geocode_dataset_path
-		 * Point this at a larger GeoNames file (e.g. the full US.txt) to expand
-		 * coverage with ZERO code changes — same parser, same format.
+		 * Core ships a small, region-agnostic SAMPLE place list (a national
+		 * spread — see data/sample-places.tsv) purely to demonstrate the format
+		 * and exercise the resolver. A business points this filter at its own
+		 * region's dataset (any GeoNames-compatible TSV — a county extract, or the
+		 * full US.txt) to get real coverage, with ZERO code changes. When no usable
+		 * dataset is present the resolver returns null and the UI shows raw coords.
 		 */
 		$path = apply_filters(
 			'zdz_media_geocode_dataset_path',
-			trailingslashit( dirname( __DIR__ ) ) . 'data/sd-county-places.tsv'
+			trailingslashit( dirname( __DIR__ ) ) . 'data/sample-places.tsv'
 		);
 
 		if ( ! $path || ! is_readable( $path ) ) {
@@ -258,7 +262,7 @@ class ZDZ_Media_Geocoder {
 			return false;
 		}
 		// Treat the exact null island (0,0) as invalid — almost always a bug,
-		// never a real field photo for this business.
+		// never a real field photo.
 		if ( 0.0 === $lat && 0.0 === $lng ) {
 			return false;
 		}
