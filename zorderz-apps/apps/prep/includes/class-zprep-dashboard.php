@@ -551,13 +551,26 @@ class ZPREP_Dashboard {
 	 * or one side is surname-only. This catches "Alex / Sam Rivera" == "Alex Rivera"
 	 * WITHOUT merging "Jordan Rivera" into "Alex Rivera" — different given names on the
 	 * same surname stay distinct.
+	 *
+	 * §131: the surnames may also be SOUNDALIKE (one source spells it one way, another
+	 * differently) — but a soundalike surname folds ONLY when a given name also agrees,
+	 * so it never merges two different people who merely sound alike. A soundalike
+	 * surname with surname-only on either side stays DISTINCT (no given to corroborate;
+	 * never merge on sound alone). Guarded by ZDZ_Name_Match — absent, only EXACT
+	 * surnames fold, exactly as before (INV-9/INV-12).
 	 */
 	public static function same_customer( string $name_a, string $cid_a, string $name_b, string $cid_b ): bool {
 		if ( $cid_a !== '' && $cid_b !== '' ) { return $cid_a === $cid_b; }
 		$a = self::customer_signature( $name_a );
 		$b = self::customer_signature( $name_b );
-		if ( $a['surname'] === '' || $a['surname'] !== $b['surname'] ) { return false; }
-		if ( ! $a['givens'] || ! $b['givens'] ) { return true; } // one side is surname-only
+		if ( $a['surname'] === '' || $b['surname'] === '' ) { return false; }
+		$surname_same  = ( $a['surname'] === $b['surname'] );
+		$surname_sound = ( ! $surname_same && class_exists( 'ZDZ_Name_Match' )
+			&& \ZDZ_Name_Match::sounds_like( $a['surname'], $b['surname'] ) );
+		if ( ! $surname_same && ! $surname_sound ) { return false; }
+		if ( ! $a['givens'] || ! $b['givens'] ) {
+			return $surname_same; // surname-only side: fold on EXACT surname only, never on sound
+		}
 		return (bool) array_intersect( $a['givens'], $b['givens'] );
 	}
 

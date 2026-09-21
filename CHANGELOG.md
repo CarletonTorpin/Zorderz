@@ -11,6 +11,22 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.10.0] - 2026-09-19
+
+Platform-wide **soundalike name matching**. A customer whose name is heard or typed with a different-but-equivalent spelling is now found and offered as a suggestion across the apps, from one shared matcher — never auto-filled, never merged on sound alone. Install the theme first, then the apps. No configuration or database changes; every new path is guarded and degrades to the prior behaviour when the matcher or a connector is absent.
+
+### Added
+- **Name matcher — a shared Core service (`ZDZ_Name_Match`).** A metaphone key plus a curated, general-English homophone/nickname map and typo tolerance, behind one `sounds_like()` / `name_score()` API. Suggestion-grade only. The shipped map is a neutral seed carrying no customer records; a business's own confirmed spellings layer in from an Identity Pack via the `zdz_name_homophones_map` filter (empty by default).
+- **Contact card — soundalike recall + a first-name precision gate.** The dashboard "get X's contact info" card now finds a client on file under a variant spelling, and — the privacy fix — a low-confidence match (a related surname but a divergent first name) is disclosed as **name and city only**, never the wrong person's phone, email, or address.
+- **Receipts — soundalike client recall.** The receipt's by-name search widens to curated soundalike spellings when the literal search is thin; each candidate still passes the per-row same-customer verify.
+- **Prep — soundalike de-dup, given-name gated.** The Approved-to-Cut queue folds one customer that two sources spell differently into a single card, but only when a given name also agrees — it never merges two different people who merely sound alike.
+
+### Notes
+- Theme and apps bundle move to 1.10.0 in lockstep. Install the theme first.
+- Everything is `class_exists`-guarded: an app running ahead of the theme keeps its prior behaviour rather than failing.
+
+---
+
 ## [1.9.0] - 2026-09-08
 
 The Inbox becomes a full in-app **mail client**, plus field-app hardening. Install the theme first, then the apps. New database migrations run automatically (Inbox folders/read-state/read-view indexes); no configuration changes are required, and every new surface degrades cleanly when its connector or Identity Pack value is absent.

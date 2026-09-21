@@ -9,7 +9,7 @@
  * exactly (the [ZDZ_PROJECT] / [ZEST_LOOKUP] shape):
  *
  *   1. Brain-Bot emits  [ZIB_SEARCH]{"q":"recent supplier orders"}
- *   2. The engine's marker interceptor (class-tsa-analytics-engine.php,
+ *   2. The engine's marker interceptor (in the analytics chat engine,
  *      process_chat, Step 4a) detects it, refuses on kiosk, then — for a real
  *      person — calls  ZIB_ZANA_Bridge::handle_marker($json, $user_id)  with the
  *      REAL caller's id (server-authoritative; never the model's).

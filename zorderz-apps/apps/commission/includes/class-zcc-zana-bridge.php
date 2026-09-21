@@ -4,10 +4,8 @@
  * orchestrator.
  *
  * The theme orchestrator (ZDZ_Orchestrator) calls this to render an inline
- * commission card or a unit tally. Because the shipped theme still references
- * the historical class name, a `class_alias( 'ZCC_ZANA_Bridge', 'ZCC_ZANA_Bridge' )`
- * at the end of this file keeps `ZCC_ZANA_Bridge::commission_calc_for_tsa()`
- * resolving — a documented deprecated alias, per Playbook §4.
+ * commission card or a unit tally, addressing this class by its canonical
+ * ZCC_ZANA_Bridge name.
  *
  * SAFETY: the shared kiosk HARD-REFUSES any figure; the tier gate
  * (ZDZ_Data_Permissions) is checked BEFORE any computation; the amount is
@@ -34,7 +32,7 @@ class ZCC_ZANA_Bridge {
 	 * COMMISSION FIGURE
 	 * ================================================================== */
 
-	public static function commission_calc_for_tsa( array $payload ): array {
+	public static function commission_calc_for_zana( array $payload ): array {
 		$result = [ 'success' => false, 'subject' => '', 'period' => '', 'denied' => false, 'message' => '', 'error' => '', 'source' => 'zcc_bridge' ];
 
 		if ( ! self::is_available() ) {
@@ -103,7 +101,7 @@ class ZCC_ZANA_Bridge {
 	 * UNIT TALLY  (item-keyed counts for analytics)
 	 * ================================================================== */
 
-	public static function unit_counts_for_tsa( array $payload ): array {
+	public static function unit_counts_for_zana( array $payload ): array {
 		$result = [ 'success' => false, 'period' => '', 'counts' => [], 'counts_v2' => [], 'units_total' => 0, 'job_count' => 0, 'unclassified_lines' => 0, 'unclassified_amount' => 0.0, 'denied' => false, 'message' => '', 'error' => '', 'source' => 'zcc_bridge' ];
 
 		if ( ! class_exists( 'ZCC_FreshBooks' ) || ! ZCC_FreshBooks::is_connected() || ! class_exists( 'ZCC_Installer_Pay' ) ) {
@@ -278,14 +276,4 @@ class ZCC_ZANA_Bridge {
 	public static function get_units_capability_descriptor(): array {
 		return [ 'id' => 'commission.units', 'label' => __( 'Sales unit tally', 'zorderz' ), 'read_only' => true, 'kiosk_forbidden' => true, 'format' => self::get_units_format_spec() ];
 	}
-}
-
-/*
- * Deprecated alias: the shipped theme orchestrator still references the historical
- * class name. class_alias keeps ZCC_ZANA_Bridge::commission_calc_for_tsa() (and
- * class_exists / method_exists on it) resolving to this class. Remove once every
- * caller has migrated to ZCC_ZANA_Bridge.
- */
-if ( ! class_exists( 'ZCC_ZANA_Bridge', false ) ) {
-	class_alias( 'ZCC_ZANA_Bridge', 'ZCC_ZANA_Bridge' );
 }

@@ -132,7 +132,7 @@ require_once ZEST_DIR . 'includes/class-zest-nutshell.php';
 require_once ZEST_DIR . 'includes/class-zest-engine.php';
 require_once ZEST_DIR . 'includes/class-zest-progress.php';
 require_once ZEST_DIR . 'includes/class-zest-background.php';
-require_once ZEST_DIR . 'includes/class-zest-tsa-bridge.php';
+require_once ZEST_DIR . 'includes/class-zest-zana-bridge.php';
 require_once ZEST_DIR . 'includes/class-zest-admin.php';
 require_once ZEST_DIR . 'includes/class-zest-dashboard.php';
 require_once ZEST_DIR . 'includes/class-zest-doc-renderer.php';

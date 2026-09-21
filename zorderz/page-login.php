@@ -41,20 +41,34 @@ if ( $is_bridge ) {
 			?: ( $custom_logo_id ? wp_get_attachment_image_url( $custom_logo_id, 'full' ) : ( $logo_light ?: '' ) );
 	}
 
+	// Brand ramp top colour, for the browser-chrome tint and as the gradient's
+	// resolved default. The Business Profile ramp is authoritative; the platform
+	// default (--ref-brand-600, #1E3A5F) is the neutral fallback when unset.
+	$brand_top = '#1E3A5F';
+	if ( class_exists( 'ZDZ_Business_Profile' ) ) {
+		$ramp = ZDZ_Business_Profile::get( 'brand.ramp', array() );
+		if ( is_array( $ramp ) && ! empty( $ramp['600'] ) && preg_match( '/^#([A-Fa-f0-9]{3}){1,2}$/', (string) $ramp['600'] ) ) {
+			$brand_top = (string) $ramp['600'];
+		}
+	}
+
 	// Minimal header — no full get_header() to avoid skeleton/SPA shell overhead.
 	?><!DOCTYPE html>
 <html <?php language_attributes(); ?>>
 <head>
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-	<meta name="theme-color" content="#2563eb">
+	<meta name="theme-color" content="<?php echo esc_attr( $brand_top ); ?>">
 	<meta name="robots" content="noindex, nofollow">
 	<title><?php esc_html_e( 'Login Successful — Zorderz', 'zorderz' ); ?></title>
 	<style>
+		/* Brand ramp base — this standalone view loads no theme CSS. The Business
+		   Profile :root overrides printed below, when present, re-skin it. */
+		:root{--ref-brand-600:#1E3A5F;--ref-brand-900:#091526;--ref-brand-950:#050D18}
 		*{box-sizing:border-box;margin:0;padding:0}
 		body{
 			font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-			background:linear-gradient(145deg,#2563eb 0%,#1e3a8a 50%,#172554 100%);
+			background:linear-gradient(145deg,var(--ref-brand-600, #2563eb) 0%,var(--ref-brand-900, #1e3a8a) 50%,var(--ref-brand-950, #172554) 100%);
 			min-height:100vh;display:flex;align-items:center;justify-content:center;
 			padding:24px 16px;color:#111827;
 		}
@@ -134,6 +148,7 @@ if ( $is_bridge ) {
 			.bridge-card{padding:32px 20px 24px;border-radius:16px}
 		}
 	</style>
+<?php if ( class_exists( 'ZDZ_Business_Profile' ) ) { ZDZ_Business_Profile::print_css_variables(); } ?>
 </head>
 <body>
 <div class="bridge-card">
@@ -275,7 +290,7 @@ get_header(); ?>
 		position: fixed;
 		inset: 0;
 		z-index: 999999;
-		background: linear-gradient(145deg, #2563eb 0%, #1e3a8a 50%, #172554 100%);
+		background: linear-gradient(145deg, var(--ref-brand-600, #2563eb) 0%, var(--ref-brand-900, #1e3a8a) 50%, var(--ref-brand-950, #172554) 100%);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -325,7 +340,7 @@ get_header(); ?>
 	.login-logo .logo-mark {
 		width: 52px;
 		height: 52px;
-		color: #2563eb;
+		color: var(--ref-brand-600, #2563eb);
 		margin: 0 auto 10px;
 	}
 	.login-logo h1 {
@@ -369,7 +384,7 @@ get_header(); ?>
 		color: #111827 !important;
 	}
 	.magic-login-section a {
-		color: #2563eb !important;
+		color: var(--ref-brand-600, #2563eb) !important;
 		text-decoration: underline !important;
 		font-size: 14px !important;
 	}
@@ -394,10 +409,10 @@ get_header(); ?>
 	.magic-login-section input[type="text"]:focus,
 	.magic-login-section .magic-login-form input[type="email"]:focus,
 	.magic-login-section .magic-login-form input[type="text"]:focus {
-		border-color: #2563eb !important;
+		border-color: var(--ref-brand-600, #2563eb) !important;
 		outline: none !important;
 		background: #ffffff !important;
-		box-shadow: 0 0 0 3px rgba(37,99,235,0.15) !important;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-brand-600, #2563eb) 15%, transparent) !important;
 	}
 	/* Submit button */
 	.magic-login-section input[type="submit"],
@@ -415,7 +430,7 @@ get_header(); ?>
 		min-height: 58px !important;
 		cursor: pointer !important;
 		text-align: center !important;
-		background: #2563eb !important;
+		background: var(--ref-brand-600, #2563eb) !important;
 		color: #ffffff !important;
 		margin: 4px 0 0 0 !important;
 		box-sizing: border-box !important;
@@ -424,7 +439,7 @@ get_header(); ?>
 	.magic-login-section button[type="submit"]:hover,
 	.magic-login-section .magic-login-form input[type="submit"]:hover,
 	.magic-login-section .magic-login-form button:hover {
-		background: #1d4ed8 !important;
+		background: var(--ref-brand-900, #1d4ed8) !important;
 	}
 	/* Plugin form wrapper containment */
 	.magic-login-section form,
@@ -460,7 +475,7 @@ get_header(); ?>
 	}
 	.zdz-bridge-polling .polling-icon {
 		width: 48px; height: 48px; margin: 0 auto 16px;
-		color: #2563eb;
+		color: var(--ref-brand-600, #2563eb);
 	}
 	.zdz-bridge-polling h3 {
 		font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 8px;
@@ -471,7 +486,7 @@ get_header(); ?>
 	}
 	.zdz-bridge-spinner {
 		display: inline-block; width: 20px; height: 20px; margin-top: 12px;
-		border: 2.5px solid #E5E7EB; border-top-color: #2563eb;
+		border: 2.5px solid #E5E7EB; border-top-color: var(--ref-brand-600, #2563eb);
 		border-radius: 50%; animation: zdz-spin 0.8s linear infinite;
 	}
 	@keyframes zdz-spin { to { transform: rotate(360deg); } }
@@ -517,7 +532,7 @@ get_header(); ?>
 		font-family: inherit;
 	}
 	.zdz-code-toggle:hover {
-		color: #2563eb;
+		color: var(--ref-brand-600, #2563eb);
 		text-decoration: underline;
 	}
 	/* v2.21.0: demoted "Already have a code?" affordance — quiet, secondary,
@@ -536,7 +551,7 @@ get_header(); ?>
 		font-family: inherit;
 	}
 	.zdz-have-code-link:hover {
-		color: #2563eb;
+		color: var(--ref-brand-600, #2563eb);
 		text-decoration: underline;
 	}
 	.zdz-have-code-block.active {
@@ -574,10 +589,10 @@ get_header(); ?>
 		font-family: 'SF Mono', ui-monospace, monospace;
 	}
 	.zdz-code-input:focus {
-		border-color: #2563eb;
+		border-color: var(--ref-brand-600, #2563eb);
 		outline: none;
 		background: #fff;
-		box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--ref-brand-600, #2563eb) 15%, transparent);
 	}
 	.zdz-code-submit {
 		display: block;
@@ -590,11 +605,11 @@ get_header(); ?>
 		min-height: 58px;
 		cursor: pointer;
 		text-align: center;
-		background: #6366F1;
+		background: var(--ref-brand-600, #6366F1);
 		color: #fff;
 		font-family: inherit;
 	}
-	.zdz-code-submit:hover { background: #1d4ed8; }
+	.zdz-code-submit:hover { background: var(--ref-brand-900, #1d4ed8); }
 	.zdz-code-submit:disabled { background: #93c5fd; cursor: not-allowed; }
 	.zdz-code-error {
 		font-size: 13px;
@@ -613,7 +628,7 @@ get_header(); ?>
 		padding: 4px 8px;
 		font-family: inherit;
 	}
-	.zdz-code-back:hover { color: #2563eb; text-decoration: underline; }
+	.zdz-code-back:hover { color: var(--ref-brand-600, #2563eb); text-decoration: underline; }
 </style>
 
 <div class="zdz-login-takeover">
@@ -667,7 +682,7 @@ get_header(); ?>
 					autocomplete="email" autocapitalize="none" inputmode="email"
 					style="display:block;width:100%;padding:16px 18px;border:2px solid #d1d5db;border-radius:14px;font-size:18px;min-height:58px;box-sizing:border-box;margin:0 0 10px;background:#f9fafb;color:#111827;">
 				<button type="button" class="zdz-otp-send" id="zdz-otp-send"
-					style="display:block;width:100%;padding:18px;border:none;border-radius:14px;font-size:18px;font-weight:700;min-height:58px;cursor:pointer;text-align:center;background:#6366F1;color:#fff;font-family:inherit;">
+					style="display:block;width:100%;padding:18px;border:none;border-radius:14px;font-size:18px;font-weight:700;min-height:58px;cursor:pointer;text-align:center;background:var(--ref-brand-600, #6366F1);color:#fff;font-family:inherit;">
 					Send me a code
 				</button>
 				<div class="zdz-otp-error" id="zdz-otp-error" style="font-size:14px;color:#dc2626;margin-top:8px;display:none;"></div>

@@ -57,7 +57,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 class ZKV_ZANA_Bridge {
 
 	/** Legacy (pre-1.5.0) transient key — cleared on invalidate for upgrades. */
-	private static $inventory_cache_key = 'zkv_zana_inventory';
+	private static $inventory_cache_key = 'zkv_inventory';
 
 	/**
 	 * Compact listing of indexed vault documents — titles and types only.
@@ -79,7 +79,7 @@ class ZKV_ZANA_Bridge {
 	public static function get_inventory( $uid = null ) {
 		$uid      = ( null === $uid ) ? get_current_user_id() : (int) $uid;
 		$is_admin = class_exists( 'ZKV_ACL' ) ? ZKV_ACL::is_admin_user( $uid ) : false;
-		$tier_key = 'zkv_zana_inventory_' . ( $is_admin ? 'admin' : 'staff' );
+		$tier_key = 'zkv_inventory_' . ( $is_admin ? 'admin' : 'staff' );
 
 		$cached = get_transient( $tier_key );
 		if ( false !== $cached ) { return $cached; }
@@ -120,8 +120,8 @@ class ZKV_ZANA_Bridge {
 	 */
 	public static function invalidate_cache() {
 		delete_transient( self::$inventory_cache_key ); // legacy pre-1.5.0 key
-		delete_transient( 'zkv_zana_inventory_admin' );
-		delete_transient( 'zkv_zana_inventory_staff' );
+		delete_transient( 'zkv_inventory_admin' );
+		delete_transient( 'zkv_inventory_staff' );
 	}
 
 	/**

@@ -91,7 +91,7 @@
  *     subscriptions (the channel_* columns) remain a future enhancement.
  *   FILES: NEW includes/class-zsch-sync.php; includes/class-zsch-graph-
  *   delegated.php + includes/class-zsch-google.php (fetch_events + dt helpers);
- *   includes/class-zsch-availability.php, includes/class-zsch-tsa-bridge.php,
+ *   includes/class-zsch-availability.php, includes/class-zsch-zana-bridge.php,
  *   includes/class-zsch-appointments.php, includes/class-zsch-rest.php,
  *   app.php (cron wire + version), assets/js/connections.js.
  *
