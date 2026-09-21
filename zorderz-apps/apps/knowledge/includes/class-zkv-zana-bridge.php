@@ -1,11 +1,11 @@
 <?php
 /**
- * ZKV_TSA_Bridge — For Analytics to inject vault context into the assistant.
+ * ZKV_ZANA_Bridge — For Analytics to inject vault context into the assistant.
  *
  * Usage in Analytics's analytics engine:
- *   if ( class_exists( 'ZKV_TSA_Bridge' ) ) {
- *       $system_prompt .= ZKV_TSA_Bridge::get_inventory();   // compact doc list
- *       $vault_block    = ZKV_TSA_Bridge::get_context( $q );  // topic-matched content
+ *   if ( class_exists( 'ZKV_ZANA_Bridge' ) ) {
+ *       $system_prompt .= ZKV_ZANA_Bridge::get_inventory();   // compact doc list
+ *       $vault_block    = ZKV_ZANA_Bridge::get_context( $q );  // topic-matched content
  *   }
  *
  * v1.2.6: Added get_inventory(), cache invalidation, removed [VAULT-{id}] citation style.
@@ -54,10 +54,10 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-class ZKV_TSA_Bridge {
+class ZKV_ZANA_Bridge {
 
 	/** Legacy (pre-1.5.0) transient key — cleared on invalidate for upgrades. */
-	private static $inventory_cache_key = 'zkv_tsa_inventory';
+	private static $inventory_cache_key = 'zkv_inventory';
 
 	/**
 	 * Compact listing of indexed vault documents — titles and types only.
@@ -79,7 +79,7 @@ class ZKV_TSA_Bridge {
 	public static function get_inventory( $uid = null ) {
 		$uid      = ( null === $uid ) ? get_current_user_id() : (int) $uid;
 		$is_admin = class_exists( 'ZKV_ACL' ) ? ZKV_ACL::is_admin_user( $uid ) : false;
-		$tier_key = 'zkv_tsa_inventory_' . ( $is_admin ? 'admin' : 'staff' );
+		$tier_key = 'zkv_inventory_' . ( $is_admin ? 'admin' : 'staff' );
 
 		$cached = get_transient( $tier_key );
 		if ( false !== $cached ) { return $cached; }
@@ -120,8 +120,8 @@ class ZKV_TSA_Bridge {
 	 */
 	public static function invalidate_cache() {
 		delete_transient( self::$inventory_cache_key ); // legacy pre-1.5.0 key
-		delete_transient( 'zkv_tsa_inventory_admin' );
-		delete_transient( 'zkv_tsa_inventory_staff' );
+		delete_transient( 'zkv_inventory_admin' );
+		delete_transient( 'zkv_inventory_staff' );
 	}
 
 	/**

@@ -41,7 +41,7 @@
  *     as-is for older installs and simply no-ops once the columns exist.
  *   CHAT BRIDGE — the analytics/Chat assistant reads its per-turn data context from
  *     the neutral `zdz_analytics_data_context` filter (ships empty). This app now
- *     hooks that filter and feeds it the ACL-scoped ZKV_TSA_Bridge inventory +
+ *     hooks that filter and feeds it the ACL-scoped ZKV_ZANA_Bridge inventory +
  *     matched content, so an indexed, permitted vault document is answerable in chat.
  *
  * v1.6.0 (generalized into the Zorderz distribution): full ts_/TS_ prefix rename
@@ -115,7 +115,7 @@
  *   - Line rendition (wp_zkv_transcript_lines) stored at transcript ingest:
  *     the stable, non-overlapping coordinate system excerpt selection and the
  *     admin queue's ±1-line context read from (chunks overlap; lines don't).
- *   - Closes a pre-existing leak in the same pass: ZKV_TSA_Bridge previously
+ *   - Closes a pre-existing leak in the same pass: ZKV_ZANA_Bridge previously
  *     applied NO visibility filter, so admin_only chunk text could reach any
  *     user's the assistant context. All bridge queries are now ACL-scoped, and the
  *     shared inventory transient is tier-keyed (admin/staff) + transcript-free.
@@ -830,7 +830,7 @@ add_action( 'rest_api_init', function () {
 // ── Chat bridge: feed vault knowledge into the analytics assistant ──
 // v1.7.1: The analytics/Chat app (ZANA_Chat) gathers each turn's data context
 // from the neutral `zdz_analytics_data_context` filter, which ships EMPTY. The
-// vault's retrieval path (ZKV_TSA_Bridge) is the ACL-aware code that turns a
+// vault's retrieval path (ZKV_ZANA_Bridge) is the ACL-aware code that turns a
 // question into matched document content and a compact document inventory — but
 // nothing connected that producer to the consumer seam, so an uploaded document
 // could never reach the assistant. This wires them together.
@@ -844,7 +844,7 @@ add_action( 'rest_api_init', function () {
 add_filter(
 	'zdz_analytics_data_context',
 	function ( $data, $message, $user_id, $context ) {
-		if ( ! class_exists( 'ZKV_TSA_Bridge' ) ) {
+		if ( ! class_exists( 'ZKV_ZANA_Bridge' ) ) {
 			return $data;
 		}
 		if ( ! is_array( $data ) ) {
@@ -855,13 +855,13 @@ add_filter(
 		$parts = array();
 
 		// Compact list of the documents the assistant may draw on.
-		$inventory = ZKV_TSA_Bridge::get_inventory( $uid );
+		$inventory = ZKV_ZANA_Bridge::get_inventory( $uid );
 		if ( is_string( $inventory ) && '' !== trim( $inventory ) ) {
 			$parts[] = $inventory;
 		}
 
 		// Content matched to THIS question (ACL-scoped inside the bridge).
-		$matched = ZKV_TSA_Bridge::get_context( (string) $message, 8, $uid );
+		$matched = ZKV_ZANA_Bridge::get_context( (string) $message, 8, $uid );
 		if ( is_string( $matched ) && '' !== trim( $matched ) ) {
 			$parts[] = $matched;
 		}
@@ -1874,7 +1874,7 @@ add_filter( 'zdz_rename_map', function ( $map ) {
  * Deprecated class aliases (documented successors).
  *
  * Other components may still reference the legacy class names —
- * the theme's integration health check probes TSKV_TSA_Bridge / TSKV_Bridge, and
+ * the theme's integration health check probes ZKV_ZANA_Bridge / TSKV_Bridge, and
  * the messaging module's email bridge probes TSKV_Mailbox. During the Option-A
  * rename these aliases keep those cross-component contracts working; they are
  * transitional and slated for removal once every consumer speaks ZKV_*.
@@ -1882,7 +1882,6 @@ add_filter( 'zdz_rename_map', function ( $map ) {
  */
 add_action( 'plugins_loaded', function () {
 	foreach ( array(
-		'ZKV_TSA_Bridge' => 'ZKV_TSA_Bridge',
 		'ZKV_Bridge'     => 'TSKV_Bridge',
 		'ZKV_Mailbox'    => 'TSKV_Mailbox',
 		'ZKV_ACL'        => 'TSKV_ACL',

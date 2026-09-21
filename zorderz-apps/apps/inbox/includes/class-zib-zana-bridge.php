@@ -1,6 +1,6 @@
 <?php
 /**
- * ZIB_TSA_Bridge — the ONE seam between the Brain-Bot / Analytics engine and the
+ * ZIB_ZANA_Bridge — the ONE seam between the Brain-Bot / Analytics engine and the
  * sealed mail store. Egress path #1 ("owner's own Brain-Bot queries").
  *
  * House pattern: like the other apps' analytics bridges, this is a public static
@@ -9,9 +9,9 @@
  * exactly (the [TS_PROJECT] / [TSEC_LOOKUP] shape):
  *
  *   1. Brain-Bot emits  [ZIB_SEARCH]{"q":"recent supplier orders"}
- *   2. The engine's marker interceptor (class-tsa-analytics-engine.php,
+ *   2. The engine's marker interceptor (in the analytics chat engine,
  *      process_chat, Step 4a) detects it, refuses on kiosk, then — for a real
- *      person — calls  ZIB_TSA_Bridge::handle_marker($json, $user_id)  with the
+ *      person — calls  ZIB_ZANA_Bridge::handle_marker($json, $user_id)  with the
  *      REAL caller's id (server-authoritative; never the model's).
  *   3. This bridge asks the Gatekeeper for THAT user's own mail only, and
  *      returns a fully-RENDERED markdown answer.
@@ -41,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ZIB_TSA_Bridge {
+class ZIB_ZANA_Bridge {
 
 	/** The read marker this bridge answers. Read-only: never needs a confirm. */
 	const MARKER = 'ZIB_SEARCH';
@@ -80,7 +80,7 @@ class ZIB_TSA_Bridge {
 
 	/**
 	 * Decode-and-answer. The engine's one-liner:
-	 *   $out = ZIB_TSA_Bridge::handle_marker($payload, (int) $user_id);
+	 *   $out = ZIB_ZANA_Bridge::handle_marker($payload, (int) $user_id);
 	 *   $response = $this->inject_marker($re, $out['render']."\n\n", $response);
 	 *
 	 * @param mixed  $payload   Decoded marker JSON (array) or the raw {"q":"…"} string.
@@ -158,7 +158,7 @@ class ZIB_TSA_Bridge {
 	/**
 	 * P5 FOLLOW-UPS entry point. Mirrors handle_marker() for the [ZIB_FOLLOWUP]
 	 * read marker. The engine's one-liner (Step 4a-3n, mirroring 4a-3m):
-	 *   $out = ZIB_TSA_Bridge::handle_followup($payload, (int) $user_id, $ask);
+	 *   $out = ZIB_ZANA_Bridge::handle_followup($payload, (int) $user_id, $ask);
 	 *   $response = $this->inject_marker($re, $out['render']."\n\n", $response);
 	 *
 	 * The marker JSON carries the kind ({"kind":"needs_reply"}) and optional
@@ -177,7 +177,7 @@ class ZIB_TSA_Bridge {
 	/**
 	 * P6c COMPUTE entry point. Mirrors handle_marker() / handle_followup() for the
 	 * [ZIB_ANALYZE] marker. The engine's one-liner (Step 4a-3o):
-	 *   $out = ZIB_TSA_Bridge::handle_analyze($payload, (int) $user_id, $ask);
+	 *   $out = ZIB_ZANA_Bridge::handle_analyze($payload, (int) $user_id, $ask);
 	 * Identity is server-authoritative — the caller id is the engine's, never the payload's.
 	 *
 	 * @return array { ok:bool, permitted:bool, count:int, render:string }

@@ -132,7 +132,7 @@ require_once ZEST_DIR . 'includes/class-zest-nutshell.php';
 require_once ZEST_DIR . 'includes/class-zest-engine.php';
 require_once ZEST_DIR . 'includes/class-zest-progress.php';
 require_once ZEST_DIR . 'includes/class-zest-background.php';
-require_once ZEST_DIR . 'includes/class-zest-tsa-bridge.php';
+require_once ZEST_DIR . 'includes/class-zest-zana-bridge.php';
 require_once ZEST_DIR . 'includes/class-zest-admin.php';
 require_once ZEST_DIR . 'includes/class-zest-dashboard.php';
 require_once ZEST_DIR . 'includes/class-zest-doc-renderer.php';
@@ -211,7 +211,7 @@ add_action( 'plugins_loaded', function () {
 	$engine = new ZEST_Estimate_Engine();
 	ZEST_Dashboard::boot( $engine );
 	ZEST_Background::boot();
-	ZEST_TSA_Bridge::init();
+	ZEST_ZANA_Bridge::init();
 	ZEST_Admin::init();
 
 	// Publish this module's chat markers to the orchestrator as one map.
@@ -225,7 +225,7 @@ add_action( 'plugins_loaded', function () {
 	// Publish estimate chat capabilities to the orchestrator registry (rows a central
 	// resolver reads; harmless until it exists).
 	add_filter( 'zdz_register_capabilities', function ( $caps ) {
-		if ( ! class_exists( 'ZEST_TSA_Bridge' ) ) {
+		if ( ! class_exists( 'ZEST_ZANA_Bridge' ) ) {
 			return $caps;
 		}
 		foreach ( array(
@@ -235,8 +235,8 @@ add_action( 'plugins_loaded', function () {
 			'estimate.lookup' => 'lookup_for_chat',
 			'estimate.stub'   => 'stub_from_lead',
 		) as $verb => $method ) {
-			if ( method_exists( 'ZEST_TSA_Bridge', $method ) ) {
-				$caps[ $verb ] = array( 'callable' => array( 'ZEST_TSA_Bridge', $method ) );
+			if ( method_exists( 'ZEST_ZANA_Bridge', $method ) ) {
+				$caps[ $verb ] = array( 'callable' => array( 'ZEST_ZANA_Bridge', $method ) );
 			}
 		}
 		return $caps;

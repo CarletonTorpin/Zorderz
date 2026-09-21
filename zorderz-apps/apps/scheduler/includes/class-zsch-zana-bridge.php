@@ -1,6 +1,6 @@
 <?php
 /**
- * ZSCH_TSA_Bridge — orchestrator capability bridge for the scheduler.
+ * ZSCH_ZANA_Bridge — orchestrator capability bridge for the scheduler.
  *
  * Per ORCHESTRATOR-INTEROP-CONTRACT-v1 §2.1, this is the static class the
  * operator bot (the assistant) calls server-side. Every method returns a
@@ -34,9 +34,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ZSCH_TSA_Bridge {
+class ZSCH_ZANA_Bridge {
 
-	const SOURCE = 'zsch_tsa_bridge';
+	const SOURCE = 'zsch_zana_bridge';
 
 	/**
 	 * Installed + ready. (Always true once the plugin is active; Graph sync is
