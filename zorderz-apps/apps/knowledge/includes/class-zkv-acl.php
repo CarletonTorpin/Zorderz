@@ -68,7 +68,7 @@ class ZKV_ACL {
 	// ──────────────────────────────────────────────────────────────
 
 	/**
-	 * Party-only predicate — the CHAT rule. Used by ZKV_TSA_Bridge on every
+	 * Party-only predicate — the CHAT rule. Used by ZKV_ZANA_Bridge on every
 	 * query it runs, so no transcript byte can enter a model context except
 	 * for a party.
 	 *

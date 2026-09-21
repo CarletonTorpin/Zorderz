@@ -9,7 +9,7 @@
  * alongside the ZDZ_Core_* data clients rather than in a plugin.
  *
  * CALLED BY: the Analytics engine, the
- *            [ZDZ_CONTACT] marker handler. Mirrors TSEC_TSA_Bridge::lookup_for_tsa().
+ *            [ZDZ_CONTACT] marker handler. Mirrors ZEST_ZANA_Bridge::lookup_for_zana().
  *
  * DATA SOURCES (Seam 1, shared clients only — no private API client):
  *   - ZDZ_Core_Nutshell::find_contacts()  — primary identity + phone/email
@@ -21,7 +21,7 @@
  *     A denial is a SUCCESSFUL result carrying a message and NO contact data.
  *   - The host passes tier + is_kiosk + requesting_user_id; the bridge re-checks
  *     them server-side and never trusts the model.
- *   - is_available() + verb_for_tsa($payload) + structured return are
+ *   - is_available() + verb_for_zana($payload) + structured return are
  *     registry-shaped, so zdz_register_capabilities (L4) onboarding is a one-liner.
  *
  * DISCLOSURE (what fields are returned), by tier:
@@ -89,7 +89,7 @@ class ZDZ_Contact_Bridge {
 	 *     @type string $source    Always 'zdz_contact_bridge'.
 	 * }
 	 */
-	public static function lookup_for_tsa( array $payload ): array {
+	public static function lookup_for_zana( array $payload ): array {
 		$result = array(
 			'success'       => true,
 			'denied'        => false,
@@ -232,7 +232,7 @@ class ZDZ_Contact_Bridge {
 			$rec['company'] = $org;
 
 			// FreshBooks field names are quirky — use the SAME proven extraction as
-			// the analytics app's customer lookup (TSA_FreshBooks::extract_client_*): the phone key
+			// the analytics app's customer lookup: the phone key
 			// is `mob_phone` (NOT `mobile_phone`), and email may live in a contacts
 			// sub-array / username / pref_email rather than a flat `email`.
 			$fb_phone = trim( (string) ( $fb_client['mob_phone'] ?? $fb_client['home_phone'] ?? $fb_client['bus_phone'] ?? $fb_client['mobile_phone'] ?? '' ) );
@@ -716,8 +716,8 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
-	 * Robustly pull an email from a FreshBooks client object. Mirrors
-	 * TSA_FreshBooks::extract_client_email(): top-level email → contacts sub-array
+	 * Robustly pull an email from a FreshBooks client object. Mirrors the analytics
+	 * app's client-email extraction: top-level email → contacts sub-array
 	 * → username-if-email → pref_email. Kept local so the theme has no hard
 	 * dependency on the Analytics plugin.
 	 *
@@ -894,7 +894,7 @@ class ZDZ_Contact_Bridge {
 			'verb'        => 'contact.lookup',
 			'provider'    => 'theme-contacts',
 			'tier'        => 'viewer',   // minimum to reach the verb; scope refined in-callback
-			'callback'    => array( 'ZDZ_Contact_Bridge', 'lookup_for_tsa' ),
+			'callback'    => array( 'ZDZ_Contact_Bridge', 'lookup_for_zana' ),
 			'kiosk'       => true,        // reachable on kiosk, but DISCLOSURE is name+city only
 			'side_effect' => false,
 		);

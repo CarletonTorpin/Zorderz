@@ -31,11 +31,11 @@ class ZIM_Admin {
 
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
-		add_action( 'admin_post_tsim_admin_create_channel', array( $this, 'handle_create_channel' ) );
-		add_action( 'admin_post_tsim_admin_add_member',     array( $this, 'handle_add_member' ) );
-		add_action( 'admin_post_tsim_admin_remove_member',  array( $this, 'handle_remove_member' ) );
-		add_action( 'admin_post_tsim_admin_export_audit',   array( $this, 'handle_export_audit' ) );
-		add_action( 'admin_post_tsim_admin_reset_email_cooldown', array( $this, 'handle_reset_email_cooldown' ) );
+		add_action( 'admin_post_zim_admin_create_channel', array( $this, 'handle_create_channel' ) );
+		add_action( 'admin_post_zim_admin_add_member',     array( $this, 'handle_add_member' ) );
+		add_action( 'admin_post_zim_admin_remove_member',  array( $this, 'handle_remove_member' ) );
+		add_action( 'admin_post_zim_admin_export_audit',   array( $this, 'handle_export_audit' ) );
+		add_action( 'admin_post_zim_admin_reset_email_cooldown', array( $this, 'handle_reset_email_cooldown' ) );
 	}
 
 	public function register_menu() {
@@ -108,7 +108,7 @@ class ZIM_Admin {
 				</p>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="zim_admin_reset_email_cooldown">
-					<?php wp_nonce_field( 'zim_admin_reset_email_cooldown', '_tsim_nonce' ); ?>
+					<?php wp_nonce_field( 'zim_admin_reset_email_cooldown', '_zim_nonce' ); ?>
 					<?php submit_button( __( 'Reset DM email cooldown', 'zdz-internal-messaging' ), 'secondary', 'submit', false ); ?>
 				</form>
 			</div>
@@ -116,7 +116,7 @@ class ZIM_Admin {
 			<h2><?php esc_html_e( 'Create channel', 'zdz-internal-messaging' ); ?></h2>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom:1.5em;">
 				<input type="hidden" name="action" value="zim_admin_create_channel">
-				<?php wp_nonce_field( 'zim_admin_create_channel', '_tsim_nonce' ); ?>
+				<?php wp_nonce_field( 'zim_admin_create_channel', '_zim_nonce' ); ?>
 				<table class="form-table"><tbody>
 				<tr>
 					<th scope="row"><label for="zim-slug"><?php esc_html_e( 'Slug', 'zdz-internal-messaging' ); ?></label></th>
@@ -218,7 +218,7 @@ class ZIM_Admin {
 								<input type="hidden" name="action" value="zim_admin_remove_member">
 								<input type="hidden" name="conversation_id" value="<?php echo (int) $conversation_id; ?>">
 								<input type="hidden" name="user_id" value="<?php echo (int) $m['user_id']; ?>">
-								<?php wp_nonce_field( 'zim_admin_remove_member_' . $conversation_id . '_' . $m['user_id'], '_tsim_nonce' ); ?>
+								<?php wp_nonce_field( 'zim_admin_remove_member_' . $conversation_id . '_' . $m['user_id'], '_zim_nonce' ); ?>
 								<button type="submit" class="button-link-delete" onclick="return confirm('<?php echo esc_js( __( 'Remove this member?', 'zdz-internal-messaging' ) ); ?>');">
 									<?php esc_html_e( 'Remove', 'zdz-internal-messaging' ); ?>
 								</button>
@@ -234,7 +234,7 @@ class ZIM_Admin {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="zim_admin_add_member">
 				<input type="hidden" name="conversation_id" value="<?php echo (int) $conversation_id; ?>">
-				<?php wp_nonce_field( 'zim_admin_add_member_' . $conversation_id, '_tsim_nonce' ); ?>
+				<?php wp_nonce_field( 'zim_admin_add_member_' . $conversation_id, '_zim_nonce' ); ?>
 				<?php
 				$candidates = get_users( array(
 					'fields' => array( 'ID', 'user_login', 'display_name' ),
@@ -271,7 +271,7 @@ class ZIM_Admin {
 			<p><?php esc_html_e( 'Exports admin actions (channel creation, member changes, force-deletes) as CSV. Regular message traffic is not logged (intentional — too voluminous to be useful).', 'zdz-internal-messaging' ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="zim_admin_export_audit">
-				<?php wp_nonce_field( 'zim_admin_export_audit', '_tsim_nonce' ); ?>
+				<?php wp_nonce_field( 'zim_admin_export_audit', '_zim_nonce' ); ?>
 				<?php submit_button( __( 'Download CSV', 'zdz-internal-messaging' ) ); ?>
 			</form>
 			<?php if ( ! class_exists( 'ZDZ_Admin_Dashboard' ) ) : ?>
@@ -289,7 +289,7 @@ class ZIM_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Permission denied.', 'zdz-internal-messaging' ) );
 		}
-		check_admin_referer( 'zim_admin_create_channel', '_tsim_nonce' );
+		check_admin_referer( 'zim_admin_create_channel', '_zim_nonce' );
 
 		$slug = sanitize_title( wp_unslash( $_POST['slug'] ?? '' ) );
 		if ( '' === $slug ) {
@@ -318,7 +318,7 @@ class ZIM_Admin {
 		$conv_id = isset( $_POST['conversation_id'] ) ? absint( $_POST['conversation_id'] ) : 0;
 		$user_id = isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0;
 		$role    = ( ( $_POST['role'] ?? 'member' ) === 'admin' ) ? 'admin' : 'member';
-		check_admin_referer( 'zim_admin_add_member_' . $conv_id, '_tsim_nonce' );
+		check_admin_referer( 'zim_admin_add_member_' . $conv_id, '_zim_nonce' );
 
 		if ( $conv_id <= 0 || $user_id <= 0 ) {
 			wp_safe_redirect( $this->back_url( 'Missing conversation or user.', $conv_id ) );
@@ -339,7 +339,7 @@ class ZIM_Admin {
 		}
 		$conv_id = isset( $_POST['conversation_id'] ) ? absint( $_POST['conversation_id'] ) : 0;
 		$user_id = isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0;
-		check_admin_referer( 'zim_admin_remove_member_' . $conv_id . '_' . $user_id, '_tsim_nonce' );
+		check_admin_referer( 'zim_admin_remove_member_' . $conv_id . '_' . $user_id, '_zim_nonce' );
 
 		if ( $conv_id > 0 && $user_id > 0 ) {
 			ZIM_Channels::remove_member( $conv_id, $user_id );
@@ -352,7 +352,7 @@ class ZIM_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Permission denied.', 'zdz-internal-messaging' ) );
 		}
-		check_admin_referer( 'zim_admin_export_audit', '_tsim_nonce' );
+		check_admin_referer( 'zim_admin_export_audit', '_zim_nonce' );
 
 		// Query wp_zdz_audit_log directly, filtered to our app_id. The theme
 		// (as of 2.13.1) does not expose a public reader method — the class
@@ -410,7 +410,7 @@ class ZIM_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Permission denied.', 'zdz-internal-messaging' ) );
 		}
-		check_admin_referer( 'zim_admin_reset_email_cooldown', '_tsim_nonce' );
+		check_admin_referer( 'zim_admin_reset_email_cooldown', '_zim_nonce' );
 
 		global $wpdb;
 		// META_LAST_EMAIL_PREFIX = 'zim_last_email_convo_'

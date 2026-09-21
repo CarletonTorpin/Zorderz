@@ -85,7 +85,7 @@
  * 6. Create Nutshell (Creates Contacts, Leads, Notes)
  * 7. Finalize (AI batch summary, mark complete)
  * v1.5.0 — Full-parity inline widget, permission system (role + username gating).
- * v2.3.0 — Orchestrator interop (L1 read bridge). Adds ZL_TSA_Bridge so the
+ * v2.3.0 — Orchestrator interop (L1 read bridge). Adds ZL_ZANA_Bridge so the
  *          cross-app operator bot (the assistant) can look up a person's
  *          leads/pipeline status and find leads by filter, server-side, with
  *          tier/kiosk redaction enforced in the bridge (never by the model).
@@ -1257,7 +1257,7 @@ add_action( 'after_setup_theme', function() {
  * INTEROP-ZL-sales-leads-v1.md; this plugin ships everything that belongs to ZL.
  */
 add_filter( 'zdz_register_capabilities', function( $caps ) {
-    if ( ! class_exists( 'ZL_TSA_Bridge' ) ) {
+    if ( ! class_exists( 'ZL_ZANA_Bridge' ) ) {
         return $caps;
     }
 
@@ -1266,7 +1266,7 @@ add_filter( 'zdz_register_capabilities', function( $caps ) {
     $caps['lead.lookup'] = array(
         'provider'      => 'leads',
         'tier'          => 'sales',                                 // minimum tier
-        'callback'      => array( 'ZL_TSA_Bridge', 'lookup_for_tsa' ),
+        'callback'      => array( 'ZL_ZANA_Bridge', 'lookup_for_zana' ),
         'kiosk'         => false,                                   // forbidden on kiosk…
         'kiosk_bounded' => true,                                    // …except the redacted variant
         'side_effect'   => false,                                   // read-only → composes freely
@@ -1276,7 +1276,7 @@ add_filter( 'zdz_register_capabilities', function( $caps ) {
     $caps['lead.find'] = array(
         'provider'      => 'leads',
         'tier'          => 'sales',
-        'callback'      => array( 'ZL_TSA_Bridge', 'find_leads_for_tsa' ),
+        'callback'      => array( 'ZL_ZANA_Bridge', 'find_leads_for_zana' ),
         'kiosk'         => false,
         'kiosk_bounded' => true,
         'side_effect'   => false,
@@ -1288,7 +1288,7 @@ add_filter( 'zdz_register_capabilities', function( $caps ) {
     $caps['lead.create'] = array(
         'provider'      => 'leads',
         'tier'          => 'sales',
-        'callback'      => array( 'ZL_TSA_Bridge', 'create_lead_from_tsa' ),
+        'callback'      => array( 'ZL_ZANA_Bridge', 'create_lead_from_zana' ),
         'kiosk'         => false,
         'kiosk_bounded' => false,
         'side_effect'   => true,                                    // → preview-and-confirm

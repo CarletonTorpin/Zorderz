@@ -16,7 +16,7 @@
  * `zdz_register_capabilities` callback (CONTRACT §2.3 / §6) so it slots into the
  * Stage-1 registry **unchanged**: structured return, tier-aware, self-contained.
  *
- * Reference implementation we mirror: Estimate Creator's `TSEC_TSA_Bridge`
+ * Reference implementation we mirror: Estimate Creator's `ZEST_ZANA_Bridge`
  * (CONTRACT §2.1) — confidence-gated entity resolution, structured return,
  * tier/kiosk redaction enforced *in the bridge* (never trusting the model), and
  * no fabrication on empty.
@@ -82,7 +82,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ZL_TSA_Bridge {
+class ZL_ZANA_Bridge {
 
 	/** Source tag for the audit trail (CONTRACT §2.1.1: every return carries `source`). */
 	const SOURCE = 'leads';
@@ -118,7 +118,7 @@ class ZL_TSA_Bridge {
 	}
 
 	/* ═══════════════════════════════════════════════════════════════════════
-	 * VERB 1 — lookup_for_tsa()  (READ, the headline verb)
+	 * VERB 1 — lookup_for_zana()  (READ, the headline verb)
 	 * "what are <person>'s leads / what's their pipeline status"
 	 * ═══════════════════════════════════════════════════════════════════════ */
 
@@ -150,7 +150,7 @@ class ZL_TSA_Bridge {
 	 * @param array $payload
 	 * @return array
 	 */
-	public static function lookup_for_tsa( array $payload ): array {
+	public static function lookup_for_zana( array $payload ): array {
 		try {
 			$ctx   = self::resolve_context( $payload );
 			$query = self::clean_query( $payload['customer'] ?? $payload['query'] ?? '' );
@@ -243,13 +243,13 @@ class ZL_TSA_Bridge {
 			) );
 
 		} catch ( \Throwable $e ) {
-			error_log( 'ZL_TSA_Bridge::lookup_for_tsa error: ' . $e->getMessage() );
+			error_log( 'ZL_ZANA_Bridge::lookup_for_zana error: ' . $e->getMessage() );
 			return self::hard_error( 'Lead lookup failed.' );
 		}
 	}
 
 	/* ═══════════════════════════════════════════════════════════════════════
-	 * VERB 2 — find_leads_for_tsa()  (READ, by filter not by person)
+	 * VERB 2 — find_leads_for_zana()  (READ, by filter not by person)
 	 * "leads from <source>", "leads not yet contacted in 12345", "new this week"
 	 * ═══════════════════════════════════════════════════════════════════════ */
 
@@ -264,7 +264,7 @@ class ZL_TSA_Bridge {
 	 *   - limit              : int      default 25, hard-capped 100
 	 *   - tier / is_kiosk / user_id : as above
 	 *
-	 * Returns the same envelope as lookup_for_tsa but `leads[]` is the filtered
+	 * Returns the same envelope as lookup_for_zana but `leads[]` is the filtered
 	 * set and `resolved`/`pipeline_stage` are null/empty. On kiosk this returns
 	 * an *aggregate-leaning* view: counts + non-contact facts only (the bounded
 	 * form), so "is there an open lead in 12345" works without exposing a name's
@@ -273,7 +273,7 @@ class ZL_TSA_Bridge {
 	 * @param array $payload
 	 * @return array
 	 */
-	public static function find_leads_for_tsa( array $payload ): array {
+	public static function find_leads_for_zana( array $payload ): array {
 		try {
 			global $wpdb;
 			$ctx = self::resolve_context( $payload );
@@ -357,13 +357,13 @@ class ZL_TSA_Bridge {
 			) );
 
 		} catch ( \Throwable $e ) {
-			error_log( 'ZL_TSA_Bridge::find_leads_for_tsa error: ' . $e->getMessage() );
+			error_log( 'ZL_ZANA_Bridge::find_leads_for_zana error: ' . $e->getMessage() );
 			return self::hard_error( 'Lead search failed.' );
 		}
 	}
 
 	/* ═══════════════════════════════════════════════════════════════════════
-	 * VERB 3 — create_lead_from_tsa()  (SIDE-EFFECT, OPTIONAL, gated)
+	 * VERB 3 — create_lead_from_zana()  (SIDE-EFFECT, OPTIONAL, gated)
 	 * Declared but intentionally a guarded stub: side-effects must run through
 	 * preview-and-confirm and are kiosk-forbidden (CONTRACT §2.4 + §3.2). We ship
 	 * it refusing rather than half-implemented so the registry can declare the
@@ -381,7 +381,7 @@ class ZL_TSA_Bridge {
 	 * @param array $payload
 	 * @return array
 	 */
-	public static function create_lead_from_tsa( array $payload ): array {
+	public static function create_lead_from_zana( array $payload ): array {
 		$ctx = self::resolve_context( $payload );
 
 		if ( $ctx['is_kiosk'] ) {
@@ -416,7 +416,7 @@ class ZL_TSA_Bridge {
 	 * Turn 2 (confirmed=true) : per lead get_lead()->rev->edit_lead(assignee) in Nutshell.
 	 *                          Fail-open per lead (one bad lead never aborts the batch).
 	 */
-	public static function assign_lead_owner_for_tsa( array $payload ): array {
+	public static function assign_lead_owner_for_zana( array $payload ): array {
 		$ctx = self::resolve_context( $payload );
 		$out = self::base( $ctx );
 
@@ -874,7 +874,7 @@ class ZL_TSA_Bridge {
 				}
 			}
 		} catch ( \Throwable $e ) {
-			error_log( 'ZL_TSA_Bridge::enrich_stage_via_core error: ' . $e->getMessage() );
+			error_log( 'ZL_ZANA_Bridge::enrich_stage_via_core error: ' . $e->getMessage() );
 		}
 		return '';
 	}

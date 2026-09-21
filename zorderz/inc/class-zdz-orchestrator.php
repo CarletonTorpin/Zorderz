@@ -12,7 +12,7 @@
  * WHY THIS EXISTS: the analytics app's own planner classification is LLM-based (it costs a Poe
  * call), so routing every keystroke through it would be slow and expensive. The
  * read-verb data, however, is available Poe-free through the capability bridges
- * (ZDZ_Contact_Bridge, TSEC_TSA_Bridge). So intent detection is done here with
+ * (ZDZ_Contact_Bridge, ZEST_ZANA_Bridge). So intent detection is done here with
  * deterministic, typo/punctuation-tolerant PHP, and the answer is assembled from
  * the bridges — no model in the loop. The bridges still enforce tier/kiosk/scope.
  *
@@ -62,10 +62,10 @@ class ZDZ_Orchestrator {
 		// The bridge is tier-gated and HARD-FORBIDDEN on kiosk — we only call it.
 		$comm = self::detect_commission( $raw );
 		if ( $comm !== null ) {
-			if ( class_exists( 'TSCC_TSA_Bridge' )
-				&& method_exists( 'TSCC_TSA_Bridge', 'commission_calc_for_tsa' )
-				&& TSCC_TSA_Bridge::is_available() ) {
-				$res = TSCC_TSA_Bridge::commission_calc_for_tsa( array(
+			if ( class_exists( 'ZCC_ZANA_Bridge' )
+				&& method_exists( 'ZCC_ZANA_Bridge', 'commission_calc_for_zana' )
+				&& ZCC_ZANA_Bridge::is_available() ) {
+				$res = ZCC_ZANA_Bridge::commission_calc_for_zana( array(
 					'subject'            => $comm['subject'],
 					'period'             => $comm['period'],
 					'tier'               => '',
@@ -109,7 +109,7 @@ class ZDZ_Orchestrator {
 				$c_key = 'zdz_contact_' . md5( strtolower( $contact_name ) . '|' . $uid );
 				$res   = get_transient( $c_key );
 				if ( ! is_array( $res ) || empty( $res['success'] ) ) {
-					$res = ZDZ_Contact_Bridge::lookup_for_tsa( array(
+					$res = ZDZ_Contact_Bridge::lookup_for_zana( array(
 						'query'              => $contact_name,
 						'tier'               => '',
 						'is_kiosk'           => false,
@@ -135,10 +135,10 @@ class ZDZ_Orchestrator {
 		// ── 2. DOCUMENT lookup ── (estimate/invoice/quote for a named customer)
 		$doc_name = self::detect_doc_lookup( $raw );
 		if ( $doc_name !== '' ) {
-			if ( class_exists( 'TSEC_TSA_Bridge' )
-				&& method_exists( 'TSEC_TSA_Bridge', 'lookup_for_tsa' )
-				&& TSEC_TSA_Bridge::is_available() ) {
-				$res = TSEC_TSA_Bridge::lookup_for_tsa( array(
+			if ( class_exists( 'ZEST_ZANA_Bridge' )
+				&& method_exists( 'ZEST_ZANA_Bridge', 'lookup_for_zana' )
+				&& ZEST_ZANA_Bridge::is_available() ) {
+				$res = ZEST_ZANA_Bridge::lookup_for_zana( array(
 					'customer'    => $doc_name,
 					'window_days' => 90,
 					'tier'        => '',
@@ -474,7 +474,7 @@ class ZDZ_Orchestrator {
 	/**
 	 * Decide how the dashboard should render a document-lookup result.
 	 *
-	 * @param array $res TSEC_TSA_Bridge::lookup_for_tsa result.
+	 * @param array $res ZEST_ZANA_Bridge::lookup_for_zana result.
 	 * @return string
 	 */
 	private static function doc_render_hint( array $res ): string {
@@ -500,7 +500,7 @@ class ZDZ_Orchestrator {
 	 *   message — fallback text
 	 *
 	 * @since theme v2.28.0
-	 * @param array $res TSCC_TSA_Bridge::commission_calc_for_tsa result.
+	 * @param array $res ZCC_ZANA_Bridge::commission_calc_for_zana result.
 	 * @return string
 	 */
 	private static function commission_render_hint( array $res ): string {

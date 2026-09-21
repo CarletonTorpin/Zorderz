@@ -9,7 +9,7 @@
  * in this plugin).
  *
  * Graceful degradation:
- *   • Analytics loaded          → proxy through TSA_Analytics_Engine, cache 5 min.
+ *   • Preview proxy available   → proxy through the analytics app's REST endpoint, cache 5 min.
  *   • Analytics not loaded      → return a lightweight fallback card that just
  *                           links to the FreshBooks search URL. No error.
  *
@@ -85,14 +85,15 @@ class ZIM_Preview_Cards {
 			return $cached;
 		}
 
-		// Analytics not active? Return a minimal fallback card with no caching —
-		// if Analytics is enabled later in the same session, the next request will
-		// upgrade to a real card.
-		if ( ! class_exists( 'TSA_Analytics_Engine' ) ) {
+		// Preview proxy not available? Return a minimal fallback card with no caching —
+		// if the analytics app publishes the proxy later in the same session, the next
+		// request will upgrade to a real card. Availability is published by the analytics
+		// app through the `zdz_preview_proxy_available` filter (default false).
+		if ( ! apply_filters( 'zdz_preview_proxy_available', false ) ) {
 			return self::fallback_card( $number );
 		}
 
-		$card = self::fetch_via_tsa( $number );
+		$card = self::fetch_via_zana( $number );
 
 		if ( is_wp_error( $card ) ) {
 			// Cache the miss briefly so a pasted-then-deleted typo doesn't
@@ -112,11 +113,10 @@ class ZIM_Preview_Cards {
 	 *
 	 * Analytics is expected to expose GET /zorderz/v1/freshbooks-preview/{id} returning
 	 * { id, number, kind, customer_name, total, currency, status, url }.
-	 * The coordinated patch doc (patches/tsa-v1.11.4-preview-endpoint.md)
-	 * defines the contract; until that ships we return a WP_Error that
-	 * callers should treat as transient.
+	 * The analytics app defines this endpoint contract; until it ships we return a
+	 * WP_Error that callers should treat as transient.
 	 */
-	private static function fetch_via_tsa( $number ) {
+	private static function fetch_via_zana( $number ) {
 		$req = new WP_REST_Request( 'GET', '/zorderz/v1/freshbooks-preview/' . $number );
 		// Dispatch in-process — permission checks on the Analytics side still run
 		// against the current user.
@@ -129,7 +129,7 @@ class ZIM_Preview_Cards {
 				return new WP_Error( 'zim_preview_not_found', 'Reference not found.' );
 			}
 			return new WP_Error(
-				'zim_preview_tsa_error',
+				'zim_preview_analytics_error',
 				$err ? $err->get_error_message() : 'Analytics preview failed.'
 			);
 		}
@@ -160,7 +160,7 @@ class ZIM_Preview_Cards {
 			'currency'      => isset( $data['currency'] ) ? (string) $data['currency'] : 'USD',
 			'status'        => isset( $data['status'] ) ? (string) $data['status'] : '',
 			'url'           => isset( $data['url'] ) ? esc_url_raw( (string) $data['url'] ) : '',
-			'source'        => 'tsa',
+			'source'        => 'analytics',
 		);
 	}
 

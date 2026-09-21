@@ -347,7 +347,7 @@ class ZDZ_Core_Settings {
 			'abbreviations' => [
 				'type'  => 'string_array',
 				'label' => 'Abbreviations',
-				'hint'  => 'Personal shorthand. One per line in "ABBR = meaning" format. E.g., "FD/SD = Front Door Screen Door"',
+				'hint'  => 'Personal shorthand. One per line in "ABBR = meaning" format. E.g., "NC = no charge"',
 			],
 			'tally_system' => [
 				'type'  => 'string',
@@ -362,7 +362,7 @@ class ZDZ_Core_Settings {
 			'service_types' => [
 				'type'  => 'string_array',
 				'label' => 'Service Types',
-				'hint'  => 'Your shorthand for service categories. One per line. E.g., "RIP = rescreen in place, small windows only"',
+				'hint'  => 'Your shorthand for service categories. One per line. E.g., "STD = standard service"',
 			],
 			'walkthrough_pattern' => [
 				'type'  => 'string',
@@ -372,7 +372,7 @@ class ZDZ_Core_Settings {
 			'default_behaviors' => [
 				'type'  => 'string_array',
 				'label' => 'Default Behaviors',
-				'hint'  => 'Implicit assumptions you don\'t write down. One per line. E.g., "No mesh type noted = 18/16 standard"',
+				'hint'  => 'Implicit assumptions you don\'t write down. One per line. E.g., "No type noted = standard grade"',
 			],
 			'freeform_notes' => [
 				'type'  => 'string',
