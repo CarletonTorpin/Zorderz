@@ -9,7 +9,7 @@
  * alongside the ZDZ_Core_* data clients rather than in a plugin.
  *
  * CALLED BY: the Analytics engine, the
- *            [ZDZ_CONTACT] marker handler. Mirrors TSEC_TSA_Bridge::lookup_for_tsa().
+ *            [ZDZ_CONTACT] marker handler. Mirrors ZEST_ZANA_Bridge::lookup_for_zana().
  *
  * DATA SOURCES (Seam 1, shared clients only — no private API client):
  *   - ZDZ_Core_Nutshell::find_contacts()  — primary identity + phone/email
@@ -21,7 +21,7 @@
  *     A denial is a SUCCESSFUL result carrying a message and NO contact data.
  *   - The host passes tier + is_kiosk + requesting_user_id; the bridge re-checks
  *     them server-side and never trusts the model.
- *   - is_available() + verb_for_tsa($payload) + structured return are
+ *   - is_available() + verb_for_zana($payload) + structured return are
  *     registry-shaped, so zdz_register_capabilities (L4) onboarding is a one-liner.
  *
  * DISCLOSURE (what fields are returned), by tier:
@@ -89,7 +89,7 @@ class ZDZ_Contact_Bridge {
 	 *     @type string $source    Always 'zdz_contact_bridge'.
 	 * }
 	 */
-	public static function lookup_for_tsa( array $payload ): array {
+	public static function lookup_for_zana( array $payload ): array {
 		$result = array(
 			'success'       => true,
 			'denied'        => false,
@@ -125,38 +125,13 @@ class ZDZ_Contact_Bridge {
 			return $result;
 		}
 
-		// ── v2.28.11: CLOSEST-MATCH GUARD (no silent wrong-person) ──
-		// resolve_freshbooks_client() accepts a fuzzy/typo last-name match and a
-		// last-name-only fallback, so an asked first name that matched NOBODY can
-		// still resolve to a different person who shares the surname (live: "who is
-		// Sam Rivera" resolved to Chris Rivera). Detect when the resolved name does
-		// not contain every token the user asked for, and flag it so the card can
-		// say "closest match" + offer chat — instead of presenting the wrong
-		// contact as exact. We only FLAG (never suppress): a closest match is still
-		// useful, it just must be labeled. Mirrors the chat path's confirm step.
-		$asked_tokens = array_values( array_filter( preg_split( '/\s+/', strtolower( trim( $query ) ) ), function ( $t ) {
-			return $t !== '' && strlen( $t ) > 1; // ignore initials/punctuation noise
-		} ) );
-		$resolved_lc  = strtolower( (string) ( $record['name'] ?? '' ) );
-		$is_closest   = false;
-		if ( ! empty( $asked_tokens ) && $resolved_lc !== '' ) {
-			foreach ( $asked_tokens as $tok ) {
-				// token present verbatim? then it matched. Otherwise, allow a near
-				// (<=1 edit) match against any word of the resolved name before
-				// declaring a mismatch, so genuine typos ('Rivera'->'Rivera') don't
-				// trip the flag but a wholly different given name ('Steve') does.
-				if ( strpos( $resolved_lc, $tok ) !== false ) { continue; }
-				$near = false;
-				foreach ( preg_split( '/\s+/', $resolved_lc ) as $rw ) {
-					if ( $rw !== '' && levenshtein( $rw, $tok ) <= 1 ) { $near = true; break; }
-				}
-				if ( ! $near ) { $is_closest = true; break; }
-			}
-		}
-		if ( $is_closest ) {
-			$result['closest_match'] = true;
-			$result['asked']         = $query;
-		}
+		// ── §133 name-match confidence gate (recall + first-name PRECISION). ──
+		// full_disclosure_ok() decides whether we are confident the resolved record IS the
+		// asked person. If not, we disclose name + city only (below) — never the wrong
+		// person's phone/email/address. See the method for the confidence rule; it closes
+		// the tier-'none' and surname-only 'strong' full-PII paths an earlier weak-only
+		// gate let through (adversarial finding, 2026-09-20).
+		$full_ok = self::full_disclosure_ok( $query, (string) ( $record['name'] ?? '' ) );
 
 		// ── DISCLOSURE: kiosk gets name + city ONLY, regardless of scope ──
 		if ( $is_kiosk ) {
@@ -165,6 +140,21 @@ class ZDZ_Contact_Bridge {
 				'city' => $record['city'],
 			);
 			$result['message'] = 'On this shared device I can only show the customer name and city. Sign in on your own device for full contact details.';
+			return $result;
+		}
+
+		// ── §133 PRECISION GATE: a low-confidence match is name + city ONLY. ──
+		if ( ! $full_ok ) {
+			$result['closest_match'] = true;
+			$result['asked']         = $query;
+			$result['contact']       = array(
+				'name' => $record['name'],
+				'city' => $record['city'],
+			);
+			$city              = (string) ( $record['city'] ?? '' );
+			$result['message'] = 'The closest customer I found is ' . $record['name']
+				. ( $city !== '' ? ' (' . $city . ')' : '' )
+				. ' — but it may be a different person than "' . $query . '". Open it in chat to confirm before using their contact details.';
 			return $result;
 		}
 
@@ -242,7 +232,7 @@ class ZDZ_Contact_Bridge {
 			$rec['company'] = $org;
 
 			// FreshBooks field names are quirky — use the SAME proven extraction as
-			// the analytics app's customer lookup (TSA_FreshBooks::extract_client_*): the phone key
+			// the analytics app's customer lookup: the phone key
 			// is `mob_phone` (NOT `mobile_phone`), and email may live in a contacts
 			// sub-array / username / pref_email rather than a flat `email`.
 			$fb_phone = trim( (string) ( $fb_client['mob_phone'] ?? $fb_client['home_phone'] ?? $fb_client['bus_phone'] ?? $fb_client['mobile_phone'] ?? '' ) );
@@ -389,6 +379,18 @@ class ZDZ_Contact_Bridge {
 			$clients = self::fb_search_clients( $fb, $fname, 10 );
 		}
 
+		// §133 recall: when the literal search finds nothing, widen with the curated
+		// soundalike spellings of the surname (e.g. a client on file under a variant
+		// spelling). Guarded, so a missing matcher simply skips the widening (INV-9);
+		// precision is still enforced below (unambiguous surname-relation) and by the
+		// caller's tier gate.
+		if ( empty( $clients ) && $lname !== '' && class_exists( 'ZDZ_Name_Match' ) ) {
+			foreach ( \ZDZ_Name_Match::soundalike_variants( $lname ) as $variant ) {
+				$clients = self::fb_search_clients( $fb, $variant, 10 );
+				if ( ! empty( $clients ) ) { break; }
+			}
+		}
+
 		if ( empty( $clients ) ) {
 			return array();
 		}
@@ -425,9 +427,10 @@ class ZDZ_Contact_Bridge {
 		if ( $wantl !== '' ) {
 			$near = array_values( array_filter( $clients, function ( $c ) use ( $wantl ) {
 				$ln = strtolower( trim( (string) ( $c['lname'] ?? '' ) ) );
-				if ( $ln === '' ) { return false; }
-				if ( strpos( $ln, $wantl ) === 0 || strpos( $wantl, $ln ) === 0 ) { return true; }
-				return levenshtein( $ln, $wantl ) <= 2;
+				// §133: surname relatedness — exact / anchored prefix / edit<=2, plus the
+				// curated homophone + metaphone signals when the matcher is present. NOT
+				// sounds_like's substring rule (which would read "Ricks" as "Hendricks").
+				return $ln !== '' && self::surname_related( $ln, $wantl );
 			} ) );
 			if ( count( $near ) === 1 ) {
 				return $near[0];
@@ -436,6 +439,148 @@ class ZDZ_Contact_Bridge {
 
 		error_log( 'ZDZ_Contact_Bridge: ' . count( $clients ) . ' FreshBooks candidates for "' . $query . '"; ambiguous, deferring to clarify.' );
 		return array();
+	}
+
+	/**
+	 * §133 precision gate — may we disclose FULL contact PII for this query, given the
+	 * resolver's single resolved record? Full PII requires POSITIVE identity confidence;
+	 * a low-confidence resolution (an unrelated surname from a first-name/near fallback,
+	 * or a near surname with no corroborating first name) returns false so the caller
+	 * discloses name + city only. The point is to never hand back the WRONG person's
+	 * phone/email/address.
+	 *
+	 * Confident (true) when ANY of:
+	 *   (A) the resolved name CONTAINS every asked word (exact name, "Smith" -> "John
+	 *       Smith", or an organisation name) — substring, not fuzzy;
+	 *   (B) the surname is EXACT and the first name is compatible or was not asked;
+	 *   (C) a near/soundalike surname (recall) CORROBORATED by a present, compatible asked
+	 *       first name.
+	 * Pure and side-effect-free, so it is unit-tested directly
+	 * (tests/unit/test-contact-bridge-disclosure.php).
+	 *
+	 * @param string $query         The name the operator asked for.
+	 * @param string $resolved_name The single record the resolver returned.
+	 * @return bool True to disclose full contact; false to disclose name + city only.
+	 */
+	public static function full_disclosure_ok( string $query, string $resolved_name ): bool {
+		$aq          = array_values( array_filter( preg_split( '/\s+/', trim( $query ) ) ) );
+		$asked_fname = count( $aq ) > 1 ? $aq[0] : '';
+		$asked_lname = count( $aq ) > 1 ? (string) end( $aq ) : (string) ( $aq[0] ?? '' );
+		$rq          = array_values( array_filter( preg_split( '/\s+/', trim( $resolved_name ) ) ) );
+		$res_fname   = count( $rq ) > 1 ? $rq[0] : '';
+		$res_lname   = count( $rq ) > 1 ? (string) end( $rq ) : (string) ( $rq[0] ?? '' );
+		$tier        = self::name_match_tier( $asked_fname, $asked_lname, $res_fname, $res_lname );
+
+		$asked_l   = strtolower( trim( $asked_lname ) );
+		$res_l     = strtolower( trim( $res_lname ) );
+		$res_full  = strtolower( trim( $resolved_name ) );
+		$sig_toks  = array_values( array_filter( $aq, function ( $t ) { return strlen( $t ) > 1; } ) );
+		$contained = ! empty( $sig_toks );
+		foreach ( $sig_toks as $tok ) {
+			if ( strpos( $res_full, strtolower( $tok ) ) === false ) { $contained = false; break; }
+		}
+		$surname_exact   = ( $asked_l !== '' && $asked_l === $res_l );
+		$fn_corroborated = ( $asked_fname !== '' && $res_fname !== '' && self::first_name_compatible( $asked_fname, $res_fname ) );
+
+		return $contained
+			|| ( $surname_exact && ( $asked_fname === '' || $fn_corroborated ) )
+			|| ( $tier === 'strong' && $fn_corroborated );
+	}
+
+	/**
+	 * §133 — confidence tier for a resolved candidate vs the asked name.
+	 *   exact  — surname equal AND first name equal/compatible (or none asked)
+	 *   strong — surname related (typo/soundalike) AND first name compatible
+	 *   weak   — surname related but the first name DIVERGES  → name+city only
+	 *   none   — surname unrelated
+	 * The bridge owns the policy (which tier discloses PII); ZDZ_Name_Match owns the
+	 * linguistics. Recall and the curated map come from the matcher when present; the
+	 * inline fallbacks in the two helpers below still enforce the PRECISION gate when it
+	 * is absent, so a theme deployed without the matcher degrades without leaking PII.
+	 *
+	 * @return string one of exact|strong|weak|none
+	 */
+	private static function name_match_tier( string $asked_fname, string $asked_lname, string $cand_fname, string $cand_lname ): string {
+		$af = strtolower( trim( $asked_fname ) );
+		$al = strtolower( trim( $asked_lname ) );
+		$cf = strtolower( trim( $cand_fname ) );
+		$cl = strtolower( trim( $cand_lname ) );
+		if ( $al === '' && $cl === '' ) {
+			return 'none';
+		}
+		if ( ! self::surname_related( $al, $cl ) ) {
+			return 'none';
+		}
+		// First name is "compatible" when either side is absent (a surname-only query
+		// cannot diverge), equal, or nickname/soundalike-equivalent.
+		$fn_ok = ( $af === '' || $cf === '' ) || $af === $cf || self::first_name_compatible( $af, $cf );
+		$surname_exact = ( $al !== '' && $al === $cl );
+		if ( $surname_exact && $fn_ok ) {
+			return 'exact';
+		}
+		if ( $fn_ok ) {
+			return 'strong';
+		}
+		return 'weak';
+	}
+
+	/**
+	 * Surname relatedness — PRECISE signals only: exact, anchored prefix, edit-distance
+	 * <= 2, and (when ZDZ_Name_Match is present) the curated homophone map + metaphone-key
+	 * equality. Deliberately NOT ZDZ_Name_Match::sounds_like(), whose substring clause
+	 * ("hendricks" contains "ricks") is right for recall but catastrophic as an equality
+	 * gate. Self-contained so the theme runs without the matcher (INV-9).
+	 */
+	private static function surname_related( string $a, string $b ): bool {
+		$a = strtolower( trim( $a ) );
+		$b = strtolower( trim( $b ) );
+		if ( $a === '' || $b === '' ) {
+			return false;
+		}
+		if ( $a === $b ) {
+			return true;
+		}
+		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) {
+			return true;
+		}
+		$d = levenshtein( $a, $b ); // PHP returns -1 when either arg > 255 bytes; treat that as "not close"
+		if ( $d >= 0 && $d <= 2 ) {
+			return true;
+		}
+		if ( class_exists( 'ZDZ_Name_Match' ) ) {
+			if ( in_array( $b, \ZDZ_Name_Match::soundalike_variants( $a ), true ) ) {
+				return true;
+			}
+			$ka = \ZDZ_Name_Match::name_sound_key( $a );
+			if ( $ka !== '' && $ka === \ZDZ_Name_Match::name_sound_key( $b ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * First-name compatibility: absent on either side, equal, nickname-equivalent, or
+	 * soundalike. Uses ZDZ_Name_Match when present; an inline prefix/short-edit fallback
+	 * keeps the gate working (fail-closed on divergence) when it is not.
+	 */
+	private static function first_name_compatible( string $a, string $b ): bool {
+		$a = strtolower( trim( $a ) );
+		$b = strtolower( trim( $b ) );
+		if ( $a === '' || $b === '' ) {
+			return true;
+		}
+		if ( $a === $b ) {
+			return true;
+		}
+		if ( class_exists( 'ZDZ_Name_Match' ) ) {
+			return \ZDZ_Name_Match::first_names_equivalent( $a, $b ) || \ZDZ_Name_Match::sounds_like( $a, $b );
+		}
+		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) {
+			return true;
+		}
+		$d = levenshtein( $a, $b ); // -1 when either arg > 255 bytes; treat as not-compatible
+		return $d >= 0 && $d <= 1;
 	}
 
 	/**
@@ -571,8 +716,8 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
-	 * Robustly pull an email from a FreshBooks client object. Mirrors
-	 * TSA_FreshBooks::extract_client_email(): top-level email → contacts sub-array
+	 * Robustly pull an email from a FreshBooks client object. Mirrors the analytics
+	 * app's client-email extraction: top-level email → contacts sub-array
 	 * → username-if-email → pref_email. Kept local so the theme has no hard
 	 * dependency on the Analytics plugin.
 	 *
@@ -749,7 +894,7 @@ class ZDZ_Contact_Bridge {
 			'verb'        => 'contact.lookup',
 			'provider'    => 'theme-contacts',
 			'tier'        => 'viewer',   // minimum to reach the verb; scope refined in-callback
-			'callback'    => array( 'ZDZ_Contact_Bridge', 'lookup_for_tsa' ),
+			'callback'    => array( 'ZDZ_Contact_Bridge', 'lookup_for_zana' ),
 			'kiosk'       => true,        // reachable on kiosk, but DISCLOSURE is name+city only
 			'side_effect' => false,
 		);

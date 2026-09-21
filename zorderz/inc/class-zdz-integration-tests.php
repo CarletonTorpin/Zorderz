@@ -201,16 +201,16 @@ class ZDZ_Integration_Tests {
 	}
 
 	private function check_vault_bridge() {
-		$has_bridge = class_exists( 'ZKV_TSA_Bridge' );
+		$has_bridge = class_exists( 'ZKV_ZANA_Bridge' );
 		$has_methods = $has_bridge
-			&& method_exists( 'ZKV_TSA_Bridge', 'get_inventory' )
-			&& method_exists( 'ZKV_TSA_Bridge', 'get_context' );
+			&& method_exists( 'ZKV_ZANA_Bridge', 'get_inventory' )
+			&& method_exists( 'ZKV_ZANA_Bridge', 'get_context' );
 		return [
 			'name'   => 'Knowledge Vault Bridge',
 			'pass'   => $has_bridge && $has_methods,
 			'detail' => $has_bridge
 				? ( $has_methods ? 'Bridge active, get_inventory + get_context available' : 'Bridge active but missing expected methods' )
-				: 'ZKV_TSA_Bridge class not found',
+				: 'ZKV_ZANA_Bridge class not found',
 		];
 	}
 

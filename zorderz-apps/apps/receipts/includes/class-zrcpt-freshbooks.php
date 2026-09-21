@@ -61,7 +61,7 @@ class ZRCPT_FreshBooks {
 	 * ================================================================ */
 
 	/**
-	 * Search FreshBooks across invoices AND estimates, filtered to EM refs.
+	 * Search FreshBooks across invoices AND estimates, optionally filtered to an item tag.
 	 *
 	 * v3.0.0: Self-sufficient implementation — works without the Prep module.
 	 *
@@ -300,6 +300,26 @@ class ZRCPT_FreshBooks {
 			$clients = $resp['response']['result']['clients'] ?? [];
 			if ( count( $clients ) <= 50 ) {
 				foreach ( $clients as $c ) $all_clients[ $c['id'] ] = $c;
+			}
+		}
+
+		// Strategy 5 (§131): soundalike recall. When the literal search is thin, re-search
+		// the curated soundalike spellings of the surname, so a client on file under a
+		// variant spelling still surfaces. Suggestion-grade — the caller's per-row
+		// customerid verify (INV-2/INV-13) still applies. Guarded, so a missing matcher
+		// simply skips this widening (INV-9).
+		$sound_seed = $lname ?: $fname;
+		if ( count( $all_clients ) < 5 && $sound_seed !== '' && class_exists( 'ZDZ_Name_Match' ) ) {
+			foreach ( \ZDZ_Name_Match::soundalike_variants( $sound_seed ) as $variant ) {
+				$resp = $this->api_get(
+					"/accounting/account/{$account_id}/users/clients",
+					[ 'search[lname_like]' => $variant, 'per_page' => 10 ]
+				);
+				$clients = $resp['response']['result']['clients'] ?? [];
+				if ( count( $clients ) <= 50 ) {
+					foreach ( $clients as $c ) $all_clients[ $c['id'] ] = $c;
+				}
+				if ( count( $all_clients ) >= 5 ) break;
 			}
 		}
 
