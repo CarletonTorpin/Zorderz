@@ -26,7 +26,7 @@
  *     breaks. A fictional demo catalog is available only via the Item Engine's own sample
  *     mechanism (Settings → "Apply sample catalog"), never auto-seeded.
  *   - The off-repo "the stock assistant" bot's baked product-catalog knowledge becomes an in-repo,
- *     placeholder-driven prompt template (defaults/brain-prompt.md) assembled at runtime from
+ *     placeholder-driven prompt template (defaults/assistant-prompt.md) assembled at runtime from
  *     the Business Profile + the live Item Engine catalog, sent through the shared ZDZ_Core_Poe
  *     client. The bot name is a setting (blank ⇒ the platform's default model) — no bot name is
  *     hardcoded.
@@ -85,11 +85,11 @@ define( 'ZSTOCK_NONCE', 'zstock_nonce' );
  * engine — never typed twice. The legacy off-repo bot emitted `YABADABA`; that is recorded as a
  * deprecated alias and stripped for backward compatibility.
  */
-if ( ! defined( 'ZSTOCK_BRAIN_SENTINEL' ) ) {
-	define( 'ZSTOCK_BRAIN_SENTINEL', '[ZSTOCK_ANSWER]' );
+if ( ! defined( 'ZSTOCK_ASSISTANT_SENTINEL' ) ) {
+	define( 'ZSTOCK_ASSISTANT_SENTINEL', '[ZSTOCK_ANSWER]' );
 }
-if ( ! defined( 'ZSTOCK_BRAIN_SENTINEL_LEGACY' ) ) {
-	define( 'ZSTOCK_BRAIN_SENTINEL_LEGACY', 'YABADABA' );
+if ( ! defined( 'ZSTOCK_ASSISTANT_SENTINEL_LEGACY' ) ) {
+	define( 'ZSTOCK_ASSISTANT_SENTINEL_LEGACY', 'YABADABA' );
 }
 
 // ── Small helpers ──────────────────────────────────────────────────
@@ -139,8 +139,8 @@ function zstock_default_model() {
  * default) means "use the platform's default model with the in-repo prompt template", so the
  * intelligence no longer depends on an off-repo bot's baked catalog.
  */
-function zstock_brain_bot() {
-	$bot = trim( (string) get_option( 'zstock_brain_bot', '' ) );
+function zstock_assistant() {
+	$bot = trim( (string) get_option( 'zstock_assistant', '' ) );
 	return '' !== $bot ? $bot : zstock_default_model();
 }
 
@@ -273,7 +273,7 @@ add_filter(
 			$map['options'] ?? array(),
 			array(
 				'tssc_db_version'            => 'zstock_db_version',
-				'tssc_brain_bot'             => 'zstock_brain_bot',
+				'tssc_brain_bot'             => 'zstock_assistant',
 				'tssc_fb_auto_sync'          => 'zstock_auto_sync',
 				'tssc_fb_sync_interval'      => 'zstock_sync_interval',
 				'tssc_low_stock_email'       => 'zstock_low_stock_email',

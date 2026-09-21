@@ -5,7 +5,7 @@
  * Every route lives under the single ZDZ_REST_NS namespace constant (never the
  * literal typed twice — the v1.0.1 404 came from exactly that mistake). Every
  * route is logged-in only and app-access gated; the sensitive ones defer their
- * real tier decision to ZCC_TSA_Bridge / ZDZ_Data_Permissions.
+ * real tier decision to ZCC_ZANA_Bridge / ZDZ_Data_Permissions.
  *
  * @package Zorderz\Commission
  */
@@ -85,10 +85,10 @@ class ZCC_REST {
 	}
 
 	public static function calculate( WP_REST_Request $req ) {
-		if ( ! class_exists( 'ZCC_TSA_Bridge' ) ) {
+		if ( ! class_exists( 'ZCC_ZANA_Bridge' ) ) {
 			return new WP_Error( 'zcc_unavailable', 'Bridge unavailable.', [ 'status' => 503 ] );
 		}
-		return rest_ensure_response( ZCC_TSA_Bridge::commission_calc_for_tsa( [
+		return rest_ensure_response( ZCC_ZANA_Bridge::commission_calc_for_zana( [
 			'subject'            => (string) $req->get_param( 'subject' ),
 			'period'             => (string) ( $req->get_param( 'period' ) ?: 'this_month' ),
 			'requesting_user_id' => get_current_user_id(),
@@ -96,10 +96,10 @@ class ZCC_REST {
 	}
 
 	public static function units( WP_REST_Request $req ) {
-		if ( ! class_exists( 'ZCC_TSA_Bridge' ) ) {
+		if ( ! class_exists( 'ZCC_ZANA_Bridge' ) ) {
 			return new WP_Error( 'zcc_unavailable', 'Bridge unavailable.', [ 'status' => 503 ] );
 		}
-		return rest_ensure_response( ZCC_TSA_Bridge::unit_counts_for_tsa( [
+		return rest_ensure_response( ZCC_ZANA_Bridge::unit_counts_for_zana( [
 			'period'             => (string) ( $req->get_param( 'period' ) ?: 'this_month' ),
 			'requesting_user_id' => get_current_user_id(),
 		] ) );

@@ -122,7 +122,7 @@ class ZDZ_Core_FreshBooks {
 		// of whether either side carries one. This permanently closes the old
 		// "https://api.freshbooks.comaccounting/..." concatenation bug (a pre-2.14
 		// build joined as `$api_base . ltrim($endpoint,'/')` with a slashless
-		// base, dropping the separator). Several plugins (TSEMC/TSER) still ship
+		// base, dropping the separator). Some sibling apps still ship
 		// private FreshBooks clients citing that bug — it is fixed here; they can
 		// now safely delegate to this method. Absolute URLs are passed through.
 		if ( preg_match( '#^https?://#i', $endpoint ) ) {

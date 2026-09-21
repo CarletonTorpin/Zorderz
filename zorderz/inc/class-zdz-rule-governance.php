@@ -3,7 +3,7 @@
  * ZDZ_Rule_Governance — rules as typed objects, and the prompt as a rendering.
  *
  * The assistant used to carry ~71 named rules as prose inside a ~740-line system
- * prompt, plus a shadow registry (TSA_Rule_Registry) that pointed at seven of them
+ * prompt, plus a shadow registry that pointed at seven of them
  * by two-letter id. Two-letter ids collide with staff initials by construction
  * (rule "DM" vs a person "DM"), the prompt was the only home of the wording, and a
  * cited id that no longer existed failed SILENTLY. This service fixes all three:
