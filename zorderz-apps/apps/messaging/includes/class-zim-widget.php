@@ -54,25 +54,14 @@ class ZIM_Widget {
 			return false;
 		}
 
-		// Check Analytics customer-facing flag. Several possible code paths depending
-		// on which Analytics version is active:
-		//   v1.11.4+  — TSA_Customer_Facing::is_active_for_user( $user_id )
-		//               (the coordinated patch shipped alongside this plugin)
-		//   v1.11.0+  — transient 'tsa_customer_mode_{user_id}'
-		//   Analytics absent — render.
-		if ( class_exists( 'TSA_Customer_Facing' )
-		     && is_callable( array( 'TSA_Customer_Facing', 'is_active_for_user' ) ) ) {
-			if ( TSA_Customer_Facing::is_active_for_user( $user_id ) ) {
-				$cached = false;
-				return false;
-			}
-		} elseif ( class_exists( 'TSA_Analytics_Engine' ) ) {
-			// Fall back to the transient Analytics v1.11.3 writes.
-			$active = (bool) get_transient( 'tsa_customer_mode_' . $user_id );
-			if ( $active ) {
-				$cached = false;
-				return false;
-			}
+		// Customer-facing ("kiosk display") mode is published by the analytics app
+		// through the `zdz_customer_facing_active` filter (default false). When a
+		// user is in customer-facing mode this internal-messaging widget hard-hides
+		// so no staff conversation can surface on a customer-visible screen. No
+		// analytics app, or nothing hooking the filter → the widget renders.
+		if ( (bool) apply_filters( 'zdz_customer_facing_active', false, $user_id ) ) {
+			$cached = false;
+			return false;
 		}
 
 		$cached = true;
@@ -159,9 +148,9 @@ class ZIM_Widget {
 			'allowedMimes'      => array_values( zim_allowed_mimes() ),
 			'editWindowSec'     => ZIM_EDIT_WINDOW_SECONDS,
 			'context'           => (string) $context,
-			'tsaPreviewAvailable' => class_exists( 'TSA_Analytics_Engine' ),
+			'previewProxyAvailable' => (bool) apply_filters( 'zdz_preview_proxy_available', false ),
 			'deepLinkConvoId'   => isset( $_GET['c'] ) ? absint( $_GET['c'] ) : 0,
-			// v1.0.7 — embed mode. When loaded inside the analytics app's iframe (?zdz_embed=tsa),
+			// v1.0.7 — embed mode. When loaded inside the analytics app's iframe (?zdz_embed=analytics),
 			// the widget runs in "conversation-focused" mode: sidebar hidden by default,
 			// no redundant header chrome, signals parent frame with unreads.
 			'embedMode'         => isset( $_GET['zdz_embed'] ) ? sanitize_key( $_GET['zdz_embed'] ) : '',

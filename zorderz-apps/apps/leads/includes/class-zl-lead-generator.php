@@ -932,21 +932,13 @@ class ZL_Lead_Generator {
 				$result['territory'] = trim( $custom['Territory'] );
 			}
 
-			// Interests from relevant Nutshell custom fields (expanded in v1.2.0)
+			// Interests from the business's curated CRM custom fields. The field
+			// NAMES are tenant-specific — every CRM instance labels its custom fields
+			// differently — so Core ships NONE. A business supplies its own map
+			// (external field name => display label) via the `zl_crm_interest_fields`
+			// filter or a mappings pack; empty by default.
 			$interest_parts  = array();
-			$interest_fields = array(
-				'Summary of Recent Work We\'ve Done',
-				'Number of Jobs',
-				'Total Billed to Date',
-				'QTY Windows',
-				'QTY Doors',
-				'QTY Double Doors',
-				'QTY Single Doors',
-				'Products Purchased',
-				'Brands Owned',
-				'Grand Zone',
-				'Work We\'ve Done',
-			);
+			$interest_fields = array_keys( (array) apply_filters( 'zl_crm_interest_fields', array() ) );
 			foreach ( $interest_fields as $field ) {
 				if ( isset( $custom[ $field ] ) && $custom[ $field ] !== '' ) {
 					$interest_parts[] = $field . ': ' . $custom[ $field ];
@@ -1479,7 +1471,7 @@ class ZL_Lead_Generator {
 	 * - Breadth (20): more diverse products → higher score
 	 * - Repeat (15): more invoices → higher score
 	 * - Nutshell (10): existing CRM contact → higher score
-	 * - Season (5): seasonal bonus for screen-relevant months
+	 * - Season (5): seasonal bonus for in-season months (trade-neutral; see zl_seasonality_boost)
 	 *
 	 * @param array $candidate Enriched candidate data from enrich_customer().
 	 * @return float Score 0–100.
@@ -2767,9 +2759,9 @@ class ZL_Lead_Generator {
 	 * Parse the "City, ST ZIP" formatted city field into Nutshell address components.
 	 *
 	 * Examples:
-	 *   "San Marcos, CA 92078" → { city: "San Marcos", state: "CA", postalCode: "92078" }
-	 *   "El Cajon 92019"       → { city: "El Cajon", postalCode: "92019" }
-	 *   "92129"                → { postalCode: "92129" }
+	 *   "Springfield, IL 62704" → { city: "Springfield", state: "IL", postalCode: "62704" }
+	 *   "Elmwood 43512"         → { city: "Elmwood", postalCode: "43512" }
+	 *   "10001"                 → { postalCode: "10001" }
 	 *
 	 * @param string $city_string The formatted city string.
 	 * @return array Nutshell address array, or empty array if unparseable.
@@ -2956,20 +2948,11 @@ class ZL_Lead_Generator {
 			$note .= "\n\xF0\x9F\x8F\xA0 CUSTOMER PROFILE (from Nutshell)\n";
 			$note .= "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\n";
 
-			// Known fields in preferred display order
-			$known_fields = array(
-				'Summary of Recent Work We\'ve Done' => "\xE2\x98\x85 Recent Work",
-				'Number of Jobs'                     => '# Jobs',
-				'Total Billed to Date'               => 'Total Billed',
-				'QTY Windows'                        => '# Windows',
-				'QTY Doors'                          => '# Doors',
-				'QTY Double Doors'                   => '# Double Doors',
-				'QTY Single Doors'                   => '# Single Doors',
-				'Products Purchased'                 => 'Products',
-				'Brands Owned'                       => 'Brands',
-				'Grand Zone'                         => 'Zone',
-				'Work We\'ve Done'                   => 'Work Done',
-			);
+			// Curated CRM custom fields in preferred display order (external field
+			// name => label). Tenant-specific, so Core ships an EMPTY map — a business
+			// supplies its own via the `zl_crm_interest_fields` filter. When empty, the
+			// fallback loop below still renders whatever custom fields the CRM returns.
+			$known_fields = (array) apply_filters( 'zl_crm_interest_fields', array() );
 
 			$displayed_keys = array();
 			foreach ( $known_fields as $field_name => $label ) {

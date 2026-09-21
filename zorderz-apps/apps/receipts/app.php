@@ -6,7 +6,7 @@
  *   billing provider + CRM, attach the install photos from the shared media store, render a
  *   NEUTRAL letterhead template, and publish a token-gated public receipt page behind a
  *   reviewer Approve-&-Send gate. Ships with NO business data.
- * Version:     3.10.0
+ * Version:     3.11.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -315,7 +315,7 @@ add_action( 'after_setup_theme', function() {
                                 <label class="zrcpt-w-label">Find the job</label>
                                 <p class="zrcpt-w-hint">Customer name, invoice/estimate #, phone, or email — just like Prep.</p>
                                 <div class="zrcpt-w-lookup-row">
-                                    <input type="text" id="zrcpt-w-lookup-input" class="zrcpt-w-input" placeholder="e.g. Scott Meyer, 15217, or 858-555-1212" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                                    <input type="text" id="zrcpt-w-lookup-input" class="zrcpt-w-input" placeholder="e.g. Jordan Blake, 15217, or 858-555-1212" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
                                     <button type="button" id="zrcpt-w-lookup-btn" class="zrcpt-w-btn zrcpt-w-btn-sm">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                         Find

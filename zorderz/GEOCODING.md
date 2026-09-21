@@ -1,14 +1,14 @@
 # Geocoding: privacy model & upgrade path
 
 The EXIF inspector turns a photo's GPS coordinate into a human place name
-("Mount Helix, La Mesa, CA 91941"). This is the **only** part of the inspector
+("Uptown, Springfield, IL 62704"). This is the **only** part of the inspector
 that *could* send data off your server, so it's built privacy-first.
 
 ## What ships today (zero data egress)
 
-1. **Offline resolver (default, fully on-server).** A bundled San Diego County
-   place list (`data/sd-county-places.tsv`, GeoNames-compatible) is searched for
-   the nearest named place. No network call, nothing leaves the server. Returns
+1. **Offline resolver (default, fully on-server).** A small, region-agnostic
+   sample place list (`data/sample-places.tsv`, GeoNames-compatible) is searched
+   for the nearest named place. No network call, nothing leaves the server. Returns
    neighborhood + city + state, and the ZIP **only when the coordinate is within
    ~4 km** of the place centroid (otherwise the ZIP is dropped: "show ZIP only
    when confident"). Beyond ~30 km from any known place it returns nothing and
@@ -25,9 +25,9 @@ that *could* send data off your server, so it's built privacy-first.
    isn't retried.
 
 ### Coverage & overhead
-- 119 places covering San Diego County cities + neighborhoods (La Mesa, El Cajon,
-  Spring Valley, Mount Helix, Lakeside, the City of San Diego's neighborhoods,
-  the back-country, etc.).
+- The bundled sample is a small national spread (~22 places across many states, a
+  couple with neighborhoods) — enough to demonstrate the format and exercise the
+  resolver, NOT real coverage. Swap in your region's dataset (below) for that.
 - The dataset is parsed into memory **only when a resolution actually happens**,
   and statically cached for the rest of that request. If nobody opens a Details
   panel, the file is never read → zero overhead in the common path.
@@ -128,8 +128,8 @@ add_filter( 'zdz_media_reverse_geocode', function ( $pre, $lat, $lng ) {
 
 ### Standing up Nominatim (outline)
 - Use the official `mediagis/nominatim` Docker image.
-- Import a region extract (e.g. `north-america-latest.osm.pbf` from Geofabrik):
-  for San Diego work, a `california-latest.osm.pbf` import is small and fast.
+- Import a region extract (e.g. `north-america-latest.osm.pbf` from Geofabrik);
+  a single-state extract (e.g. `california-latest.osm.pbf`) is small and fast.
 - A 96 GB machine handles a full North-America (or even planet) import; for a
   state extract it's very comfortable.
 - For your **production website** to reach a Nominatim running on your Mac Studio,

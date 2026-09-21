@@ -8,9 +8,9 @@
  * third-party consumers. The endpoints expose only what the current
  * user could already see in the widget.
  *
- * Routes (all under the `tsim/v1` namespace):
+ * Routes (all under the `zim/v1` namespace; the legacy `tsim/v1` is kept as an alias):
  *
- *   GET /wp-json/tsim/v1/unread-total
+ *   GET /wp-json/zim/v1/unread-total
  *     Returns this user's total unread count across all conversations:
  *        { unread: <int>, by_conversation: [ { id, unread }, ... ] }
  *     Cap-gated on `zdz_access_app`, customer-facing-hidden blocks with 404.
@@ -31,58 +31,72 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZIM_REST {
 
-	const NS = 'tsim/v1';
+	const NS = 'zim/v1';
+
+	// Pre-rename namespace ("tsim" = the origin app's internal-messaging prefix). Kept
+	// as a back-compat alias so any external caller of the old REST namespace still resolves.
+	const LEGACY_NS = 'tsim/v1';
 
 	public static function register_routes() {
-		register_rest_route( self::NS, '/unread-total', array(
-			'methods'             => WP_REST_Server::READABLE,
-			'callback'            => array( __CLASS__, 'get_unread_total' ),
-			'permission_callback' => array( __CLASS__, 'permission_check' ),
-		) );
+		$routes = array(
+			'/unread-total' => array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'get_unread_total' ),
+				'permission_callback' => array( __CLASS__, 'permission_check' ),
+			),
 
-		// v1.0.3 — resolve a WordPress login to a teammate record.
-		// Returns 404 for unknown logins, or users lacking zdz_access_app
-		// (so typos and outsiders don't leak membership information).
-		register_rest_route( self::NS, '/user-by-login', array(
-			'methods'             => WP_REST_Server::READABLE,
-			'callback'            => array( __CLASS__, 'get_user_by_login' ),
-			'permission_callback' => array( __CLASS__, 'permission_check' ),
-			'args' => array(
-				'login' => array(
-					'required' => true,
-					'validate_callback' => function ( $v ) {
-						// user_login validation is permissive; we enforce the
-						// `@login` charset we documented elsewhere.
-						return is_string( $v ) && (bool) preg_match( '/^[a-z0-9._\-]{1,60}$/i', $v );
-					},
-					'sanitize_callback' => function ( $v ) {
-						return strtolower( (string) $v );
-					},
+			// v1.0.3 — resolve a WordPress login to a teammate record.
+			// Returns 404 for unknown logins, or users lacking zdz_access_app
+			// (so typos and outsiders don't leak membership information).
+			'/user-by-login' => array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'get_user_by_login' ),
+				'permission_callback' => array( __CLASS__, 'permission_check' ),
+				'args' => array(
+					'login' => array(
+						'required' => true,
+						'validate_callback' => function ( $v ) {
+							// user_login validation is permissive; we enforce the
+							// `@login` charset we documented elsewhere.
+							return is_string( $v ) && (bool) preg_match( '/^[a-z0-9._\-]{1,60}$/i', $v );
+						},
+						'sanitize_callback' => function ( $v ) {
+							return strtolower( (string) $v );
+						},
+					),
 				),
 			),
-		) );
 
-		// v1.0.20: List channels the current user belongs to.
-		// Used by Analytics and Knowledge Vault for "share to channel" pickers.
-		register_rest_route( self::NS, '/channels', array(
-			'methods'             => WP_REST_Server::READABLE,
-			'callback'            => array( __CLASS__, 'get_channels' ),
-			'permission_callback' => array( __CLASS__, 'permission_check' ),
-		) );
-
-		// v1.0.20: Post a message to a channel on behalf of the current user.
-		// Used by the assistant "post to #channel" feature.
-		// Requires: channel_slug (string) + body (string).
-		// The message is posted AS the current logged-in user (not a bot).
-		register_rest_route( self::NS, '/post', array(
-			'methods'             => WP_REST_Server::CREATABLE,
-			'callback'            => array( __CLASS__, 'post_message' ),
-			'permission_callback' => array( __CLASS__, 'permission_check' ),
-			'args' => array(
-				'channel_slug' => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
-				'body'         => array( 'required' => true, 'sanitize_callback' => 'wp_kses_post' ),
+			// v1.0.20: List channels the current user belongs to.
+			// Used by Analytics and Knowledge Vault for "share to channel" pickers.
+			'/channels' => array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'get_channels' ),
+				'permission_callback' => array( __CLASS__, 'permission_check' ),
 			),
-		) );
+
+			// v1.0.20: Post a message to a channel on behalf of the current user.
+			// Used by the assistant "post to #channel" feature.
+			// Requires: channel_slug (string) + body (string).
+			// The message is posted AS the current logged-in user (not a bot).
+			'/post' => array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'post_message' ),
+				'permission_callback' => array( __CLASS__, 'permission_check' ),
+				'args' => array(
+					'channel_slug' => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+					'body'         => array( 'required' => true, 'sanitize_callback' => 'wp_kses_post' ),
+				),
+			),
+		);
+
+		// Register under the canonical zim/v1 namespace AND the legacy tsim/v1 alias
+		// so any external caller of the pre-rename namespace keeps resolving.
+		foreach ( array( self::NS, self::LEGACY_NS ) as $ns ) {
+			foreach ( $routes as $path => $args ) {
+				register_rest_route( $ns, $path, $args );
+			}
+		}
 	}
 
 	public static function permission_check() {

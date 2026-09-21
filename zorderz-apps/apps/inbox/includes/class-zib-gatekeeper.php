@@ -1714,7 +1714,7 @@ class ZIB_Gatekeeper {
 	 *
 	 * Returns STRUCTURED data. The spotlighting fence that wraps it for the model,
 	 * and the neutralising of any fence delimiters an attacker mailed in, live in
-	 * ZIB_TSA_Bridge — the one engine-facing seam — so this reader stays pure DB.
+	 * ZIB_ZANA_Bridge — the one engine-facing seam — so this reader stays pure DB.
 	 *
 	 * @return array { ok:bool, reason?:string, results:array[] }
 	 */
@@ -2624,7 +2624,7 @@ class ZIB_Gatekeeper {
 
 		// Group by ADDRESS — the stable identity key. (Grouping by display name splits
 		// a single address that appears both WITH and WITHOUT a from_name into two
-		// phantom people — "Morgan Reyes <f@x>" + "<f@x>" → "morgan reyes" and "f x com" —
+		// phantom people — "Morgan Blake <f@x>" + "<f@x>" → "morgan blake" and "f x com" —
 		// which made "latest from Morgan" a permanent, un-resolvable "which did you
 		// mean?". One address = one contact, whatever names it carried.)
 		$by_addr = array();
@@ -2731,7 +2731,7 @@ class ZIB_Gatekeeper {
 
 	/**
 	 * Normalize a display name for grouping senders: lowercase, punctuation → space,
-	 * whitespace collapsed. "Morgan Reyes!" and "morgan  reyes" both → "morgan reyes", so
+	 * whitespace collapsed. "Morgan Blake!" and "morgan  blake" both → "morgan blake", so
 	 * one person's two spellings/addresses group together instead of reading as two.
 	 */
 	public static function norm_name( string $s ): string {

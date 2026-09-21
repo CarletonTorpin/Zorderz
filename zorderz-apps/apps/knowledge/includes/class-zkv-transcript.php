@@ -855,8 +855,8 @@ class ZKV_Transcript {
 	/** Invalidate everything that could hold a stale view of transcript state. */
 	public static function flush_caches() {
 		ZKV_ACL::reset_cache();
-		if ( class_exists( 'ZKV_TSA_Bridge' ) && method_exists( 'ZKV_TSA_Bridge', 'invalidate_cache' ) ) {
-			ZKV_TSA_Bridge::invalidate_cache();
+		if ( class_exists( 'ZKV_ZANA_Bridge' ) && method_exists( 'ZKV_ZANA_Bridge', 'invalidate_cache' ) ) {
+			ZKV_ZANA_Bridge::invalidate_cache();
 		}
 	}
 }

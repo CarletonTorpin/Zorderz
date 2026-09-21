@@ -1408,8 +1408,8 @@ Respond with ONLY the JSON object.";
 
 		// v1.2.6: Invalidate the Analytics bridge inventory cache so the assistant
 		// sees the updated document list on the next query.
-		if ( class_exists( 'ZKV_TSA_Bridge' ) && method_exists( 'ZKV_TSA_Bridge', 'invalidate_cache' ) ) {
-			ZKV_TSA_Bridge::invalidate_cache();
+		if ( class_exists( 'ZKV_ZANA_Bridge' ) && method_exists( 'ZKV_ZANA_Bridge', 'invalidate_cache' ) ) {
+			ZKV_ZANA_Bridge::invalidate_cache();
 		}
 
 		wp_send_json_success( array( 'deleted' => true ) );

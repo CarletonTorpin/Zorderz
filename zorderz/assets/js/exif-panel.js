@@ -213,7 +213,7 @@
 		}
 
 		function providerLabel(p) {
-			if (p === 'offline-sdcounty') return 'Place: offline';
+			if (p === 'offline-local' || p === 'offline-sdcounty') return 'Place: offline';
 			if (p === 'filter') return 'Place: custom';
 			return 'Place: ' + p;
 		}

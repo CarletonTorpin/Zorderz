@@ -1,6 +1,6 @@
 <?php
 /**
- * ZEST_TSA_Bridge — the chat/orchestrator verbs for the Estimates app.
+ * ZEST_ZANA_Bridge — the chat/orchestrator verbs for the Estimates app.
  *
  * The chat engine emits a marker (ZEST_MARKER_*, published via zdz_chat_markers) and the
  * orchestrator calls the matching verb here. This class does ALL resolution and side
@@ -24,7 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ZEST_TSA_Bridge {
+class ZEST_ZANA_Bridge {
 
 	public static function init(): void {
 		// Verbs are invoked by the orchestrator via the capability registry (see app.php).

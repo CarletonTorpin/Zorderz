@@ -250,8 +250,8 @@ class ZKV_Indexer {
 		}
 
 		// v1.2.6: Invalidate Analytics bridge inventory cache so new docs appear immediately.
-		if ( class_exists( 'ZKV_TSA_Bridge' ) && method_exists( 'ZKV_TSA_Bridge', 'invalidate_cache' ) ) {
-			ZKV_TSA_Bridge::invalidate_cache();
+		if ( class_exists( 'ZKV_ZANA_Bridge' ) && method_exists( 'ZKV_ZANA_Bridge', 'invalidate_cache' ) ) {
+			ZKV_ZANA_Bridge::invalidate_cache();
 		}
 
 		// v1.4.0: email-sourced docs — deterministic 'Email Correspondence' tag
@@ -923,7 +923,7 @@ Content (chunk %d of %d):
 		}
 
 		// Invalidate caches.
-		if ( class_exists( 'ZKV_TSA_Bridge' ) ) { ZKV_TSA_Bridge::invalidate_cache(); }
+		if ( class_exists( 'ZKV_ZANA_Bridge' ) ) { ZKV_ZANA_Bridge::invalidate_cache(); }
 		if ( class_exists( 'ZKV_Bridge' ) ) { ZKV_Bridge::invalidate_cache(); }
 
 		// v1.4.0: email-sourced docs — deterministic tag + forwarder confirmation.

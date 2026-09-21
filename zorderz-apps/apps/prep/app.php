@@ -9,7 +9,7 @@
  *   subtype/tag — nothing is hardcoded to one trade. What counts as a cut piece, the piece
  *   vocabulary, default sizes and the roll/material model all come from the Item Engine and
  *   tenant configuration; supplier costs SHIP EMPTY.
- * Version:     2.3.0
+ * Version:     2.4.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html

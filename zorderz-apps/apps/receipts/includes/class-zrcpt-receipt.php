@@ -1210,7 +1210,7 @@ final class ZRCPT_Receipt {
                 <p class="zrcpt-lookup-hint">Type an estimate #, invoice #, customer name, or phone.</p>
 
                 <div class="zrcpt-lookup-row">
-                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 5541 or Scott Meyer or 858-555-1212" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 5541 or Jordan Blake or 858-555-1212" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                     <button type="button" id="zrcpt-lookup-btn">Find</button>
                 </div>
 
@@ -1517,9 +1517,9 @@ final class ZRCPT_Receipt {
 
     /* --- progress steps --- */
     var steps = [
-        ['Sending invoice to AI\u2026',     'Gemini 3.1 Pro is reading your invoice'],
-        ['Analyzing vent details\u2026',     'Extracting sizes and types'],
-        ['Verifying invoice data\u2026',     'Double-checking vent counts and address'],
+        ['Sending invoice to AI\u2026',     'The assistant is reading your invoice'],
+        ['Analyzing line items\u2026',       'Extracting quantities and details'],
+        ['Verifying invoice data\u2026',     'Double-checking counts and address'],
         ['Building receipt page\u2026',      'Generating HTML with your photos'],
         ['Creating WordPress page\u2026',    'Setting up the vanity URL'],
         ['Almost there\u2026',              'Finalizing \u2014 this can take a minute or two'],
@@ -1568,7 +1568,7 @@ final class ZRCPT_Receipt {
                 document.getElementById('zrcpt-meta').innerHTML =
                     '<dt>Address</dt><dd>' + esc(d.address) + '</dd>'
                   + '<dt>Date</dt><dd>' + esc(d.install_date) + '</dd>'
-                  + '<dt>Vents</dt><dd>' + vents + '</dd>'
+                  + '<dt>Units</dt><dd>' + vents + '</dd>'
                   + '<dt>Photos</dt><dd>' + d.photo_count + ' images</dd>'
                   + fbHtml
                   + '<div class="permalink-row">&#128279; <a href="' + esc(d.permalink) + '">' + esc(d.permalink) + '</a></div>';
@@ -2260,7 +2260,7 @@ final class ZRCPT_Receipt {
         // server-fetched FreshBooks lines) and rebuild the text "invoice" we send
         // the bot so the count is IMPOSSIBLE to miss. Why: the Poe bot's text
         // path (parse_invoice_from_text) regexes a count out of this text and, on
-        // failure, asks Gemini to ESTIMATE it FROM PRICING — and our vent lines
+        // failure, asks the model to ESTIMATE it FROM PRICING — and our unit lines
         // are $0.00 (flat-rate job), so it guesses ~1. We pre-empt that by leading
         // the text with an explicit, machine-readable total in the exact phrasing
         // the bot already recognizes ("N total ... units") plus a tagged
@@ -2350,7 +2350,7 @@ final class ZRCPT_Receipt {
         ) );
 
         // v3.3.12 — Server-side Nutshell notes for material detection. A supplemental catalog item
-        // 4" circular vents (and similar product detail) live in the NUTSHELL lead
+        // supplemental product detail (extra catalog items) lives in the NUTSHELL lead
         // notes, not the FreshBooks invoice lines. Previously install_notes came
         // ONLY from the client ($_POST), so if the front-end didn't pre-pull them,
         // the materials detector never saw the supplemental-item detail. Now: if the client
@@ -2445,7 +2445,7 @@ final class ZRCPT_Receipt {
         // invoice/estimate line items + the install notes. Returns '' (no-op) when
         // nothing relevant is detected or the vault is unavailable.
         // v3.3.5: detect from the SERVER-FETCHED lines (not the unreliable
-        // client lines) so the terra-cotta/round vents are seen even on the
+        // client lines) so supplemental catalog items are seen even on the
         // delegated-search path.
         // v3.3.12 — feed the FULL Nutshell lead notes into the detector's extra
         // text (in addition to install notes + invoice lines), so product detail
@@ -2735,9 +2735,9 @@ final class ZRCPT_Receipt {
         // v3.3.9 — CONTENT DIAGNOSTICS (post-create). The single line that
         // answers "did this actually work?": which post was written, its final
         // URL (should be the clean /receipt/{address}/ canonical), whether it was
-        // an update or a new post, the computed vent count (expect 63 for inv
-        // 15424 — compare against the bot's "N units" headline), and the
-        // resolved customer share link. Grep the log for `ZRCPT GEN SUMMARY`.
+        // an update or a new post, the computed unit count (compare against the
+        // bot's "N units" headline), and the resolved customer share link. Grep
+        // the log for `ZRCPT GEN SUMMARY`.
         error_log( sprintf(
             'ZRCPT GEN SUMMARY: post_id=%d updated=%s permalink=%s vent_count_computed=%d bot_vent_summary=%s share_link=%s fb_linked=%s',
             $post_id,
@@ -2914,8 +2914,8 @@ final class ZRCPT_Receipt {
 
     /**
      * v3.3.11 — Sum the unit quantities from FreshBooks line items,
-     * using the SAME rule as build_customer_block: count per-vent unit lines
-     * (name/desc mentions "vent" or "screen"), excluding the flat "installation
+     * using the SAME rule as build_customer_block: count catalog-unit lines
+     * (matched by the catalog-driven unit noun), excluding the flat "installation
      * of the primary product…" labor line, discounts, the location line, and the receipt-link
      * line. Returns the integer total (0 if none).
      */
@@ -2923,7 +2923,7 @@ final class ZRCPT_Receipt {
         if ( ! is_array( $lines ) ) { return 0; }
 
         // S5-03 (§76 3.11.3–3.11.6) — DOCUMENT-TOTAL rule. When a unit line states
-        // the count in PROSE ("…Total of 33 ember screens…") at Qty 1, that stated
+        // the count in PROSE ("…Total of 33 units…") at Qty 1, that stated
         // total OVERRIDES the per-line sum (deliberately override, NOT max — a
         // summary line plus its itemised lines must not double-count). Gated so a
         // discount line ("total of 99") and a non-unit noun ("total of 250 linear
@@ -3086,12 +3086,12 @@ final class ZRCPT_Receipt {
      *
      * This parses a unit count out of the line's own text. Patterns, in
      * priority order (first hit wins; name checked before description):
-     *   1. "(4) Gable Vents"        — parenthesized bare integer (the shop's
+     *   1. "(4) Units"        — parenthesized bare integer (the shop's
      *                                 own convention; size/percent/money
      *                                 parens like (AS), (50%), ($600), (14x6)
      *                                 never match — digits only).
      *   2. "qty 4" / "quantity: 4"  — explicit quantity wording in the text.
-     *   3. "4 Gable Vents"          — leading bare count; NEVER a size: the
+     *   3. "4 Units"          — leading bare count; NEVER a size: the
      *                                 next word must not be a unit (in/inch/
      *                                 ft/mm/…) or another number ("4 6x6…").
      *   4. "4x …" / "… x4"          — multiplier shorthand; dimensions like
@@ -3114,7 +3114,7 @@ final class ZRCPT_Receipt {
                 return (int) $m[1];
             }
         }
-        // 3. Leading bare count ("4 Gable Vents") — next token must not be a
+        // 3. Leading bare count ("4 Units") — next token must not be a
         //    unit word or another number.
         foreach ( $texts as $t ) {
             if ( $t !== '' && preg_match( '/^\s*(\d{1,3})\s+(\S+)/', $t, $m ) ) {
@@ -4949,7 +4949,7 @@ final class ZRCPT_Receipt {
                         }
                     }
                     $parts[] = $line;
-                    // Sum effective units for lines that look like vent/screen
+                    // Sum effective units for lines that look like countable
                     // units (skip the flat "installation" labor line, discounts,
                     // and the receipt-link/location lines).
                     if ( $this->line_is_vent_unit( $label ) ) {
@@ -5025,7 +5025,7 @@ final class ZRCPT_Receipt {
      * S5-09 (§78 D2) — installed products are what the job BILLED (line items),
      * never what a note merely mentions. So a product is EVIDENCED only by the
      * line-item text; the note text may ONLY enrich the display brand of an item
-     * the lines already show (e.g. lines say "circular terra-cotta vent", a note
+     * the lines already show (e.g. the lines name a catalog item, a note
      * names a specific branded "4-inch" child of it). A catalog item named solely in a
      * note is NOT emitted (the D2 defect).
      *
@@ -5278,7 +5278,7 @@ final class ZRCPT_Receipt {
        Future-proofing: the receipt↔invoice link is stored as a LIST
        (_fb_doc_numbers) and the cross-check is a query, not a unique
        constraint — so a later "split one invoice across multiple receipts"
-       (e.g. property-manager per-unit, or window-screen vs. screen-door
+       (e.g. property-manager per-unit, or differing product-category
        receipt types) needs no schema change, only relaxing the gate.
        ===================================================================== */
 
