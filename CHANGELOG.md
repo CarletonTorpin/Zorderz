@@ -21,6 +21,14 @@ Platform-wide **soundalike name matching**. A customer whose name is heard or ty
 - **Receipts — soundalike client recall.** The receipt's by-name search widens to curated soundalike spellings when the literal search is thin; each candidate still passes the per-row same-customer verify.
 - **Prep — soundalike de-dup, given-name gated.** The Approved-to-Cut queue folds one customer that two sources spell differently into a single card, but only when a given name also agrees — it never merges two different people who merely sound alike.
 
+### Changed
+- **Login and registration follow the brand ramp.** The sign-in and register screens take their colours from the theme's `--ref-brand-*` reference ramp, with the former blues kept as inline fallbacks, so a business's own palette from its Identity Pack reskins them with no template edits. The standalone magic-link bridge view carries a matching base ramp and a `brand.ramp`-derived `theme-color`.
+- **Messaging REST namespace is now neutral.** The messaging app registers its routes under `zim/v1`, with the former `tsim/v1` kept as a back-compatible alias so existing callers keep working; both resolve identically.
+- **Generalization.** Core and the apps are now free of tenant-specific identifiers and a region-specific geocoding default, so a fresh install is fully neutral and driven entirely by its Identity Pack. Behaviour is unchanged.
+
+### Fixed
+- **Messaging admin channel tools reconnected.** Create channel, Add member, Remove member, Export audit, and Reset cooldown were inert because their form handlers were still hooked on the pre-rename `admin_post_tsim_admin_*` action names while the forms posted `zim_admin_*`; the handlers are re-wired and the tools work again.
+
 ### Notes
 - Theme and apps bundle move to 1.10.0 in lockstep. Install the theme first.
 - Everything is `class_exists`-guarded: an app running ahead of the theme keeps its prior behaviour rather than failing.
