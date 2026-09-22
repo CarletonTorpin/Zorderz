@@ -5,10 +5,9 @@ an **optional "extras" tile** in the Zorderz apps bundle: no external API calls,
 no cron, and no business data. High scores are kept in one small table (one row
 per user, their personal best) and shown as a leaderboard.
 
-This is a Core-clean port of an internal block-breaker. The company-logo first
-level, the initial-letter easter egg, and the analytics/chat embed hook have
-been removed; identifiers were renamed off the old `ts`/`tsg` names to the short
-`zg` prefix.
+This is a self-contained block-breaker with no baked-in branding: the first
+level shows a neutral block wall, there is no initial-letter easter egg, and it
+makes no analytics/chat embed. Identifiers use the short `zg` prefix.
 
 ## At a glance
 

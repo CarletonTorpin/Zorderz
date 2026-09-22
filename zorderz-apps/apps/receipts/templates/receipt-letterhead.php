@@ -3,11 +3,10 @@
  * Neutral in-repo receipt letterhead template (Zorderz Receipts).
  *
  * WHY THIS FILE EXISTS (crosswalk 03 §B18 / playbook §6): the customer-facing receipt
- * letterhead + certification copy used to live OFF-repo, inside a private, product-named AI bot
- * ("the receipt writer"). That made the bot load-bearing IP and baked one business's name,
- * colours and product wording into every receipt. It now ships IN-REPO as this neutral,
- * placeholder-driven template. ALL identity is resolved at RENDER TIME from
- * ZDZ_Business_Profile — there is NO company, person, product, place or provider name here.
+ * letterhead + certification copy is a neutral, placeholder-driven template that ships
+ * IN-REPO — no business name, colours or product wording is baked into a receipt.
+ * ALL identity is resolved at RENDER TIME from ZDZ_Business_Profile — there is NO
+ * company, person, product, place or provider name here.
  *
  * HOW IT IS USED:
  *   - As the deterministic letterhead/header + footer wrapper for a receipt page.

@@ -64,7 +64,7 @@ define( 'ZEST_APP_ID', 'estimate-creator' );
  * Chat/orchestrator protocol markers. Protocol tokens live in ONE place, referenced
  * by the bridge + parser + JS through this map and published via `zdz_chat_markers`
  * — never typed twice. Each carries its deprecated legacy alias so an install upgraded
- * from the private lineage keeps working for one release.
+ * from an earlier version keeps working for one release.
  */
 if ( ! defined( 'ZEST_MARKER_CREATE' ) ) {
 	define( 'ZEST_MARKER_CREATE', '[ZDZ_EST_CREATE]' );
