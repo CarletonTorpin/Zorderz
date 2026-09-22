@@ -8,7 +8,7 @@
  *                             par/reorder overrides. Keyed by the Item Engine item id (VARCHAR).
  *   wp_zstock_supplier_orders uploaded/parsed supplier invoices (draft → approved/rejected).
  *   wp_zstock_order_items     parsed line items from a supplier order.
- *   wp_zstock_sync_log        de-dupe log for the consumption sweep (the source's missing table).
+ *   wp_zstock_sync_log        de-dupe log for the consumption sweep (absent in the earlier build).
  *
  * The catalog itself (items, SKUs, unit nouns, par/reorder defaults, and each item's BOM
  * `consumes[]`) lives in ZDZ_Item_Engine — this module stores no product taxonomy.

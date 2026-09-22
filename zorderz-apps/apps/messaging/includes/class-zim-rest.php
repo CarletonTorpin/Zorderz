@@ -33,7 +33,7 @@ class ZIM_REST {
 
 	const NS = 'zim/v1';
 
-	// Pre-rename namespace ("tsim" = the origin app's internal-messaging prefix). Kept
+	// Legacy namespace ("tsim"), kept
 	// as a back-compat alias so any external caller of the old REST namespace still resolves.
 	const LEGACY_NS = 'tsim/v1';
 

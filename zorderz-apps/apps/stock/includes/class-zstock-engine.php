@@ -565,8 +565,8 @@ class ZSTOCK_Engine {
 	}
 
 	/**
-	 * Ask the inventory brain a question. The "built-in product catalog knowledge" is no longer an
-	 * off-repo bot's baked list — it is the in-repo neutral template (defaults/assistant-prompt.md)
+	 * Ask the inventory brain a question. The "built-in product catalog knowledge" is not a
+	 * baked list — it is the in-repo neutral template (defaults/assistant-prompt.md)
 	 * assembled at runtime with the live Item Engine catalog snapshot and sent through ZDZ_Core_Poe
 	 * using the configured bot name (blank ⇒ the platform default model).
 	 *

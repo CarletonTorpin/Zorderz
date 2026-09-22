@@ -11,6 +11,12 @@ then the apps**: the ordering matters and is not enforced by WordPress.
 
 ---
 
+## [1.10.1] - 2026-09-22
+
+Housekeeping only. Internal code comments and documentation were tidied for clarity, and a name in the bundled sample data was refreshed. There is no functional change to the apps, and no database or configuration change for existing installs. Theme and apps move to 1.10.1 in lockstep, install the theme first.
+
+---
+
 ## [1.10.0] - 2026-09-19
 
 Platform-wide **soundalike name matching**. A customer whose name is heard or typed with a different-but-equivalent spelling is now found and offered as a suggestion across the apps, from one shared matcher — never auto-filled, never merged on sound alone. Install the theme first, then the apps. No configuration or database changes; every new path is guarded and degrades to the prior behaviour when the matcher or a connector is absent.

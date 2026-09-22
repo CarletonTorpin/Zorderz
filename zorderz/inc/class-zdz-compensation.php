@@ -476,7 +476,7 @@ class ZDZ_Compensation {
 			'tiers'             => is_array( $tiers_raw ) ? $tiers_raw : [],
 			'pay_period'        => (string) ( get_user_meta( $party_id, self::META_PAY_PERIOD, true ) ?: '' ),
 			// The card-fee exclusion default is FALSE (the safe, explicit choice):
-			// an unset flag no longer silently hides fees the way the source did.
+			// an unset flag no longer silently hides fees.
 			'exclude_card_fees' => ( $exclude_cc === '' || $exclude_cc === false ) ? false : (bool) $exclude_cc,
 			'code'              => self::party_code( $party_id ),
 			'split_policy'      => $split_policy,
