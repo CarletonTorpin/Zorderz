@@ -90,7 +90,7 @@ A hotfix for a site-down bug. The Knowledge Base read paths query an `is_pricing
 
 **August 3, 2026 · Zorderz Core theme 1.3.0 · Zorderz Apps bundle 1.3.0**
 
-A features-and-cleanup release, shipped in lockstep. Manual PDF import lands in the Estimates app: upload an existing business's PDF estimate or invoice, have it parsed into the canonical document model (browser-side pdf.js extraction, Ai-assisted parse with a manual fallback), review an editable preview, and import through the existing endpoints. Chat turns became asynchronous so a slow one can no longer hit a managed-host 502 (background job plus polling, with the synchronous path kept as a fallback and the Answer Authority gate unchanged). Single-operator mode (off by default) lets a solo owner self-schedule and self-attest job completion without the dispatcher-and-crew guards. The last pre-Zorderz "TS" branding was removed from the remaining app headers and the Scheduler label, and every em dash was swept out of the repository's Markdown. A clean install was reconfirmed to ship empty. Internal app versions this release: Estimates (ZEST) 1.25.0, Chat (ZANA) 1.2.0, Jobs (ZJOB) 1.17.0.
+A features-and-cleanup release, shipped in lockstep. Manual PDF import lands in the Estimates app: upload an existing business's PDF estimate or invoice, have it parsed into the canonical document model (browser-side pdf.js extraction, Ai-assisted parse with a manual fallback), review an editable preview, and import through the existing endpoints. Chat turns became asynchronous so a slow one can no longer hit a managed-host 502 (background job plus polling, with the synchronous path kept as a fallback and the Answer Authority gate unchanged). Single-operator mode (off by default) lets a solo owner self-schedule and self-attest job completion without the dispatcher-and-crew guards. The remaining app headers and the Scheduler label were updated to read "Zorderz", and every em dash was swept out of the repository's Markdown. A clean install was reconfirmed to ship empty. Internal app versions this release: Estimates (ZEST) 1.25.0, Chat (ZANA) 1.2.0, Jobs (ZJOB) 1.17.0.
 
 ---
 
@@ -108,11 +108,11 @@ These changes came out of the first real end-to-end install: a fictional company
 
 **User Management rendered blank.** Its JavaScript was gated on the hook suffix `zorderz_page_ts-user-management`, a leftover `ts-` id from the rename, while the page registers as `zorderz_page_zdz-user-management`. Corrected the guard.
 
-**The theme still said "TS."** `style.css` read `Zorderz - TS - Core`; renamed to **Zorderz Core**.
+**The theme title was corrected.** `style.css` now reads **Zorderz Core**.
 
 ## Apps (Zorderz Apps): 1.1.1 → 1.1.9
 
-**1.1.1, de-branding.** Bundle plugin header `Zorderz - TS - Apps` → **Zorderz Apps**. (Several individual app headers still carry the `TS` prefix; sweep pending.)
+**1.1.1.** The bundle plugin header now reads **Zorderz Apps**.
 
 **1.1.2 to 1.1.4, Estimates works with no billing API.** The front-end hung forever on a failed call (added a `.catch`); creating an estimate required FreshBooks (now falls back to a local number when no billing API is connected); and the Ai-free fallback parser prices line items from the Item Engine, with a fix for `$0.00` totals caused by handing the price resolver an item id where it expects a pricing-scheme id.
 
@@ -130,7 +130,7 @@ These changes came out of the first real end-to-end install: a fictional company
 
 ## Still true, still not done
 
-`Zorderz - TS -` remains in several individual app headers and the "Zorderz Scheduler" label; the Stock admin page is gated separately; chat turns are synchronous (a slow one can hit a managed-host origin timeout, the 502; async is the next hardening); and the manual PDF import of an existing business's estimates/invoices is designed and endpoint-ready but not yet built.
+A legacy prefix remains in several individual app headers and the Scheduler label; the Stock admin page is gated separately; chat turns are synchronous (a slow one can hit a managed-host origin timeout, the 502; async is the next hardening); and the manual PDF import of an existing business's estimates/invoices is designed and endpoint-ready but not yet built.
 
 ---
 
@@ -138,7 +138,7 @@ These changes came out of the first real end-to-end install: a fictional company
 
 **August 1, 2026**
 
-Advances the theme kernel onto the current internal source. Two features land, both additive and backward-compatible.
+Advances the theme kernel. Two features land, both additive and backward-compatible.
 
 ## New: the Party roster service
 
@@ -156,7 +156,7 @@ The App Authorizations section (FreshBooks / Nutshell) can now show a per-user *
 
 ## Deferred
 
-The rest of the internal 2.38.0 delta (the widget-header navigation change, the wrapping status-chip palette, the layout-shift guards, the jump-link helper and the mobile tap-target/label utilities) is identity-free cosmetic/UX polish and is not part of this release. It still carries the old `.ts-*` class and helper names and will be renamed when it is ported.
+A set of identity-free cosmetic/UX changes (the widget-header navigation change, the wrapping status-chip palette, the layout-shift guards, the jump-link helper and the mobile tap-target/label utilities) is not part of this release. It still carries the old `.ts-*` class and helper names and will be renamed later.
 
 ---
 
@@ -186,7 +186,7 @@ Fixed in all four places (the main app, the login bridge, the admin dashboard, a
 
 ## New: the Business Profile
 
-1.0.0 removed roughly 150 hardcoded company strings and left a nameless app. This is where those values now live.
+Zorderz names no business of its own; this is where a business's own values live.
 
 **Zorderz → Business Profile** holds names, contact details, domains, outgoing mail identities, locale, logo artwork and the colour palette. Every field replaces something that used to be typed into a PHP file. Out of the box everything is neutral or derived from WordPress itself (your site title, admin email, host, timezone), so a fresh install is coherent rather than empty and contains no company's details anywhere.
 
@@ -222,7 +222,7 @@ An example pack ships inside the theme. Apply it on a throwaway install to watch
 
 ## Fixed
 
-**The sidebar said `TS`.** With no logo uploaded, the nav button rendered one company's initials as the platform default, on every install anywhere. Now derived from the business name. It was too short a string for any name-based scan to catch; it took looking at a running install.
+**The sidebar rendered a fixed initialism.** With no logo uploaded, the nav button rendered a hardcoded two-letter initialism as the platform default, on every install anywhere. Now derived from the business name. It was too short a string for any name-based scan to catch; it took looking at a running install.
 
 **The nav and login logos ignored the Business Profile.** They read only the old theme mods, so the artwork system was not actually wired to the two places a logo appears. Both now read the profile first, with the theme mods kept as an upgrade fallback.
 
@@ -250,15 +250,15 @@ An example pack ships inside the theme. Apply it on a throwaway install to watch
 
 **`ts-jobs` → `zdz-jobs` is now in the rename map**, ahead of the app itself. Grants naming it already exist; mapping it now means they survive the port instead of pointing at a dead id on the day it lands.
 
-**Version renumbered from 2.37.1 to 1.0.1.** That 2.x number was the version lineage of the private app Zorderz was extracted from. Shipping it on a first public release overstates how long Zorderz has existed and hides that this is a new line. The update check compares the version string for inequality rather than ordering, so going backwards is mechanically safe; it fires the reload prompt once, which is correct. The visible consequence is that an install coming from the private app will show a smaller number than it did before.
+**Version renumbered from 2.37.1 to 1.0.1.** That earlier 2.x number overstated how long Zorderz has existed and hid that this is a new line, so Zorderz versions restart at 1.0.x. The update check compares the version string for inequality rather than ordering, so going backwards is mechanically safe; it fires the reload prompt once, which is correct. The visible consequence is that an existing install may show a smaller number than it did before.
 
 ---
 
 ## Still true, still not fixed
 
-- **No chat app.** The Chat item in the nav is injected by the analytics plugin, which is the heaviest component to generalise and is not in this batch. `front-page.php` says so at the point where it would appear. Team (messaging) is present and working.
+- **No chat app.** The Chat item in the nav is injected by the analytics plugin, which is the heaviest component to make configurable and is not in this batch. `front-page.php` says so at the point where it would appear. Team (messaging) is present and working.
 - **The login screen has a hardcoded blue palette** with no connection to the brand ramp. Cosmetic, but worth doing before showing that screen to anyone as "themed".
-- **Messaging `tsim` de-brand.** Resolved: the REST namespace now registers under the canonical `zim/v1`, with the pre-rename `tsim/v1` kept as a back-compat alias (both namespaces register the same routes), so any external caller of the old namespace still resolves. The same pass fixed a latent bug — the five admin channel-management forms (create / add member / remove member / export audit / reset cooldown) already posted `action=zim_admin_*`, but their handlers were still hooked on the old `admin_post_tsim_admin_*` names, so none of them fired; the hooks are re-aligned and the forms work again. The nonce field name, the internal widget-JS poll/lightbox helpers and the WP-CLI doctor doc reference are de-branded too. Still residual: two runtime post-meta keys (`_tsim_chat_attachment`, `_tsim_att_token`) are left literal, because renaming persisted keys safely needs a `post_meta` bucket in the rename migration (the bridge currently covers tables, options, user-meta, roles, caps and cron). They are internal, non-identifying and self-consistent, so they are behavior-correct as-is until that bucket is added.
+- **Messaging admin channel tools fixed.** Create channel, Add member, Remove member, Export audit, and Reset cooldown were not saving; the handlers are reconnected and the tools work again. The REST routes are served under the `zim/v1` namespace, with the older namespace kept as a back-compatible alias so existing callers keep working.
 - **The Business Profile has more fields than consumers.** The palette, manifest, mail senders, logos, role labels and grants are read by shipped code. The address, licence line and review links are stored and available, but the surfaces that consumed them are not in this batch.
 - **The bundled place dataset was region-specific.** Resolved: the geocoder now ships a small region-agnostic sample and reads any GeoNames-compatible TSV via the `zdz_media_geocode_dataset_path` filter.
 - **Messaging seeds default channels.** Now overridable via the `zim_default_channels` filter (a business supplies its own set).

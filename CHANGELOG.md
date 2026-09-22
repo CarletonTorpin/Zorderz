@@ -22,12 +22,10 @@ Platform-wide **soundalike name matching**. A customer whose name is heard or ty
 - **Prep — soundalike de-dup, given-name gated.** The Approved-to-Cut queue folds one customer that two sources spell differently into a single card, but only when a given name also agrees — it never merges two different people who merely sound alike.
 
 ### Changed
-- **Login and registration follow the brand ramp.** The sign-in and register screens take their colours from the theme's `--ref-brand-*` reference ramp, with the former blues kept as inline fallbacks, so a business's own palette from its Identity Pack reskins them with no template edits. The standalone magic-link bridge view carries a matching base ramp and a `brand.ramp`-derived `theme-color`.
-- **Messaging REST namespace is now neutral.** The messaging app registers its routes under `zim/v1`, with the former `tsim/v1` kept as a back-compatible alias so existing callers keep working; both resolve identically.
-- **Generalization.** Core and the apps are now free of tenant-specific identifiers and a region-specific geocoding default, so a fresh install is fully neutral and driven entirely by its Identity Pack. Behaviour is unchanged.
+- **Login and registration follow the brand ramp.** The sign-in and register screens take their colours from the theme's `--ref-brand-*` reference ramp, with sensible fallbacks, so a business's own palette from its Identity Pack reskins them with no template edits. The standalone magic-link bridge view carries a matching base ramp and a `brand.ramp`-derived `theme-color`.
 
 ### Fixed
-- **Messaging admin channel tools reconnected.** Create channel, Add member, Remove member, Export audit, and Reset cooldown were inert because their form handlers were still hooked on the pre-rename `admin_post_tsim_admin_*` action names while the forms posted `zim_admin_*`; the handlers are re-wired and the tools work again.
+- **Messaging admin channel tools.** Create channel, Add member, Remove member, Export audit, and Reset cooldown were not saving; the handlers are reconnected and the tools work again.
 
 ### Notes
 - Theme and apps bundle move to 1.10.0 in lockstep. Install the theme first.
@@ -66,7 +64,7 @@ Point release: adds explicit input sanitizers to five administrator-only mailbox
 
 ## [1.8.0] - 2026-09-02
 
-The mail wave. Adds a per-user mailbox connect and assistant as the 20th app, generalizes the analytics and chat assistant so Core still names no business, ships a one-click sample company for evaluation, and completes a round of generalization and functional hardening.
+The mail wave. Adds a per-user mailbox connect and assistant as the 20th app, assembles the analytics and chat assistant's prompt so Core names no business, ships a one-click sample company for evaluation, and completes a round of hardening.
 
 ### Added
 - **Email (Inbox), the 20th app.** A per-user mailbox connect and assistant tile in the `Personal` category. Each user connects their own Microsoft 365 mailbox through Microsoft Graph delegated OAuth, read-only (`Mail.Read`, no send), with a two-stage read (metadata first, message body only for in-scope mail), an encrypted token vault, single-flight refresh, and the shared kiosk denied outright. Ships dark and connect-your-own, behind a new Core interface `Zorderz\Mailbox_Connector`.
@@ -74,8 +72,8 @@ The mail wave. Adds a per-user mailbox connect and assistant as the 20th app, ge
 - **One-click sample company (TestCo).** A scrubbed demo dataset (`zorderz/sample-data/testco.zip`, clean through the PII gate) ships in the theme. Tools -> Zorderz Data -> "Load TestCo sample data" populates every app with a fictional company for evaluation. The seed omits the owner user and the WordPress site settings, so loading it never replaces the loader's account or reconfigures their site.
 
 ### Changed
-- **Analytics and chat assistant generalized.** The prompt builder now assembles the system prompt at runtime from Core services (Business Profile, Item Engine, `ZDZ_Party`, Data Permissions, and Rule Governance) with no hardcoded company, person, product, or price. It ships empty, with the company-facts data omitted. Output markers emit renamed tokens, with the legacy tokens kept only as deprecated back-compat.
-- **Source-tenant naming removed.** The assistant's former tenant brand name is scrubbed from user-visible strings and comments to "the assistant". Uppercase app abbreviations and the bare source-tenant prefix are replaced with real app names across module headers, comments, log prefixes, and labels. The deliberate migration back-compat (lowercase cascades, rename maps, deprecated markers, the external bridge-key header, and the changelog rename history) is preserved. User-visible labels corrected ("Integration Health" and the Estimate Creator REST errors).
+- **Analytics and chat assistant name no business.** The prompt builder now assembles the system prompt at runtime from Core services (Business Profile, Item Engine, `ZDZ_Party`, Data Permissions, and Rule Governance) with no hardcoded company, person, product, or price. It ships empty, with the company-facts data omitted. Output markers emit renamed tokens, with the legacy tokens kept only as deprecated back-compat.
+- **User-visible labels corrected.** "Integration Health" and the Estimate Creator REST error messages now read clearly.
 - **PII gate now recurses into nested zips**, so the bundled sample-data seed is scanned too.
 
 ### Fixed
@@ -84,7 +82,7 @@ The mail wave. Adds a per-user mailbox connect and assistant as the 20th app, ge
 - **Integration Health stale class references corrected.** A fresh install now reports 9 of 11 (the two remaining are connect-your-own integration checks).
 
 ### Notes
-- Every value the mail wave touched is generalized: Core ships each one empty, and a business supplies its own through the Business Profile or an Identity Pack.
+- Every value the mail wave touched ships empty in Core; a business supplies its own through the Business Profile or an Identity Pack.
 - Theme and apps bundle move to 1.8.0 in lockstep.
 
 ---
@@ -120,7 +118,7 @@ Point release: display fix found during live functional verification of 1.7.0. N
 
 ## [1.7.0] - 2026-08-24
 
-The workflow release. Ported the delta between the source app's V9.15 and V9.25.14 as four build waves, generalizing every tenant-specific value as it went so Core still names no business. Adds a workflow spine and the apps that ride on it, an update path for estimates, a schedule-inference service and a visualization app, plus the reliability fix that ends the worker-exhaustion 502s.
+The workflow release. Core names no business. Adds a workflow spine and the apps that ride on it, an update path for estimates, a schedule-inference service and a visualization app, plus the reliability fix that ends the worker-exhaustion 502s.
 
 ### Added
 - **Flow substrate + Projects.** A workflow spine (`Zdz_Flow`) with a single state-writer, keyed references, logged dispositions and an event outbox. Every estimate becomes a trackable Project with a Record panel; a fresh install ships with no Projects data.
@@ -132,14 +130,14 @@ The workflow release. Ported the delta between the source app's V9.15 and V9.25.
 
 ### Changed
 - The AI client is repaired and routed through the Model Registry (no vendor name in Core); every app now calls the one shared gateway instead of its own model client.
-- Map links, address linkifying and the commission-coverage view are unified behind shared, generalized helpers.
+- Map links, address linkifying and the commission-coverage view are unified behind shared helpers.
 
 ### Fixed
-- **Leads privacy gate.** A generalization rename left a permission check pointing at a class that no longer exists, so it defaulted open. Any viewer could see others' lead data and revenue in the dashboard. Corrected to the real permissions class.
+- **Leads privacy gate.** A rename left a permission check pointing at a class that no longer exists, so it defaulted open. Any viewer could see others' lead data and revenue in the dashboard. Corrected to the real permissions class.
 - **Activity telemetry (`/track`) returned 401.** The front-end used `navigator.sendBeacon`, which cannot carry the REST nonce, so events were rejected. It now uses `fetch({keepalive:true})` with the nonce and records correctly.
 
 ### Notes
-- Every value the waves touched is generalized: Core ships each one empty, and a business supplies its own through the Business Profile or an Identity Pack. Most new surfaces stay inert until configured.
+- Every value the waves touched ships empty in Core; a business supplies its own through the Business Profile or an Identity Pack. Most new surfaces stay inert until configured.
 - Theme and apps bundle move to 1.7.0 in lockstep.
 
 ---
@@ -499,7 +497,7 @@ automatically. Theme and apps move together to 1.3.1.
 
 A features-and-cleanup release. The headline is a built-in way to bring an existing
 business's paperwork in: upload a PDF estimate or invoice and import it. Chat turns no
-longer block, the last of the pre-Zorderz "TS" branding is gone, and the docs are cleaned
+longer block, the app headers and Scheduler label now read "Zorderz" throughout, and the docs are cleaned
 up. Theme and apps move together to 1.3.0.
 
 ### Added
@@ -528,10 +526,7 @@ up. Theme and apps move together to 1.3.0.
   The previous synchronous path remains as a fallback, every answer still passes through
   the same Answer Authority gate, and shared-device (kiosk) turns stay synchronous and
   unrecorded as before.
-- **The pre-Zorderz "TS" branding is gone.** The remaining app headers that read
-  "Zorderz - TS - X" are now "Zorderz X", and the Scheduler's admin label, cron entry, and
-  log beacons read "Zorderz Scheduler". Functional identifiers (class prefixes, the
-  tsim/v1 REST namespace, backward-compatible meta keys) are unchanged.
+- **App headers and Scheduler labels read "Zorderz".** The bundle's app headers read "Zorderz X", and the Scheduler's admin label, cron entry, and log beacons read "Zorderz Scheduler". Functional identifiers (class prefixes, REST namespaces, backward-compatible meta keys) are unchanged.
 
 ### Docs
 
@@ -627,8 +622,8 @@ WooCommerce is not involved.
 
 ### Still pending
 
-A legacy `TS` prefix from the pre-Zorderz source still appears in a few individual
-app headers and one admin label (cosmetic; sweep pending); chat turns are
+A few individual app headers and one admin label still show a legacy prefix
+(cosmetic; sweep pending); chat turns are
 synchronous (a slow one can hit a managed-host origin timeout, and async is the next
 hardening); and the manual PDF import front end is designed but not yet built.
 
@@ -644,11 +639,10 @@ console UI.
 
 ## [1.1.0] - 2026-08-01
 
-A maximal port. This release advances the platform onto the current internal
-source, generalizes eight new Core services into the theme, and brings fourteen
-previously-specific apps into the bundle after stripping every company, person,
-product, place and provider name out of them. What varies between businesses is
-now configuration; what stays in code names nobody.
+A maximal port. This release adds eight new Core services to the theme and
+brings fourteen apps into the bundle. No company, person, product, place or
+provider name appears in any of them. What varies between businesses is now
+configuration; what stays in code names nobody.
 
 ### Added: Core services (theme)
 
@@ -700,7 +694,7 @@ screen**, **Answer Authority**, **Rule Governance**, the **Model Registry**,
 
 ### Added: apps
 
-Fourteen newly-generalized apps join the bundle, bringing it to **18 apps**
+Fourteen new apps join the bundle, bringing it to **18 apps**
 total (the media and collaboration apps, Camera, Media, Sketch Pad and Team ,
 were already present):
 
@@ -731,10 +725,10 @@ Named honestly rather than shipped half-done:
 - The **Chat** app ships as the assistant, but its analytics sub-systems, a data
   planner, an auditor, a memory, and a voice layer, and roughly **350 starter
   prompts** are deferred to a future **Knowledge pack**.
-- The **Team** (messaging) app still registers under its legacy `tsim/v1` REST
-  namespace. It is self-consistent (it registers and calls the same string, so
-  nothing is broken); the full rename will pick it up later.
-- The identity-free cosmetic/UX delta from the internal source (status-chip
+- The **Team** (messaging) app still uses its legacy REST namespace. It is
+  self-consistent (it registers and calls the same string, so
+  nothing is broken); a later release aligns it with the others.
+- The identity-free cosmetic/UX delta (status-chip
   palette, widget-header navigation, layout-shift guards, mobile tap-target
   utilities) is not in this release and still carries its pre-rename class names.
 
@@ -818,10 +812,10 @@ difference between the app working and every server call silently failing.
   are never the same value.
 - **The old jobs app id is mapped to its new id ahead of the app itself**, so
   existing grants naming it survive the eventual port.
-- **Version renumbered to 1.0.1** from the private app's `2.x` lineage. Shipping a
-  `2.x` number on a first public release overstated how long Zorderz had existed;
-  Zorderz versions start at 1.0.0. The update check compares the version string
-  for inequality, not ordering, so moving "backwards" is mechanically safe.
+- **Version renumbered to 1.0.1.** A leftover `2.x` number on a first public
+  release overstated how long Zorderz had existed; Zorderz versions start at
+  1.0.0. The update check compares the version string for inequality, not
+  ordering, so moving "backwards" is mechanically safe.
 
 ### Setup note
 
@@ -846,19 +840,17 @@ namespace bug reached a real install in the first place.
 The beginning of the Zorderz line: the first build that could be installed on a
 real WordPress site.
 
-Zorderz is the open-source generalization of a single private WordPress business
-platform into a distribution any field-service business can self-host. 1.0.0
-established the shape everything since builds on:
+Zorderz is an open-source WordPress platform any field-service business can
+self-host. 1.0.0 established the shape everything since builds on:
 
 - **The two-artifact model**: a theme (the platform kernel) plus an apps bundle
   (one plugin containing several apps), installed theme-first.
 - **The full rename**: a single PHP namespace and class prefix, options and
   tables carrying migration shims, and one REST namespace (`zorderz/v1`) referenced
   everywhere it's needed.
-- **A neutral platform**: roughly 150 hardcoded company strings removed from the
-  code, leaving a nameless app whose identity is supplied by the business rather
-  than baked in.
-- **GPL-2.0-or-later**, replacing the private platform's proprietary license.
+- **A neutral platform**: the app names no business of its own; its identity is
+  supplied by the business rather than baked into the code.
+- **GPL-2.0-or-later**, the license Zorderz ships under.
 
 1.0.0 was the first build installable on a real site; what installing it surfaced
 was fixed in 1.0.1.

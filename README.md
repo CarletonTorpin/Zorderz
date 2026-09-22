@@ -186,4 +186,4 @@ Zorderz is released under the **GNU General Public License v2.0 or later** (GPL-
 
 ## Contributing
 
-Zorderz is community-first. Issues, fixes and generalizations that help it fit more kinds of business are welcome. The one hard rule for any contribution: it names no specific company, person, customer or brand anywhere, in code, comments, prompts, schemas, examples or docs. What varies between businesses is *configuration*, and configuration lives in the Business Profile or an Identity Pack, never in the code.
+Zorderz is community-first. Issues, fixes and improvements that help it fit more kinds of business are welcome. The one hard rule for any contribution: it names no specific company, person, customer or brand anywhere, in code, comments, prompts, schemas, examples or docs. What varies between businesses is *configuration*, and configuration lives in the Business Profile or an Identity Pack, never in the code.
