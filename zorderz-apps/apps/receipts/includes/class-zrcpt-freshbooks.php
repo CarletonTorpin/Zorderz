@@ -2,7 +2,7 @@
 /**
  * ZRCPT FreshBooks — billing client for the Receipts module.
  *
- * GENERALIZATION (crosswalk 03 §B, B6/B7/B13): credentials resolve through the theme's ONE
+ * Credentials (crosswalk 03 §B, B6/B7/B13) resolve through the theme's ONE
  * shared source (ZDZ_Core_Settings), and the OAuth refresh delegates to the kernel
  * (ZDZ_Core_FreshBooks / ZDZ_Token_Service single-flight lock) — this module never POSTs the
  * token endpoint itself, so it can no longer revoke a sibling's single-use refresh token. The
@@ -391,7 +391,7 @@ class ZRCPT_FreshBooks {
 	/**
 	 * Filter matches to the tenant's configured item tag/subtype via the Item Engine.
 	 *
-	 * Generalized from the old hardcoded product-keyword/reference list: each match's
+	 * The product-keyword/reference list is configurable, not hardcoded: each match's
 	 * searchable text (reference + notes + description + line text) is classified through the
 	 * Item Engine (zrcpt_count_classify → ZDZ_Item_Engine::classify), and a match is kept when
 	 * it classifies to $tag (or to a child of it). NO product keyword is compiled in. With an

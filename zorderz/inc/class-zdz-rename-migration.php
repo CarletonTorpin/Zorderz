@@ -2,7 +2,7 @@
 /**
  * Zorderz — Rename Migration
  *
- * Carries an existing install from the pre-Zorderz identifier scheme to the
+ * Carries an existing install from the legacy identifier scheme to the
  * Zorderz scheme without data loss.
  *
  * WHY THIS EXISTS

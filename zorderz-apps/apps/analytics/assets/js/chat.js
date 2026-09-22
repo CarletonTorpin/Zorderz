@@ -238,7 +238,7 @@
   // XSS: the href is the shared helper's output (hardcoded https + encodeURIComponent);
   // the visible text is set via textContent — no markup is ever parsed from the match.
   //
-  // GENERALIZATION: the street grammar ships a US + common-Spanish default and is
+  // The street grammar ships a US + common-Spanish default and is
   // extendable per-locale via window.zdzStreetGrammar (an Identity `territories`
   // extension). The addresses themselves are runtime data, never shipped.
   var SKIP_TAGS = { A: 1, CODE: 1, PRE: 1, SCRIPT: 1, STYLE: 1, TEXTAREA: 1, BUTTON: 1, KBD: 1, SAMP: 1, SVG: 1 };

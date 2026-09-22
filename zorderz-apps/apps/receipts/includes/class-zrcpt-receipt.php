@@ -1,13 +1,13 @@
 <?php
 /**
- * ZRCPT_Receipt — the Receipts app engine (generalized from the internal receipt generator).
+ * ZRCPT_Receipt — the Receipts app engine.
  *
  * Generates a customer-facing installation/service receipt: look up the job by name /
  * document number / phone / email through the configured billing provider + CRM, attach the
  * install photos from the shared media store, render a neutral letterhead template, and
  * publish a token-gated public receipt page with a reviewer Approve-&-Send gate.
  *
- * GENERALIZATION (v1.1):
+ * CONFIGURABLE (v1.1):
  *   - The single receipt mode is generic and product-tag-bound (MODE_TAGGED). The admin picks which
  *     Item Engine tag/subtype receipts apply to; NO product name is compiled in.
  *   - Unit counting binds to the Item Engine COUNTS CONTRACT (zrcpt_count_* helpers ->
@@ -55,7 +55,7 @@ final class ZRCPT_Receipt {
 
     /**
      * Receipt "modes". The default mode is bound to an admin-chosen Item Engine tag/subtype
-     * — NO product name is compiled in (generalized from the old single product-named mode):
+     * — NO product name is compiled in (the product name is configurable, not baked in):
      *   - 'tagged'       : any completed job for the tenant's configured item tag (default;
      *                      an EMPTY tag means "any completed job", i.e. no restriction).
      *   - 'general'      : any completed job; supports before/after photo pairs.
@@ -584,7 +584,7 @@ final class ZRCPT_Receipt {
         if ( ! is_array( $opts ) || empty( $opts['bot_name'] ) ) {
             return;
         }
-        // Legacy off-repo bot handles to clear ship EMPTY — a tenant supplies its
+        // Legacy bot handles to clear ship EMPTY — a tenant supplies its
         // own set via this filter (or its private pack), so no vendor bot name is
         // ever compiled into the public module.
         $legacy = (array) apply_filters( 'zrcpt_legacy_bot_handles', [] );
@@ -3031,7 +3031,7 @@ final class ZRCPT_Receipt {
     /**
      * Is this line a countable product/service UNIT (not a metadata / labor / adjustment line)?
      *
-     * Generalized from the old 'vent|screen' substring test to the Item Engine COUNTS
+     * Uses the Item Engine COUNTS
      * CONTRACT: a line counts when it classifies to a countable kind (and, if a receipt item
      * tag is configured, to that tag or a child of it). Metadata / adjustment / flat-labor
      * lines are always excluded: discounts, refunds, fees, tips, the receipt-link line, the
