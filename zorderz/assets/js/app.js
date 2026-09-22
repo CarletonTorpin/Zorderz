@@ -1649,7 +1649,7 @@ function escapeHtml(str) {
 // out of the query via a crafted address string. Callers still esc() the
 // returned URL before putting it in an href.
 //
-// GENERALIZATION: the maps PROVIDER/base-URLs are Identity-configurable — a
+// The maps PROVIDER/base-URLs are Identity-configurable — a
 // business may run a different maps service — via the PHP filter
 // `zdz_maps_providers` (ZDZ_Maps::providers()), surfaced to the client as
 // window.zdzMapsProviders. Core ships a generic default per device family +

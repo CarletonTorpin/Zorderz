@@ -102,7 +102,7 @@ ok( 'parse_rule() names the sound-not-spelling principle', stripos($rule,'sound'
 ok( 'parse_rule() carries the [AMBIGUOUS] escape hatch', strpos($rule,'[AMBIGUOUS') !== false );
 ok( 'parse_rule() forbids merging soundalikes', stripos($rule,'never merge') !== false );
 
-/* generalization guard: the shipped seed is NEUTRAL. Structural checks only - the
+/* neutrality guard: the shipped seed is NEUTRAL. Structural checks only - the
  * tenant-name string scan lives in the OFF-REPO PII gate (scripts/pii-gate.sh + a
  * gitignored wordlist), never hardcoded here, so this committed test names no real
  * customer, owner or business. */

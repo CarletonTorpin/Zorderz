@@ -3,7 +3,7 @@
  * Zorderz Surveys — schema install + migrations + the disposition helper.
  *
  * Ships EMPTY: install() creates tables only, never seeds a row. The one migration
- * that matters is the SURVEY-OPERATOR column rename — the generalized replacement for
+ * that matters is the SURVEY-OPERATOR column rename — the configurable replacement for
  * the baked-in operator's first name that used to name two DB columns. It is a real
  * ALTER guarded by a version option, with a data copy, and is recorded in
  * schema_migrations.
@@ -200,7 +200,7 @@ class ZSV_DB {
 
 		/**
 		 * Tenant-supplied legacy operator-column renames (Business Identity). A tenant
-		 * upgrading from the pre-generalization schema may hold operator columns named
+		 * upgrading from the earlier schema may hold operator columns named
 		 * after a specific person; its private pack registers them here. Every target is
 		 * still a neutral column, so no person-named column survives. Core ships none.
 		 * Shape: array( 'legacy_col' => array( 'to' => 'neutral_col', 'def' => '<column def>' ) ).

@@ -16,13 +16,13 @@
  * one small table (one row per user — their personal best) and surface as a
  * leaderboard. The engine is entirely in assets/js/game.js.
  *
- * ── Core-clean port (from the internal block-breaker) ─────────────────
- * Generalized for the public release:
- *   - Dropped the company-logo first level. The first game now shows a neutral
+ * ── Neutral, no baked-in branding ─────────────────────────────────────
+ * Configurable for the public release:
+ *   - The first level shows a neutral
  *     block wall; a site MAY supply its own welcome pattern via the
  *     `zg_first_pattern` filter (an array of row strings). No company letters
  *     are baked in.
- *   - Dropped the initial-letter easter egg. Level 2 shows the signed-in user's
+ *   - Level 2 shows the signed-in user's
  *     own first initial when it maps to a glyph, otherwise it falls through to a
  *     random pattern — there is no hardcoded fallback letter.
  *   - Dropped the analytics/chat embed hook (the "play while you wait" coupling

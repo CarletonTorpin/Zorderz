@@ -186,7 +186,7 @@ class ZDZ_Party {
 			return false;
 		}
 		// Read-time alias: honor the pre-rename key on installs upgraded from the
-		// private lineage that set it before ZDZ_Rename_Migration ran.
+		// earlier version that set it before ZDZ_Rename_Migration ran.
 		if ( get_user_meta( (int) $user->ID, 'ts_inactive', true ) ) {
 			return false;
 		}

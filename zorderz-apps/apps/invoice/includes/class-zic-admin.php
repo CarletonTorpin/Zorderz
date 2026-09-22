@@ -3,7 +3,7 @@
  * WP-Admin screens for the invoicing module: dashboard, new invoice, settings,
  * webhook events.
  *
- * Two generalized settings live here, both clearly disclosed:
+ * Two configurable settings live here, both clearly disclosed:
  *   - Platform fee (%)  — default 0 / off. Applied as a Stripe Connect
  *     application fee only when a connected account is set. Replaces the old
  *     baked 0.5% constant.
@@ -47,7 +47,7 @@ class ZIC_Admin {
 			register_setting( 'zic_settings_group', $o );
 		}
 
-		// Generalized, disclosed options with explicit sanitizers.
+		// Configurable, disclosed options with explicit sanitizers.
 		register_setting(
 			'zic_settings_group',
 			'zic_platform_fee_percent',

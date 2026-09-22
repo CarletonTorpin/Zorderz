@@ -18,8 +18,8 @@
  * out. It registers a dashboard tile through the theme's `zdz_register_apps`
  * filter and defers all work past plugin load.
  *
- * ── Core-clean port (from the internal, dormant invoice creator) ───────
- * Generalized for the public release:
+ * ── Neutral, no baked-in business values ──────────────────────────────
+ * Configurable for the public release:
  *   - The baked 0.5% platform-fee CONSTANT is gone. The fee is now a disclosed
  *     admin option (Settings → "Platform fee (%)"), DEFAULT 0 / off, applied as
  *     a Stripe Connect application fee only when a connected account is set.

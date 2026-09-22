@@ -85,7 +85,7 @@ class ZSV_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * The SURVEY OPERATOR — the generalized replacement for the one baked-in
+	 * The SURVEY OPERATOR — the configurable replacement for the one baked-in
 	 * operator whose first name named two DB columns and an author-substring test.
 	 *
 	 * An operator is: (a) a configurable Party USER (the person who works the

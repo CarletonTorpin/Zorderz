@@ -129,7 +129,7 @@ class ZCC_Calc_Engine {
 		$processed_lines = [];
 		$gross_billed    = 0.0;
 		$total_cogs      = 0.0;
-		// Per-subtype net accumulators, for the generalized product-minimum rule.
+		// Per-subtype net accumulators, for the configurable product-minimum rule.
 		$subtype_gross = [];
 		$subtype_net   = [];
 
@@ -244,7 +244,7 @@ class ZCC_Calc_Engine {
 			$commission = self::apply_commission_structure( $net_commissionable, $plan, $running_total );
 		}
 
-		// Product-scoped minimum-commission floor (generalized "product minimum").
+		// Product-scoped minimum-commission floor (configurable "product minimum").
 		$floor_meta = self::apply_product_minimums( $commission, $plan, $is_shared, $net_commissionable, $net_attributed, $subtype_gross, $subtype_net, $flags, $inv );
 		if ( $floor_meta !== null ) {
 			$commission = $floor_meta['new_commission'];
@@ -326,7 +326,7 @@ class ZCC_Calc_Engine {
 	}
 
 	/**
-	 * Product-scoped minimum-commission floor. Generalizes the "product minimum":
+	 * Product-scoped minimum-commission floor. Applies the configurable "product minimum":
 	 * for each configured rule whose qualifying subtype hit its min job gross, if
 	 * the party is covered and on a percentage structure, the subtype's share of
 	 * commission is floored at the rule's minimum. Ships with NO rules ⇒ no-op.

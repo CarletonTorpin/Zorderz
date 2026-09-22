@@ -13,12 +13,10 @@
  * plugin. It registers with the theme through the `zdz_register_apps` filter
  * and declines cleanly when the theme is absent.
  *
- * PORTING NOTE: generalized from a private single-tenant "mailbox connect"
- * plugin (through its v0.9.12) into the open-source Zorderz distribution.
- * Behavior carries forward unchanged from that source; only identifiers were
- * renamed to the Zorderz scheme and tenant-owned values (branding, the
- * default internal mail domain) were neutralized. The source's long
- * version-by-version changelog is not reproduced here.
+ * NOTE: the mailbox-connect flow is per-user and Identity-configurable.
+ * Identifiers follow the Zorderz scheme, and business-owned values
+ * (branding, the default internal mail domain) are neutral by default,
+ * filled from Identity when configured.
  *
  * WHAT IT DOES: each user connects their own Microsoft 365 mailbox (delegated,
  * read-only Mail.Read — nothing is ever sent or changed); mail is classified
