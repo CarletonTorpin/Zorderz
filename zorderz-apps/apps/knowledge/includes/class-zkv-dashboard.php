@@ -849,8 +849,8 @@ Respond with ONLY the JSON object.";
 	/**
 	 * Get the Poe API key.
 	 *
-	 * GENERALIZED (was: scavenge three other plugins' option families + reach
-	 * into a company-era admin class). Now:
+	 * CONFIGURABLE (was: scavenge three other plugins' option families + reach
+	 * into a legacy admin class). Now:
 	 *   1. This app's own key (zkv_poe_api_key option — encrypted or plaintext).
 	 *   2. The platform's shared credential store (ZDZ_Core_Settings), which is
 	 *      the one place a Zorderz install keeps the Poe key.

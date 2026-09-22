@@ -8,7 +8,7 @@
  * the server-side half: it owns the PROVIDER base-URLs as an Identity-configurable
  * value with a sensible Core default, and hands them to the client.
  *
- * GENERALIZATION: would another business's copy differ? The maps service MIGHT
+ * Config check: would another business's copy differ? The maps service MIGHT
  * (a business outside the Apple/Google duopoly, or one standardising on a single
  * provider) — so the base-URLs are [IDENTITY], routed through the Core filter
  *   apply_filters( 'zdz_maps_providers', <core defaults> )

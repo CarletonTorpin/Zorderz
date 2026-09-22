@@ -27,7 +27,7 @@
  *      reviewer clicks through. A legitimate gallery/paid-panel receipt round-
  *      trips unchanged; <script> and every on* handler are stripped.
  *
- * GENERALIZATION: mechanism only. Sentinels, ordering, escaping, the QR-free
+ * Mechanism only. Sentinels, ordering, escaping, the QR-free
  * link+number panel, the kses allowlist, and the "every source must confirm"
  * matrix are [CORE]. Section wording and styling resolve through a neutral
  * document-conventions filter ([IDENTITY->document-conventions], Core default).
