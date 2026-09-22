@@ -2,7 +2,7 @@
 /**
  * Thin Stripe REST client for the invoicing module.
  *
- * PLATFORM FEE (generalized): the old baked 0.5% constant is gone. The fee comes
+ * PLATFORM FEE (configurable): the fee is not hardcoded. The fee comes
  * from zic_platform_fee_rate() — the disclosed admin option, default 0 / off. A
  * fee is only ever charged as a Stripe Connect application fee, and only when a
  * connected (merchant) account is configured; with no connected account the

@@ -44,7 +44,7 @@
  *     hooks that filter and feeds it the ACL-scoped ZKV_ZANA_Bridge inventory +
  *     matched content, so an indexed, permitted vault document is answerable in chat.
  *
- * v1.6.0 (generalized into the Zorderz distribution): full ts_/TS_ prefix rename
+ * v1.6.0: full ts_/TS_ prefix rename
  *   to zkv/ZKV with in-place migration via `zdz_rename_map`; REST under the single
  *   ZDZ_REST_NS namespace; proprietary licence → GPL-2.0-or-later; product-name
  *   literals → the settings-driven `zkv_product_keywords` list (density-scoring

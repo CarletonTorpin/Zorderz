@@ -99,7 +99,7 @@ class ZPREP_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * The QUEUE TAG + SUBTYPE — the generalized replacement for the baked-in
+	 * The QUEUE TAG + SUBTYPE — the configurable replacement for the baked-in
 	 * single hardcoded product line. A queue tag is a reference token that marks a
 	 * job as prep work; a queue subtype binds the queue to an Item-Engine
 	 * subtype so the product-line gate reads the item's own subtype (RC-03),

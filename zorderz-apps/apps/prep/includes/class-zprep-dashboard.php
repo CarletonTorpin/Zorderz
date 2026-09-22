@@ -349,7 +349,7 @@ class ZPREP_Dashboard {
 		// against OTHER-SOURCE (CRM) cards by customer, and against another invoice only when they
 		// share a billing estimate id — so two distinct invoices for one customer stay two cards.
 		// Degrades to nothing when billing is not configured (list returns []). The mesh bar and the
-		// install chip are left off invoice cards in this generalized port (the source's mesh summary
+		// install chip are left off invoice cards in this build (the mesh summary
 		// is trade-specific; fb_note carries the invoiced/possible state either way).
 		$fbc       = new ZPREP_Billing();
 		$seen_cust = array();

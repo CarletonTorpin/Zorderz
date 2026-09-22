@@ -31,11 +31,11 @@
  * The Core-default token TTL is 2h (raised from 15 min per S4-06's slow-save fix).
  * The authoritative value is Jobs' Zjob_Schedule_Context::token_ttl(); this reads
  * it when present and otherwise the same `zdz_compose_context_token_ttl` filter, so
- * the TTL is never a second hardcode of an already-generalized value.
+ * the TTL is never a second hardcode of an already-configurable value.
  *
  * Ships EMPTY: names no company/person/product/place/provider; seeds nothing.
  *
- * @since 1.9.0 (handoff port; scheduler 1.7.1 → 1.8.0 in the Zorderz arc)
+ * @since 1.9.0 (scheduler 1.7.1 → 1.8.0 in the Zorderz arc)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

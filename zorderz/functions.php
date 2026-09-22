@@ -3,21 +3,20 @@
 /**
  * THE ONE version floor. Keep in lock-step with style.css.
  *
- * v1.1.0 — maximal port: advances the distribution onto the current internal
- * source (theme 2.38.1). New this release: the Party roster service (ZDZ_Party)
+ * v1.1.0 — New this release: the Party roster service (ZDZ_Party)
  * and the Connected Calendars card in Settings -> App Authorizations (via the
  * zdz_app_authorizations filter). Keep this constant in lock-step with style.css.
  *
- * v1.0.1 — RENUMBERED. This theme had been carrying `2.37.1`, which is the
- * version lineage of the single private app Zorderz was extracted from. Shipping
+ * v1.0.1 — RENUMBERED. This theme had been carrying `2.37.1`, an earlier
+ * version lineage that predates the 1.0.x line. Shipping
  * that number on a first public release is misleading twice over: it overstates
  * how long Zorderz has existed, and it hides that this is a new line rather than
  * a continuation. Zorderz versions start at 1.0.0.
  *
  * The update check compares this string for INEQUALITY, not ordering, so going
  * "backwards" is mechanically safe — it fires the reload prompt once, which is
- * exactly right. The one visible consequence is that an install upgrading from
- * the private app will show a smaller number than it did before.
+ * exactly right. The one visible consequence is that an existing install may
+ * show a smaller number than it did before.
  *
  * v2.31.0 — the original note, kept because the bug it records is instructive:
  * wp_get_theme()->get('Version') returns '' under WPE's early-callback stacking,
@@ -141,7 +140,7 @@ require_once get_template_directory() . '/inc/class-zdz-rest-api.php';
 require_once get_template_directory() . '/inc/class-zdz-user-roles.php';
 
 // ── Zorderz transition: rename migration ──────────────────────────────
-// Carries a pre-Zorderz install onto the new identifier scheme (options,
+// Carries a legacy install onto the current identifier scheme (options,
 // user meta, roles, capabilities, tables, cron). Idempotent and guarded by
 // a stored version; a no-op on a fresh install. Must load before anything
 // that reads a renamed option or resolves a role.

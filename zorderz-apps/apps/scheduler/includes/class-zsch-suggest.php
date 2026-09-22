@@ -17,7 +17,7 @@
  * Business hours + duration are [IDENTITY→profile]: business hours via the
  * `zsch_business_hours` filter (Core default Mon–Fri 08:00–17:00) and the duration
  * via the EXISTING ZJOB_Scheduler::default_duration_min() mechanism (never a second
- * hardcode of the already-generalized 2-hour default). tz via ZSCH_Settings.
+ * hardcode of the already-configurable 2-hour default). tz via ZSCH_Settings.
  *
  * @since 1.9.0
  */
@@ -40,7 +40,7 @@ class Zsch_Suggest {
 	/**
 	 * Core-default duration fallback (minutes) used ONLY when neither the intake
 	 * bundle nor the ZJOB_Scheduler mechanism yields one. Mirrors the platform's
-	 * already-generalized 2-hour default; the authoritative, tunable value is the
+	 * already-configurable 2-hour default; the authoritative, tunable value is the
 	 * `zdz_job_appt_duration_min` filter read via ZJOB_Scheduler.
 	 */
 	const DURATION_FALLBACK_MIN = 120;

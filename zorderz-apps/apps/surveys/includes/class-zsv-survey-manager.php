@@ -138,7 +138,7 @@ class ZSV_Survey_Manager {
 	 * Pull the survey operator's call activities/notes for each lead from the CRM and
 	 * derive an operator_status. A transient CRM error can NEVER become a permanent
 	 * business outcome: on failure we fire a `source_unavailable` disposition and
-	 * LEAVE the stored status untouched (this is the generalized fix for the incident
+	 * LEAVE the stored status untouched (this is the shared fix for the incident
 	 * where a 429 overwrote a real "satisfied" with "not_contacted", which the sweep
 	 * then closed as Won).
 	 *

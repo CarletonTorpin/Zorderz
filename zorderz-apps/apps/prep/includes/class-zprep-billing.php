@@ -377,10 +377,10 @@ class ZPREP_Billing {
 	 * so a job whose estimate never read accepted/invoiced — but that HAS an invoice —
 	 * still surfaces on the Approved-to-Cut queue. Each carries the receipt-link (installed)
 	 * + scheduled-date signals so the de-dup pass can fold or surface it. Queue membership
-	 * uses the generalized reference tag (ZPREP_Settings::job_in_queue), never a hardcoded
-	 * code. The mesh bar is left null here — the source's mesh summary is trade-specific
-	 * (a fixed dark/light material taxonomy) and is not part of this generalized de-dup port;
-	 * a card with no mesh simply shows no bar, exactly as the source degrades a detail-less card.
+	 * uses the configurable reference tag (ZPREP_Settings::job_in_queue), never a hardcoded
+	 * code. The mesh bar is left null here — the mesh summary is trade-specific
+	 * (a fixed dark/light material taxonomy) and is not part of this de-dup work;
+	 * a card with no mesh simply shows no bar, exactly as any detail-less card degrades.
 	 *
 	 * @return array[] { invoice_number, customer_name, customer_id, amount, estimateid,
 	 *                   reference, created_at, installed, scheduled, mesh }
