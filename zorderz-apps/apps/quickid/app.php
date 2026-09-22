@@ -251,7 +251,7 @@ final class ZQID_Card {
 	 *
 	 *   1. A per-person override, if set.
 	 *   2. Otherwise the business's staff email PATTERN (e.g. "{first}@acme.com")
-	 *      with the person's name substituted — the generalized replacement for
+	 *      with the person's name substituted — the configurable replacement for
 	 *      the old hardcoded "FirstName@<company>.com" rule. Used only if it
 	 *      fully resolves to a valid address.
 	 *   3. Otherwise the person's own account email.

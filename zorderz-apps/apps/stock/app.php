@@ -17,15 +17,14 @@
  * It registers with the theme through the `zdz_register_apps` filter on after_setup_theme
  * and declines cleanly when the theme is absent.
  *
- * ── Core-clean port (from the internal ts-stock-checker, which shipped ~66 real supplier
- *    SKUs with unit costs + par levels and a hardcoded BOM keyword→SKU map) ───────────────
+ * ── Catalog-clean design: no product taxonomy is compiled into this module ───
  *   - THE CATALOG IS THE ITEM ENGINE. This module owns no product taxonomy. What a business
  *     stocks, its SKUs, unit nouns, par/reorder policy and — critically — the BOM (an item's
  *     `consumes[]`) all live in ZDZ_Item_Engine. The seed SKU catalog and the BOM keyword map
  *     are GONE from code; with an empty catalog every resolver degrades to neutral and nothing
  *     breaks. A fictional demo catalog is available only via the Item Engine's own sample
  *     mechanism (Settings → "Apply sample catalog"), never auto-seeded.
- *   - The off-repo "the stock assistant" bot's baked product-catalog knowledge becomes an in-repo,
+ *   - The assistant prompt is an in-repo,
  *     placeholder-driven prompt template (defaults/assistant-prompt.md) assembled at runtime from
  *     the Business Profile + the live Item Engine catalog, sent through the shared ZDZ_Core_Poe
  *     client. The bot name is a setting (blank ⇒ the platform's default model) — no bot name is
@@ -34,12 +33,12 @@
  *     AES-CBC credential cascade and its own Poe HTTP client are dropped (reuse v1.0.1 core).
  *   - EVERY endpoint gates on REAL app-access (ZDZ_Plugin_API::user_can_access_app), not the
  *     blanket zdz_access_app cap that every role (incl. the shared kiosk) holds — the v1.1.6
- *     source already moved this way; it is preserved.
+ *     build already moved this way; it is preserved.
  *   - Renamed off tssc/TSSC_ → zstock/ZSTOCK_. Tables/options/cron carry deprecated-alias
  *     rename-map entries so an existing install upgrades in place; the item_id columns are
  *     widened by a real guarded migration (see ZSTOCK_DB). No REST routes exist in this module
  *     (admin-ajax only), so there is no namespace to move.
- *   - REPAIR: the source did not actually run — the consumption query used non-existent columns
+ *   - REPAIR: the earlier build did not actually run — the consumption query used non-existent columns
  *     and exact-string keyword equality, and the sync-log table was never created. Rebinding the
  *     catalog/BOM to the Item Engine and unifying the schema fixes all three.
  *
@@ -82,7 +81,7 @@ define( 'ZSTOCK_NONCE', 'zstock_nonce' );
 
 /**
  * The brain-bot answer sentinel. Protocol/marker tokens live in ONE constant, referenced by the
- * engine — never typed twice. The legacy off-repo bot emitted `YABADABA`; that is recorded as a
+ * engine — never typed twice. The legacy sentinel `YABADABA` is recorded as a
  * deprecated alias and stripped for backward compatibility.
  */
 if ( ! defined( 'ZSTOCK_ASSISTANT_SENTINEL' ) ) {
@@ -137,7 +136,7 @@ function zstock_default_model() {
 /**
  * The inventory brain-bot name. A SETTING — never a hardcoded bot name. Blank (the shipped
  * default) means "use the platform's default model with the in-repo prompt template", so the
- * intelligence no longer depends on an off-repo bot's baked catalog.
+ * intelligence never depends on a baked-in catalog.
  */
 function zstock_assistant() {
 	$bot = trim( (string) get_option( 'zstock_assistant', '' ) );

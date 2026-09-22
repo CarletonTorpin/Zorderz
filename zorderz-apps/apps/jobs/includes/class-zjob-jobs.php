@@ -438,7 +438,7 @@ class ZJOB_Jobs {
 			$component = function_exists( 'zjob_default_component' ) ? zjob_default_component() : 'other';
 		}
 
-		// Accept both the generalized crm_contact_id and the legacy nutshell_contact_id.
+		// Accept both the neutral crm_contact_id and the legacy nutshell_contact_id.
 		$contact_id = (int) ( $data['crm_contact_id'] ?? ( $data['nutshell_contact_id'] ?? 0 ) );
 
 		$ok = $wpdb->insert(

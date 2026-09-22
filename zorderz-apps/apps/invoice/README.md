@@ -18,7 +18,7 @@ payments, no credentials, no seeds. Everything is configured by an admin under
 - Optionally a Stripe **Connected Account** for Stripe Connect payouts, and a
   FreshBooks OAuth app for pay-link injection.
 
-## Generalizations vs. the internal original
+## Configurable settings
 
 - **Platform fee is now a disclosed setting**, not a baked constant.
   *Invoices → Settings → Platform fee (%)*, **default 0 (off)**. It is charged as

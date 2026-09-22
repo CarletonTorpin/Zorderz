@@ -24,7 +24,7 @@
  * but an attempt to weaken or remove a safety-floor rule is rejected and logged —
  * the floor only ever rises.
  *
- * The corpus recovered here is the off-repo assistant's rule set brought IN-REPO as
+ * The corpus here ships IN-REPO as
  * neutral, versioned templates: of the 62 live rules, the ~39 that name no company, product,
  * person, vendor or place ship as Core doctrine; the parameterised ones take their
  * specifics from the Business Profile, the Item Engine and the connection config at

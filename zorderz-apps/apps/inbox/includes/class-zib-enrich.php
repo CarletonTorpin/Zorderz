@@ -17,7 +17,7 @@
  * enrich_message() / backfill_batch() are the WP/DB seam; both fail SOFT — a bad parse or
  * DB hiccup logs and returns, never breaking ingestion.
  *
- * PRODUCT TAXONOMY is Identity, not Core (v1.8 generalization). The mechanism —
+ * PRODUCT TAXONOMY is Identity, not Core (v1.8). The mechanism —
  * canonicalise a supplier's many phrasings for one product to a single family label so
  * counts aggregate — lives here; the specific families a business sells are supplied via
  * the `zib_product_families` / `zib_product_hint_terms` filters (an Identity Pack fills

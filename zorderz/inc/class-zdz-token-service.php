@@ -207,7 +207,7 @@ class ZDZ_Token_Service {
 	 *
 	 * @param array $args See the file docblock. `provider` selects the instance;
 	 *                    omitted → the default provider (contract-compatible with
-	 *                    the pre-generalization single-provider service).
+	 *                    the earlier single-provider service).
 	 * @return string New/valid access token, or '' on failure (caller falls back).
 	 */
 	public static function refresh( array $args = array() ) {
@@ -682,7 +682,7 @@ class ZDZ_Token_Service {
 
 		add_action( 'init', static function () {
 			// Retire any predecessor cron hooks a provider declares (e.g. a
-			// pre-Zorderz must-use plugin's hook), then ensure our single
+			// legacy must-use plugin's hook), then ensure our single
 			// 15-minute maintenance tick is scheduled.
 			foreach ( self::providers() as $provider ) {
 				foreach ( $provider['legacy_cron'] as $legacy_hook ) {
@@ -699,7 +699,7 @@ class ZDZ_Token_Service {
 
 		// Deprecated-alias migration: publish each provider's old canonical option
 		// keys → the zdz_tok_<key>_* store, applied (copy-not-move) by the theme's
-		// rename migration so a pre-Zorderz install upgrades in place.
+		// rename migration so a legacy install upgrades in place.
 		add_filter( 'zdz_rename_map', array( __CLASS__, 'rename_map' ) );
 
 		add_action( 'admin_notices', array( __CLASS__, 'admin_notice' ) );
@@ -810,7 +810,7 @@ class ZDZ_Token_Service {
 ZDZ_Token_Service::boot();
 
 /*
- * Deprecated alias for a pre-Zorderz install upgrading in place. Any legacy
+ * Deprecated alias for a legacy install upgrading in place. Any legacy
  * consumer still calling the old class name resolves to this service (the public
  * contract is identical: refresh()/get_refresh_token()/get_access_token()). Only
  * added when the legacy class is absent, so it never collides with a still-

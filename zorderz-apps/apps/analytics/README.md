@@ -4,7 +4,7 @@ The conversational analytics assistant: the **Chat** surface of the Zorderz
 dashboard. Ask a question in plain language and the assistant answers from the
 business's own systems of record.
 
-Generalized from the internal analytics/chat plugin. App id kept as
+The analytics/chat app. App id kept as
 **`sales-analytics`** (the theme grants and labels it, and the dashboard KPI tiles +
 digest deep-link route to it). PHP prefix `zana` / `ZANA_` (renamed from the legacy
 analytics prefix, which is recorded as a deprecated alias in the rename map). Text domain
@@ -22,7 +22,7 @@ app shares them, not just this one:
   system of record confirms it.
 - **`ZDZ_Rule_Governance`**: rules as typed, parameterised objects in a registry;
   the prompt is a **rendering** of the rule set. A cited rule that does not exist
-  fails loudly. The off-repo assistant's rule corpus is brought in-repo as neutral,
+  fails loudly. The rule corpus ships in-repo as neutral,
   placeholder-driven templates; safety-floor rules are non-overridable.
 - **`ZDZ_Model_Registry`**: central per-task model slots (chat/planner/auditor/
   memory/transcription/vision/dedup/kiosk), replacing the ~12 hardcoded model

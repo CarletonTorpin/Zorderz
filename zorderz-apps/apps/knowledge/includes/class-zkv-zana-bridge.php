@@ -171,7 +171,7 @@ class ZKV_ZANA_Bridge {
 
 		// Layer 2: Content chunk search (actual document text).
 		// Boost limit when the query looks pricing-related. The keyword list is
-		// GENERALIZED: generic pricing cues ship in Core, and the business-specific
+		// CONFIGURABLE: generic pricing cues ship in Core, and the business-specific
 		// product/brand tokens that used to be hardcoded here come from the
 		// settings-driven zkv_pricing_keywords() (empty by default; fed by the
 		// Item Engine through the zkv_product_keywords filter when it lands).
@@ -320,7 +320,7 @@ class ZKV_ZANA_Bridge {
 				// wider dimension ranges (more columns = more numbers), so a
 				// narrower line can get squeezed out. Rescue a chunk that names any
 				// CONFIGURED product/brand token and still carries pricing data.
-				// GENERALIZED: the token list is tenant data (zkv_product_keywords),
+				// CONFIGURABLE: the token list is business data (zkv_product_keywords),
 				// matched with OCR-spacing tolerance (a token like "WIDGET" also
 				// matches the space-mangled "W I D G E T" PDF extraction produces). Core
 				// ships NO tokens, so this boost simply no-ops and density scoring

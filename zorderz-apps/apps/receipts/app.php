@@ -86,7 +86,7 @@ function zrcpt_asset_ver( $rel ) {
    ══════════════════════════════════════════════════════════════════════ */
 
 /**
- * The admin-chosen item id/subtype this tenant's receipts are about (the generalization of
+ * The admin-chosen item id/subtype this tenant's receipts are about (the configurable replacement for
  * the old product-named mode's reference filter). Ships EMPTY — an empty value means "any completed job",
  * i.e. no product-tag restriction. NO product name is hardcoded.
  */
