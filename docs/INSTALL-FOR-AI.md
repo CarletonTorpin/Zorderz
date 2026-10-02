@@ -378,6 +378,10 @@ Do not disable TLS verification, do not unset the proxy, and do not retry an org
 
 ---
 
+**Behind a reverse proxy or CDN.** Login-code rate limits key on `REMOTE_ADDR`, never a forwarded header a client can set. If the proxy does not pass the visitor's address through as `REMOTE_ADDR`, every visitor shares one bucket and a few requests lock sign-in for everyone. Restore the real client address at the web server (for example the proxy's real-IP module), or return a proxy-validated address from the `zdz_magic_link_rate_limit_ip` filter.
+
+---
+
 ## What you must never do
 
 - **Never invent business data.** No names, catalog items, prices, people, territories or rules unless the operator supplied them (or they arrived in a bundle). The platform ships empty on purpose.

@@ -668,14 +668,19 @@ class ZDZ_Magic_Link_Bridge {
 			return new WP_REST_Response( [ 'success' => true ], 200 );
 		}
 
-		// Per-account cap: however many addresses a caller sends from, one account can have at
-		// most three codes minted per window, so the pool of live codes for a victim stays bounded
-		// and their inbox cannot be flooded. Answer as if sent, so the cap reveals nothing.
+		// Per-account caps, so the pool of live codes for one person stays bounded and their inbox
+		// cannot be flooded: at most 3 codes per window from any one address, and 10 in total.
+		// The per-address part means a stranger filling the cap from their own address does not
+		// stop the account's owner from getting a code from theirs. Answer as if sent either way,
+		// so the caps reveal nothing.
+		$pair_key   = self::TRANSIENT_PREFIX . 'otp_user_ip_' . md5( (int) $user->ID . '|' . self::rate_limit_ip() );
 		$user_key   = self::TRANSIENT_PREFIX . 'otp_user_' . (int) $user->ID;
+		$pair_count = (int) get_transient( $pair_key );
 		$user_count = (int) get_transient( $user_key );
-		if ( $user_count >= 3 ) {
+		if ( $pair_count >= 3 || $user_count >= (int) apply_filters( 'zdz_magic_link_account_send_cap', 10 ) ) {
 			return new WP_REST_Response( [ 'success' => true ], 200 );
 		}
+		set_transient( $pair_key, $pair_count + 1, self::REQUEST_TTL );
 		set_transient( $user_key, $user_count + 1, self::REQUEST_TTL );
 
 		// Generate the code
