@@ -209,14 +209,12 @@ class ZDZ_Magic_Link_Bridge {
 		// Verify the email belongs to a valid user (don't reveal which). Resolves the
 		// account email OR an admin-configured login alias; returns null on a genuine
 		// miss, so the anti-enumeration no-op below is unchanged.
-		$user = self::resolve_login_user( $email );
-		if ( ! $user ) {
-			// Return success even for invalid emails to avoid user enumeration
-			return new WP_REST_Response( [ 'success' => true ], 200 );
-		}
-
-		// Rate limit: max 5 inits per IP per 10 minutes
-		$ip_key = self::TRANSIENT_PREFIX . 'rate_' . md5( self::get_client_ip() );
+		// Rate limit: max 5 inits per IP per 10 minutes. Counted BEFORE the account lookup so
+		// that existing and unknown addresses are throttled identically (otherwise the 429 itself
+		// tells a caller which addresses have accounts), and keyed on REMOTE_ADDR via
+		// rate_limit_ip(): a forwarded header is client-controlled and would hand every request
+		// a fresh bucket.
+		$ip_key = self::TRANSIENT_PREFIX . 'rate_' . md5( self::rate_limit_ip() );
 		$count  = (int) get_transient( $ip_key );
 		if ( $count >= 5 ) {
 			return new WP_Error(
@@ -226,6 +224,12 @@ class ZDZ_Magic_Link_Bridge {
 			);
 		}
 		set_transient( $ip_key, $count + 1, self::REQUEST_TTL );
+
+		$user = self::resolve_login_user( $email );
+		if ( ! $user ) {
+			// Return success even for invalid emails to avoid user enumeration
+			return new WP_REST_Response( [ 'success' => true ], 200 );
+		}
 
 		// Store the request
 		$data = [
@@ -642,7 +646,8 @@ class ZDZ_Magic_Link_Bridge {
 		$email = $request->get_param( 'email' );
 
 		// Rate limit: max 5 code sends per IP per 10 minutes
-		$ip_key = self::TRANSIENT_PREFIX . 'otp_rate_' . md5( self::get_client_ip() );
+		// Keyed on REMOTE_ADDR (rate_limit_ip()), never a client-supplied forwarded header.
+		$ip_key = self::TRANSIENT_PREFIX . 'otp_rate_' . md5( self::rate_limit_ip() );
 		$count  = (int) get_transient( $ip_key );
 		if ( $count >= 5 ) {
 			return new WP_Error(
@@ -662,6 +667,21 @@ class ZDZ_Magic_Link_Bridge {
 			// We still delay the same amount so timing attacks don't work.
 			return new WP_REST_Response( [ 'success' => true ], 200 );
 		}
+
+		// Per-account caps, so the pool of live codes for one person stays bounded and their inbox
+		// cannot be flooded: at most 3 codes per window from any one address, and 10 in total.
+		// The per-address part means a stranger filling the cap from their own address does not
+		// stop the account's owner from getting a code from theirs. Answer as if sent either way,
+		// so the caps reveal nothing.
+		$pair_key   = self::TRANSIENT_PREFIX . 'otp_user_ip_' . md5( (int) $user->ID . '|' . self::rate_limit_ip() );
+		$user_key   = self::TRANSIENT_PREFIX . 'otp_user_' . (int) $user->ID;
+		$pair_count = (int) get_transient( $pair_key );
+		$user_count = (int) get_transient( $user_key );
+		if ( $pair_count >= 3 || $user_count >= (int) apply_filters( 'zdz_magic_link_account_send_cap', 10 ) ) {
+			return new WP_REST_Response( [ 'success' => true ], 200 );
+		}
+		set_transient( $pair_key, $pair_count + 1, self::REQUEST_TTL );
+		set_transient( $user_key, $user_count + 1, self::REQUEST_TTL );
 
 		// Generate the code
 		$short_code   = self::generate_short_code();
@@ -802,9 +822,9 @@ class ZDZ_Magic_Link_Bridge {
 		// a plain code email needs none.
 		$args['attachments'] = [];
 
+		// Never log the code itself: it is a live login credential.
 		error_log( sprintf(
-			'ZDZ_Magic_Link_Bridge: replaced Magic Login email with code-only message (code %s) for %s',
-			$code_display,
+			'ZDZ_Magic_Link_Bridge: replaced Magic Login email with code-only message for %s',
 			$user->user_login
 		) );
 

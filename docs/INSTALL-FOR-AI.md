@@ -293,7 +293,9 @@ Use this **only** when you are evaluating Zorderz and want every app populated w
 
 **Where:** wp-admin -> **Tools -> Zorderz Data**, the **"Sample data"** card. The button is **"Load TestCo sample data"**, with a **"Preview counts only (write nothing)"** checkbox for a dry run. It is a wp-admin feature with no WP-CLI command; drive it in the browser or a logged-in session that carries the `zdz_load_sample` nonce. If the build ships no seed, this card is absent, so use 8A or 8B.
 
-**Action:** optionally check "Preview counts only" and submit to read the counts, then submit again unchecked to load. It imports the demo company (catalog, price list, estimates and invoices, a team roster, chat history, and knowledge documents), **keeps you as the owner**, and does **not** change your WordPress site settings. It uses fixed record ids, so loading again refreshes the sample rather than duplicating it.
+**Action:** "Preview counts only" is checked by default; submit once to read the counts, then uncheck it and submit again to load. It imports the demo company (catalog, price list, estimates and invoices, a team roster, chat history, and knowledge documents), **keeps you as the owner**, and does **not** change your WordPress site settings. It uses fixed record ids, so loading again refreshes the sample rather than duplicating it.
+
+**Demo accounts.** The sample adds 13 demo staff accounts. Each one gets its own random password on this install, so none of them can sign in until an administrator resets a password; the seed carries no password hash. If an account id the sample uses is already taken by a real account, the loader refuses and names the conflict instead of overwriting it. On a fresh install this never happens.
 
 **Browser-driving note:** set the checkbox by its `checked` property and submit with `input.form.submit()` if a button click misses, exactly as in step 8A.
 
@@ -308,10 +310,19 @@ curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/item-engine/cata
 
 ## 9. Connect providers and the Ai gateway (required after an import)
 
-**wp-admin:** Zorderz -> Settings -> **App Authorizations** (Connections). This is the single place external systems are registered; apps read credentials from here rather than storing their own. **After a bundle import this step is mandatory**, because the bundle carried no secrets, so every integration starts blank exactly as on a fresh install.
+**Where credentials are entered:** wp-admin -> **Zorderz** (the Core settings page, `admin.php?page=zdz-core-settings`). This is the Core credential store; apps read credentials from it rather than storing their own. **After a bundle import this step is mandatory**, because the bundle carried no secrets, so every integration starts blank exactly as on a fresh install.
 
-- **Billing / CRM / scheduling:** register the provider. API-key providers can be set through the connection form; OAuth providers require completing the provider's consent flow in a browser; do not attempt to bypass it.
-- **Ai gateway:** the v1 gateway is **Poe** (one key reaches most models). Enter the key here, then open the **Model Registry** and assign a model to each task slot. The gateway is provider-agnostic and the slots are configurable, so no model or vendor is hardwired.
+- **Ai gateway:** the v1 gateway is **Poe** (one key reaches most models). Enter the key on the Core settings page, then open the **Model Registry** and assign a model to each task slot. The gateway is provider-agnostic and the slots are configurable, so no model or vendor is hardwired.
+- **Billing (FreshBooks):** enter the Client ID, Client Secret and the account's tokens on the Core settings page. In-dashboard authorization is not available yet; the dashboard's **Authorize FreshBooks** button says so and points here. OAuth providers require completing the provider's consent flow in a browser; do not attempt to bypass it.
+- **CRM (Nutshell):** an administrator can enter the company login email and API key either on the Core settings page or from the dashboard's **Settings -> App Authorizations** card; both write the same store.
+- **Mailbox (Inbox):** wp-admin -> **Settings -> Zorderz Inbox**. Reading is the default. Compose, reply, forward and triage appear only when an administrator turns on **Sending & triage** and each user reconnects to grant `Mail.Send` and `Mail.ReadWrite`.
+
+**Verify:** the dashboard's **Settings -> App Authorizations** card shows each configured provider as **Connected**:
+
+```bash
+curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/app-authorizations"
+#    {"success":true,"data":{"freshbooks":{"connected":true,...},"nutshell":{"connected":true,...},"poe":{"connected":true}}}
+```
 
 Connections are optional for a first boot; the apps stand alone and hook into external systems when they exist. But the Chat assistant and the billing-backed apps (Invoices, Estimates, Receipts) need their respective providers to do useful work.
 
@@ -364,6 +375,10 @@ Uploading a newer bundle over an existing one does not fire WordPress's activati
 | One app shows an error notice on load | That single app failed to load | It is isolated by design; the others keep working; read the notice, fix that app |
 
 Do not disable TLS verification, do not unset the proxy, and do not retry an organization policy denial; surface it instead.
+
+---
+
+**Behind a reverse proxy or CDN.** Login-code rate limits key on `REMOTE_ADDR`, never a forwarded header a client can set. If the proxy does not pass the visitor's address through as `REMOTE_ADDR`, every visitor shares one bucket and a few requests lock sign-in for everyone. Restore the real client address at the web server (for example the proxy's real-IP module), or return a proxy-validated address from the `zdz_magic_link_rate_limit_ip` filter.
 
 ---
 

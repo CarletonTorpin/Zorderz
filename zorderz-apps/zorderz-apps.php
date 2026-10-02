@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Apps
  * Plugin URI:  https://zorderz.org
  * Description: The Zorderz app bundle - 20 apps (Camera, Media, Sketch Pad, Messaging, Quick-ID, Game, Invoices, Knowledge Base, Scheduler, Jobs, Surveys, Stock, Leads, Prep, Receipts, Estimates, Commission, Dot Plot, Email, and the Chat assistant). Requires the Zorderz theme, which provides the dashboard, roles, permissions, shared media store, Item Engine and Core services these apps register into.
- * Version:     1.10.1
+ * Version:     1.10.2
  * Author:      Zorderz
  * Author URI:  https://zorderz.com
  * License:     GPL-2.0-or-later
@@ -50,7 +50,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * for the rare boot where get_file_data() is not yet available.
  */
 if ( ! defined( 'ZDZ_APPS_VERSION' ) ) {
-	$zdz_apps_ver = '1.7.2';
+	$zdz_apps_ver = '1.10.2';
 	if ( function_exists( 'get_file_data' ) ) {
 		$zdz_apps_hdr = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
 		if ( ! empty( $zdz_apps_hdr['Version'] ) ) {
@@ -75,9 +75,33 @@ define( 'ZDZ_APPS_DIR', plugin_dir_path( __FILE__ ) );
  * debug-log reader already picks up. Off by default — no behaviour change on a
  * normal install. Applied as early as possible so it catches the whole request.
  */
+/**
+ * Where debug capture writes. Never a fixed, guessable path under wp-content: the file
+ * holds runtime diagnostics, so it goes in a directory named from the site's own salt,
+ * with deny-all rules for Apache and an index guard. (nginx ignores .htaccess; the random
+ * directory name is what protects it there.)
+ */
+function zdz_apps_debug_log_path(): string {
+	$content = defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : ABSPATH . 'wp-content';
+	$seed    = ( defined( 'AUTH_SALT' ) ? AUTH_SALT : '' ) . ( defined( 'ABSPATH' ) ? ABSPATH : '' ) . 'zdz-debug-log';
+	$dir     = $content . '/zorderz-logs-' . substr( hash( 'sha256', $seed ), 0, 24 );
+	if ( ! is_dir( $dir ) ) {
+		@mkdir( $dir, 0750, true );
+	}
+	if ( is_dir( $dir ) ) {
+		if ( ! file_exists( $dir . '/.htaccess' ) ) {
+			@file_put_contents( $dir . '/.htaccess', "Require all denied\nDeny from all\n" );
+		}
+		if ( ! file_exists( $dir . '/index.php' ) ) {
+			@file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" );
+		}
+	}
+	return $dir . '/zorderz-debug.log';
+}
+
 if ( function_exists( 'get_option' ) && get_option( 'zdz_debug_capture' ) ) {
 	@ini_set( 'log_errors', '1' );
-	@ini_set( 'error_log', ( defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : ABSPATH . 'wp-content' ) . '/zorderz-debug.log' );
+	@ini_set( 'error_log', zdz_apps_debug_log_path() );
 }
 
 /**
@@ -326,6 +350,12 @@ add_action(
 			}
 		}
 		update_option( 'zdz_apps_version', ZDZ_APPS_VERSION, false );
+		// 1.10.2: debug capture used to write a world-readable wp-content/zorderz-debug.log.
+		// Remove that legacy file on upgrade; capture now writes to zdz_apps_debug_log_path().
+		$legacy_log = ( defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : ABSPATH . 'wp-content' ) . '/zorderz-debug.log';
+		if ( is_file( $legacy_log ) ) {
+			@unlink( $legacy_log );
+		}
 	},
 	4
 );
@@ -365,7 +395,7 @@ function zdz_apps_read_debug_log( $request ) {
 	if ( 'on' === $cap ) {
 		update_option( 'zdz_debug_capture', '1', false );
 		@ini_set( 'log_errors', '1' );
-		@ini_set( 'error_log', ( defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : ABSPATH . 'wp-content' ) . '/zorderz-debug.log' );
+		@ini_set( 'error_log', zdz_apps_debug_log_path() );
 		error_log( '[zorderz] debug capture enabled at ' . gmdate( 'c' ) );
 	} elseif ( 'off' === $cap ) {
 		update_option( 'zdz_debug_capture', '', false );
@@ -380,6 +410,7 @@ function zdz_apps_read_debug_log( $request ) {
 	$content_dir = defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : ( ABSPATH . 'wp-content' );
 	$cands = array(
 		$content_dir . '/debug.log',
+		zdz_apps_debug_log_path(),
 		(string) ini_get( 'error_log' ),
 		ABSPATH . 'error_log',
 		dirname( ABSPATH ) . '/logs/php_errorlog',

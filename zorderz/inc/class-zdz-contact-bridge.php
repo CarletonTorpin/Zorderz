@@ -450,8 +450,8 @@ class ZDZ_Contact_Bridge {
 	 * phone/email/address.
 	 *
 	 * Confident (true) when ANY of:
-	 *   (A) the resolved name CONTAINS every asked word (exact name, "Smith" -> "John
-	 *       Smith", or an organisation name) — substring, not fuzzy;
+	 *   (A) every asked word is a whole WORD of the resolved name (exact name, "Smith" ->
+	 *       "John Smith", or an organisation name) — word equality, never a substring;
 	 *   (B) the surname is EXACT and the first name is compatible or was not asked;
 	 *   (C) a near/soundalike surname (recall) CORROBORATED by a present, compatible asked
 	 *       first name.
@@ -473,11 +473,18 @@ class ZDZ_Contact_Bridge {
 
 		$asked_l   = strtolower( trim( $asked_lname ) );
 		$res_l     = strtolower( trim( $res_lname ) );
-		$res_full  = strtolower( trim( $resolved_name ) );
-		$sig_toks  = array_values( array_filter( $aq, function ( $t ) { return strlen( $t ) > 1; } ) );
+		// Rule (A) compares whole WORDS, not substrings: "Don Lee" must not unlock "Brandon
+		// Lee", nor "Ed Smith" unlock "Fred Smith". Every significant asked word has to be a
+		// word of the resolved name.
+		$word_split = function ( string $v ): array {
+			$parts = preg_split( '/[^\p{L}\p{N}]+/u', function_exists( 'mb_strtolower' ) ? mb_strtolower( $v ) : strtolower( $v ) );
+			return array_values( array_filter( (array) $parts, function ( $t ) { return '' !== $t; } ) );
+		};
+		$res_words = $word_split( $resolved_name );
+		$sig_toks  = array_values( array_filter( $word_split( $query ), function ( $t ) { return strlen( $t ) > 1; } ) );
 		$contained = ! empty( $sig_toks );
 		foreach ( $sig_toks as $tok ) {
-			if ( strpos( $res_full, strtolower( $tok ) ) === false ) { $contained = false; break; }
+			if ( ! in_array( $tok, $res_words, true ) ) { $contained = false; break; }
 		}
 		$surname_exact   = ( $asked_l !== '' && $asked_l === $res_l );
 		$fn_corroborated = ( $asked_fname !== '' && $res_fname !== '' && self::first_name_compatible( $asked_fname, $res_fname ) );
@@ -574,7 +581,18 @@ class ZDZ_Contact_Bridge {
 			return true;
 		}
 		if ( class_exists( 'ZDZ_Name_Match' ) ) {
-			return \ZDZ_Name_Match::first_names_equivalent( $a, $b ) || \ZDZ_Name_Match::sounds_like( $a, $b );
+			// Precise signals only, as in surname_related(): the curated nickname map, curated
+			// soundalike variants, and sound-key equality. Not sounds_like(), whose substring
+			// clause made "Don" compatible with "Brandon" and "Ann" with "Joanne", which let the
+			// gate hand back a different person's contact details.
+			if ( \ZDZ_Name_Match::first_names_equivalent( $a, $b ) ) {
+				return true;
+			}
+			if ( in_array( $b, \ZDZ_Name_Match::soundalike_variants( $a ), true ) || in_array( $a, \ZDZ_Name_Match::soundalike_variants( $b ), true ) ) {
+				return true;
+			}
+			$ka = \ZDZ_Name_Match::name_sound_key( $a );
+			return $ka !== '' && $ka === \ZDZ_Name_Match::name_sound_key( $b );
 		}
 		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) {
 			return true;

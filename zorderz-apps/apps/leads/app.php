@@ -444,18 +444,13 @@ function zl_activate() {
         KEY idx_last_generated (last_generated_at)
     ) {$charset};" );
 
-    // v1.8.2: Failsafe — only stamp version if all 3 tables were created successfully.
-    $required_tables = array( $t_batches, $t_leads, $t_history );
-    $all_exist = true;
-    foreach ( $required_tables as $tbl ) {
-        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $tbl ) ) !== $tbl ) {
-            error_log( 'ZL ACTIVATE: Table ' . $tbl . ' missing after dbDelta — skipping version stamp.' );
-            $all_exist = false;
-        }
-    }
-    if ( $all_exist ) {
-        update_option( 'zl_db_version', ZL_VERSION );
-    }
+    // 1.10.2: activation no longer stamps zl_db_version itself. Stamping the current version
+    // here meant zl_maybe_upgrade() returned early on every fresh install, so the version-gated
+    // steps never ran: no zl_lead_forwards table, no updated_at / error_message /
+    // status_updated_by / callback_date columns (db/migrate-2.0.0.php), and no default
+    // permission seed. zl_maybe_upgrade() is called at the end of activation instead; it syncs
+    // the schema, runs every migration the stored version has not seen, and stamps the version
+    // only after its own table failsafe passes.
 
     // Operational tuning defaults only (batch size / lookback / cooldown). NO business data
     // is seeded: the roster resolves through ZDZ_Party and the territory map ships empty.
@@ -468,6 +463,8 @@ function zl_activate() {
     if ( ! get_option( 'zl_cooldown_days' ) ) {
         update_option( 'zl_cooldown_days', 90 );
     }
+
+    zl_maybe_upgrade();
 }
 
 // ── Deactivation ───────────────────────────────────────────────────
@@ -688,8 +685,12 @@ function zl_maybe_upgrade() {
         error_log( 'ZL v2.0.0 migration: Lead interaction model enabled, forward-to-team table created, permissions updated.' );
     }
 
-    // v1.5.0 migration — Full-parity widget + permission system
-    if ( version_compare( $db_ver, '1.5.0', '<' ) ) {
+    // v1.5.0 migration — Full-parity widget + permission system.
+    // Skipped on a fresh install ($db_ver '0'): this seed is the 1.5-era permission set, and
+    // the later blocks that would update it ran first (they are ordered newest-first), so on a
+    // fresh install it would freeze the old set in place. With zl_permissions unset,
+    // ZL_Permissions::get_config() falls back to the current get_defaults().
+    if ( '0' !== (string) $db_ver && version_compare( $db_ver, '1.5.0', '<' ) ) {
         // Initialize default permission configuration if not set
         if ( ! get_option( 'zl_permissions' ) ) {
             update_option( 'zl_permissions', array(

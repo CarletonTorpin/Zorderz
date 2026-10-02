@@ -138,7 +138,7 @@ class ZDZ_Data_Portability {
 		return (array) apply_filters( 'zdz_export_secret_markers', array(
 			'api_key', 'apikey', 'client_secret', 'client_id', 'access_token',
 			'refresh_token', 'oauth', '_secret', 'secret_', 'password', '_pass',
-			'private_key', 'webhook_secret', 'signing', 'bearer',
+			'private_key', 'private_pem', 'vapid_private', 'webhook_secret', 'signing', 'bearer',
 		) );
 	}
 
@@ -150,7 +150,7 @@ class ZDZ_Data_Portability {
 	 */
 	private static function secret_suffixes(): array {
 		return (array) apply_filters( 'zdz_export_secret_suffixes', array(
-			'_key', '_token', '_secret', '_pass', '_password',
+			'_key', '_token', '_secret', '_pass', '_password', '_pem',
 		) );
 	}
 
@@ -173,6 +173,7 @@ class ZDZ_Data_Portability {
 			'zsch_google_token',  // Google OAuth bundle, if connected
 			'zkv_poe_api_key',    // Knowledge-vault Poe key (also encrypted at rest)
 			'zic_fb_oauth',       // FreshBooks OAuth store, if present
+			'zim_vapid_private_pem', // Team (messaging) Web Push signing key
 		) );
 		$names = (array) apply_filters( 'zdz_export_secret_option_names', $names );
 		return array_map( 'strtolower', array_values( array_unique( array_filter( $names ) ) ) );
@@ -186,7 +187,7 @@ class ZDZ_Data_Portability {
 	private static function secret_value_keys(): array {
 		return (array) apply_filters( 'zdz_export_secret_value_keys', array(
 			'access_token', 'refresh_token', 'client_secret', 'api_key', 'apikey',
-			'private_key', 'webhook_secret', 'bearer', 'oauth_token', 'password',
+			'private_key', 'private_pem', 'webhook_secret', 'bearer', 'oauth_token', 'password',
 			'client_id', 'secret',
 		) );
 	}
@@ -207,6 +208,7 @@ class ZDZ_Data_Portability {
 		global $wpdb;
 		return array(
 			'session_tokens',
+			'zdz_kiosk_demo', // a live kiosk switch (and its PIN hash) belongs to one install's session
 			$wpdb->prefix . 'capabilities', // roles are exported separately and re-applied
 			$wpdb->prefix . 'user_level',
 		);
@@ -215,6 +217,62 @@ class ZDZ_Data_Portability {
 	/* ---------------------------------------------------------------------- */
 	/* Discovery                                                               */
 	/* ---------------------------------------------------------------------- */
+
+	/**
+	 * Option names that describe THIS install's state rather than the business, and so never
+	 * travel in either direction: schema/version markers (importing one would tell a fresh
+	 * install that migrations it never ran are done, or re-run ones it did), migration
+	 * bookkeeping, diagnostic switches (debug capture writes a log into wp-content), and the
+	 * Web Push keypair (each install must sign with its own key).
+	 */
+	public static function is_non_portable_option( string $name ): bool {
+		$patterns = (array) apply_filters( 'zdz_export_non_portable_option_patterns', array(
+			'/_db_version$/',
+			'/_schema$/',          // per-table schema markers (zdz_media_schema, zdz_notifications_schema, ...)
+			'/_rewrite_flushed$/', // one-time rewrite flush flags
+			'/^zdz_(apps|item_engine|audit_log|theme_db|rename_migration)_version$/',
+			'/^zdz_rename_migration_/',
+			'/^zdz_migrated_/',
+			'/_migrated$/',
+			'/^zdz_debug_/',
+			'/^zdz_apps_autoinstall/',
+			'/^zim_vapid_/',
+		) );
+		foreach ( $patterns as $re ) {
+			if ( is_string( $re ) && '' !== $re && @preg_match( $re, $name ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * True when a bare table name (without $wpdb->prefix) may be written by an import: it must
+	 * carry a Zorderz table prefix and must not be on the skip list. This is the same rule the
+	 * export uses to choose tables, applied on the way back in, so a crafted bundle cannot
+	 * REPLACE rows into WordPress core tables (options, users, usermeta, posts, ...).
+	 */
+	public static function is_importable_table( string $bare ): bool {
+		if ( '' === $bare || preg_match( '/[^A-Za-z0-9_]/', $bare ) ) {
+			return false;
+		}
+		$hit = false;
+		foreach ( self::table_prefixes() as $tp ) {
+			if ( '' !== $tp && 0 === strpos( $bare, $tp ) ) {
+				$hit = true;
+				break;
+			}
+		}
+		if ( ! $hit ) {
+			return false;
+		}
+		foreach ( self::skip_table_suffixes() as $sfx ) {
+			if ( '' !== $sfx && strlen( $bare ) >= strlen( $sfx ) && substr( $bare, -strlen( $sfx ) ) === $sfx ) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 	/** All Zorderz custom tables present on this install (minus the skip list). */
 	public static function discover_tables(): array {
@@ -225,31 +283,12 @@ class ZDZ_Data_Portability {
 		if ( ! $names ) {
 			return $out;
 		}
-		$tprefixes = self::table_prefixes();
-		$skips     = self::skip_table_suffixes();
 		foreach ( $names as $full ) {
 			if ( 0 !== strpos( $full, $prefix ) ) {
 				continue; // only this install's tables
 			}
 			$bare = substr( $full, strlen( $prefix ) ); // e.g. zdz_items
-			$hit  = false;
-			foreach ( $tprefixes as $tp ) {
-				if ( 0 === strpos( $bare, $tp ) ) {
-					$hit = true;
-					break;
-				}
-			}
-			if ( ! $hit ) {
-				continue;
-			}
-			$skip = false;
-			foreach ( $skips as $s ) {
-				if ( strlen( $bare ) >= strlen( $s ) && substr( $bare, -strlen( $s ) ) === $s ) {
-					$skip = true;
-					break;
-				}
-			}
-			if ( $skip ) {
+			if ( ! self::is_importable_table( $bare ) ) {
 				continue;
 			}
 			$out[] = $full;
@@ -351,6 +390,9 @@ class ZDZ_Data_Portability {
 			if ( self::is_secret( $name ) ) {
 				$excluded[] = $name;
 				continue;
+			}
+			if ( self::is_non_portable_option( $name ) ) {
+				continue; // install state, not business data
 			}
 			// Even for a non-secret name, deep-redact any secret-keyed leaves in the value
 			// (e.g. an OAuth token bundle) so a credential nested in a value never travels.
@@ -794,6 +836,10 @@ class ZDZ_Data_Portability {
 					$res['skipped'][] = "option:{$name} (not a Zorderz option)";
 					continue;
 				}
+				if ( self::is_non_portable_option( (string) $name ) ) {
+					$res['skipped'][] = "option:{$name} (install state, not portable)";
+					continue;
+				}
 				if ( ! $dry ) {
 					update_option( $name, $value );
 				}
@@ -837,6 +883,11 @@ class ZDZ_Data_Portability {
 				$att['post_type'] = 'attachment';
 				$row = array_intersect_key( $att, array_flip( $post_cols ) );
 				if ( ! $dry ) {
+					$owner = $wpdb->get_var( $wpdb->prepare( "SELECT post_type FROM {$wpdb->posts} WHERE ID = %d", (int) $att['ID'] ) );
+					if ( $owner && 'attachment' !== $owner ) {
+						$res['skipped'][] = "attachment {$att['ID']} (id belongs to a {$owner})";
+						continue;
+					}
 					$wpdb->replace( $wpdb->posts, $row );
 					$id = (int) $att['ID'];
 					foreach ( (array) $meta as $mk => $mv ) {
@@ -854,6 +905,10 @@ class ZDZ_Data_Portability {
 			foreach ( $bundle['tables'] as $bare => $rows ) {
 				$bare = preg_replace( '/[^A-Za-z0-9_]/', '', (string) $bare ); // defensive: table name from an uploaded file
 				if ( '' === $bare ) {
+					continue;
+				}
+				if ( ! self::is_importable_table( $bare ) ) {
+					$res['skipped'][] = "table:{$bare} (not a Zorderz table)";
 					continue;
 				}
 				$full = $wpdb->prefix . $bare;
@@ -910,8 +965,9 @@ class ZDZ_Data_Portability {
 					}
 					$id = (int) $core['ID'];
 					clean_user_cache( $id ); // REPLACE bypassed the object cache; drop the stale entry (e.g. the admin we just overwrote)
+					$skip_meta = self::skip_user_meta();
 					foreach ( $meta as $mk => $vals ) {
-						if ( self::is_secret( (string) $mk ) ) {
+						if ( self::is_secret( (string) $mk ) || in_array( (string) $mk, $skip_meta, true ) ) {
 							continue;
 						}
 						delete_user_meta( $id, $mk );
@@ -935,6 +991,13 @@ class ZDZ_Data_Portability {
 		if ( ! empty( $bundle['post_types'] ) && is_array( $bundle['post_types'] ) ) {
 			$post_cols = self::columns_for( $wpdb->posts );
 			foreach ( $bundle['post_types'] as $pt => $rows ) {
+				$pt = (string) $pt;
+				// Only Zorderz-owned post types, mirroring the export rule; a bundle cannot
+				// REPLACE pages, posts or another plugin's records by id.
+				if ( ! self::is_zorderz_object( $pt ) ) {
+					$res['skipped'][] = "post_type:{$pt} (not a Zorderz post type)";
+					continue;
+				}
 				$n = 0;
 				foreach ( (array) $rows as $row ) {
 					$meta = isset( $row['meta'] ) ? (array) $row['meta'] : array();
@@ -942,6 +1005,14 @@ class ZDZ_Data_Portability {
 					$core = array_intersect_key( (array) $row, array_flip( $post_cols ) );
 					if ( empty( $core['ID'] ) ) {
 						continue;
+					}
+					$core['post_type'] = $pt; // the section name is authoritative, never the row
+					if ( ! $dry ) {
+						$owner = $wpdb->get_var( $wpdb->prepare( "SELECT post_type FROM {$wpdb->posts} WHERE ID = %d", (int) $core['ID'] ) );
+						if ( $owner && $owner !== $pt ) {
+							$res['skipped'][] = "post {$core['ID']} in {$pt} (id belongs to a {$owner})";
+							continue;
+						}
 					}
 					if ( ! $dry ) {
 						$ok = $wpdb->replace( $wpdb->posts, $core );
@@ -1170,12 +1241,97 @@ class ZDZ_Data_Portability {
 			$zip->close();
 			return array( array( 'type' => 'error', 'msg' => 'The sample-data bundle is invalid.' ), null );
 		}
+		$bundle   = self::prepare_sample_bundle( $bundle );
+		$conflict = self::sample_user_conflicts( $bundle );
+		if ( $conflict ) {
+			$zip->close();
+			return array( array( 'type' => 'error', 'msg' => ( $dry ? 'Dry run: loading would be refused. ' : 'Sample data was not loaded: ' ) . 'it would overwrite existing accounts on this site (' . implode( ', ', $conflict ) . '). Load the sample on a fresh install, or remove those accounts first.' ), null );
+		}
+		if ( ! $dry ) {
+			// The importer keeps an existing row's hash when the bundle's is empty. For sample
+			// accounts that is wrong (a sample loaded before 1.10.2 installed published hashes),
+			// so every demo account gets a fresh random password on every load.
+			foreach ( array_keys( (array) ( $bundle['users'] ?? array() ) ) as $i ) {
+				$bundle['users'][ $i ]['user_pass'] = wp_hash_password( wp_generate_password( 32, true, true ) );
+			}
+		}
 		$media = $dry ? self::count_upload_entries( $zip ) : self::extract_uploads( $zip );
 		$zip->close();
 		$result                = self::import_bundle( $bundle, array( 'dry_run' => $dry ) );
 		$result['media_files'] = $media;
+		if ( ! $dry ) {
+			foreach ( (array) ( $bundle['users'] ?? array() ) as $u ) {
+				if ( ! empty( $u['ID'] ) && get_userdata( (int) $u['ID'] ) ) {
+					update_user_meta( (int) $u['ID'], self::SAMPLE_USER_META, 1 );
+				}
+			}
+		}
 		$notice = array( 'type' => 'success', 'msg' => $dry ? 'Sample-data dry run complete (nothing written).' : 'TestCo sample data loaded.' );
 		return array( $notice, $result );
+	}
+
+	/** User meta that marks an account as created by the sample loader. */
+	const SAMPLE_USER_META = 'zdz_sample_user';
+
+	/**
+	 * Make a sample seed safe to load on any site, whatever the seed file carries:
+	 *  - every demo account gets a fresh random password on this install (an empty hash makes
+	 *    the importer mint one), so no two sites share a login and no published hash works;
+	 *  - per-install state (debug switches, schema markers, the Web Push keypair) is dropped.
+	 */
+	public static function prepare_sample_bundle( array $bundle ): array {
+		if ( ! empty( $bundle['users'] ) && is_array( $bundle['users'] ) ) {
+			foreach ( $bundle['users'] as $i => $u ) {
+				if ( is_array( $u ) ) {
+					$bundle['users'][ $i ]['user_pass']           = '';
+					$bundle['users'][ $i ]['user_activation_key'] = '';
+				}
+			}
+		}
+		if ( ! empty( $bundle['options'] ) && is_array( $bundle['options'] ) ) {
+			foreach ( array_keys( $bundle['options'] ) as $name ) {
+				if ( self::is_non_portable_option( (string) $name ) || self::is_secret( (string) $name ) ) {
+					unset( $bundle['options'][ $name ] );
+				}
+			}
+		}
+		return $bundle;
+	}
+
+	/**
+	 * Accounts on this site that loading the sample would overwrite: a sample user id that is
+	 * already taken by an account the sample loader did not create, or the loader's own account.
+	 *
+	 * @return string[] Human-readable "#id login" labels; empty when the load is safe.
+	 */
+	private static function sample_user_conflicts( array $bundle ): array {
+		$out    = array();
+		$acting = get_current_user_id();
+		foreach ( (array) ( $bundle['users'] ?? array() ) as $u ) {
+			$id = (int) ( $u['ID'] ?? 0 );
+			if ( $id <= 0 ) {
+				continue;
+			}
+			$existing = get_userdata( $id );
+			if ( ! $existing ) {
+				continue;
+			}
+			if ( $id === $acting ) {
+				$out[] = '#' . $id . ' ' . $existing->user_login;
+				continue;
+			}
+			if ( get_user_meta( $id, self::SAMPLE_USER_META, true ) ) {
+				continue; // created by this loader
+			}
+			// Loaded by a release before 1.10.2 (no marker yet): the same login AND email as the
+			// seed row means it is the sample's own demo account, not a real person's.
+			$same_login = strtolower( (string) $existing->user_login ) === strtolower( (string) ( $u['user_login'] ?? '' ) );
+			$same_email = strtolower( (string) $existing->user_email ) === strtolower( (string) ( $u['user_email'] ?? '' ) );
+			if ( ! ( $same_login && $same_email ) ) {
+				$out[] = '#' . $id . ' ' . $existing->user_login;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -1241,11 +1397,11 @@ class ZDZ_Data_Portability {
 		// Sample-data card (only when this build ships the bundled TestCo seed).
 		if ( self::has_sample_bundle() ) {
 			echo '<h2 class="title">Sample data</h2>';
-			echo '<p>New to Zorderz? Load the <strong>TestCo</strong> demo company &mdash; a complete fictional business with a product catalog, price list, estimates, invoices, a team roster, chat history and knowledge documents &mdash; so you can explore every app with realistic data before entering your own. This adds demo records and demo staff; it does <strong>not</strong> change your own account or your WordPress site title. Best on a fresh install; records use fixed ids, so loading again simply refreshes them.</p>';
+			echo '<p>New to Zorderz? Load the <strong>TestCo</strong> demo company &mdash; a complete fictional business with a product catalog, price list, estimates, invoices, a team roster, chat history and knowledge documents &mdash; so you can explore every app with realistic data before entering your own. This adds demo records and demo staff accounts, each with its own random password (sign-in as them is not possible until you reset one); it does <strong>not</strong> change your own account or your WordPress site title. Use it on a fresh install: if the demo accounts\' ids are already taken by real accounts, the loader refuses rather than overwrite them. Records use fixed ids, so loading again simply refreshes them.</p>';
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 			wp_nonce_field( 'zdz_load_sample' );
 			echo '<input type="hidden" name="action" value="zdz_load_sample">';
-			echo '<p><label><input type="checkbox" name="dry_run" value="1"> Preview counts only (write nothing)</label></p>';
+			echo '<p><label><input type="checkbox" name="dry_run" value="1" checked> Preview counts only (write nothing)</label></p>';
 			echo '<p><button type="submit" class="button button-primary button-hero">Load TestCo sample data</button></p>';
 			echo '</form><hr>';
 		}
