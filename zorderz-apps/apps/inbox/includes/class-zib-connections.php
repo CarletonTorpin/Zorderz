@@ -108,7 +108,7 @@ class ZIB_Connections {
 	public static function get_for_user( int $user_id ): ?array {
 		global $wpdb;
 		$a = $wpdb->get_row( $wpdb->prepare(
-			'SELECT id, provider, email_label, upn, status, index_mode, admin_search_enabled, backfill_status, last_synced_at, connected_at FROM ' . self::t() . ' WHERE owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			'SELECT id, provider, email_label, upn, status, index_mode, admin_search_enabled, backfill_status, last_synced_at, connected_at, scopes FROM ' . self::t() . ' WHERE owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			$user_id
 		) );
 		if ( ! $a ) {
@@ -125,7 +125,26 @@ class ZIB_Connections {
 			'backfill_status'      => (string) $a->backfill_status,
 			'last_synced_at'       => $a->last_synced_at ? (string) $a->last_synced_at : null,
 			'connected_at'         => (string) $a->connected_at,
+			// What the widget may offer. Both need the administrator's opt-in AND the scope the
+			// user actually granted; the server routes enforce the same rule.
+			'can_send'             => self::account_can( (string) ( $a->scopes ?? '' ), 'Mail.Send' ),
+			'can_triage'           => self::account_can( (string) ( $a->scopes ?? '' ), 'Mail.ReadWrite' ),
 		);
+	}
+
+	/** True when writing is enabled site-wide and $granted includes $scope. */
+	public static function account_can( string $granted, string $scope ): bool {
+		return class_exists( 'ZIB_Settings' ) && ZIB_Settings::write_enabled()
+			&& class_exists( 'ZIB_Graph' ) && ZIB_Graph::has_scope( $granted, $scope );
+	}
+
+	/** Granted scopes for this user's mailbox ('' when not connected). */
+	public static function granted_scopes( int $user_id ): string {
+		global $wpdb;
+		return (string) $wpdb->get_var( $wpdb->prepare(
+			'SELECT scopes FROM ' . self::t() . ' WHERE owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$user_id
+		) );
 	}
 
 	/** Set the index mode (owner-scoped). Narrowing purges out-of-scope mail in P1. */

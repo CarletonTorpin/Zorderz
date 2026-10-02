@@ -453,6 +453,18 @@ add_action( 'after_setup_theme', function () {
 /* ── AJAX Handlers ──────────────────────────────────────── */
 
 add_action( 'init', function () {
+	// The widget, its upload queue and the theme service worker all post zcam_* actions.
+	// 1.10.2 fixes these hooks, which were still registered under the pre-rename tscam_*
+	// names, so every upload, list and delete answered admin-ajax's "0" and captures sat in
+	// the offline queue. The legacy names stay registered as aliases for one release, for
+	// records queued by an older build.
+	add_action( 'wp_ajax_zcam_save_photo', 'zcam_ajax_save_photo' );
+	add_action( 'wp_ajax_nopriv_zcam_save_photo', 'zcam_deny_nopriv' );
+	add_action( 'wp_ajax_zcam_list_photos', 'zcam_ajax_list_photos' );
+	add_action( 'wp_ajax_nopriv_zcam_list_photos', 'zcam_deny_nopriv' );
+	add_action( 'wp_ajax_zcam_delete_photo', 'zcam_ajax_delete_photo' );
+	add_action( 'wp_ajax_nopriv_zcam_delete_photo', 'zcam_deny_nopriv' );
+	// Legacy aliases (pre-rename names), kept for one release.
 	add_action( 'wp_ajax_tscam_save_photo', 'zcam_ajax_save_photo' );
 	add_action( 'wp_ajax_nopriv_tscam_save_photo', 'zcam_deny_nopriv' );
 	add_action( 'wp_ajax_tscam_list_photos', 'zcam_ajax_list_photos' );

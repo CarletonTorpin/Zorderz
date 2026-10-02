@@ -233,7 +233,46 @@ class ZDZ_Answer_Authority {
 			'money_tolerance_cents'=> 1,
 		);
 		$t = apply_filters( 'zdz_answer_authority_thresholds', $defaults );
-		return is_array( $t ) ? array_merge( $defaults, $t ) : $defaults;
+		return is_array( $t ) ? self::clamp_thresholds( $defaults, $t ) : $defaults;
+	}
+
+	/**
+	 * Merge filtered thresholds over the defaults so that every value can only move in the
+	 * STRICTER direction. A filter (a tenant pack, another plugin) may raise the bar; it can
+	 * never lower the INV-12 floor, turn a refusal into a caveat, or let an unbacked figure
+	 * through silently. A loosening value is ignored (the default stands) and logged.
+	 */
+	public static function clamp_thresholds( array $defaults, array $t ): array {
+		$out     = $defaults;
+		$refused = array();
+		$higher  = array( 'clean_min', 'warn_min', 'orphan_multiplier' );            // bigger = stricter
+		$lower   = array( 'max_unparseable_ratio', 'money_tolerance_cents' );       // smaller = stricter
+		$policy  = array( 'allow' => 0, 'caveat' => 1, 'refuse' => 2 );             // later = stricter
+		foreach ( $t as $k => $v ) {
+			if ( ! array_key_exists( $k, $defaults ) ) {
+				$out[ $k ] = $v; // unknown key: carried through, Core does not read it
+				continue;
+			}
+			$d = $defaults[ $k ];
+			if ( in_array( $k, $higher, true ) && is_numeric( $v ) ) {
+				( (float) $v >= (float) $d ) ? ( $out[ $k ] = $v + 0 ) : ( $refused[] = $k );
+			} elseif ( in_array( $k, $lower, true ) && is_numeric( $v ) ) {
+				( (float) $v <= (float) $d && (float) $v >= 0 ) ? ( $out[ $k ] = $v + 0 ) : ( $refused[] = $k );
+			} elseif ( in_array( $k, array( 'outcome_without_sor', 'unbacked_figure' ), true ) && is_string( $v ) && isset( $policy[ $v ] ) ) {
+				( $policy[ $v ] >= $policy[ (string) $d ] ) ? ( $out[ $k ] = $v ) : ( $refused[] = $k );
+			} elseif ( 'require_tier_for_fact' === $k && is_string( $v ) && isset( self::TIER_RANK[ $v ] ) ) {
+				( self::TIER_RANK[ $v ] >= self::TIER_RANK[ (string) $d ] ) ? ( $out[ $k ] = $v ) : ( $refused[] = $k );
+			} else {
+				$refused[] = $k;
+			}
+		}
+		if ( $out['warn_min'] > $out['clean_min'] ) {
+			$out['warn_min'] = $out['clean_min'];
+		}
+		if ( $refused && function_exists( 'error_log' ) ) {
+			error_log( '[ZDZ_Answer_Authority] ignored threshold values that would loosen the floor: ' . implode( ', ', array_unique( $refused ) ) );
+		}
+		return $out;
 	}
 
 	/**
