@@ -223,58 +223,42 @@ class ZDZ_Rest_API {
 	}
 
 	/**
-	 * v2.11.0: Return the FreshBooks OAuth authorize URL for the current user.
-	 * Uses TSEC_Admin (the canonical credential owner) to build the URL with
-	 * the correct scopes + state token. Returns 400 if FB credentials aren't
-	 * configured yet.
+	 * Start a FreshBooks connection from the dashboard's Settings card.
+	 *
+	 * 1.10.2: these handlers used to delegate to a credential class from the private
+	 * predecessor plugin that Zorderz does not ship, so they always answered 503 "plugin is
+	 * not active". Credentials now come from the Core store (ZDZ_Core_Settings). Core does not
+	 * yet run its own FreshBooks OAuth callback, so this route says exactly where the
+	 * connection is made instead of pretending to start a flow that cannot complete.
 	 */
 	public function handle_fb_auth_start( WP_REST_Request $request ) {
-		if ( ! class_exists( 'TSEC_Admin' ) || ! class_exists( 'TSEC_FreshBooks' ) ) {
-			return new WP_Error( 'plugin_missing', 'Estimate Creator plugin is not active.', [ 'status' => 503 ] );
-		}
+		$configured = class_exists( 'ZDZ_Core_Settings' )
+			&& '' !== ZDZ_Core_Settings::get_fb_client_id()
+			&& '' !== ZDZ_Core_Settings::get_fb_client_secret();
 
-		$admin = new TSEC_Admin();
-		$client_id     = $admin->get_fb_client_id();
-		$client_secret = $admin->get_fb_client_secret();
+		$where = current_user_can( 'manage_options' )
+			? 'in wp-admin under Zorderz (Core settings)'
+			: 'by an administrator in wp-admin under Zorderz (Core settings)';
 
-		if ( empty( $client_id ) || empty( $client_secret ) ) {
+		if ( ! $configured ) {
 			return new WP_Error(
 				'not_configured',
-				'FreshBooks credentials are not yet configured. Please ask an administrator to paste the Client ID and Client Secret in wp-admin → TS Est Maker → Settings.',
-				[ 'status' => 400 ]
+				'FreshBooks is not configured yet. The Client ID and Client Secret are entered ' . $where . '.',
+				[ 'status' => 400, 'settings_url' => current_user_can( 'manage_options' ) ? admin_url( 'admin.php?page=zdz-core-settings' ) : '' ]
 			);
 		}
 
-		$fb = new TSEC_FreshBooks( $client_id, $client_secret, '', '', '' );
-
-		$ref = new \ReflectionClass( $admin );
-		$m   = $ref->getMethod( 'build_oauth_state' );
-		$m->setAccessible( true );
-		$state = $m->invoke( $admin );
-
-		$redirect_uri = $admin->get_fb_redirect_uri();
-		$auth_url     = $fb->get_auth_url( $redirect_uri, $state );
-
-		// v2.14.0 / v2.15.0: Mark this user as having started the OAuth
-		// flow from the front-end so the theme's wp_redirect filter can
-		// bounce them back home instead of leaving them stranded on
-		// wp-admin after callback. (v2.15.0 reads this transient via
-		// location-based detection — see functions.php::zdz_frontend_oauth_bounce.)
-		set_transient( 'zdz_fb_auth_origin_' . get_current_user_id(), 'frontend', 10 * MINUTE_IN_SECONDS );
-
-		return rest_ensure_response( [
-			'success' => true,
-			'data'    => [
-				'auth_url'     => $auth_url,
-				'redirect_uri' => $redirect_uri,
-			],
-		] );
+		return new WP_Error(
+			'manual_setup',
+			'FreshBooks is connected ' . $where . ': paste the account\'s access and refresh tokens there. In-dashboard authorization is not available yet.',
+			[ 'status' => 409, 'settings_url' => current_user_can( 'manage_options' ) ? admin_url( 'admin.php?page=zdz-core-settings' ) : '' ]
+		);
 	}
 
 	/**
-	 * v2.11.0 / v2.13.0: Report connection status for every integration
-	 * the Settings view cares about. Nutshell is reported as a company-wide
-	 * flag (no per-user state).
+	 * Report connection status for every integration the Settings view cares about, read
+	 * from the Core credential store. Nutshell is company-wide; its login email is shown only
+	 * to administrators (it is a credential identifier, and the kiosk can reach this route).
 	 */
 	public function handle_app_authorizations( WP_REST_Request $request ) {
 		$fb_connected  = false;
@@ -283,13 +267,12 @@ class ZDZ_Rest_API {
 		$fb_configured = false;
 		$ns_email      = '';
 
-		if ( class_exists( 'TSEC_Admin' ) ) {
-			$admin         = new TSEC_Admin();
-			$fb_connected  = ! empty( $admin->get_fb_access_token() );
-			$fb_configured = ! empty( $admin->get_fb_client_id() ) && ! empty( $admin->get_fb_client_secret() );
-			$ns_email      = (string) $admin->get_ns_email();
-			$ns_connected  = ! empty( $admin->get_ns_api_key() ) && ! empty( $ns_email );
-			$poe_connected = ! empty( $admin->get_poe_api_key() );
+		if ( class_exists( 'ZDZ_Core_Settings' ) ) {
+			$fb_connected  = '' !== ZDZ_Core_Settings::get_fb_access_token();
+			$fb_configured = '' !== ZDZ_Core_Settings::get_fb_client_id() && '' !== ZDZ_Core_Settings::get_fb_client_secret();
+			$ns_email      = ZDZ_Core_Settings::get_ns_email();
+			$ns_connected  = '' !== ZDZ_Core_Settings::get_ns_api_key() && '' !== $ns_email;
+			$poe_connected = '' !== ZDZ_Core_Settings::get_poe_api_key();
 		}
 
 		$data = [
@@ -299,8 +282,8 @@ class ZDZ_Rest_API {
 			],
 			'nutshell'   => [
 				'connected' => $ns_connected,
-				'email'     => $ns_email,
-				'scope'     => 'company', // v2.13.0 — informational, for the UI
+				'email'     => current_user_can( 'manage_options' ) ? $ns_email : '',
+				'scope'     => 'company', // informational, for the UI
 			],
 			'poe'        => [ 'connected' => $poe_connected ],
 		];
@@ -325,19 +308,17 @@ class ZDZ_Rest_API {
 	}
 
 	/**
-	 * v2.13.0: Save company-wide Nutshell credentials. Admin-gated by the
-	 * route's permission_callback, so this method does not have to re-check
-	 * — but the logic is identical to the previous per-user flow: encrypt
-	 * the API key with TSEC_Admin::encrypt() and cascade to sibling app
-	 * plugins so Estimates / Surveys / Leads / Analytics all pick it up.
+	 * Save company-wide Nutshell credentials into the Core store (the same options the
+	 * wp-admin Core settings form writes, which every app reads through ZDZ_Core_Settings).
+	 * Admin-gated by the route's permission_callback.
 	 */
 	public function handle_ns_auth_save( WP_REST_Request $request ) {
-		if ( ! class_exists( 'TSEC_Admin' ) ) {
-			return new WP_Error( 'plugin_missing', 'Estimate Creator plugin is not active.', [ 'status' => 503 ] );
+		if ( ! class_exists( 'ZDZ_Core_Settings' ) ) {
+			return new WP_Error( 'core_missing', 'The Zorderz Core settings service is unavailable.', [ 'status' => 503 ] );
 		}
 
 		$email   = sanitize_email( (string) $request->get_param( 'email' ) );
-		$api_key = trim( (string) $request->get_param( 'api_key' ) );
+		$api_key = sanitize_text_field( trim( (string) $request->get_param( 'api_key' ) ) );
 
 		if ( empty( $email ) || ! is_email( $email ) ) {
 			return new WP_Error( 'invalid_email', 'Please enter a valid Nutshell login email.', [ 'status' => 400 ] );
@@ -349,19 +330,8 @@ class ZDZ_Rest_API {
 			return new WP_Error( 'short_key', 'That API key looks too short. Double-check the value from Nutshell → Setup → API Keys.', [ 'status' => 400 ] );
 		}
 
-		$admin     = new TSEC_Admin();
-		$encrypted = $admin->encrypt( $api_key );
-
-		// Primary Estimates options
-		update_option( 'tsec_ns_email',   $email );
-		update_option( 'tsec_ns_api_key', $encrypted );
-
-		// Sibling cascade — keeps the ecosystem in sync (same logic used by
-		// TSEC_Admin::sanitize_encrypted_field fallback path).
-		foreach ( [ 'tsl_', 'tsa_', 'zdz_surveys_' ] as $prefix ) {
-			update_option( $prefix . 'ns_email',   $email );
-			update_option( $prefix . 'ns_api_key', $encrypted );
-		}
+		update_option( ZDZ_Core_Settings::OPTION_PREFIX . 'ns_email', $email, false );
+		update_option( ZDZ_Core_Settings::OPTION_PREFIX . 'ns_api_key', $api_key, false );
 
 		return rest_ensure_response( [
 			'success' => true,

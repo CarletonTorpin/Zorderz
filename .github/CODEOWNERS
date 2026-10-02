@@ -23,6 +23,10 @@ zorderz/inc/class-zdz-view-as.php                   @CarletonTorpin
 zorderz/inc/class-zdz-alert-router.php              @CarletonTorpin
 zorderz/inc/class-zdz-kpi-metrics.php               @CarletonTorpin
 zorderz/inc/class-zdz-kiosk-demo.php                @CarletonTorpin
+zorderz/inc/class-zdz-admin-ui.php                  @CarletonTorpin
+zorderz/page-register.php                           @CarletonTorpin
+zorderz/inc/class-zdz-answer-authority.php          @CarletonTorpin
+zorderz/inc/class-zdz-rule-governance.php           @CarletonTorpin
 
 # --- Data movement and code that writes/executes files (supply chain) ---
 zorderz/inc/class-zdz-data-portability.php          @CarletonTorpin

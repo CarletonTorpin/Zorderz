@@ -1069,19 +1069,17 @@
 		// When exec(pdftotext) is disabled (WP Engine), the server can't extract
 		// text from PDFs. This uses PDF.js in the browser to extract text and
 		// sends it to the server for chunk storage. Fully automatic.
-		var pdfJsLoaded = false;
+		// 1.10.2: the vendored pdf.js ES module (shipped in the bundle), loaded with a dynamic
+		// import(). Previously pdf.js 3.11.174 (CVE-2024-4367) was fetched from a CDN.
+		var pdfjsLib = null;
 		function ensurePdfJs(cb) {
-			if (pdfJsLoaded && window.pdfjsLib) { cb(); return; }
-			var s = document.createElement('script');
-			s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-			s.onload = function() {
-				window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-					'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-				pdfJsLoaded = true;
+			if (pdfjsLib) { cb(); return; }
+			if (!D.pdfLib) { console.error('ZKV: PDF.js is not available'); return; }
+			import(D.pdfLib).then(function(lib) {
+				if (D.pdfWorker) { lib.GlobalWorkerOptions.workerSrc = D.pdfWorker; }
+				pdfjsLib = lib;
 				cb();
-			};
-			s.onerror = function() { console.error('ZKV: Failed to load PDF.js'); };
-			document.head.appendChild(s);
+			}, function() { console.error('ZKV: Failed to load PDF.js'); });
 		}
 
 		function browserExtractChunks(docId, statusEl) {
@@ -1099,7 +1097,7 @@
 			})
 			.then(function(buf) {
 				if (statusEl) statusEl.textContent = 'Extracting text from PDF...';
-				return pdfjsLib.getDocument({data:buf}).promise;
+				return pdfjsLib.getDocument({data:buf, isEvalSupported:false}).promise;
 			})
 			.then(function(pdf) {
 				var pages = [];

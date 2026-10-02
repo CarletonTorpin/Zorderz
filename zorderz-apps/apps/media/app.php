@@ -413,15 +413,31 @@ add_action( 'wp_enqueue_scripts', function () {
  * ──────────────────────────────────────────────────────────────────────────*/
 
 add_action( 'init', function () {
-	add_action( 'wp_ajax_tsml_list',            'zml_ajax_list' );
-	add_action( 'wp_ajax_tsml_save_note',       'zml_ajax_save_note' );
+	// media.js posts zml_* actions. 1.10.2 fixes the logged-in hooks, which were still
+	// registered under the pre-rename tsml_* names (only the nopriv denials had been renamed),
+	// so every list, upload, note, visibility and delete call answered admin-ajax's "0". The
+	// legacy names stay registered as aliases for one release, for pages cached by an older build.
+	add_action( 'wp_ajax_zml_list', 'zml_ajax_list' );
+	add_action( 'wp_ajax_nopriv_zml_list', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_save_note', 'zml_ajax_save_note' );
+	add_action( 'wp_ajax_nopriv_zml_save_note', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_save_visibility', 'zml_ajax_save_visibility' );
+	add_action( 'wp_ajax_nopriv_zml_save_visibility', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_upload', 'zml_ajax_upload' );
+	add_action( 'wp_ajax_nopriv_zml_upload', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_delete', 'zml_ajax_delete' );
+	add_action( 'wp_ajax_nopriv_zml_delete', 'zml_deny_nopriv' );
+	// Legacy aliases (pre-rename names), kept for one release.
+	add_action( 'wp_ajax_tsml_list', 'zml_ajax_list' );
+	add_action( 'wp_ajax_nopriv_tsml_list', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_tsml_save_note', 'zml_ajax_save_note' );
+	add_action( 'wp_ajax_nopriv_tsml_save_note', 'zml_deny_nopriv' );
 	add_action( 'wp_ajax_tsml_save_visibility', 'zml_ajax_save_visibility' );
-	add_action( 'wp_ajax_tsml_upload',          'zml_ajax_upload' );
-	add_action( 'wp_ajax_tsml_delete',          'zml_ajax_delete' );
-
-	foreach ( [ 'zml_list', 'zml_save_note', 'zml_save_visibility', 'zml_upload', 'zml_delete' ] as $a ) {
-		add_action( "wp_ajax_nopriv_$a", 'zml_deny_nopriv' );
-	}
+	add_action( 'wp_ajax_nopriv_tsml_save_visibility', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_tsml_upload', 'zml_ajax_upload' );
+	add_action( 'wp_ajax_nopriv_tsml_upload', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_tsml_delete', 'zml_ajax_delete' );
+	add_action( 'wp_ajax_nopriv_tsml_delete', 'zml_deny_nopriv' );
 } );
 
 function zml_deny_nopriv() {

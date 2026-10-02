@@ -349,15 +349,19 @@ class ZDZ_Admin_UI {
 	}
 
 	public function save_app_permissions( $user_id ) {
-		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+		// Mirror render_app_permissions(): these fields are only ever shown to someone who can
+		// edit OTHER users. WordPress grants 'edit_user' to everyone for their own profile, so
+		// that check alone let a staff member (a) wipe their own app grants just by saving their
+		// profile, and (b) post their own app grants and data-permission overrides.
+		if ( ! current_user_can( 'edit_users' ) || ! current_user_can( 'edit_user', $user_id ) ) {
 			return;
 		}
 
-		// v2.12.3: optional nonce - capability check above still gates us.
-		if ( isset( $_POST['zdz_app_permissions_nonce'] ) ) {
-			if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['zdz_app_permissions_nonce'] ) ), 'zdz_save_app_permissions' ) ) {
-				return;
-			}
+		// The nonce is emitted with the section, so it is required: no nonce means the section
+		// was not on the submitted form, and nothing here may change.
+		if ( ! isset( $_POST['zdz_app_permissions_nonce'] )
+			|| ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['zdz_app_permissions_nonce'] ) ), 'zdz_save_app_permissions' ) ) {
+			return;
 		}
 
 		// v2.13.0: save salesperson initials for ALL roles (admins included).
