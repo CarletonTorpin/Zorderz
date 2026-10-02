@@ -320,8 +320,10 @@ class ZDZ_Kiosk_Demo {
 		}
 
 		// Never overwrite an active record (and so its PIN hash). Exit with the current PIN first.
+		// A record whose session has ended (expired, or "log out everywhere") can never be
+		// exited from its own device, so it is stale: replace it rather than strand the admin.
 		$existing = get_user_meta( $admin_uid, self::META_KEY, true );
-		if ( ! empty( $existing ) && ! empty( $existing['active'] ) ) {
+		if ( ! empty( $existing ) && ! empty( $existing['active'] ) && ! self::record_session_is_dead( $admin_uid, (array) $existing ) ) {
 			return new WP_Error( 'already_active', 'Kiosk / Demo mode is already active. Exit it with its PIN first.', [ 'status' => 409 ] );
 		}
 
@@ -460,12 +462,53 @@ class ZDZ_Kiosk_Demo {
 			return null;
 		}
 		$bound = (string) ( $state['session'] ?? '' );
-		if ( '' !== $bound && function_exists( 'wp_get_session_token' ) ) {
-			if ( ! hash_equals( $bound, (string) wp_get_session_token() ) ) {
-				return null;
+		if ( '' === $bound ) {
+			return $state;
+		}
+		// FAIL CLOSED. The record is skipped only when this request provably belongs to a
+		// DIFFERENT live session of the administrator. Missing, deleted or tampered cookies
+		// never skip it: wp-admin and admin-ajax authenticate from the auth cookie alone, so
+		// trusting the logged_in cookie (or its absence) would let the kiosk guest delete one
+		// cookie and be the administrator again.
+		$tokens = self::request_session_tokens();
+		foreach ( $tokens as $t ) {
+			if ( hash_equals( $bound, $t ) ) {
+				return $state;
+			}
+		}
+		if ( class_exists( 'WP_Session_Tokens' ) ) {
+			$manager = WP_Session_Tokens::get_instance( $uid );
+			foreach ( $tokens as $t ) {
+				if ( $manager->verify( $t ) ) {
+					return null; // a genuine other session of this admin (their laptop, say)
+				}
 			}
 		}
 		return $state;
+	}
+
+	/** Session tokens carried by this request's auth cookies (unverified; may be empty). */
+	private static function request_session_tokens(): array {
+		$out = [];
+		if ( ! function_exists( 'wp_parse_auth_cookie' ) ) {
+			return $out;
+		}
+		foreach ( [ 'logged_in', 'secure_auth', 'auth' ] as $scheme ) {
+			$c = wp_parse_auth_cookie( '', $scheme );
+			if ( is_array( $c ) && ! empty( $c['token'] ) ) {
+				$out[] = (string) $c['token'];
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/** True when a bound record's session no longer exists (expired or logged out). */
+	private static function record_session_is_dead( int $uid, array $state ): bool {
+		$bound = (string) ( $state['session'] ?? '' );
+		if ( '' === $bound || ! class_exists( 'WP_Session_Tokens' ) ) {
+			return false;
+		}
+		return ! WP_Session_Tokens::get_instance( $uid )->verify( $bound );
 	}
 
 	/**
