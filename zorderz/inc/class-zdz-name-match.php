@@ -124,7 +124,10 @@ class ZDZ_Name_Match {
 		$b = strtolower( trim( (string) $b ) );
 		if ( $a === '' || $b === '' ) return false;
 		if ( $a === $b ) return true;
-		if ( strpos( $a, $b ) !== false || strpos( $b, $a ) !== false ) return true;
+		// Anchored prefix only ("jo" ~ "joseph", "don" ~ "donald"). A plain substring test also
+		// matched "don" ~ "brandon", "ed" ~ "fred" and "ann" ~ "joanne", i.e. different people;
+		// nicknames that are not prefixes ("bob" ~ "robert") come from the nickname map below.
+		if ( strpos( $a, $b ) === 0 || strpos( $b, $a ) === 0 ) return true;
 		if ( self::nickname_root( $a ) === self::nickname_root( $b ) ) return true;
 		return self::name_close( $a, $b );
 	}

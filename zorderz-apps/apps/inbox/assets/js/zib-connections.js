@@ -251,6 +251,14 @@
 				nav.innerHTML = '<div class="zib-loading">Loading your mail…</div>';
 				api('/folders', 'GET').then(function (res) {
 					var fs = (res && res.folders) ? res.folders : [];
+					// No per-folder index yet (the all-folder sync is not on): fall back to the coarse
+					// buckets ingest always fills, so the mail list is reachable from day one.
+					if (!fs.length) {
+						fs = [
+							{ hash: 'inbox', name: 'Inbox', well_known: 'inbox', count: 0, coarse: true },
+							{ hash: 'sent', name: 'Sent', well_known: 'sentitems', count: 0, coarse: true }
+						];
+					}
 					state.folders = fs;
 					// order: inbox, sent, then the rest (as returned)
 					var order = { inbox: 0, sentitems: 1, drafts: 2, archive: 3, junkemail: 4, deleteditems: 5 };
@@ -262,7 +270,7 @@
 					var opts = '';
 					for (var i = 0; i < sorted.length; i++) {
 						var f = sorted[i];
-						opts += '<option value="' + esc(f.hash) + '" data-name="' + esc(f.name) + '">' + esc(f.name) + ' (' + (f.count | 0) + ')</option>';
+						opts += '<option value="' + esc(f.hash) + '" data-name="' + esc(f.name) + '">' + esc(f.name) + (f.coarse ? '' : ' (' + (f.count | 0) + ')') + '</option>';
 					}
 					folSel.innerHTML = opts || '<option value="">No folders</option>';
 					if (!sorted.length) { nav.innerHTML = '<p class="zib-empty">No indexed folders yet.</p>'; return; }

@@ -128,6 +128,7 @@ class ZIB_Admin {
 		update_option( ZIB_Settings::OPT_FLAG, isset( $_POST['zib_enabled'] ) ? 'yes' : 'no' );
 		update_option( ZIB_Settings::OPT_INGEST, isset( $_POST['zib_ingest'] ) ? 'yes' : 'no' );
 		update_option( ZIB_Settings::OPT_ENRICH, isset( $_POST['zib_enrich'] ) ? 'yes' : 'no' );
+		update_option( ZIB_Settings::OPT_WRITE, isset( $_POST['zib_write'] ) ? 'yes' : 'no' );
 
 		wp_safe_redirect( add_query_arg( array( 'page' => 'zib-settings', 'updated' => '1' ), admin_url( 'options-general.php' ) ) );
 		exit;
@@ -143,6 +144,7 @@ class ZIB_Admin {
 		$flag    = ( 'yes' === get_option( ZIB_Settings::OPT_FLAG, 'no' ) );
 		$ingest  = ( 'yes' === get_option( ZIB_Settings::OPT_INGEST, 'no' ) );
 		$enrich  = ( 'yes' === get_option( ZIB_Settings::OPT_ENRICH, 'no' ) );
+		$write   = ( 'yes' === get_option( ZIB_Settings::OPT_WRITE, 'no' ) );
 		$redir   = ZIB_OAuth::redirect_uri();
 		$domains = implode( ', ', ZIB_Settings::internal_domains() );
 		$roster  = ZIB_Connections::roster();
@@ -159,7 +161,7 @@ class ZIB_Admin {
 			</p>
 
 			<h2>Entra (Azure) delegated app</h2>
-			<p>Register a <strong>single-tenant</strong> app with delegated permission <code>Mail.Read</code> (plus <code>User.Read</code>, <code>offline_access</code>, <code>openid</code>, <code>profile</code>, <code>email</code>). Add this <strong>exact</strong> redirect URI (Web platform):</p>
+			<p>Register a <strong>single-tenant</strong> app with delegated permission <code>Mail.Read</code> (plus <code>User.Read</code>, <code>offline_access</code>, <code>openid</code>, <code>profile</code>, <code>email</code>). If you enable sending and triage below, also add <code>Mail.Send</code> and <code>Mail.ReadWrite</code>. Add this <strong>exact</strong> redirect URI (Web platform):</p>
 			<p><code style="user-select:all;background:#f6f7f7;padding:6px 10px;display:inline-block;"><?php echo esc_html( $redir ); ?></code></p>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -199,7 +201,12 @@ class ZIB_Admin {
 					<tr>
 						<th scope="row">Enrichment (P6)</th>
 						<td><label><input type="checkbox" name="zib_enrich" value="1" <?php checked( $enrich ); ?> /> Derive index cards, extracts &amp; tags from indexed mail</label>
-						<p class="description"><strong>Dark by default.</strong> With it ON, each in-scope message is enriched — a cleaned/searchable body, extracted amounts / order refs / product quantities, and message tags — so the assistant can compute mailbox answers ("how many rolls have I ordered"). Runs on the sync cron in bounded batches and re-enriches already-indexed mail. Reads only what's already indexed; the live chat model never re-reads a raw body. Safe to run with or without live Ingestion.</p></td>
+						<p class="description"><strong>Dark by default.</strong> With it ON, each in-scope message is enriched — a cleaned/searchable body, extracted amounts / order refs / product quantities, and message tags — so the assistant can compute mailbox answers ("how many units have I ordered"). Runs on the sync cron in bounded batches and re-enriches already-indexed mail. Reads only what's already indexed; the live chat model never re-reads a raw body. Safe to run with or without live Ingestion.</p></td>
+					</tr>
+					<tr>
+						<th scope="row">Sending &amp; triage</th>
+						<td><label><input type="checkbox" name="zib_write" value="1" <?php checked( $write ); ?> /> Let users compose, reply, forward, mark read and move mail from the in-app client</label>
+						<p class="description"><strong>Off by default.</strong> When on, connecting a mailbox also asks for <code>Mail.Send</code> and <code>Mail.ReadWrite</code>; mailboxes connected before you turned this on stay read-only until their owner reconnects. Nothing is ever sent automatically: every send is the user confirming the composer.</p></td>
 					</tr>
 				</table>
 				<?php submit_button( 'Save settings' ); ?>

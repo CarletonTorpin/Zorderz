@@ -29,9 +29,25 @@
 	var reviewEl    = document.getElementById( 'imp-review' );
 	if ( ! fileEl && ! parseTextBtn ) { return; } // card not on this page
 
-	// Point pdf.js at the vendored worker (pdf.min.js loaded via a prior <script> tag).
-	if ( window.pdfjsLib && cfg.pdfWorker ) {
-		try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = cfg.pdfWorker; } catch ( e ) {}
+	// pdf.js is a vendored ES module (vendor/pdfjs). Load it on first use with a dynamic
+	// import() and point it at the vendored worker; nothing is fetched from a CDN.
+	var pdfjsPromise = null;
+	function loadPdfjs() {
+		if ( ! pdfjsPromise ) {
+			if ( ! cfg.pdfLib ) {
+				return Promise.reject( new Error( 'PDF library failed to load' ) );
+			}
+			pdfjsPromise = import( cfg.pdfLib ).then( function ( lib ) {
+				if ( cfg.pdfWorker ) {
+					lib.GlobalWorkerOptions.workerSrc = cfg.pdfWorker;
+				}
+				return lib;
+			}, function () {
+				pdfjsPromise = null;
+				throw new Error( 'PDF library failed to load' );
+			} );
+		}
+		return pdfjsPromise;
 	}
 
 	/* ───────────────────────────── helpers ───────────────────────────── */
@@ -82,9 +98,10 @@
 	/* ─────────────────────── pdf.js text extraction ──────────────────── */
 
 	function extractText( file ) {
-		return file.arrayBuffer().then( function ( buf ) {
-			if ( ! window.pdfjsLib ) { throw new Error( 'PDF library failed to load' ); }
-			return window.pdfjsLib.getDocument( { data: buf } ).promise;
+		return Promise.all( [ file.arrayBuffer(), loadPdfjs() ] ).then( function ( r ) {
+			// isEvalSupported:false keeps font compilation off eval paths on any build that
+			// still has them (defence in depth; the CVE-2024-4367 fix is the upgrade itself).
+			return r[1].getDocument( { data: r[0], isEvalSupported: false } ).promise;
 		} ).then( function ( pdf ) {
 			var total = pdf.numPages;
 			var pages = [];

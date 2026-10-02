@@ -1631,6 +1631,10 @@ add_action( 'after_setup_theme', function () {
 					'isAdmin'   => $is_admin,
 					'maxUpload' => ZKV_MAX_UPLOAD_BYTES,
 					'version'   => ZKV_VERSION,
+					// Vendored pdf.js shipped with the bundle (the Estimates app owns the copy).
+					// Previously loaded pdf.js 3.11.174 from a CDN at runtime.
+					'pdfLib'    => plugins_url( 'estimate/assets/js/vendor/pdfjs/pdf.min.js', dirname( __FILE__ ) ) . '?v=' . rawurlencode( ZKV_VERSION ),
+					'pdfWorker' => plugins_url( 'estimate/assets/js/vendor/pdfjs/pdf.worker.min.js', dirname( __FILE__ ) ) . '?v=' . rawurlencode( ZKV_VERSION ),
 				] );
 
 				ob_start();

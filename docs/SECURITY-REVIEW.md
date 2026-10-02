@@ -40,14 +40,17 @@ These are `CODEOWNERS`-protected. A change to any of them must preserve its inva
 | File | Invariant that must never regress |
 |---|---|
 | `class-zdz-apps-autoinstall.php` | Gate stays `current_user_can('install_plugins') && ('activate_plugins')`, never `is_admin()`; `$src`/`$dest`/`PLUGIN_FILE` stay fixed constants with no filter or `get_stylesheet_directory()`. |
-| `class-zdz-data-portability.php` | Secrets excluded by name, name-suffix, exact-name list, and value redaction; import is JSON only (no `unserialize`); `is_safe_upload_relpath()` + `wp_check_filetype()` both guard extraction; `$acting` for re-auth is the pre-import `get_current_user_id()`. |
-| `class-zdz-magic-link-bridge.php` | Login user id comes only from the server-side transient; rate limit keys on `rate_limit_ip()` (REMOTE_ADDR), never a forwarded header; the six-digit shape check and global miss cap stay. |
+| `class-zdz-data-portability.php` | Secrets excluded by name, name-suffix, exact-name list, and value redaction; import is JSON only (no `unserialize`); `is_safe_upload_relpath()` + `wp_check_filetype()` both guard extraction; `$acting` for re-auth is the pre-import `get_current_user_id()`; import writes only tables that pass `is_importable_table()` and only Zorderz post types; `is_non_portable_option()` install state never travels; the sample loader blanks every password hash and refuses to overwrite accounts it did not create. |
+| `class-zdz-magic-link-bridge.php` | Login user id comes only from the server-side transient; every rate limit (init, send-code, code-claim) keys on `rate_limit_ip()` (REMOTE_ADDR), never a forwarded header; the init limit is counted before the account lookup; the per-account send cap, the six-digit shape check and the global miss cap stay; a login code is never logged. |
 | `class-zdz-share-link.php` | HMAC under `wp_salt('auth')`, compared with `hash_equals`. |
 | `class-zdz-rest-api.php` | Company-shared-secret writes stay `manage_options`; per-user data endpoints stay `get_current_user_id()`-scoped; no `__return_true` on a data route. |
 | `class-zdz-alert-router.php` | Every notification mutation carries a per-user WHERE predicate. |
 | `class-zdz-data-permissions.php` | An unknown / unrecognized role resolves to all-deny. |
 | `class-zdz-kpi-metrics.php` | Endpoint stays admin-gated; revenue redaction defaults to stripping (fail closed). |
-| `class-zdz-kiosk-demo.php` | Exit-to-admin requires the PIN check; stale kiosk records are purged. |
+| `class-zdz-kiosk-demo.php` | Exit-to-admin requires the PIN check; `enter` is refused from a switched request and while a record is active (so the PIN can never be overwritten from the kiosk); a record applies only to the session token that started it; exit misses are capped per minute and per day; stale kiosk records are purged. |
+| `class-zdz-admin-ui.php` | The Zorderz profile fields (app grants, data permissions, crew) save only for `edit_users` with the section nonce; self-edit never writes them. |
+| `page-register.php` | Self-registration is refused server-side unless `users_can_register` is on, and never assigns a role that can manage the site or users. |
+| `class-zdz-answer-authority.php`, `class-zdz-rule-governance.php` | A filter may only tighten a threshold (`clamp_thresholds()`); a fragment may only add trigger scope to a safety-floor rule. |
 | `build.sh` | Builds only from a clean checkout; the bundled apps it vendors are the trusted payload the auto-installer runs. |
 
 ## The automated gate
@@ -61,9 +64,13 @@ Every PR runs (see `.github/workflows/security.yml`):
    line, append `// sentinel:allow <reason>`, used rarely, and the reason shows up in review.
 2. **Unit tests** (`tests/unit`) pin the security invariants that need no database: the export
    never emits a credential (by name, suffix, or nested value), the importer never writes outside
-   uploads, revenue is withheld from a non-privileged KPI view, and the share-link HMAC is
-   domain-separated, id-bound, and constant-time. If one fails, a known vulnerability class has
-   been re-opened. Fix the code, not the test.
+   uploads or into a WordPress core table, the shipped sample seed carries no password hash or
+   private key, revenue is withheld from a non-privileged KPI view, the share-link HMAC is
+   domain-separated, id-bound, and constant-time, the Ai safety floors can only rise, the contact
+   card discloses full details only for a whole-word match, and every admin-ajax action a script
+   posts is registered. `StandaloneScriptsTest` also runs the repository's standalone test scripts
+   (`tests/unit/test-*.php` and `zorderz-apps/apps/*/tests/*.php`), so they gate CI too. If one
+   fails, a known vulnerability class has been re-opened. Fix the code, not the test.
 3. **PHP lint** and **PHP_CodeSniffer** (`WordPress.Security`, `WordPress.DB.PreparedSQL` as
    errors): broad coverage for escaping, nonces, and SQL.
 4. **Integration tests** (`tests/integration`, WordPress harness) cover the invariants that need

@@ -12,9 +12,39 @@
 
 define( 'ABSPATH', __DIR__ . '/' );
 
+// Keep intentional error_log() diagnostics from the code under test out of the test output.
+ini_set( 'error_log', PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null' );
+
+/*
+ * Filters: pass-through by default, so tests exercise the unfiltered behaviour. A test that
+ * needs a filter (e.g. to prove a tenant cannot loosen a safety floor) registers a callable
+ * in $GLOBALS['zdz_test_filters'][ $hook ] and removes it afterwards.
+ */
 if ( ! function_exists( 'apply_filters' ) ) {
-	// Pass-through: unit tests exercise the default (unfiltered) behavior.
-	function apply_filters( $hook, $value = null ) { return $value; }
+	function apply_filters( $hook, $value = null, ...$args ) {
+		if ( isset( $GLOBALS['zdz_test_filters'][ $hook ] ) && is_callable( $GLOBALS['zdz_test_filters'][ $hook ] ) ) {
+			return call_user_func( $GLOBALS['zdz_test_filters'][ $hook ], $value, ...$args );
+		}
+		return $value;
+	}
+}
+if ( ! function_exists( 'add_filter' ) ) {
+	function add_filter( ...$a ) { return true; }
+}
+if ( ! function_exists( 'add_action' ) ) {
+	function add_action( ...$a ) { return true; }
+}
+if ( ! function_exists( 'do_action' ) ) {
+	function do_action( ...$a ) { return null; }
+}
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $k, $d = false ) { return $GLOBALS['zdz_test_options'][ $k ] ?? $d; }
+}
+if ( ! function_exists( '__' ) ) {
+	function __( $s, $d = null ) { return $s; }
+}
+if ( ! function_exists( 'sanitize_key' ) ) {
+	function sanitize_key( $k ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $k ) ); }
 }
 if ( ! function_exists( 'sanitize_text_field' ) ) {
 	function sanitize_text_field( $s ) { return is_string( $s ) ? trim( $s ) : ''; }
@@ -41,3 +71,7 @@ if ( ! class_exists( 'ZDZ_Core_Settings' ) ) {
 require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-data-portability.php';
 require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-kpi-metrics.php'; // for is_financial_metric()
 require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-share-link.php';  // HMAC share-link primitive
+require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-answer-authority.php'; // threshold floor clamp
+require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-rule-governance.php';  // safety-floor merge
+require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-name-match.php';       // shared name matcher
+require_once dirname( __DIR__ ) . '/zorderz/inc/class-zdz-contact-bridge.php';   // §133 disclosure gate

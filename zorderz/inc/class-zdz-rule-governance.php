@@ -337,11 +337,19 @@ class ZDZ_Rule_Governance {
 					continue;
 				}
 				if ( isset( $core[ $id ] ) && self::TIER_SAFETY === $core[ $id ]['tier'] ) {
-					// Protect the floor: allow adding trigger scope only, never re-tier or re-word.
-					if ( isset( $frag['tier'] ) || isset( $frag['directive'] ) ) {
-						error_log( '[ZDZ_Rule_Governance] refused override of safety-floor rule: ' . $id );
-						continue;
+					// Protect the floor: a fragment may only ADD trigger scope. Every other key is
+					// ignored (a replaced trigger list could drop the rule from every turn, and a
+					// replaced title is rendered straight into the prompt), and triggers are a
+					// union with the Core list, never a replacement.
+					$extra = array_diff( array_keys( $frag ), array( 'triggers' ) );
+					if ( $extra ) {
+						error_log( '[ZDZ_Rule_Governance] ignored keys on safety-floor rule ' . $id . ': ' . implode( ', ', array_map( 'strval', $extra ) ) );
 					}
+					$merged[ $id ]['triggers'] = array_values( array_unique( array_merge(
+						(array) $core[ $id ]['triggers'],
+						array_values( array_filter( array_map( 'strval', (array) ( $frag['triggers'] ?? array() ) ) ) )
+					) ) );
+					continue;
 				}
 				$base          = $merged[ $id ] ?? array( 'tier' => self::TIER_ADVISORY );
 				$merged[ $id ] = self::normalize_rule( $id, array_merge( $base, $frag ) );
