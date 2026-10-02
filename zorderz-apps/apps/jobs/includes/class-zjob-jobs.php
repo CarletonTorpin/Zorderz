@@ -43,6 +43,9 @@ class ZJOB_Jobs {
 	const ASSURANCE_TWO_PARTY   = 'two_party';
 	const ASSURANCE_SINGLE      = 'single_party_attested';
 	const ASSURANCE_SYSTEM_AUTO = 'system_auto';
+	// A manager closed someone else's job directly ("Mark done"), without the worker's
+	// photo-gated hand-off. Recorded distinctly so it is never mistaken for a two-party close.
+	const ASSURANCE_MANAGER     = 'manager_marked';
 
 	/** Worker-inbox ETA signals (on_my_way doubles as auto-start; running_late flags the dispatcher). */
 	const ETA_STATUSES = [ 'on_my_way', 'running_late' ];
@@ -532,8 +535,29 @@ class ZJOB_Jobs {
 		if ( 'pending_close' === $status ) {
 			return false;
 		}
-		if ( 'done' === $status && ! self::actor_can_schedule( $actor_id, $row ) ) {
-			return false;
+		if ( 'done' === $status ) {
+			if ( ! self::actor_can_schedule( $actor_id, $row ) ) {
+				return false;
+			}
+			// The person doing the work never closes it here, even when they also created it
+			// (the solo case): their path is worker_complete() and then a close-out or a
+			// recorded single-party attestation. Otherwise the photo gate and the attestation
+			// record are skipped entirely.
+			if ( $actor_id === (int) ( $row['assigned_user_id'] ?? 0 ) ) {
+				return false;
+			}
+			$now = current_time( 'mysql', true );
+			$wpdb->update(
+				ZJOB_DB::table(),
+				[ 'status' => 'done', 'closed_at' => $now, 'closed_by' => $actor_id, 'assurance_level' => self::ASSURANCE_MANAGER, 'close_deadline' => null, 'updated_at' => $now ],
+				[ 'id' => $id ],
+				[ '%s', '%s', '%d', '%s', '%s', '%s' ],
+				[ '%d' ]
+			);
+			self::audit( $actor_id, 'job_status',
+				sprintf( 'Set job #%d to done (manager close, no worker hand-off)', $id ),
+				[ 'job_id' => $id, 'status' => 'done', 'assurance' => self::ASSURANCE_MANAGER ] );
+			return true;
 		}
 		$wpdb->update(
 			ZJOB_DB::table(),
@@ -759,6 +783,20 @@ class ZJOB_Jobs {
 			array_map( 'intval', $media_ids ),
 			static function ( $n ) { return $n > 0; }
 		) ) );
+		// Only photos actually uploaded for THIS job count toward the gate. Any positive
+		// integers used to pass, so the gate could be met with no photo at all, or with
+		// another job's or another app's media.
+		if ( $media_ids && class_exists( 'ZDZ_User_Media' ) && class_exists( 'ZJOB_Photos' ) ) {
+			$media_table  = $wpdb->prefix . ZDZ_User_Media::TABLE;
+			$placeholders = implode( ',', array_fill( 0, count( $media_ids ), '%d' ) );
+			$found        = $wpdb->get_col( $wpdb->prepare(
+				"SELECT id FROM {$media_table} WHERE source_app = %s AND source_ref = %s AND id IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefixed table name and a %d placeholder list
+				array_merge( [ ZJOB_Photos::SOURCE_APP, 'jobphoto:' . $id ], $media_ids )
+			) );
+			$media_ids = array_values( array_intersect( $media_ids, array_map( 'intval', (array) $found ) ) );
+		} elseif ( $media_ids ) {
+			$media_ids = []; // cannot verify ownership without the media store: fail closed
+		}
 		if ( count( $media_ids ) < self::min_finish_photos() ) {
 			$out['error'] = 'photos_required';
 			return $out;

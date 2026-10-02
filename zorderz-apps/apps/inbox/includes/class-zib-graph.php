@@ -28,7 +28,49 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ZIB_Graph {
 
 	const GRAPH  = 'https://graph.microsoft.com/v1.0';
-	const SCOPES = 'openid profile email offline_access User.Read Mail.Read';
+	const SCOPES       = 'openid profile email offline_access User.Read Mail.Read';
+	const WRITE_SCOPES = 'Mail.Send Mail.ReadWrite';
+
+	/**
+	 * Scopes to request at sign-in: the read-only set, plus the write set when the
+	 * administrator has turned on sending and triage (ZIB_Settings::write_enabled()).
+	 */
+	public static function scopes(): string {
+		return ZIB_Settings::write_enabled() ? self::SCOPES . ' ' . self::WRITE_SCOPES : self::SCOPES;
+	}
+
+	/**
+	 * Scopes to request on a refresh: the read-only set plus only those write scopes the
+	 * account was actually granted. Asking for a scope the user never consented to would turn
+	 * a working read-only mailbox into a forced reconnect.
+	 */
+	public static function refresh_scopes( string $granted ): string {
+		$out = self::SCOPES;
+		if ( ZIB_Settings::write_enabled() ) {
+			foreach ( explode( ' ', self::WRITE_SCOPES ) as $w ) {
+				if ( self::has_scope( $granted, $w ) ) {
+					$out .= ' ' . $w;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** True when a space-separated granted-scope string includes $scope (bare or URI form). */
+	public static function has_scope( string $granted, string $scope ): bool {
+		foreach ( preg_split( '/\s+/', trim( $granted ) ) as $g ) {
+			$g = strtolower( (string) $g );
+			if ( '' === $g ) {
+				continue;
+			}
+			$tail = strrchr( $g, '/' );
+			$bare = false === $tail ? $g : substr( $tail, 1 );
+			if ( strtolower( $scope ) === $bare ) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/** Single-tenant authority root (…/{tenant}/oauth2/v2.0). */
 	private static function authority(): string {
@@ -53,7 +95,7 @@ class ZIB_Graph {
 			'response_type' => 'code',
 			'redirect_uri'  => ZIB_OAuth::redirect_uri(),
 			'response_mode' => 'query',
-			'scope'         => self::SCOPES,
+			'scope'         => self::scopes(),
 			'prompt'        => 'select_account',
 			'state'         => $state,
 		) );
@@ -71,7 +113,7 @@ class ZIB_Graph {
 			'client_id'     => ZIB_Settings::client_id(),
 			'client_secret' => ZIB_Settings::secret(),
 			'redirect_uri'  => ZIB_OAuth::redirect_uri(),
-			'scope'         => self::SCOPES,
+			'scope'         => self::scopes(),
 		) );
 	}
 
@@ -81,13 +123,13 @@ class ZIB_Graph {
 	 *
 	 * @return array|WP_Error
 	 */
-	public static function refresh_token( string $refresh_token ) {
+	public static function refresh_token( string $refresh_token, string $granted = '' ) {
 		return self::token_request( array(
 			'grant_type'    => 'refresh_token',
 			'refresh_token' => $refresh_token,
 			'client_id'     => ZIB_Settings::client_id(),
 			'client_secret' => ZIB_Settings::secret(),
-			'scope'         => self::SCOPES,
+			'scope'         => self::refresh_scopes( $granted ),
 		) );
 	}
 
