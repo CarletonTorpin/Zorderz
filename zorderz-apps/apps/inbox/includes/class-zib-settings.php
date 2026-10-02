@@ -32,6 +32,7 @@ class ZIB_Settings {
 	const OPT_INGEST  = 'zib_ingest_enabled';   // 'yes' | 'no' (default no) — the dark ingestion switch
 	const OPT_ENRICH  = 'zib_enrich_enabled';   // 'yes' | 'no' (default no) — the dark enrichment switch (P6a)
 	const OPT_DOMAINS = 'zib_internal_domains'; // comma/space list; [IDENTITY]/BID-6
+	const OPT_WRITE   = 'zib_write_enabled';    // 'yes' | 'no' (default no) — allow human-confirmed send + triage
 
 	/**
 	 * Config array (secret excluded).
@@ -148,6 +149,16 @@ class ZIB_Settings {
 	 * mailboxes connected, NO mail is read/indexed until this is turned on. Lets
 	 * the owner deploy + verify P1 before any real inbox is touched.
 	 */
+	/**
+	 * May users send (compose / reply / forward) and triage (mark read, move) from the
+	 * in-app client? Off by default. When on, connecting a mailbox also asks Microsoft for
+	 * Mail.Send and Mail.ReadWrite; every send is still a human confirming the composer
+	 * (INV-SEND), never an automatic one.
+	 */
+	public static function write_enabled(): bool {
+		return self::feature_enabled() && 'yes' === get_option( self::OPT_WRITE, 'no' );
+	}
+
 	public static function ingest_enabled(): bool {
 		return self::feature_enabled() && 'yes' === get_option( self::OPT_INGEST, 'no' );
 	}

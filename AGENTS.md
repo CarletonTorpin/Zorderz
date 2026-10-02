@@ -11,7 +11,7 @@ The 30-second shape of an install:
 1. Set WordPress permalinks to **Post name** (Settings -> Permalinks).
 2. Install and **activate the theme** (`zorderz-theme-<version>.zip`). On most hosts that is the only upload you need: the active theme installs and activates the apps bundle itself.
 3. Give the install its data: import a Company Data bundle, apply an Identity Pack or fill the Business Profile, or load the one-click sample company to explore first.
-4. Reconnect provider secrets under Zorderz -> Settings -> App Authorizations. Secrets are never carried in a bundle, by design.
+4. Reconnect provider secrets in wp-admin under Zorderz (the Core settings page); the dashboard's Settings -> App Authorizations card shows what is connected. Secrets are never carried in a bundle, by design.
 
 Always take the **latest release** as the source of truth for the version and the asset names. Never hardcode a version number.
 

@@ -383,7 +383,23 @@ class ZIB_REST {
 
 	// ── Send path (INV-SEND: every send is human-confirmed; no auto-send) ──
 
+	/**
+	 * Server-side twin of the widget's can_send / can_triage flags: refuse the write routes
+	 * unless the administrator enabled writing and this user granted the needed scope. Null
+	 * when allowed.
+	 */
+	private static function write_gate( string $scope ) {
+		if ( ! ZIB_Connections::account_can( ZIB_Connections::granted_scopes( get_current_user_id() ), $scope ) ) {
+			return new WP_Error( 'zib_write_disabled', 'Sending and triage are not enabled for this mailbox.', array( 'status' => 403, 'reason' => 'write-disabled' ) );
+		}
+		return null;
+	}
+
 	public static function send_reply( WP_REST_Request $req ) {
+		$gate = self::write_gate( 'Mail.Send' );
+		if ( $gate ) {
+			return $gate;
+		}
 		return self::send_response( ZIB_Gatekeeper::owner_send_reply(
 			get_current_user_id(),
 			(int) $req->get_param( 'id' ),
@@ -393,6 +409,10 @@ class ZIB_REST {
 	}
 
 	public static function send_forward( WP_REST_Request $req ) {
+		$gate = self::write_gate( 'Mail.Send' );
+		if ( $gate ) {
+			return $gate;
+		}
 		return self::send_response( ZIB_Gatekeeper::owner_send_forward(
 			get_current_user_id(),
 			(int) $req->get_param( 'id' ),
@@ -402,6 +422,10 @@ class ZIB_REST {
 	}
 
 	public static function send_new( WP_REST_Request $req ) {
+		$gate = self::write_gate( 'Mail.Send' );
+		if ( $gate ) {
+			return $gate;
+		}
 		return self::send_response( ZIB_Gatekeeper::owner_send_new(
 			get_current_user_id(),
 			(string) $req->get_param( 'to' ),
@@ -416,6 +440,10 @@ class ZIB_REST {
 	public static function mark_read( WP_REST_Request $req ) {
 		$read    = $req->get_param( 'read' );
 		$is_read = ( null === $read ) ? true : (bool) filter_var( $read, FILTER_VALIDATE_BOOLEAN );
+		$gate    = self::write_gate( 'Mail.ReadWrite' );
+		if ( $gate ) {
+			return $gate;
+		}
 		return self::send_response( ZIB_Gatekeeper::owner_mark_read(
 			get_current_user_id(),
 			(int) $req->get_param( 'id' ),
@@ -424,6 +452,10 @@ class ZIB_REST {
 	}
 
 	public static function move_msg( WP_REST_Request $req ) {
+		$gate = self::write_gate( 'Mail.ReadWrite' );
+		if ( $gate ) {
+			return $gate;
+		}
 		return self::send_response( ZIB_Gatekeeper::owner_move(
 			get_current_user_id(),
 			(int) $req->get_param( 'id' ),

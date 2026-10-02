@@ -14,14 +14,39 @@ if ( is_user_logged_in() ) {
 $errors = [];
 $success = false;
 
+/**
+ * The role a self-registered account receives: WordPress' own default role (Settings ->
+ * General -> New User Default Role), filterable, and never a role that can administer the
+ * site or other users. Returns '' when no safe role is available, which refuses the signup.
+ */
+$zdz_register_role = (string) apply_filters( 'zdz_register_role', (string) get_option( 'default_role', 'subscriber' ) );
+$zdz_role_obj      = $zdz_register_role ? get_role( $zdz_register_role ) : null;
+if ( ! $zdz_role_obj ) {
+	$zdz_register_role = '';
+} else {
+	foreach ( array( 'manage_options', 'edit_users', 'promote_users', 'create_users', 'install_plugins', 'activate_plugins', 'edit_theme_options', 'unfiltered_html' ) as $zdz_cap ) {
+		if ( ! empty( $zdz_role_obj->capabilities[ $zdz_cap ] ) ) {
+			$zdz_register_role = '';
+			break;
+		}
+	}
+}
+
 if ( 'POST' === $_SERVER['REQUEST_METHOD'] && isset( $_POST['zdz_register_nonce'] ) ) {
-	if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['zdz_register_nonce'] ) ), 'zdz_register_action' ) ) {
+	// Server-side gate: the "Anyone can register" setting decides, not the form's visibility.
+	$zdz_ip_key = 'zdz_register_rate_' . md5( isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '' );
+	if ( ! get_option( 'users_can_register' ) || '' === $zdz_register_role ) {
+		$errors[] = __( 'User registration is currently disabled.', 'zorderz' );
+	} elseif ( (int) get_transient( $zdz_ip_key ) >= 5 ) {
+		$errors[] = __( 'Too many registration attempts. Please try again later.', 'zorderz' );
+	} elseif ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['zdz_register_nonce'] ) ), 'zdz_register_action' ) ) {
 		$errors[] = __( 'Security check failed. Please try again.', 'zorderz' );
 	} else {
 		$username = isset( $_POST['zdz_username'] ) ? sanitize_user( wp_unslash( $_POST['zdz_username'] ) ) : '';
 		$email    = isset( $_POST['zdz_email'] ) ? sanitize_email( wp_unslash( $_POST['zdz_email'] ) ) : '';
-		$password = isset( $_POST['zdz_password'] ) ? $_POST['zdz_password'] : '';
-		$confirm  = isset( $_POST['zdz_password_confirm'] ) ? $_POST['zdz_password_confirm'] : '';
+		$password = isset( $_POST['zdz_password'] ) ? (string) wp_unslash( $_POST['zdz_password'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- a password is hashed, never sanitized
+		$confirm  = isset( $_POST['zdz_password_confirm'] ) ? (string) wp_unslash( $_POST['zdz_password_confirm'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- compared to the password only
+		set_transient( $zdz_ip_key, (int) get_transient( $zdz_ip_key ) + 1, HOUR_IN_SECONDS );
 
 		if ( empty( $username ) || empty( $email ) || empty( $password ) ) {
 			$errors[] = __( 'Please fill in all required fields.', 'zorderz' );
@@ -33,12 +58,14 @@ if ( 'POST' === $_SERVER['REQUEST_METHOD'] && isset( $_POST['zdz_register_nonce'
 			$errors[] = __( 'Email already registered.', 'zorderz' );
 		} elseif ( $password !== $confirm ) {
 			$errors[] = __( 'Passwords do not match.', 'zorderz' );
+		} elseif ( strlen( $password ) < 12 ) {
+			$errors[] = __( 'Please choose a password of at least 12 characters.', 'zorderz' );
 		} else {
 			$user_id = wp_insert_user( [
 				'user_login' => $username,
 				'user_pass'  => $password,
 				'user_email' => $email,
-				'role'       => 'zdz_tech',
+				'role'       => $zdz_register_role,
 			] );
 
 			if ( is_wp_error( $user_id ) ) {
@@ -180,7 +207,7 @@ get_header(); ?>
 			<p><?php esc_html_e( 'Register Account', 'zorderz' ); ?></p>
 		</div>
 
-		<?php if ( ! get_option( 'users_can_register' ) ) : ?>
+		<?php if ( ! get_option( 'users_can_register' ) || '' === $zdz_register_role ) : ?>
 			<div class="login-error">
 				<?php esc_html_e( 'User registration is currently disabled.', 'zorderz' ); ?>
 			</div>

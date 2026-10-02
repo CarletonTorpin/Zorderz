@@ -119,8 +119,7 @@ class ZDZ_Kiosk_Demo {
 		if ( ! $real_uid ) {
 			return;
 		}
-		$state = get_user_meta( $real_uid, self::META_KEY, true );
-		if ( ! empty( $state ) && ! empty( $state['active'] ) ) {
+		if ( null !== self::live_state( $real_uid ) ) {
 			wp_safe_redirect( home_url( '/' ) );
 			exit;
 		}
@@ -139,8 +138,7 @@ class ZDZ_Kiosk_Demo {
 		if ( ! $real_uid ) {
 			return;
 		}
-		$state = get_user_meta( $real_uid, self::META_KEY, true );
-		if ( empty( $state ) || empty( $state['active'] ) ) {
+		if ( null === self::live_state( $real_uid ) ) {
 			return;
 		}
 		// A demo record exists but we never switched → the global was cached
@@ -181,8 +179,8 @@ class ZDZ_Kiosk_Demo {
 			// must authorise the operator even after the runtime id is swapped.
 			self::$real_uid = $real_uid;
 
-			$state = get_user_meta( $real_uid, self::META_KEY, true );
-			if ( empty( $state ) || empty( $state['active'] ) ) {
+			$state = self::live_state( $real_uid );
+			if ( null === $state ) {
 				return $user_id;
 			}
 
@@ -301,7 +299,14 @@ class ZDZ_Kiosk_Demo {
 	 */
 	public static function can_enter(): bool {
 		$uid = self::resolve_real_user_id();
-		return $uid && user_can( $uid, 'manage_options' );
+		if ( ! $uid || ! user_can( $uid, 'manage_options' ) ) {
+			return false;
+		}
+		// ENTER is only reachable from an unswitched administrator request. A request that is
+		// already running as the kiosk identity must never be able to (re)start a demo: doing so
+		// would let the guest holding the device overwrite the exit PIN with one of their own and
+		// then exit straight into the administrator's session.
+		return ! self::$switched && get_current_user_id() === $uid;
 	}
 
 	/**
@@ -310,8 +315,14 @@ class ZDZ_Kiosk_Demo {
 	 */
 	public static function rest_enter( WP_REST_Request $request ) {
 		$admin_uid = self::resolve_real_user_id();
-		if ( ! $admin_uid || ! user_can( $admin_uid, 'manage_options' ) ) {
+		if ( ! $admin_uid || ! user_can( $admin_uid, 'manage_options' ) || self::$switched || get_current_user_id() !== $admin_uid ) {
 			return new WP_Error( 'forbidden', 'Administrator session required.', [ 'status' => 403 ] );
+		}
+
+		// Never overwrite an active record (and so its PIN hash). Exit with the current PIN first.
+		$existing = get_user_meta( $admin_uid, self::META_KEY, true );
+		if ( ! empty( $existing ) && ! empty( $existing['active'] ) ) {
+			return new WP_Error( 'already_active', 'Kiosk / Demo mode is already active. Exit it with its PIN first.', [ 'status' => 409 ] );
 		}
 
 		$pin = preg_replace( '/\D/', '', (string) $request->get_param( 'pin' ) );
@@ -337,6 +348,9 @@ class ZDZ_Kiosk_Demo {
 			'target_user_id' => $target,
 			'started_at'     => current_time( 'mysql' ),
 			'real_user_id'   => $admin_uid,
+			// Bind the demo to the login session that started it, so the administrator's other
+			// devices (and other browsers) keep running as the administrator.
+			'session'        => function_exists( 'wp_get_session_token' ) ? (string) wp_get_session_token() : '',
 		] );
 
 		// Hand back a nonce valid for the GENERAL identity. The very next
@@ -381,15 +395,25 @@ class ZDZ_Kiosk_Demo {
 		if ( $fails >= $max ) {
 			return new WP_Error( 'locked', 'Too many incorrect PIN attempts. Wait a minute and try again.', [ 'status' => 429 ] );
 		}
+		// The per-minute window alone still allows thousands of guesses a day, enough to walk a
+		// 4-digit PIN. Cap the total misses per record per day as well.
+		$day_key   = 'zdz_kiosk_pin_fail_day_' . $admin_uid;
+		$day_fails = (int) get_transient( $day_key );
+		$day_max   = (int) apply_filters( 'zdz_kiosk_pin_max_daily_attempts', 25 );
+		if ( $day_fails >= $day_max ) {
+			return new WP_Error( 'locked', 'Too many incorrect PIN attempts today. The administrator can clear demo mode from WP-CLI: wp user meta delete <id> ' . self::META_KEY, [ 'status' => 429 ] );
+		}
 
 		$pin = preg_replace( '/\D/', '', (string) $request->get_param( 'pin' ) );
 		if ( '' === $pin || ! wp_check_password( $pin, $state['pin_hash'] ?? '' ) ) {
 			// Count the miss (with a cooldown window), then refuse without revealing closeness.
 			set_transient( $lock_key, $fails + 1, (int) apply_filters( 'zdz_kiosk_pin_lockout_window', MINUTE_IN_SECONDS ) );
+			set_transient( $day_key, $day_fails + 1, DAY_IN_SECONDS );
 			return new WP_Error( 'bad_pin', 'Incorrect PIN.', [ 'status' => 403 ] );
 		}
 
 		delete_transient( $lock_key ); // correct PIN: clear the throttle
+		delete_transient( $day_key );
 		delete_user_meta( $admin_uid, self::META_KEY );
 
 		// Mint a fresh admin-identity nonce for the SPA's next calls.
@@ -407,8 +431,8 @@ class ZDZ_Kiosk_Demo {
 	/** STATUS handler — what the SPA needs to decide which control to show. */
 	public static function rest_status() {
 		$admin_uid = self::resolve_real_user_id();
-		$state     = $admin_uid ? get_user_meta( $admin_uid, self::META_KEY, true ) : '';
-		$active    = self::$switched || ( ! empty( $state ) && ! empty( $state['active'] ) );
+		$state     = $admin_uid ? self::live_state( $admin_uid ) : null;
+		$active    = self::$switched || null !== $state;
 
 		return rest_ensure_response( [
 			'active'           => (bool) $active,
@@ -420,6 +444,29 @@ class ZDZ_Kiosk_Demo {
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────
+
+	/**
+	 * The admin's demo record when it applies to THIS request, else null.
+	 *
+	 * A record applies when it is active and was started from the current login session.
+	 * Records written before session binding existed carry no session token and keep their
+	 * original behaviour (they apply to every session) until they are exited.
+	 *
+	 * @return array|null
+	 */
+	public static function live_state( int $uid ) {
+		$state = get_user_meta( $uid, self::META_KEY, true );
+		if ( empty( $state ) || ! is_array( $state ) || empty( $state['active'] ) ) {
+			return null;
+		}
+		$bound = (string) ( $state['session'] ?? '' );
+		if ( '' !== $bound && function_exists( 'wp_get_session_token' ) ) {
+			if ( ! hash_equals( $bound, (string) wp_get_session_token() ) ) {
+				return null;
+			}
+		}
+		return $state;
+	}
 
 	/**
 	 * Create a nonce as if a specific user were current, then restore the
