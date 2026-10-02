@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 
 final class AjaxActionContractTest extends TestCase {
 
-	private const ACTION_RE = '/(?:append\(\s*[\'"]action[\'"]\s*,\s*|action\s*:\s*|ajaxPost\(\s*|ajax\(\s*|post\(\s*)[\'"]([a-z][a-z0-9_]{3,})[\'"]/';
+	private const ACTION_RE = '/(?:append\(\s*[\'"]action[\'"]\s*,\s*|(?<![.\w])action\s*:\s*|ajaxPost\(\s*|ajax\(\s*|post\(\s*)[\'"]([a-z][a-z0-9_]{3,})[\'"]/';
 
 	private static function files( string $dir, string $ext ): array {
 		$out = array();
@@ -33,11 +33,18 @@ final class AjaxActionContractTest extends TestCase {
 		return implode( "\n", array_map( 'file_get_contents', $paths ) );
 	}
 
-	/** True when $php registers $action (a literal hook, or a name in a dispatch table). */
+	/**
+	 * True when $php registers $action for logged-in users: a literal `wp_ajax_<action>` hook,
+	 * or a key of a dispatch table ('<action>' => handler) in code that registers
+	 * 'wp_ajax_' . $key dynamically. A bare mention of the name is not enough: in 1.10.1 Media
+	 * named its actions in the nopriv denial loop while the logged-in hooks used old names.
+	 */
 	private static function registered( string $action, string $php ): bool {
-		return false !== strpos( $php, 'wp_ajax_' . $action )
-			|| false !== strpos( $php, "'" . $action . "'" )
-			|| false !== strpos( $php, '"' . $action . '"' );
+		if ( false !== strpos( $php, "'wp_ajax_" . $action . "'" ) || false !== strpos( $php, '"wp_ajax_' . $action . '"' ) ) {
+			return true;
+		}
+		$dynamic = (bool) preg_match( "/add_action\(\s*'wp_ajax_'\s*\./", $php );
+		return $dynamic && (bool) preg_match( "/['\"]" . preg_quote( $action, '/' ) . "['\"]\s*=>/", $php );
 	}
 
 	public function test_every_posted_action_has_a_hook(): void {
