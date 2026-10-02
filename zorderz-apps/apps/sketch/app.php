@@ -109,6 +109,19 @@ add_action( 'after_setup_theme', function () {
 }, 12 );
 
 add_action( 'init', function () {
+	// The widget posts zsp_* actions. 1.10.2 fixes these hooks, which were still registered
+	// under the pre-rename tssp_* names, so every save/list/load/delete answered admin-ajax's
+	// "0". The legacy names stay registered as aliases for one release, for pages cached by
+	// an older build.
+	add_action( 'wp_ajax_zsp_save_sketch', 'zsp_ajax_save_sketch' );
+	add_action( 'wp_ajax_nopriv_zsp_save_sketch', 'zsp_deny_nopriv' );
+	add_action( 'wp_ajax_zsp_list_sketches', 'zsp_ajax_list_sketches' );
+	add_action( 'wp_ajax_nopriv_zsp_list_sketches', 'zsp_deny_nopriv' );
+	add_action( 'wp_ajax_zsp_delete_sketch', 'zsp_ajax_delete_sketch' );
+	add_action( 'wp_ajax_nopriv_zsp_delete_sketch', 'zsp_deny_nopriv' );
+	add_action( 'wp_ajax_zsp_load_sketch', 'zsp_ajax_load_sketch' );
+	add_action( 'wp_ajax_nopriv_zsp_load_sketch', 'zsp_deny_nopriv' );
+	// Legacy aliases (pre-rename names), kept for one release.
 	add_action( 'wp_ajax_tssp_save_sketch', 'zsp_ajax_save_sketch' );
 	add_action( 'wp_ajax_nopriv_tssp_save_sketch', 'zsp_deny_nopriv' );
 	add_action( 'wp_ajax_tssp_list_sketches', 'zsp_ajax_list_sketches' );
@@ -117,6 +130,7 @@ add_action( 'init', function () {
 	add_action( 'wp_ajax_nopriv_tssp_delete_sketch', 'zsp_deny_nopriv' );
 	add_action( 'wp_ajax_tssp_load_sketch', 'zsp_ajax_load_sketch' );
 	add_action( 'wp_ajax_nopriv_tssp_load_sketch', 'zsp_deny_nopriv' );
+	add_action( 'wp_ajax_zsp_debug_status', 'zsp_ajax_debug_status' );
 	add_action( 'wp_ajax_tssp_debug_status', 'zsp_ajax_debug_status' );
 } );
 

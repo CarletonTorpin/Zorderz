@@ -17,7 +17,7 @@ The fastest path from a blank WordPress site to a working Zorderz:
 3. **Get your data in, one of two ways.**
    - *Have a Company Data bundle?* **Tools → Zorderz Data**, and import it. A whole business (catalog, roster, estimates, orders, chats, knowledge base, media, even the site title and timezone) lands ready to use, and you stay logged in through it. Run the dry run first to preview counts.
    - *Starting fresh?* **Zorderz → Business Profile** to name the business, then **Item Engine** for your catalog. Nothing is seeded; you add what is yours.
-4. **Reconnect your keys.** **Zorderz → Settings → App Authorizations**. Connection secrets (Poe, billing, CRM, calendar) are never carried in a bundle, by design, so re-enter them here. Then the Ai and billing-backed apps light up.
+4. **Reconnect your keys.** In wp-admin, open **Zorderz** (the Core settings page). Connection secrets (Poe, billing, CRM, calendar) are never carried in a bundle, by design, so re-enter them here; the dashboard's **Settings → App Authorizations** card shows what is connected. Then the Ai and billing-backed apps light up.
 
 That is the whole thing. The sections below explain what each piece is; [`docs/INSTALL-FOR-AI.md`](docs/INSTALL-FOR-AI.md) is the same procedure written for an autonomous agent.
 
@@ -90,7 +90,7 @@ Bundled in `zorderz-apps-<version>.zip`. An app whose dependencies aren't presen
 | **Commission** | Compensation and commission calculation. Ships no pay data. |
 | **Chat** | The Ai assistant, gated by Answer Authority and grounded in the Business Profile, catalog, roster and rule set. |
 | **Dot Plot** | Plots work-item history from the Flow event log, behind a report-spec validator and an Answer-Authority entitlement gate. Renders whatever sources a business registers; ships with none. |
-| **Inbox** | An email assistant: connect your own mailbox (Microsoft 365) and it reads to surface and tag work-related mail and draft replies for your review. Read-only, never sends, and off until you connect an account. |
+| **Inbox** | An email assistant and in-app mail client: connect your own mailbox (Microsoft 365) and it reads to surface and tag work-related mail. Read-only by default. An administrator can turn on sending and triage, after which a user can compose, reply, forward and file mail; every send is the user confirming the composer, never automatic. Off until you connect an account. |
 
 ---
 
@@ -139,7 +139,7 @@ Then fill the catalog (**Zorderz → Item Engine**), the roster (Party), and the
 
 ### 5. Connect your providers
 
-**Zorderz → Settings → App Authorizations** (Connections). Register a billing provider, a CRM, a scheduling calendar and an Ai gateway here. Credentials live in one place and the apps read them from it, so you never paste a key into an app.
+In wp-admin, open **Zorderz** (the Core settings page) and enter the Ai gateway key and the billing and CRM credentials there. Credentials live in one place and the apps read them from it. The dashboard's **Settings → App Authorizations** card shows what is connected, and lets an administrator save the company CRM credentials; per-user calendars connect from the Scheduler, and mailboxes from the Inbox.
 
 ### Bring your own intelligence
 

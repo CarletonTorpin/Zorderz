@@ -260,7 +260,7 @@ class ZIB_Vault {
 				return new WP_Error( 'zib_reauth', 'This mailbox needs to be reconnected.' );
 			}
 
-			$result = ZIB_Graph::refresh_token( $refresh );
+			$result = ZIB_Graph::refresh_token( $refresh, (string) ( $fresh_row->scopes ?? '' ) );
 			if ( is_wp_error( $result ) ) {
 				if ( 'invalid_grant' === $result->get_error_code() ) {
 					self::mark_reauth( (int) $row->id, 'refresh rejected (invalid_grant)' );

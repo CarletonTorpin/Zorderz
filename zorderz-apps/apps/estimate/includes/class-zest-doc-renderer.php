@@ -814,20 +814,20 @@ table.items tbody td.desc{text-align:left}
 	 * object. workerSrc points at the VENDORED worker, never a CDN. All values are escaped.
 	 */
 	private static function import_scripts( $rest, $nonce, $ajax, $znonce, $aurl, $aver ) {
-		$cfg = function_exists( 'wp_json_encode' )
-			? wp_json_encode( array(
-				'rest'      => (string) $rest,
-				'restNonce' => (string) $nonce,
-				'ajaxurl'   => (string) $ajax,
-				'nonce'     => (string) $znonce,
-				'pdfWorker' => (string) $aurl . 'assets/js/vendor/pdf.worker.min.js',
-			) )
-			: json_encode( array( 'rest' => (string) $rest, 'restNonce' => (string) $nonce, 'ajaxurl' => (string) $ajax, 'nonce' => (string) $znonce, 'pdfWorker' => (string) $aurl . 'assets/js/vendor/pdf.worker.min.js' ) );
-		$v      = rawurlencode( (string) $aver );
-		$pdfjs  = self::e( $aurl . 'assets/js/vendor/pdf.min.js' ) . '?v=' . $v;
+		// pdf.js is an ES module (vendor/pdfjs, see its README); import.js loads it with a
+		// dynamic import() from these URLs, so there is no separate <script> tag for it.
+		$v    = rawurlencode( (string) $aver );
+		$conf = array(
+			'rest'      => (string) $rest,
+			'restNonce' => (string) $nonce,
+			'ajaxurl'   => (string) $ajax,
+			'nonce'     => (string) $znonce,
+			'pdfLib'    => (string) $aurl . 'assets/js/vendor/pdfjs/pdf.min.js?v=' . $v,
+			'pdfWorker' => (string) $aurl . 'assets/js/vendor/pdfjs/pdf.worker.min.js?v=' . $v,
+		);
+		$cfg      = function_exists( 'wp_json_encode' ) ? wp_json_encode( $conf ) : json_encode( $conf );
 		$importjs = self::e( $aurl . 'assets/js/import.js' ) . '?v=' . $v;
 		return '<script>window.zestImport=' . $cfg . ';</script>'
-			. '<script src="' . $pdfjs . '"></script>'
 			. '<script src="' . $importjs . '"></script>';
 	}
 

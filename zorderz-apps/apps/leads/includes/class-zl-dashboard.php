@@ -3142,7 +3142,10 @@ class ZL_Dashboard {
 		wp_remote_post( $url, array(
 			'timeout'   => 1,
 			'blocking'  => false,
-			'sslverify' => false,
+			// The relay token authorises the background endpoints, so it is never sent without
+			// certificate verification. A host whose loopback uses a self-signed certificate can
+			// opt out explicitly through WordPress' own https_local_ssl_verify filter.
+			'sslverify' => (bool) apply_filters( 'https_local_ssl_verify', true ),
 			'body'      => array(
 				'action'      => $action,
 				'batch_id'    => $batch_id,
@@ -3548,20 +3551,35 @@ class ZL_Dashboard {
 			// ── Step 6: Nutshell Create ──
 			// v2.0.0: When sp_code is '_ALL_', pass empty string so Nutshell
 			// creates the lead unassigned (rather than looking up '_ALL_' as a salesperson)
+			// 1.10.2: this step called a method that does not exist (the Error was swallowed by
+			// the catch below), so no background batch ever reached the CRM. It now uses the same
+			// generator call as the manual "Create in Nutshell" path, and like that path it never
+			// pushes a test batch.
 			$ns_sp = ( $sp_code === '_ALL_' ) ? '' : $sp_code;
-			if ( class_exists( 'ZL_Nutshell' ) && ! empty( $ns_sp ) ) {
+			if ( class_exists( 'ZL_Nutshell' ) && ! empty( $ns_sp ) && ! $is_test ) {
 				@set_time_limit( 120 );
 				$this->update_batch_progress( $batch_id, 'nutshell', 85, 'Creating Nutshell leads...' );
 				try {
-					$ns = new ZL_Nutshell();
+					$sp_name = $ns_sp;
+					foreach ( (array) ( json_decode( get_option( 'zl_salespeople', '[]' ), true ) ?: zl_salespeople() ) as $sp ) {
+						if ( isset( $sp['code'], $sp['name'] ) && $sp['code'] === $ns_sp ) {
+							$sp_name = $sp['name'];
+							break;
+						}
+					}
 					$db_leads = $wpdb->get_results( $wpdb->prepare(
-						"SELECT * FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d", $batch_id
+						"SELECT * FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d AND (nutshell_lead_id IS NULL OR nutshell_lead_id = '')", $batch_id
 					), ARRAY_A );
 					foreach ( $db_leads as $dl ) {
-						$ns_id = $ns->create_lead_from_candidate( $dl, $ns_sp, $batch_id );
+						try {
+							$ns_id = $gen->create_nutshell_lead( $dl, $sp_name, $product_filter );
+						} catch ( \Throwable $lead_err ) {
+							error_log( 'ZL Relay: Nutshell create failed for lead #' . (int) $dl['id'] . ': ' . $lead_err->getMessage() );
+							continue;
+						}
 						if ( $ns_id ) {
 							$wpdb->update( $wpdb->prefix . 'zl_leads',
-								array( 'nutshell_lead_id' => $ns_id ), array( 'id' => $dl['id'] ), array( '%s' ), array( '%d' ) );
+								array( 'nutshell_lead_id' => $ns_id, 'status' => 'Lead Created' ), array( 'id' => $dl['id'] ), array( '%s', '%s' ), array( '%d' ) );
 						}
 					}
 				} catch ( \Throwable $e ) {
@@ -3577,10 +3595,11 @@ class ZL_Dashboard {
 				$this->update_batch_progress( $batch_id, 'ai_summary', 90, 'Generating AI summary...' );
 				try {
 					$db_leads = $wpdb->get_results( $wpdb->prepare(
-						"SELECT * FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d ORDER BY score DESC", $batch_id
+						"SELECT id FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d LIMIT 1", $batch_id
 					), ARRAY_A );
 					if ( ! empty( $db_leads ) ) {
-						$summary = $gen->generate_batch_summary( $db_leads );
+						// 1.10.2: was a call to a method that does not exist.
+						$summary = $gen->ai_batch_summary( $batch_id );
 						if ( ! empty( $summary ) ) {
 							$wpdb->update( $wpdb->prefix . 'zl_batches',
 								array( 'ai_summary' => $summary ), array( 'id' => $batch_id ), array( '%s' ), array( '%d' ) );
