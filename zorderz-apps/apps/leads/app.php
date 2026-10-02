@@ -685,8 +685,12 @@ function zl_maybe_upgrade() {
         error_log( 'ZL v2.0.0 migration: Lead interaction model enabled, forward-to-team table created, permissions updated.' );
     }
 
-    // v1.5.0 migration — Full-parity widget + permission system
-    if ( version_compare( $db_ver, '1.5.0', '<' ) ) {
+    // v1.5.0 migration — Full-parity widget + permission system.
+    // Skipped on a fresh install ($db_ver '0'): this seed is the 1.5-era permission set, and
+    // the later blocks that would update it ran first (they are ordered newest-first), so on a
+    // fresh install it would freeze the old set in place. With zl_permissions unset,
+    // ZL_Permissions::get_config() falls back to the current get_defaults().
+    if ( '0' !== (string) $db_ver && version_compare( $db_ver, '1.5.0', '<' ) ) {
         // Initialize default permission configuration if not set
         if ( ! get_option( 'zl_permissions' ) ) {
             update_option( 'zl_permissions', array(

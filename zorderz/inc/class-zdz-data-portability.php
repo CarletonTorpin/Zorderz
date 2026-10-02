@@ -1241,12 +1241,18 @@ class ZDZ_Data_Portability {
 			$zip->close();
 			return array( array( 'type' => 'error', 'msg' => 'The sample-data bundle is invalid.' ), null );
 		}
-		$bundle = self::prepare_sample_bundle( $bundle );
+		$bundle   = self::prepare_sample_bundle( $bundle );
+		$conflict = self::sample_user_conflicts( $bundle );
+		if ( $conflict ) {
+			$zip->close();
+			return array( array( 'type' => 'error', 'msg' => ( $dry ? 'Dry run: loading would be refused. ' : 'Sample data was not loaded: ' ) . 'it would overwrite existing accounts on this site (' . implode( ', ', $conflict ) . '). Load the sample on a fresh install, or remove those accounts first.' ), null );
+		}
 		if ( ! $dry ) {
-			$conflict = self::sample_user_conflicts( $bundle );
-			if ( $conflict ) {
-				$zip->close();
-				return array( array( 'type' => 'error', 'msg' => 'Sample data was not loaded: it would overwrite existing accounts on this site (' . implode( ', ', $conflict ) . '). Load the sample on a fresh install, or remove those accounts first.' ), null );
+			// The importer keeps an existing row's hash when the bundle's is empty. For sample
+			// accounts that is wrong (a sample loaded before 1.10.2 installed published hashes),
+			// so every demo account gets a fresh random password on every load.
+			foreach ( array_keys( (array) ( $bundle['users'] ?? array() ) ) as $i ) {
+				$bundle['users'][ $i ]['user_pass'] = wp_hash_password( wp_generate_password( 32, true, true ) );
 			}
 		}
 		$media = $dry ? self::count_upload_entries( $zip ) : self::extract_uploads( $zip );
@@ -1310,7 +1316,18 @@ class ZDZ_Data_Portability {
 			if ( ! $existing ) {
 				continue;
 			}
-			if ( $id === $acting || ! get_user_meta( $id, self::SAMPLE_USER_META, true ) ) {
+			if ( $id === $acting ) {
+				$out[] = '#' . $id . ' ' . $existing->user_login;
+				continue;
+			}
+			if ( get_user_meta( $id, self::SAMPLE_USER_META, true ) ) {
+				continue; // created by this loader
+			}
+			// Loaded by a release before 1.10.2 (no marker yet): the same login AND email as the
+			// seed row means it is the sample's own demo account, not a real person's.
+			$same_login = strtolower( (string) $existing->user_login ) === strtolower( (string) ( $u['user_login'] ?? '' ) );
+			$same_email = strtolower( (string) $existing->user_email ) === strtolower( (string) ( $u['user_email'] ?? '' ) );
+			if ( ! ( $same_login && $same_email ) ) {
 				$out[] = '#' . $id . ' ' . $existing->user_login;
 			}
 		}
