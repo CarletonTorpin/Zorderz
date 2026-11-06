@@ -155,21 +155,28 @@ class ZDZ_Integration_Tests {
 				$found++;
 			}
 		}
+		// A site that has not connected the billing app has nothing to cascade: that is not a fault.
+		if ( 0 === $found && '' === (string) get_option( 'zdz_core_fb_client_id', '' ) ) {
+			return [
+				'name'   => 'Credential Cascade (FreshBooks)',
+				'pass'   => true,
+				'detail' => 'The billing app is not connected yet (Zorderz → Credentials): nothing to check',
+			];
+		}
 		return [
 			'name'   => 'Credential Cascade (FreshBooks)',
 			'pass'   => $found >= 1,
-			'detail' => "{$found}/" . count( $prefixes ) . " prefixes have access tokens",
+			'detail' => "{$found}/" . count( $prefixes ) . ' prefixes have access tokens',
 		];
 	}
 
 	private function check_plugin_discovery() {
-		$apps     = apply_filters( 'zdz_register_apps', [] );
-		$expected = 12;
-		$count    = count( $apps );
+		$apps  = apply_filters( 'zdz_register_apps', [] );
+		$count = count( $apps );
 		return [
 			'name'   => 'Plugin Discovery (zdz_register_apps)',
-			'pass'   => $count >= 10,
-			'detail' => "{$count} apps registered (expected ~{$expected})",
+			'pass'   => $count >= 1,
+			'detail' => $count >= 1 ? "{$count} apps registered" : 'No apps registered: is the Zorderz Apps plugin active?',
 		];
 	}
 
@@ -226,19 +233,27 @@ class ZDZ_Integration_Tests {
 	}
 
 	private function check_messaging_preview() {
-		$server    = rest_get_server();
-		$routes    = $server->get_routes();
-		$has_route = false;
-		foreach ( array_keys( $routes ) as $route ) {
+		// Messaging reads estimate and invoice cards through the Estimates app's document reader first,
+		// and only without it through a freshbooks-preview REST route (see apps/messaging/app.php).
+		$has_reader = has_filter( 'zdz_fb_document_for_viewer' );
+		$has_route  = false;
+		foreach ( array_keys( rest_get_server()->get_routes() ) as $route ) {
 			if ( strpos( $route, 'freshbooks-preview' ) !== false ) {
 				$has_route = true;
 				break;
 			}
 		}
+		if ( $has_reader ) {
+			$detail = 'Estimates document reader registered';
+		} elseif ( $has_route ) {
+			$detail = 'freshbooks-preview REST route registered';
+		} else {
+			$detail = 'No document reader: #NNNNN chips in Messages show their number only (is the Estimates app active?)';
+		}
 		return [
-			'name'   => 'Messaging → Analytics Preview',
-			'pass'   => $has_route,
-			'detail' => $has_route ? 'REST route registered' : 'freshbooks-preview route NOT found',
+			'name'   => 'Messaging → document cards',
+			'pass'   => $has_reader || $has_route,
+			'detail' => $detail,
 		];
 	}
 

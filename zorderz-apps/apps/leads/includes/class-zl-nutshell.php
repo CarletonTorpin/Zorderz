@@ -210,7 +210,7 @@ class ZL_Nutshell {
 		$body_json   = wp_remote_retrieve_body( $response );
 
 		if ( 401 === $status_code ) {
-			throw new Exception( 'Nutshell authentication failed. Check your API Key and Login Email in settings.' );
+			throw new Exception( 'Nutshell authentication failed. Check the Nutshell key and login email on Zorderz → Credentials.' );
 		}
 
 		if ( 200 !== $status_code ) {

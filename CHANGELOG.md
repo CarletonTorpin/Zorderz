@@ -97,6 +97,14 @@ monthly budget and a zero-retention workspace are set (Zorderz → Ai usage → 
 - Theme and apps bundle move to 2.0.0 in lockstep; the hub carries the same version.
 - Unit tests grow from 43 to more than 1,300.
 
+### Fixed
+- The Email tile did nothing when tapped on a site where Email is not turned on. It now opens a note that says so,
+  and tells an administrator where the connection goes and where Email is turned on.
+- Tools → Zorderz Integration Health no longer reports a fresh install as failing: the billing check passes while the
+  billing app is not connected, app discovery has no fixed count, and Messages' document cards pass with the Estimates
+  document reader (the route it looked for is only the fallback).
+- Commission's empty state and Leads' Nutshell sign-in error now point to Zorderz → Credentials instead of "settings".
+
 ---
 
 ## [1.10.2] - 2026-10-02

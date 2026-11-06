@@ -109,6 +109,21 @@ class ZIB_Widget {
 	}
 
 	/**
+	 * What the Email tile opens while Email is not turned on for this site (the flag is off, or the
+	 * Microsoft 365 connection is not entered): a plain note, so the tile never opens nothing.
+	 */
+	public static function render_off_card(): string {
+		$out = '<div id="zib-card" class="zib-card zib-off"><p>' . esc_html__( 'Email is not turned on for this site yet.', 'zorderz' ) . '</p>';
+		if ( current_user_can( 'manage_options' ) ) {
+			$out .= '<p>' . esc_html__( 'It reads a Microsoft 365 mailbox. Enter the connection on Zorderz → Credentials, then turn Email on here:', 'zorderz' )
+				. ' <a href="' . esc_url( admin_url( 'options-general.php?page=zib-settings' ) ) . '">' . esc_html__( 'Settings → Zorderz Inbox', 'zorderz' ) . '</a></p>';
+		} else {
+			$out .= '<p>' . esc_html__( 'An administrator turns it on.', 'zorderz' ) . '</p>';
+		}
+		return $out . '</div>';
+	}
+
+	/**
 	 * Register the app tile (widget-only; the icon jumps to the card).
 	 *
 	 * This filter callback runs when the theme ENUMERATES apps — i.e. well
