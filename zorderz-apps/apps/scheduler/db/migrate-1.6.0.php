@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Scheduler schema migration — v1.6.0 (Connected Calendars, Phase 0).
+ * Zorderz Scheduler schema migration — v1.6.0 (Connected Calendars).
  *
  * Idempotent. Safe to run repeatedly; dbDelta handles schema diffs. Additive
  * only — the three v1.0.0 tables are untouched.
@@ -9,9 +9,9 @@
  *   wp_zsch_calendar_accounts  one row per user × provider × external account
  *                               (the encrypted token vault lives on this row)
  *   wp_zsch_calendar_feeds     one row per selected calendar on an account
- *                               ("conflict calendars"; two_way arrives Phase 2)
+ *                               ("conflict calendars"; two_way arrives with write-back)
  *   wp_zsch_external_events    normalized external busy mirror (rolling
- *                               window; populated by the Phase 1 sync engine)
+ *                               window; populated by the sync engine)
  *
  * DESIGN NOTES:
  *   - `external_id` is the provider's IMMUTABLE account key — Google's `sub`
@@ -24,7 +24,7 @@
  *   - `token_version` is a monotonic counter powering the vault's
  *     single-flight refresh (GET_LOCK holder bumps it; waiting requests adopt
  *     the sibling's fresh token instead of racing a second refresh — the
- *     FreshBooks token-service lesson, INV-4).
+ *     same single-flight rule as the FreshBooks token service).
  *   - `wp_zsch_external_events.title` is owner-eyes-only and NULL when the
  *     feed's privacy toggle is "busy-only" (data minimization).
  *   - UNIQUE (owner, provider, external_id): reconnecting the same account
@@ -76,9 +76,9 @@ class ZSCH_Migrate_1_6_0 {
 		) {$charset};" );
 
 		// ── calendar_feeds ─────────────────────────────────────────
-		// mode = 'conflict' | 'two_way' (two_way is Phase 2; Phase 0/1 rows are
+		// mode = 'conflict' | 'two_way' (two_way is write-back; rows today are
 		// always 'conflict'). privacy = 'titles' | 'busy_only'.
-		// channel_* / sync_* columns are Phase 1 sync-engine bookkeeping,
+		// channel_* / sync_* columns are sync-engine bookkeeping,
 		// shipped now so the schema never needs another migration for it.
 		dbDelta( "CREATE TABLE {$p}zsch_calendar_feeds (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -105,7 +105,7 @@ class ZSCH_Migrate_1_6_0 {
 
 		// ── external_events ────────────────────────────────────────
 		// The normalized busy mirror. Rows exist only inside the rolling sync
-		// window (today−1d → +60d); the Phase 1 engine purges as it goes.
+		// window (today−1d → +60d); the sync engine purges as it goes.
 		// busy_status = 'busy' | 'tentative' | 'free' (free rows are normally
 		// skipped at ingest; the column allows a future policy change).
 		dbDelta( "CREATE TABLE {$p}zsch_external_events (

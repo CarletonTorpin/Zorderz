@@ -32,3 +32,22 @@
 .zstock-w-toast--error { background: #dc2626; }
 .zstock-w-toast--success { background: #16a34a; }
 .zstock-w-toast--info { background: #2563eb; }
+/* Incoming orders, Received, New order. */
+.zstock-w-dot--uncounted { background: #d1d5db; }
+.zstock-w-uncounted { color: #6b7280; }
+.zstock-w-badge--incoming { background: #e0e7ff; color: #3730a3; }
+.zstock-w-badge--partial { background: #fef3c7; color: #92400e; }
+.zstock-w-order { padding: 8px 10px; background: #fafafa; border-radius: 8px; }
+.zstock-w-order-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.zstock-w-order-lines { margin: 4px 0 6px; padding-left: 18px; font-size: 13px; }
+.zstock-w-order .zstock-w-actions { margin-bottom: 0; }
+.zstock-w-panel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding: 10px; background: #f6f7f9; border-radius: 8px; }
+.zstock-w-panel[hidden] { display: none; }
+.zstock-w-panel input, .zstock-w-panel select { padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; min-height: 36px; max-width: 100%; box-sizing: border-box; }
+.zstock-w-rcv-line, .zstock-w-no-line { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.zstock-w-rcv-desc { flex: 1 1 100%; font-size: 13px; }
+.zstock-w-rcv-qty, .zstock-w-no-qty { width: 96px; }
+.zstock-w-no-desc { flex: 1 1 180px; }
+.zstock-w-rcv-more { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.zstock-w-match-also { margin-top: 8px; }
+@media (pointer: coarse) { .zstock-w-panel input, .zstock-w-panel select { font-size: 16px; } }

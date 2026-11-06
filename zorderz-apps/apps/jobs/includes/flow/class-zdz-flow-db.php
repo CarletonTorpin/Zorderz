@@ -2,7 +2,7 @@
 /**
  * Zdz_Flow_DB — the Flow substrate schema + a version-gated, idempotent self-boot.
  *
- * Creates the eight `wp_zdz_`-prefixed Flow tables (per workflow-web.md §4.11, re-prefixed).
+ * Creates the eight `wp_zdz_`-prefixed Flow tables.
  * Self-boots on `after_setup_theme`, gated by the `zdz_flow_db_version` option, running
  * `dbDelta` only when the stored version is behind or a table is physically missing.
  *
@@ -17,7 +17,7 @@
  * cannot portably manage triggers, so it is DEFERRED (documented, optional) — the code
  * invariant + a scan-gate are the shipping enforcement this release.
  *
- * PORTABILITY NOTES (why the physical types differ from §4.11's logical types):
+ * PORTABILITY NOTES (why the physical types differ from the logical ones):
  *   - JSON columns (guards_evaluated, evidence, envelope, detail, spec) are stored as LONGTEXT
  *     holding JSON. MariaDB aliases the JSON type to LONGTEXT and reports it back as `longtext`,
  *     which would make dbDelta attempt an ALTER on every run — breaking idempotency. LONGTEXT is
@@ -41,7 +41,8 @@ if ( ! class_exists( 'Zdz_Flow_DB' ) ) {
 	class Zdz_Flow_DB {
 
 		const DB_VERSION_OPTION = 'zdz_flow_db_version';
-		const DB_VERSION        = '1.0.0';
+		/** 1.1.0: a work item may hold many refs per {system, entity} (refs keyed by the external id too). */
+		const DB_VERSION        = '1.1.0';
 
 		/* ── table-name helpers (all `wp_zdz_`-prefixed) ─────────────────────── */
 
@@ -151,22 +152,27 @@ if ( ! class_exists( 'Zdz_Flow_DB' ) ) {
 
 			// ── work_item_refs ── the namespaced reference map. `system` is a MySQL 8.0
 			//    reserved word, so it is backticked here and in every query that touches it.
+			//    A work item may hold MANY refs in one {system, entity} (two estimates, a deposit
+			//    and a balance invoice, every job), so the primary key includes the external id.
 			//    UNIQUE(system,entity,external_id) is the double-writer / duplicate-container catch.
+			//    `ref_seq` keeps the order refs were recorded in (the first is the "main" one).
 			$sql[] = "CREATE TABLE {$rf} (
 				work_item_id CHAR(26) NOT NULL DEFAULT '',
 				`system` VARCHAR(32) NOT NULL DEFAULT '',
 				entity VARCHAR(32) NOT NULL DEFAULT '',
 				external_id VARCHAR(191) NOT NULL DEFAULT '',
+				ref_seq BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				external_version VARCHAR(191) NULL DEFAULT NULL,
 				last_pulled_at DATETIME NULL DEFAULT NULL,
 				last_pushed_at DATETIME NULL DEFAULT NULL,
 				sync_state VARCHAR(16) NOT NULL DEFAULT 'pending',
 				last_error TEXT NULL,
-				PRIMARY KEY  (work_item_id,`system`,entity),
-				UNIQUE KEY uq_ext (`system`,entity,external_id)
+				PRIMARY KEY  (work_item_id,`system`,entity,external_id),
+				UNIQUE KEY uq_ext (`system`,entity,external_id),
+				KEY idx_seq (ref_seq)
 			) {$charset_collate};";
 
-			// ── work_item_timers ── keyed to fire once (UNIQUE fire_key), §4.10 layer 4.
+			// ── work_item_timers ── keyed to fire once (UNIQUE fire_key).
 			$sql[] = "CREATE TABLE {$tm} (
 				work_item_id CHAR(26) NOT NULL DEFAULT '',
 				timer_id VARCHAR(64) NOT NULL DEFAULT '',
@@ -197,7 +203,7 @@ if ( ! class_exists( 'Zdz_Flow_DB' ) ) {
 				KEY idx_transition (transition_id)
 			) {$charset_collate};";
 
-			// ── flow_inbox ── consumers process THEN mark handled in one transaction (§5.9).
+			// ── flow_inbox ── consumers process THEN mark handled in one transaction.
 			$sql[] = "CREATE TABLE {$ib} (
 				consumer VARCHAR(64) NOT NULL DEFAULT '',
 				idempotency_key CHAR(64) NOT NULL DEFAULT '',
@@ -231,8 +237,8 @@ if ( ! class_exists( 'Zdz_Flow_DB' ) ) {
 				KEY idx_retry (retryable,retry_after)
 			) {$charset_collate};";
 
-			// ── flow_definitions ── the validated §4.2 spec per (tenant,work_type,version).
-			//    Ships EMPTY — the Core-default `project` definition is B2's, not the substrate's.
+			// ── flow_definitions ── the validated definition per (tenant,work_type,version).
+			//    Ships EMPTY — the `project` definition is registered by the Projects code, not the substrate.
 			$sql[] = "CREATE TABLE {$df} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				tenant_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 1,
@@ -245,12 +251,67 @@ if ( ! class_exists( 'Zdz_Flow_DB' ) ) {
 				UNIQUE KEY uq_ver (tenant_id,work_type,version)
 			) {$charset_collate};";
 
+			// An existing refs table is re-keyed first, in one ALTER that keeps every row: dbDelta
+			// cannot change a primary key or add an AUTO_INCREMENT column (it must be keyed in the
+			// same statement). The table stays as it was if the ALTER fails, and the version is
+			// not advanced, so the next request tries again.
+			$migrated = self::migrate_refs_keys();
+
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 			foreach ( $sql as $stmt ) {
 				dbDelta( $stmt );
 			}
 
-			update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
+			if ( $migrated ) {
+				update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
+			}
+		}
+
+		/**
+		 * Re-key an existing refs table from one ref per {item, system, entity} to many. Keeps every
+		 * row: the old key was narrower than the new one, so no two rows can collide. True when the
+		 * table is current (already re-keyed, freshly made, or absent so dbDelta will create it).
+		 */
+		public static function migrate_refs_keys(): bool {
+			global $wpdb;
+			$rf = self::refs();
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $rf ) ) !== $rf ) {
+				return true; // no table yet: dbDelta creates it with the new keys.
+			}
+			$pk = array();
+			foreach ( (array) $wpdb->get_results( "SHOW INDEX FROM {$rf} WHERE Key_name = 'PRIMARY'", ARRAY_A ) as $ix ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a fixed name; no input in the query.
+				$pk[ (int) ( $ix['Seq_in_index'] ?? 0 ) ] = (string) ( $ix['Column_name'] ?? '' );
+			}
+			ksort( $pk );
+			$cols    = (array) $wpdb->get_col( "SHOW COLUMNS FROM {$rf}", 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a fixed name; no input in the query.
+			$has_seq = in_array( 'ref_seq', array_map( 'strval', $cols ), true );
+			$alter   = self::refs_upgrade_sql( $rf, array_values( $pk ), $has_seq );
+			if ( '' === $alter ) {
+				return true;
+			}
+			return false !== $wpdb->query( $alter ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- schema change built only from the fixed table name and fixed column names in self::refs_upgrade_sql().
+		}
+
+		/**
+		 * The one ALTER that brings a refs table to the current keys, or '' when it already has them.
+		 * PURE.
+		 *
+		 * @param string   $table   the refs table name.
+		 * @param string[] $pk_cols its primary-key columns, in order.
+		 * @param bool     $has_seq whether `ref_seq` exists.
+		 * @return string
+		 */
+		public static function refs_upgrade_sql( string $table, array $pk_cols, bool $has_seq ): string {
+			$parts = array();
+			if ( ! $has_seq ) {
+				$parts[] = 'ADD COLUMN ref_seq BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT AFTER external_id';
+				$parts[] = 'ADD KEY idx_seq (ref_seq)';
+			}
+			if ( array( 'work_item_id', 'system', 'entity', 'external_id' ) !== array_values( $pk_cols ) ) {
+				$parts[] = 'DROP PRIMARY KEY';
+				$parts[] = 'ADD PRIMARY KEY (work_item_id,`system`,entity,external_id)';
+			}
+			return $parts ? 'ALTER TABLE ' . $table . ' ' . implode( ', ', $parts ) : '';
 		}
 
 		/**

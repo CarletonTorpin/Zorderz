@@ -85,7 +85,7 @@ echo "$VER"     # e.g. 1.7.1, whatever the current release is
 **Action:** Download both assets from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed there.
 
 - `zorderz-theme-${VER}.zip`: the theme (platform kernel + Core services). **On the default one-upload path this is the only file you need**, because the theme carries the apps bundle inside it.
-- `zorderz-apps-${VER}.zip`: the apps bundle (20 apps) on its own. You need this only for the two-artifact fallback (step 6) or to update the apps independently.
+- `zorderz-apps-${VER}.zip`: the apps bundle (30 apps) on its own. You need this only for the two-artifact fallback (step 6) or to update the apps independently.
 
 **Verify** each zip you have is intact with the expected top-level folder:
 
@@ -259,7 +259,7 @@ A fresh install is a coherent but nameless blank slate: defaults are inherited f
 
 ### Option B: Identity Pack (by file): preferred for reproducible setup
 
-An Identity Pack is a business as data: a folder of YAML or JSON. A full pack is fifteen files; this version reads `profile.yml` and `org.yml` and reports (never silently ignores) the rest.
+An Identity Pack is a business as data: a folder of YAML or JSON. A full pack is fifteen files; this version reads `profile.yml` and `org.yml` and the parts of `rules.yml`, `connections.yml`, `catalog.yml`, `pricing.yml`, `costs.yml`, `territories.yml`, `parties.yml` and `knowledge.yml` listed in `identity-packs/README.md`, and reports (never silently ignores) the rest. The preview also lists every value it refuses, with the reason.
 
 1. Place the pack where it survives updates:
 
@@ -276,7 +276,9 @@ An Identity Pack is a business as data: a folder of YAML or JSON. A full pack is
 
 **Constraints a valid pack must respect** (a pack that violates these is rejected):
 - It may not create, rename or remove a role; role slugs belong to the platform.
-- It may not carry secrets. `connections.yml` holds `secret://` references, never credential values.
+- It may not carry secrets. `connections.yml` holds `secret://` references, never credential values; a pack carrying a value is refused whole. Enter credentials on Zorderz -> Credentials.
+- It may not loosen a safety limit (each value goes through its setting's own check) and it may not turn a rule live: Territories rules from a pack start in shadow.
+- People are named by their initials on the site; a person the site does not have is skipped and reported.
 - It may not carry customer records or employees' personal contact details.
 
 Then fill the catalog (Zorderz -> Item Engine) and roster as needed. **Verify** the identity took:
@@ -310,11 +312,11 @@ curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/item-engine/cata
 
 ## 9. Connect providers and the Ai gateway (required after an import)
 
-**Where credentials are entered:** wp-admin -> **Zorderz** (the Core settings page, `admin.php?page=zdz-core-settings`). This is the Core credential store; apps read credentials from it rather than storing their own. **After a bundle import this step is mandatory**, because the bundle carried no secrets, so every integration starts blank exactly as on a fresh install.
+**Where credentials are entered:** wp-admin -> **Zorderz -> Credentials** (`admin.php?page=zdz-core-credentials`). This is the one credential store: one key per service, sealed at rest, never printed back into the page; apps read their keys from it. **After a bundle import this step is mandatory**, because the bundle carried no secrets, so every integration starts blank exactly as on a fresh install.
 
-- **Ai gateway:** the v1 gateway is **Poe** (one key reaches most models). Enter the key on the Core settings page, then open the **Model Registry** and assign a model to each task slot. The gateway is provider-agnostic and the slots are configurable, so no model or vendor is hardwired.
-- **Billing (FreshBooks):** enter the Client ID, Client Secret and the account's tokens on the Core settings page. In-dashboard authorization is not available yet; the dashboard's **Authorize FreshBooks** button says so and points here. OAuth providers require completing the provider's consent flow in a browser; do not attempt to bypass it.
-- **CRM (Nutshell):** an administrator can enter the company login email and API key either on the Core settings page or from the dashboard's **Settings -> App Authorizations** card; both write the same store.
+- **Ai:** enter the provider key on **Credentials** (the Poe gateway key, or an Anthropic key with its zero-retention workspace id). Then open **Zorderz -> Ai usage -> Setup** and set, for each role, the model to use, its prices and a monthly budget. **Nothing is sent to any Ai provider until models, prices and a budget are set**; the Ai usage page says what is missing. Model names are never hardwired.
+- **Billing (FreshBooks):** enter the Client ID and Client Secret on **Credentials**, then connect the account from the app that holds the sign-in (the button on Credentials says where). OAuth providers require completing the provider's consent flow in a browser; do not attempt to bypass it.
+- **CRM (Nutshell):** enter the company login email and API key on **Credentials**, or from the dashboard's **Settings -> App Authorizations** card; both write the same store.
 - **Mailbox (Inbox):** wp-admin -> **Settings -> Zorderz Inbox**. Reading is the default. Compose, reply, forward and triage appear only when an administrator turns on **Sending & triage** and each user reconnects to grant `Mail.Send` and `Mail.ReadWrite`.
 
 **Verify:** the dashboard's **Settings -> App Authorizations** card shows each configured provider as **Connected**:

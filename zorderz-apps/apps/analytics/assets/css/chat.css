@@ -1,105 +1,456 @@
-/* Zorderz Analytics — Chat surface. Neutral tokens; inherits theme variables. */
+/* Zorderz Analytics — the Chat surface.
+   Colours are the theme's tokens only (each tinted background with its own ink, so light, dark, system and sunlight
+   all hold their contrast); sizes are the theme's type roles; every press target is at least --zdz-kit-tap. The
+   buttons are the kit's (.zdz-btn). Fallbacks are neutral greys, never a brand colour. */
 
+/* ── the view ─────────────────────────────────────────────────────────────────────────────────────── */
 .sub-view.zana-chat {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	min-height: 0;
+	padding: 0;
+	overflow: hidden;
+	--zana-bubble-radius: 18px;
+	--zana-bubble-tail: 6px;
+	font-size: var(--zdz-type-body, 17px);
+	line-height: var(--zdz-type-lh-body, 1.45);
+	color: var(--sys-text, #111);
 }
 
 .zana-head {
 	display: flex;
-	align-items: baseline;
-	gap: 12px;
-	padding: 12px 16px 4px;
+	flex-wrap: wrap;   /* a button another part of the chat adds (Needs a referral) moves to a second line on a phone */
+	align-items: center;
+	gap: 4px 8px;
+	padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px 16px;
+	border-bottom: 1px solid var(--sys-border, rgba(127, 127, 127, 0.25));
+	background: var(--sys-bg, transparent);
+	flex-shrink: 0;
 }
-.zana-head h4 { margin: 0; }
-.zana-kiosk-note {
-	font-size: 12px;
-	opacity: 0.7;
+.zana-head h4 {
+	flex: 1 1 120px;
+	min-width: 0;
+	margin: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: var(--zdz-type-title, 20px);
+	font-weight: var(--sys-font-wt-b, 700);
+	line-height: var(--zdz-type-lh-tight, 1.2);
+}
+.zana-head-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.zana-head-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--zdz-kit-tap, 44px);
+	height: var(--zdz-kit-tap, 44px);
+	padding: 0;
+	border: 0;
+	border-radius: var(--zdz-kit-radius, 12px);
+	background: transparent;
+	color: var(--sys-text-sec, #555);
+	cursor: pointer;
+}
+.zana-head-btn:hover { background: var(--sys-surface-subtle, rgba(127, 127, 127, 0.12)); color: var(--sys-text, #111); }
+.zana-head-btn:focus-visible { outline: 3px solid var(--sys-focus, var(--sys-brand, currentColor)); outline-offset: 1px; }
+.zana-head-btn[hidden] { display: none; }
+.zana-head-btn svg, .zana-head-btn i { width: 22px; height: 22px; pointer-events: none; }
+.zana-head-btn[aria-pressed="true"] { color: var(--sys-brand, currentColor); }
+
+.zana-notes { padding: 6px 16px 0; flex-shrink: 0; }
+.zana-note {
+	margin: 0 0 6px;
+	padding: 8px 12px;
+	border-radius: var(--ref-radius-sm, 8px);
+	background: var(--sys-tint-info-bg, rgba(127, 127, 127, 0.12));
+	color: var(--sys-tint-info-fg, inherit);
+	font-size: var(--zdz-type-secondary, 15px);
 }
 
+/* ── messages ─────────────────────────────────────────────────────────────────────────────────────── */
 .zana-messages {
 	flex: 1 1 auto;
+	min-height: 0;
 	overflow-y: auto;
-	padding: 12px 16px;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
+	padding: 16px;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	-webkit-overflow-scrolling: touch;
+	gap: 14px;
 }
 
-.zana-empty {
-	opacity: 0.6;
-	text-align: center;
-	margin-top: 24px;
+.zana-empty { margin: auto 0; text-align: center; }
+.zana-empty-line { margin: 0 0 14px; color: var(--sys-text-sec, #555); }
+.zana-starters { display: flex; flex-direction: column; gap: 8px; max-width: 560px; margin: 0 auto; }
+.zana-starter {
+	display: block;
+	width: 100%;
+	min-height: 56px;
+	padding: 12px 16px;
+	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3));
+	border-radius: var(--zdz-kit-radius, 12px);
+	background: var(--sys-surface, transparent);
+	color: var(--sys-text, inherit);
+	font: inherit;
+	font-size: var(--zdz-type-secondary, 16px);
+	line-height: var(--zdz-type-lh-tight, 1.2);
+	text-align: left;
+	cursor: pointer;
 }
+.zana-starter:hover { border-color: var(--sys-brand, currentColor); }
+.zana-starter:focus-visible { outline: 3px solid var(--sys-focus, var(--sys-brand, currentColor)); outline-offset: 2px; }
 
 .zana-msg {
-	max-width: 82%;
-	padding: 10px 13px;
-	border-radius: 14px;
-	font-size: 15px;
-	line-height: 1.4;
-	white-space: pre-wrap;
-	word-wrap: break-word;
+	max-width: min(88%, 780px);
+	padding: 10px 16px;
+	font-size: var(--zdz-type-body, 17px);
+	line-height: var(--zdz-type-lh-body, 1.45);
+	overflow-wrap: anywhere;
 }
 .zana-msg-user {
 	align-self: flex-end;
-	background: var(--sys-brand, #6366F1);
-	color: #fff;
-	border-bottom-right-radius: 4px;
+	white-space: pre-wrap;
+	background: var(--sys-brand, #444);
+	color: var(--sys-text-brand, #fff);
+	border-radius: var(--zana-bubble-radius) var(--zana-bubble-radius) var(--zana-bubble-tail) var(--zana-bubble-radius);
 }
 .zana-msg-assistant {
 	align-self: flex-start;
-	background: var(--sys-surface-2, rgba(127, 127, 127, 0.12));
-	border-bottom-left-radius: 4px;
+	max-width: min(100%, 780px);
+	background: var(--sys-surface, transparent);
+	color: var(--sys-text, inherit);
+	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.25));
+	border-radius: var(--zana-bubble-radius) var(--zana-bubble-radius) var(--zana-bubble-radius) var(--zana-bubble-tail);
 }
-.zana-pending { opacity: 0.6; font-style: italic; }
+.zana-pending { color: var(--sys-text-sec, #555); font-style: italic; }
+.zana-streaming { font-style: normal; }
+
+/* inside an answer */
+.zana-msg-body > :first-child { margin-top: 0; }
+.zana-msg-body > :last-child { margin-bottom: 0; }
+.zana-msg-body p { margin: 0 0 0.6em; }
+.zana-msg-body .zana-h { margin: 0.5em 0 0.4em; font-size: var(--zdz-type-title, 20px); line-height: var(--zdz-type-lh-tight, 1.2); }
+.zana-msg-body h5.zana-h, .zana-msg-body h6.zana-h { font-size: var(--zdz-type-body, 17px); }
+.zana-msg-body ul, .zana-msg-body ol { margin: 0.3em 0 0.6em; padding-left: 1.3em; }
+.zana-msg-body li { margin: 0.15em 0; }
+.zana-msg-body blockquote { margin: 0.4em 0; padding-left: 12px; border-left: 3px solid var(--sys-border-strong, rgba(127, 127, 127, 0.5)); color: var(--sys-text-sec, #555); }
+.zana-msg-body code { padding: 0 4px; border-radius: 4px; background: var(--sys-bg-alt, rgba(127, 127, 127, 0.12)); font-size: 0.92em; }
+.zana-msg-body pre { margin: 0.4em 0; padding: 10px 12px; overflow-x: auto; border-radius: var(--ref-radius-sm, 8px); background: var(--sys-bg-alt, rgba(127, 127, 127, 0.12)); white-space: pre; }
+.zana-msg-body pre code { padding: 0; background: none; }
+.zana-msg-body hr { border: 0; border-top: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3)); margin: 0.8em 0; }
+.zana-msg-body a { color: var(--sys-brand, inherit); text-decoration: underline; text-underline-offset: 2px; }
+.zana-table-wrap { max-width: 100%; overflow-x: auto; margin: 0.4em 0 0.6em; }
+.zana-msg-body table { border-collapse: collapse; font-size: var(--zdz-type-secondary, 15px); }
+.zana-msg-body th, .zana-msg-body td { padding: 6px 10px; border-bottom: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3)); text-align: left; vertical-align: top; }
+.zana-msg-body th { font-weight: var(--sys-font-wt-sb, 600); color: var(--sys-text-sec, #555); white-space: nowrap; }
+.zana-chg { font-weight: var(--sys-font-wt-sb, 600); white-space: nowrap; }
+.zana-chg-up { color: var(--sys-tint-success-fg, inherit); }
+.zana-chg-down { color: var(--sys-tint-error-fg, inherit); }
 
 .zana-verdict {
 	display: inline-block;
 	margin-top: 6px;
-	padding: 1px 7px;
-	border-radius: 8px;
-	font-size: 11px;
-	text-transform: uppercase;
-	letter-spacing: 0.03em;
-	background: rgba(234, 179, 8, 0.18);
+	padding: 1px 8px;
+	border-radius: var(--ref-radius-sm, 8px);
+	font-size: var(--zdz-type-meta, 13px);
+	background: var(--sys-tint-warning-bg, rgba(127, 127, 127, 0.15));
+	color: var(--sys-tint-warning-fg, inherit);
 }
-.zana-verdict-refuse { background: rgba(239, 68, 68, 0.18); }
+.zana-verdict-refuse { background: var(--sys-tint-error-bg, rgba(127, 127, 127, 0.15)); color: var(--sys-tint-error-fg, inherit); }
 
+/* an answer worked out by code from the business's own records */
+.zana-instant { margin-top: 8px; font-size: var(--zdz-type-meta, 14px); line-height: 1.3; color: var(--sys-text-sec, #555); }
+
+/* Copy under an answer: always shown (never only on hover, which a phone has not), and kept in reach at the bottom of
+   the chat while any part of a long answer is on screen, on the answer's own background. */
+.zana-msg-actions {
+	position: sticky;
+	bottom: -10px;
+	display: flex;
+	gap: 4px;
+	margin: 6px -4px -4px;
+	padding: 2px 4px 4px;
+	background: var(--sys-surface, transparent);
+	border-radius: 0 0 var(--zana-bubble-radius, 18px) var(--zana-bubble-tail, 6px);
+}
+.zana-msg-actions .zdz-btn { color: var(--sys-text-sec, #555); }
+
+/* ── the composer ─────────────────────────────────────────────────────────────────────────────────── */
 .zana-form {
 	display: flex;
+	align-items: flex-end;
 	gap: 8px;
-	padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
-	border-top: 1px solid var(--sys-border, rgba(127, 127, 127, 0.2));
+	padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+	border-top: 1px solid var(--sys-border, rgba(127, 127, 127, 0.25));
+	background: var(--sys-bg, transparent);
+	flex-shrink: 0;
 }
+.zana-form[hidden] { display: none; }
 .zana-form textarea {
 	flex: 1 1 auto;
 	resize: none;
-	min-height: 44px;
-	max-height: 140px;
-	padding: 11px 13px;
-	border-radius: 12px;
-	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3));
+	min-height: var(--zdz-kit-tap, 44px);
+	max-height: 160px;
+	padding: 10px 14px;
+	border-radius: var(--zdz-kit-radius, 12px);
+	border: 1px solid var(--sys-border-strong, rgba(127, 127, 127, 0.45));
 	background: var(--sys-surface, transparent);
-	color: inherit;
+	color: var(--sys-text, inherit);
 	font: inherit;
-	font-size: 16px; /* >=16px: prevents mobile input auto-zoom */
+	font-size: max(16px, var(--zdz-type-body, 17px)); /* 16px or more: a phone does not zoom into the field */
+	line-height: var(--zdz-type-lh-body, 1.45);
 }
+.zana-form textarea:focus-visible { outline: 3px solid var(--sys-focus, var(--sys-brand, currentColor)); outline-offset: 1px; }
 .zana-send {
 	flex: 0 0 auto;
-	min-width: 64px;
-	min-height: 44px;
-	border: none;
-	border-radius: 12px;
-	background: var(--sys-brand, #6366F1);
-	color: #fff;
-	font-weight: 600;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-width: var(--zdz-kit-tap, 44px);
+	min-height: var(--zdz-kit-tap, 44px);
+	padding: 0 14px;
+	border: 0;
+	border-radius: var(--zdz-kit-radius, 12px);
+	background: var(--sys-brand, #444);
+	color: var(--sys-text-brand, #fff);
+	font: inherit;
+	font-weight: var(--sys-font-wt-sb, 600);
 	cursor: pointer;
 }
+.zana-send svg, .zana-send i { width: 20px; height: 20px; }
 .zana-send:disabled { opacity: 0.5; cursor: default; }
+.zana-send:focus-visible { outline: 3px solid var(--sys-focus, var(--sys-brand, currentColor)); outline-offset: 2px; }
+@media (max-width: 480px) { .zana-send-label { display: none; } }
 
-/* The injected Chat nav item aligns with the theme's bottom-nav items. */
+/* the injected Chat nav item lines up with the theme's bottom-nav items */
 .bnav .ni-chat i { pointer-events: none; }
+
+/* ── cards in an answer ───────────────────────────────────────────────────────────────────────────── */
+.zana-card {
+	margin: 4px 0 10px;
+	padding: 12px 14px;
+	border-radius: var(--zdz-kit-radius, 12px);
+	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3));
+	background: var(--sys-bg-alt, rgba(127, 127, 127, 0.08));
+	color: var(--sys-text, inherit);
+	white-space: normal;
+}
+.zana-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.zana-card-note { margin: 6px 0 0; font-size: var(--zdz-type-secondary, 15px); color: var(--sys-text-sec, #555); }
+.zana-card-note:empty { display: none; }
+.zana-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.zana-card-kicker { font-size: var(--zdz-type-secondary, 15px); font-weight: var(--sys-font-wt-sb, 600); }
+.zana-card-app { flex-shrink: 0; font-size: var(--zdz-type-meta, 14px); color: var(--sys-text-sec, #555); }
+.zana-card-done {
+	padding: 10px 14px;
+	border-radius: var(--zdz-kit-radius, 12px);
+	font-size: var(--zdz-type-secondary, 15px);
+	font-weight: var(--sys-font-wt-sb, 600);
+}
+.zana-card-done.is-ok { background: var(--sys-tint-success-bg, rgba(127, 127, 127, 0.12)); color: var(--sys-tint-success-fg, inherit); }
+.zana-card-done.is-bad { background: var(--sys-tint-error-bg, rgba(127, 127, 127, 0.12)); color: var(--sys-tint-error-fg, inherit); }
+.zana-card-error {
+	margin-top: 10px;
+	padding: 8px 12px;
+	border-radius: var(--ref-radius-sm, 8px);
+	font-size: var(--zdz-type-secondary, 15px);
+	background: var(--sys-tint-error-bg, rgba(127, 127, 127, 0.12));
+	color: var(--sys-tint-error-fg, inherit);
+}
+
+/* a held change: nothing has happened until Confirm */
+.zana-confirm-card {
+	background: var(--sys-tint-warning-bg, rgba(127, 127, 127, 0.12));
+	color: var(--sys-tint-warning-fg, inherit);
+	border-color: transparent;
+	border-left: 4px solid currentColor;
+}
+.zana-confirm-card .zana-card-note { color: inherit; }
+.zana-confirm-card.is-expired { background: var(--sys-tint-neutral-bg, rgba(127, 127, 127, 0.12)); color: var(--sys-tint-neutral-fg, inherit); }
+.zana-confirm-card .zana-card-done { padding: 0; background: none; color: inherit; }
+.zana-confirm-card .zdz-btn--quiet { color: inherit; }
+
+/* drafts held for a press */
+.zana-draft-body {
+	margin-bottom: 12px;
+	padding: 10px 14px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	border-radius: var(--zana-bubble-radius, 18px) var(--zana-bubble-radius, 18px) var(--zana-bubble-tail, 6px) var(--zana-bubble-radius, 18px);
+	background: var(--sys-surface, transparent);
+	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3));
+}
+.zana-email-line { margin-bottom: 4px; font-size: var(--zdz-type-secondary, 15px); color: var(--sys-text-sec, #555); overflow-wrap: anywhere; }
+
+/* the sent message, docked: a line saying where it went, then Messages' own thread */
+.zana-dm-dock { padding: 0; overflow: hidden; background: var(--sys-bg, transparent); }
+.zana-dock-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 10px;
+	padding: 10px 12px 10px 14px;
+	background: var(--sys-tint-success-bg, rgba(127, 127, 127, 0.12));
+	color: var(--sys-tint-success-fg, inherit);
+	font-size: var(--zdz-type-secondary, 15px);
+	line-height: var(--zdz-type-lh-tight, 1.2);
+}
+.zana-dock-said { flex: 1 1 auto; min-width: 0; }
+.zana-dock-tick { font-weight: var(--sys-font-wt-b, 700); }
+.zana-dock-frame { display: block; width: 100%; height: 300px; border: 0; background: var(--sys-bg, transparent); }
+@media (min-width: 820px) { .zana-dock-frame { height: 340px; } }
+
+/* "Open in Charts" / "Open in <app>" and the small chart above them */
+.zana-chips-card { margin: 10px 0 2px; }
+.zana-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.zana-chip.zdz-btn { white-space: normal; text-align: left; justify-content: flex-start; max-width: 100%; }
+.zana-mini {
+	margin: 0 0 10px;
+	padding: 8px 10px;
+	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3));
+	border-radius: var(--zdz-kit-radius, 12px);
+	background: var(--sys-surface-raised, var(--sys-surface, transparent));
+	color: var(--sys-text, inherit);
+}
+.zana-mini-cap { margin-bottom: 4px; font-size: var(--zdz-type-meta, 14px); font-weight: var(--sys-font-wt-sb, 600); }
+.zana-mini-svg { display: block; width: 100%; height: auto; max-height: 170px; }
+.zana-mini-svg.is-h { max-height: 270px; }
+.zana-mini-text { fill: currentColor; opacity: 0.8; font-size: 9px; }
+.zana-mini-s0 { fill: var(--sys-brand, currentColor); stroke: var(--sys-brand, currentColor); }
+.zana-mini-s1 { fill: currentColor; stroke: currentColor; fill-opacity: 0.55; stroke-opacity: 0.55; }
+.zana-mini-s2 { fill: currentColor; stroke: currentColor; fill-opacity: 0.35; stroke-opacity: 0.35; }
+.zana-mini-s3 { fill: currentColor; stroke: currentColor; fill-opacity: 0.22; stroke-opacity: 0.22; }
+.zana-mini-s4 { fill: currentColor; stroke: currentColor; fill-opacity: 0.14; stroke-opacity: 0.14; }
+.zana-mini-s5 { fill: currentColor; stroke: currentColor; fill-opacity: 0.08; stroke-opacity: 0.08; }
+.zana-mini-line { fill: none !important; }
+.zana-mini-key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: var(--zdz-type-meta, 14px); }
+.zana-mini-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; background: currentColor; }
+.zana-mini-sw.zana-mini-s0 { background: var(--sys-brand, currentColor); }
+.zana-mini-sw.zana-mini-s1 { opacity: 0.55; } .zana-mini-sw.zana-mini-s2 { opacity: 0.35; } .zana-mini-sw.zana-mini-s3 { opacity: 0.22; }
+.zana-mini-sw.zana-mini-s4 { opacity: 0.14; } .zana-mini-sw.zana-mini-s5 { opacity: 0.08; }
+
+/* a page of this site, opened in the app */
+.zana-page-card { margin: 8px 0 2px; }
+.zana-page-open svg, .zana-page-open i { width: 18px; height: 18px; }
+
+/* an invoice or estimate, opened under its line (the kit draws the paper) */
+.zana-doc-link {
+	display: inline;
+	min-height: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--sys-brand, inherit);
+	font: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+.zana-doc-link:focus-visible { outline: 3px solid var(--sys-focus, var(--sys-brand, currentColor)); outline-offset: 2px; }
+.zana-msg-assistant:has(.zana-doc-wrap) { max-width: 100%; width: 100%; }
+.zana-doc-wrap { position: relative; margin: 8px 0; white-space: normal; }
+.zana-doc-cell { padding: 8px 0 !important; }
+.zana-doc-bar { display: flex; align-items: center; gap: 8px; }
+.zana-doc-close {
+	min-width: var(--zdz-kit-tap, 44px);
+	min-height: var(--zdz-kit-tap, 44px);
+	border: 0;
+	background: none;
+	color: var(--sys-text-sec, #555);
+	font-size: 22px;
+	line-height: 1;
+	cursor: pointer;
+}
+.zana-doc-wrap > .zana-doc-close { position: absolute; top: 0; right: 0; z-index: 1; }
+
+/* ── About you and Chats (inside the kit's sheet) ─────────────────────────────────────────────────── */
+.zana-mem-intro { margin: 0 0 12px; color: var(--sys-text-sec, #555); font-size: var(--zdz-type-secondary, 15px); }
+.zana-mem-list, .zana-chat-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.zana-mem-item { padding: 10px 0; border-bottom: 1px solid var(--sys-border, rgba(127, 127, 127, 0.25)); }
+.zana-mem-text { margin: 0 0 4px; }
+.zana-mem-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--zdz-type-meta, 14px); color: var(--sys-text-sec, #555); }
+.zana-mem-del { margin-left: auto; }
+.zana-mem-empty { padding: 10px 0; color: var(--sys-text-sec, #555); }
+.zana-mem-status { min-height: 1.2em; margin: 0 0 8px; font-size: var(--zdz-type-secondary, 15px); }
+.zana-chat-row {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	width: 100%;
+	min-height: 56px;
+	padding: 10px 4px;
+	border: 0;
+	border-bottom: 1px solid var(--sys-border, rgba(127, 127, 127, 0.25));
+	background: none;
+	color: var(--sys-text, inherit);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.zana-chat-row:hover { background: var(--sys-surface-subtle, rgba(127, 127, 127, 0.08)); }
+.zana-chat-row:focus-visible { outline: 3px solid var(--sys-focus, var(--sys-brand, currentColor)); outline-offset: -3px; }
+.zana-chat-row-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.zana-chat-row-meta { margin-top: 2px; font-size: var(--zdz-type-meta, 14px); color: var(--sys-text-sec, #555); }
+
+/* ── Needs a referral: the button in the chat's header and its panel ─────────────────────────────── */
+.zana-ref-open {
+	margin-left: auto;
+	min-height: var(--zdz-kit-tap, 44px);
+	padding: 0 12px;
+	border: 1px solid var(--sys-border-strong, rgba(127, 127, 127, 0.45));
+	border-radius: var(--zdz-kit-radius, 12px);
+	background: var(--sys-surface, transparent);
+	color: var(--sys-text, inherit);
+	font: inherit;
+	font-size: var(--zdz-type-secondary, 15px);
+	cursor: pointer;
+}
+.zana-ref-count {
+	display: inline-block;
+	min-width: 1.6em;
+	margin-left: 6px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--sys-brand, #444);
+	color: var(--sys-text-brand, #fff);
+	font-size: 0.85em;
+	text-align: center;
+}
+.zana-ref-panel {
+	position: fixed;
+	inset: 0 0 0 auto;
+	z-index: 100000;
+	width: min(480px, 100vw);
+	overflow-y: auto;
+	padding: 16px;
+	background: var(--sys-surface, #fff);
+	color: var(--sys-text, inherit);
+	box-shadow: var(--sys-shadow-xl, -8px 0 24px rgba(0, 0, 0, 0.2));
+}
+.zana-ref-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.zana-ref-close { min-width: var(--zdz-kit-tap, 44px); min-height: var(--zdz-kit-tap, 44px); border: none; background: transparent; color: inherit; font-size: 1.5em; cursor: pointer; }
+.zana-ref-card { margin: 12px 0; padding: 12px; border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3)); border-radius: var(--zdz-kit-radius, 12px); }
+.zana-ref-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.zana-ref-badge { padding: 0 8px; border-radius: 999px; border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.4)); font-size: 0.8em; }
+.zana-ref-meta, .zana-ref-hint { margin: 6px 0; font-size: 0.9em; }
+.zana-ref-err { margin: 6px 0; font-size: 0.9em; font-weight: 600; }
+.zana-ref-cands { margin: 8px 0; padding: 0; list-style: none; }
+.zana-ref-cand { margin: 8px 0; }
+.zana-ref-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0; }
+.zana-ref-note { width: 100%; min-height: var(--zdz-kit-tap, 44px); margin: 6px 0; padding: 8px; border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.4)); border-radius: var(--ref-radius-sm, 8px); background: var(--sys-surface, transparent); color: inherit; font-size: 16px; }
+.zana-ref-btn { min-height: var(--zdz-kit-tap, 44px); padding: 0 14px; margin: 4px 6px 4px 0; border: 1px solid var(--sys-border-strong, rgba(127, 127, 127, 0.45)); border-radius: var(--zdz-kit-radius, 12px); background: var(--sys-surface, transparent); color: inherit; font: inherit; cursor: pointer; }
+.zana-ref-btn--primary { background: var(--sys-brand, #444); border-color: transparent; color: var(--sys-text-brand, #fff); font-weight: 600; }
+.zana-ref-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── sunlight: heavier edges, the theme's own convention ──────────────────────────────────────────── */
+[data-theme="sunlight"] .zana-msg-assistant,
+[data-theme="sunlight"] .zana-card,
+[data-theme="sunlight"] .zana-mini,
+[data-theme="sunlight"] .zana-starter,
+[data-theme="sunlight"] .zana-form textarea { border: 2px solid #000; }
+[data-theme="sunlight"] .zana-confirm-card { border-left-width: 6px; }
+[data-theme="sunlight"] .zana-head, [data-theme="sunlight"] .zana-form { border-color: #000; }

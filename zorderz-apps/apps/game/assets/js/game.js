@@ -458,7 +458,32 @@
 	}
 
 	/* ═══ LOOP + CONCLUDE ═══ */
-	function loop(){if(canvas&&!canvas.isConnected){concludeGame();return}update();draw();animFrame=requestAnimationFrame(loop)}
+	/* The game steps by elapsed time, not per screen refresh. update() moves
+	   everything by a fixed 1/60 s step; the loop runs as many steps as real time
+	   has passed, so a 120 Hz screen, a 60 Hz one and a laptop or phone in a
+	   low-power mode all play at the same speed. A gap longer than 250 ms (a hidden
+	   tab, a stall) is not replayed, and at most 8 steps run per frame. */
+	var STEP_MS=1000/60,_lastT=0,_acc=0,_drift=0,MAX_STEPS=8;
+	function loop(t){
+		if(canvas&&!canvas.isConnected){concludeGame();return}
+		if(typeof t!=='number')t=(window.performance&&performance.now)?performance.now():Date.now();
+		if(!_lastT)_lastT=t;
+		var d=t-_lastT;_lastT=t;
+		if(d<0)d=0;if(d>250)d=STEP_MS;
+		// Frame times jitter by a fraction of a millisecond (and some browsers round them
+		// to 1 ms), so a 60 Hz frame arrives as 16.4 or 16.9 ms. Without this, a frame just
+		// under one step runs no step and the next runs two: the ball stops, then jumps.
+		// A gap within 1.5 ms of a whole number of half-steps counts as exactly that.
+		// The rounding is carried forward and paid back, so the long-run speed stays exact
+		// on any refresh rate (144 Hz, 110 Hz, a 60 Hz screen dropping to 55 fps).
+		var hs=STEP_MS/2,k=Math.round(d/hs),raw=d;
+		if(k>0&&Math.abs(d-k*hs)<1.5)d=k*hs;
+		_drift+=raw-d;
+		if(Math.abs(_drift)>=hs){d+=_drift;_drift=0;}
+		_acc+=d;var n=0;
+		while(_acc>=STEP_MS&&n<MAX_STEPS){update();_acc-=STEP_MS;n++}
+		if(n>=MAX_STEPS)_acc=0;
+		draw();animFrame=requestAnimationFrame(loop)}
 	function concludeGame(){if(concluded)return;concluded=true;if(animFrame){cancelAnimationFrame(animFrame);animFrame=null}teardownFit();if(score>hi)hi=score;saveGameState();submitScore()}
 
 	/* ═══ INPUT (v1.0.5: mouseleave/mouseenter pause) ═══ */
@@ -544,6 +569,43 @@
 		// so the theme should express --zdz-game-max-h in px or vh.
 		return isFinite(px)&&px>0?px:0;
 	}
+	/* Size the canvas from the space it has NOW, every time the container
+	   changes -- not once at load. The panel around the canvas shrink-wraps it
+	   (.zg-wrap is a centred flex column), so a canvas measured once would keep
+	   the size it had when its widget was narrow (the layout still settling, a
+	   sidebar opening) and only ever be transform-scaled up from it. The width
+	   is worked out explicitly: the game root's width, capped by the canvas's
+	   own max-width (the stylesheet's 340/560/680). The backing store follows
+	   at device pixels. */
+	var _dispW=0,_dispH=0;
+	function sizeBacking(){
+		if(!canvas)return false;
+		var root=canvas.closest?canvas.closest('.zg-wrap'):null;
+		var avail=0;
+		if(root){var rs=getComputedStyle(root);avail=root.clientWidth-(parseFloat(rs.paddingLeft)||0)-(parseFloat(rs.paddingRight)||0);}
+		var cap=parseFloat(getComputedStyle(canvas).maxWidth);
+		if(!isFinite(cap)||cap<=0)cap=Infinity;
+		// The frame (.zg-canvas-wrap) has a 1px border and its own max-width: the canvas
+		// must fit INSIDE it, or its right edge is hidden under the border.
+		var frame=canvas.parentElement,bd=0;
+		if(frame){bd=Math.max(0,frame.offsetWidth-frame.clientWidth);
+			var fmax=parseFloat(getComputedStyle(frame).maxWidth);
+			var fcs=getComputedStyle(frame);
+			if(isFinite(fmax)&&fmax>0)cap=Math.min(cap,fcs.boxSizing==='border-box'?fmax-bd:fmax);}
+		if(avail>0)avail-=bd;
+		var dw=Math.floor(Math.min(avail>0?avail:W,cap));
+		if(!(dw>0))dw=W;
+		var dh=Math.round(dw*H/W);
+		canvas.style.width=dw+'px';canvas.style.height=dh+'px';
+		if(cx&&dw===_dispW&&dh===_dispH)return false;
+		var dpr=window.devicePixelRatio||1;
+		canvas.width=dw*dpr;canvas.height=dh*dpr;
+		cx=canvas.getContext('2d');
+		cx.setTransform((dw*dpr)/W,0,0,(dh*dpr)/H,0,0);
+		cx.imageSmoothingEnabled=false;
+		_dispW=dw;_dispH=dh;
+		return true;
+	}
 	function clearFit(){
 		if(!elCanvasWrap)return;
 		elCanvasWrap.style.transform='';
@@ -559,6 +621,8 @@
 			// Measure the natural (un-transformed, width-driven) box first.
 			var prevTransform=elCanvasWrap.style.transform;
 			elCanvasWrap.style.transform='none';
+			elCanvasWrap.style.marginBottom='';
+			sizeBacking(); // re-measure from the current container first
 			var natRect=elCanvasWrap.getBoundingClientRect();
 			var naturalH=natRect.height;
 			var naturalW=natRect.width;
@@ -642,6 +706,11 @@
 			if(typeof ResizeObserver!=='undefined'&&elCanvasWrap&&elCanvasWrap.parentElement){
 				_fitRO=new ResizeObserver(scheduleFit);
 				_fitRO.observe(elCanvasWrap.parentElement);
+				// Also watch the game's own container. The panel above shrink-wraps the
+				// canvas, so it never changes size when the space AROUND the game grows
+				// (the layout settling after load) -- only the container does.
+				var _host=elRoot&&elRoot.parentElement;
+				if(_host&&_host!==elCanvasWrap.parentElement)_fitRO.observe(_host);
 			}
 		}catch(e){_fitRO=null;}
 		_fitListener=function(){scheduleFit();};
@@ -660,7 +729,7 @@
 
 	/* ═══ INIT ═══ */
 	function init(rootEl){
-		if(animFrame){cancelAnimationFrame(animFrame);animFrame=null}concluded=false;
+		if(animFrame){cancelAnimationFrame(animFrame);animFrame=null}concluded=false;_lastT=0;_acc=STEP_MS;_drift=0;
 		var root=rootEl||document;canvas=root.querySelector('#zg-canvas');if(!canvas)return;
 
 		// v1.5.2: Capture the wrap and clear any prior scale-to-fit transform
@@ -677,17 +746,8 @@
 		// sized to dispW * dpr, so the context scale just needs to map
 		// logical W×H to (dispW*dpr)×(dispH*dpr). Also pin canvas.style
 		// to rounded integers to prevent browser sub-pixel CSS scaling.
-		var dpr = window.devicePixelRatio || 1;
-		var rect = canvas.getBoundingClientRect();
-		var dispW = Math.round(rect.width) || W;
-		var dispH = Math.round(rect.height) || H;
-		canvas.style.width = dispW + 'px';
-		canvas.style.height = dispH + 'px';
-		canvas.width = dispW * dpr;
-		canvas.height = dispH * dpr;
-		cx = canvas.getContext('2d');
-		cx.scale((dispW * dpr) / W, (dispH * dpr) / H);
-		cx.imageSmoothingEnabled = false;
+		_dispW=0;_dispH=0;cx=null;
+		sizeBacking();
 
 		elRoot=root.querySelector('#zg-game-root');elPauseB=root.querySelector('#zg-pause-banner');
 		elPanelGame=root.querySelector('#zg-panel-game');elPanelScores=root.querySelector('#zg-panel-scores');

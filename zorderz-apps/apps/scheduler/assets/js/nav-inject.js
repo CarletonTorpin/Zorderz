@@ -2,7 +2,7 @@
  * Zorderz Scheduler — bottom-nav tab injector.
  *
  * Adds a "Schedule" tab to the theme's bottom navigation (.bnav) on the SPA
- * shell, mirroring ts-internal-messaging's nav-inject. No-ops gracefully if the
+ * shell, mirroring the Messaging app's nav-inject. No-ops gracefully if the
  * shell isn't present (so it's safe to enqueue on any front-end page).
  */
 (function () {

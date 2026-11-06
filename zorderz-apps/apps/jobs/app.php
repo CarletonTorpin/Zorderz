@@ -1,14 +1,14 @@
 <?php
 /**
  * Module: Zorderz - Jobs
- * Description: Field-job engine for the Zorderz dashboard. Track your jobs to do and
+ * Description: Field-job engine and Projects hub for the Zorderz dashboard. Track your jobs to do and
  *   hand a job COMPONENT of a mixed order to a specialist as a separate, tracked
  *   sub-job — recorded in the app and (when a CRM is configured) as a child lead,
  *   and DELIBERATELY invisible on the customer's billing document. Two-party
  *   photo-gated completion, with a recorded single-party attestation path for a solo
  *   operator. Consumes the theme's crew-lead hierarchy (ZDZ_Hierarchy), party roster
  *   (ZDZ_Party), media store (ZDZ_User_Media) and geocoder (ZDZ_Media_Geocoder).
- * Version:     1.18.0
+ * Version:     1.19.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -32,6 +32,18 @@
  *                   reverse-geocodes the finish fix for provenance.
  *   - Party       : worker roster + code resolution via ZDZ_Party (never a local roster).
  *
+ * PUBLISHED FOR OTHER APPS (behind class_exists, so a missing jobs app degrades, never errors):
+ *   ZJOB_Install_Date  for_leads, for_estimate_numbers, for_lead, for_project, pick, paper_line, is_scheduled,
+ *                      visible_rows, reconcile_lead_refs, on_appointment_changed, on_appointment_deleted, flush_memo.
+ *   ZJOB_Scope         for_user, can_see, sp_codes_for, code_for_new_job, scope_predicate, label, project_label.
+ *   ZJOB_Project       (Zjob_Project) get, jobs_for, list_for, refresh_status, ensure_for_estimate.
+ *   ZJOB_Project_Refs  get, put, project_for, for_project.
+ *   ZJOB_Handoff       get, create, record_event, actor_can_manage, actor_can_schedule, actor_can_close,
+ *                      user_can_hand_off, set_status, change_status, clear_schedule, is_scheduled, list_for.
+ * Material orders (ZJOB_Project_Orders), the go sign for ordering (ZJOB_Order_Gate), supplier invoices matched by PO
+ * (ZJOB_Supplier_Invoices), "Log a repair" (ZJOB_Repair_Log), the access-code vault consumer (ZJOB_Sealed) and the
+ * notices through the platform's alert router (ZJOB_Accept_Notice) live beside them.
+ *
  * SAFETY FLOOR: two-party photo-gated completion is preserved. A SOLO operator may
  * satisfy it with a RECORDED single-party attestation, raised to a distinct
  * assurance level (single_party_attested — never laundered into two_party) and
@@ -45,7 +57,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZJOB_VERSION', '1.18.0' );
+define( 'ZJOB_VERSION', '1.19.0' );
 define( 'ZJOB_FILE', __FILE__ );
 define( 'ZJOB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZJOB_URL', plugin_dir_url( __FILE__ ) );
@@ -55,7 +67,6 @@ define( 'ZJOB_APP_ID', 'jobs' );
 /**
  * The chat/orchestrator handoff marker. Protocol tokens live in ONE constant,
  * referenced by the bridge and exposed via `zdz_job_markers` — never typed twice.
- * Replaces the legacy '[TS_HANDOFF]' token.
  */
 if ( ! defined( 'ZJOB_MARKER' ) ) {
 	define( 'ZJOB_MARKER', '[ZDZ_JOB_HANDOFF]' );
@@ -137,28 +148,72 @@ require_once ZJOB_DIR . 'includes/class-zjob-photos.php';
 require_once ZJOB_DIR . 'includes/class-zjob-ajax.php';
 require_once ZJOB_DIR . 'includes/class-zjob-chat-bridge.php';
 require_once ZJOB_DIR . 'includes/class-zjob-admin.php';
+// The published faces other apps use, the vault consumer and the notices.
+require_once ZJOB_DIR . 'includes/class-zjob-handoff.php';
+require_once ZJOB_DIR . 'includes/class-zjob-sealed.php';
+require_once ZJOB_DIR . 'includes/class-zjob-accept-notice.php';
 
-// Wave B — the Flow substrate (app-local but Flow-shaped; promotable to a Core class-zdz-flow.php).
+// The Flow substrate (app-local but Flow-shaped; promotable to a Core class-zdz-flow.php).
 require_once ZJOB_DIR . 'includes/flow/class-zdz-ulid.php';
 require_once ZJOB_DIR . 'includes/flow/class-zdz-flow-db.php';
 require_once ZJOB_DIR . 'includes/flow/class-zdz-flow-refs.php';
 require_once ZJOB_DIR . 'includes/flow/class-zdz-flow.php';
-// Wave B — the Job Dossier substrate (events/notes/scope; self-booting schema).
+// The job history substrate (events, notes, scope; self-booting schema).
 require_once ZJOB_DIR . 'includes/class-zjob-scope.php';
 require_once ZJOB_DIR . 'includes/class-zjob-events.php';
 require_once ZJOB_DIR . 'includes/class-zjob-notes.php';
 
-// Wave B — Projects (the estimate-shaped container over the Flow substrate; app-local).
+// Projects (the estimate-shaped container over the Flow substrate; app-local).
 // init() only registers filters/subscribers (guarded); it seeds nothing and is safe to
 // call at load, before after_setup_theme, so the flow definition/namespaces/derive-state
 // filters and the audit-seam subscriber are in place before any request touches Flow.
 require_once ZJOB_DIR . 'includes/class-zjob-project-signal.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-visibility.php';
+require_once ZJOB_DIR . 'includes/class-zjob-tile-grant.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-resolver.php';
 require_once ZJOB_DIR . 'includes/class-zjob-project-sweep.php';
 require_once ZJOB_DIR . 'includes/class-zjob-geo-backfill.php';
-// Wave C (C-01) — install-date resolver + INV-8 published boundary + compose_context handoff.
+// Kinds of project (the business's own list) and the people on a project, by step.
+require_once ZJOB_DIR . 'includes/class-zjob-project-types.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-people.php';
+if ( class_exists( 'ZJOB_Project_People' ) ) {
+	ZJOB_Project_People::init();
+}
+// What a Project points at; material orders and their go sign; supplier invoices; logged repairs; the Projects hub.
+require_once ZJOB_DIR . 'includes/class-zjob-project-refs.php';
+require_once ZJOB_DIR . 'includes/class-zjob-order-gate.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-orders.php';
+require_once ZJOB_DIR . 'includes/class-zjob-order-paper.php';
+require_once ZJOB_DIR . 'includes/class-zjob-pack.php';
+add_filter( 'zdz_identity_pack_consumers', array( 'ZJOB_Pack', 'register' ) );
+require_once ZJOB_DIR . 'includes/class-zjob-supplier-invoices.php';
+require_once ZJOB_DIR . 'includes/class-zjob-materials-desk.php';
+require_once ZJOB_DIR . 'includes/class-zjob-repair-log.php';
+require_once ZJOB_DIR . 'includes/class-zjob-privacy-view.php';
+require_once ZJOB_DIR . 'includes/class-zjob-projects-ajax.php';
+// My next (each person's open steps) and the home tiles' counts read from it.
+require_once ZJOB_DIR . 'includes/class-zjob-my-next.php';
+require_once ZJOB_DIR . 'includes/class-zjob-my-counts.php';
+require_once ZJOB_DIR . 'includes/class-zjob-installed-counts.php';
+require_once ZJOB_DIR . 'includes/class-zjob-upcoming.php';
+require_once ZJOB_DIR . 'includes/class-zjob-project-homes.php';
+ZJOB_Sealed::boot();
+ZJOB_Accept_Notice::init();
+ZJOB_Order_Gate::init();
+ZJOB_Project_Orders::init();
+ZJOB_Order_Paper::init();
+ZJOB_Supplier_Invoices::init();
+ZJOB_Materials_Desk::init();
+ZJOB_Repair_Log::init();
+ZJOB_Projects_Ajax::init();
+ZJOB_My_Next::init();
+ZJOB_My_Counts::init();
+ZJOB_Installed_Counts::init();
+ZJOB_Upcoming::init();
+ZJOB_Project_Homes::init();
+// The install-date resolver (the published boundary Prep and the Scheduler read), the appointment
+// link and the scheduling context handed to the Scheduler.
 require_once ZJOB_DIR . 'includes/class-zjob-install-date.php';
 require_once ZJOB_DIR . 'includes/class-zjob-appointment-link.php';
 require_once ZJOB_DIR . 'includes/class-zjob-schedule-context.php';
@@ -181,6 +236,10 @@ if ( class_exists( 'Zjob_Geo_Backfill' ) && method_exists( 'Zjob_Geo_Backfill', 
  */
 function zjob_activate() {
 	ZJOB_DB::install();
+	if ( class_exists( 'ZJOB_Project_People' ) && method_exists( 'ZJOB_Project_People', 'install' ) ) {
+		ZJOB_Project_People::install();
+	}
+	zjob_install_project_tables();
 	if ( class_exists( 'ZJOB_User_Log' ) && method_exists( 'ZJOB_User_Log', 'install' ) ) {
 		ZJOB_User_Log::install();
 	}
@@ -196,6 +255,13 @@ function zjob_activate() {
 	update_option( 'zjob_db_version', ZJOB_DB::DB_VERSION );
 }
 
+/** The tables of material orders, supplier invoices and logged repairs (dbDelta: safe to run again). */
+function zjob_install_project_tables() {
+	ZJOB_Project_Orders::install();
+	ZJOB_Supplier_Invoices::install();
+	ZJOB_Repair_Log::install();
+}
+
 /** Deactivation — clear our scheduled events (data is preserved; tables are NOT dropped). */
 function zjob_deactivate() {
 	wp_clear_scheduled_hook( 'zjob_heartbeat' );
@@ -204,8 +270,8 @@ function zjob_deactivate() {
 }
 
 /**
- * Grant the Jobs tile to every user with `zdz_access_app` (unless explicitly denied).
- * Idempotent. Admin-class roles bypass the allowed-apps meta in the theme, so we skip them.
+ * Grant the Jobs tile and the Projects hub to every user with `zdz_access_app` (unless explicitly
+ * denied; the Projects hub never to the shared device). Idempotent. See ZJOB_Tile_Grant.
  */
 function zjob_grant_tile_to_all_eligible_users() {
 	$users = get_users( array(
@@ -218,28 +284,9 @@ function zjob_grant_tile_to_all_eligible_users() {
 	}
 }
 
-/** Grant to one user. Hooked on wp_login so users created/promoted later also get the tile. */
+/** Grant to one user. Hooked on wp_login so users created/promoted later also get the tiles. */
 function zjob_grant_tile_to_user( $user_id ) {
-	$user_id = (int) $user_id;
-	if ( $user_id <= 0 ) {
-		return;
-	}
-	$has_access = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'zdz_access_app' );
-	if ( ! $has_access ) {
-		return;
-	}
-	$denied = get_user_meta( $user_id, 'zdz_denied_apps', true );
-	if ( is_array( $denied ) && in_array( ZJOB_APP_ID, $denied, true ) ) {
-		return; // admin explicitly denied — respect it.
-	}
-	$allowed = get_user_meta( $user_id, 'zdz_allowed_apps', true );
-	if ( ! is_array( $allowed ) ) {
-		$allowed = array();
-	}
-	if ( ! in_array( ZJOB_APP_ID, $allowed, true ) ) {
-		$allowed[] = ZJOB_APP_ID;
-		update_user_meta( $user_id, 'zdz_allowed_apps', $allowed );
-	}
+	ZJOB_Tile_Grant::grant( (int) $user_id );
 }
 
 add_action( 'wp_login', function ( $user_login, $user ) {
@@ -259,6 +306,9 @@ add_action( 'admin_menu', function () {
 add_action( 'plugins_loaded', function () {
 	// Self-heal the schema on any file-overwrite / fresh copy that skipped activation.
 	ZJOB_DB::maybe_upgrade();
+	if ( ! ZJOB_Project_Orders::ready() || ! ZJOB_Supplier_Invoices::ready() || ! ZJOB_Repair_Log::ready() ) {
+		zjob_install_project_tables();
+	}
 	if ( class_exists( 'ZJOB_User_Log' ) && method_exists( 'ZJOB_User_Log', 'maybe_install' ) ) {
 		ZJOB_User_Log::maybe_install();
 	}
@@ -268,7 +318,7 @@ add_action( 'plugins_loaded', function () {
 	}
 	ZJOB_AJAX::init();
 
-	// B4 — the budgeted "every estimate is a Project" sweep: registers its 15-min schedule +
+	// The budgeted "every estimate is a Project" sweep: registers its 15-min schedule +
 	// cron callback and self-heals the event if unscheduled. It NEVER unschedules itself.
 	if ( class_exists( 'Zjob_Project_Sweep' ) ) {
 		Zjob_Project_Sweep::init();
@@ -278,6 +328,8 @@ add_action( 'plugins_loaded', function () {
 	// Admin requests only; hooks admin_menu/admin_init so it must register before those fire.
 	if ( is_admin() && class_exists( 'ZJOB_Admin' ) ) {
 		new ZJOB_Admin();
+		require_once ZJOB_DIR . 'includes/class-zjob-order-forms-admin.php';
+		ZJOB_Order_Forms_Admin::init();
 	}
 
 	// Publish the jobs.handoff capability to the orchestrator registry so the chat
@@ -294,14 +346,14 @@ add_action( 'plugins_loaded', function () {
 	} );
 
 	// Expose this module's marker token(s) to the chat engine via one map (never a
-	// literal). Legacy '[TS_HANDOFF]' is recorded as the deprecated alias.
+	// literal).
 	add_filter( 'zdz_job_markers', function ( $markers ) {
 		if ( ! is_array( $markers ) ) {
 			$markers = array();
 		}
 		$markers['jobs.handoff'] = array(
 			'token'      => ZJOB_MARKER,
-			'deprecated' => array( '[TS_HANDOFF]' ),
+			'deprecated' => array(),
 		);
 		return $markers;
 	} );
@@ -362,9 +414,13 @@ add_action( 'after_setup_theme', function () {
 		return;
 	}
 	require_once ZJOB_DIR . 'includes/class-zjob-app.php';
+	require_once ZJOB_DIR . 'includes/class-zjob-projects-app.php';
 	add_filter( 'zdz_register_apps', function ( $apps ) {
 		if ( class_exists( 'ZJOB_App' ) ) {
 			$apps[ ZJOB_APP_ID ] = new ZJOB_App();
+		}
+		if ( class_exists( 'ZJOB_Projects_App' ) ) {
+			$apps[ ZJOB_Projects_App::APP_ID ] = new ZJOB_Projects_App();
 		}
 		return $apps;
 	} );
@@ -420,9 +476,17 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 		'ts_user_log'  => 'zjob_user_log',
 	) );
 	$map['options'] = array_merge( $map['options'] ?? array(), array(
+		'ts_jobs_cleared_test_ids'          => 'zjob_cleared_test_ids',
+		'ts_jobs_order_operators'           => 'zjob_order_operators',
+		'ts_jobs_order_po'                  => 'zjob_order_po',
+		'ts_jobs_log_repair'                => 'zjob_log_repair',
+		'ts_jobs_accept_fallback'           => 'zjob_accept_fallback',
 		'ts_jobs_db_version'                => 'zjob_db_version',
 		'ts_user_log_db_version'            => 'zjob_user_log_db_version',
 		'ts_jobs_media_share_token_healed'  => 'zjob_media_share_token_healed',
+		'ts_jobs_step_owners'               => 'zjob_step_owners',
+		'ts_jobs_order_company'             => 'zjob_order_company',
+		'ts_jobs_group_homes'               => 'zjob_group_homes',
 	) );
 	$map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
 		'tsl_nutshell_user_id' => 'zdz_crm_user_id',
@@ -435,4 +499,15 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 		'ts-jobs' => ZJOB_APP_ID,
 	) );
 	return $map;
+} );
+
+/** The actions this app counts in the platform's Usage view (a number at most, never a name). */
+add_filter( 'zdz_register_usage_actions', function ( $a ) {
+	$a = is_array( $a ) ? $a : array();
+	$a['jobs'] = array_merge( (array) ( $a['jobs'] ?? array() ), array(
+		'order_started' => __( 'Started a material order', 'zorderz' ),
+		'order_placed'  => __( 'Marked a material order ordered', 'zorderz' ),
+		'repair_logged' => __( 'Logged a repair', 'zorderz' ),
+	) );
+	return $a;
 } );

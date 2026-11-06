@@ -1,0 +1,14 @@
+# The words of this business that the question reader and the local models are given.
+charts:
+  ask_example: revenue by product last year
+  measure_words:
+    units: units, panels, sails, caps, lights
+  work_type_words: '"install" or "new" = New / install; "repair" or "service" = Repair / service'
+  vocabulary: '"film" = the window film family; "sails" = Shade sails'
+  followup_examples: '"now by month", "only Northtown", "make it a line"'
+  assumption_examples: '"All history (no dates given)", "Window film = its three kinds"'
+  title_example: '"Revenue by product, 2025"'
+  service_install:
+    install: New / install
+    service: Repair / service
+    note: Service = repairs and service calls, new install = new installs (mixed jobs left out)

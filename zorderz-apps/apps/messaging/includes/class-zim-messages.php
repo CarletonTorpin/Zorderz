@@ -34,6 +34,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZIM_Messages {
 
+	/** The body as stored (after kses), or '' for a missing or deleted message. */
+	public static function stored_body( $message_id ) {
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare(
+			"SELECT body, deleted_at FROM {$wpdb->prefix}zim_messages WHERE id = %d",
+			(int) $message_id
+		) );
+		return ( $row && empty( $row->deleted_at ) ) ? (string) $row->body : '';
+	}
+
 	/**
 	 * Post a new message.
 	 *
@@ -49,6 +59,20 @@ class ZIM_Messages {
 		$conversation_id = (int) $conversation_id;
 		$author_user_id  = (int) $author_user_id;
 		$body            = wp_unslash( (string) $body ); // Gotcha #6: undo magic quotes.
+
+		// First of all, and before wp_kses_post() below: the same chokepoint for an author in Privacy View, whatever the
+		// caller (the composer, the chat's send, an e-mail reply, REST, another app): only its direct conversation with
+		// the administrator chosen for it, text only, starting with its prefix.
+		if ( class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on( $author_user_id ) ) {
+			if ( ! ZIM_Privacy_View::conversation_ok( $conversation_id, $author_user_id ) ) {
+				return new WP_Error( 'zim_privacy_view', 'This account may post only in its conversation with the administrator chosen for it.' );
+			}
+			if ( array_filter( array_map( 'intval', (array) $attachment_ids ) ) ) {
+				return new WP_Error( 'zim_text_only', 'Text only from this account.' );
+			}
+			$body = ZIM_Privacy_View::body( $body );
+		}
+
 		// v1.1.4 (Vimeo chapter embed): distill a TRUSTED-ORIGIN Vimeo player embed to a
 		// plain-text [zdz-video] token BEFORE sanitization. The seeking markup no longer
 		// depends on <iframe>/<script> surviving kses (they don't) — the token carries
@@ -65,14 +89,12 @@ class ZIM_Messages {
 
 		// Membership check is the caller's job (AJAX gate).
 
-		// v1.0.24 — Read-only roles (the shared kiosk `zdz_general`) can never
-		// post. This is the single model-layer chokepoint every write funnels
-		// through (AJAX zim_post, the REST /post route used by the assistant's
-		// "post to #channel", and any future caller), so a forgotten gate at a
-		// higher layer cannot re-open a send path for the shared account. This
-		// is the structural fix the platform learned it needed after the
-		// Session 406 autonomous-posting incident: remove the capability, don't
-		// merely discourage it.
+		// Read-only roles (the shared device `zdz_general`) can never post. This
+		// is the single model-layer chokepoint every write funnels through (AJAX
+		// zim_post, the REST /post route the assistant's "post to #channel"
+		// uses, e-mail replies, zim_dm_send and any future caller), so a
+		// forgotten gate at a higher layer cannot re-open a send path for the
+		// shared account: the capability is removed, not merely discouraged.
 		if ( function_exists( 'zim_user_can_write' ) && ! zim_user_can_write( $author_user_id ) ) {
 			return new WP_Error(
 				'zim_read_only',
@@ -230,6 +252,11 @@ class ZIM_Messages {
 			array( '%d' )
 		);
 
+		// A number edited out of the message is no longer shared.
+		if ( class_exists( 'ZIM_Doc_Shares' ) ) {
+			ZIM_Doc_Shares::prune_for_message( (int) $message_id, $new_body, (int) $author_user_id );
+		}
+
 		// Mention reconciliation (Trap 3): only `added` fires pushes.
 		$mentioned_logins = ZIM_Mentions::parse( $new_body );
 		$mentioned_ids    = ZIM_Mentions::resolve_for_conversation( $mentioned_logins, (int) $row->conversation_id );
@@ -287,6 +314,11 @@ class ZIM_Messages {
 
 		// Cancel any queued-but-not-yet-fired notifications tied to this message.
 		ZIM_Notifications::cancel_for_message( (int) $message_id );
+
+		// A deleted message shares nothing any more: a share is for that one occasion.
+		if ( class_exists( 'ZIM_Doc_Shares' ) ) {
+			ZIM_Doc_Shares::revoke_for_message( (int) $message_id, (int) $actor_user_id );
+		}
 
 		// Audit admin force-deletes (not self-deletes — those are user action).
 		// Theme contract: ZDZ_Admin_Dashboard::log_action( $user_id, $action_type, $detail, $app_id, $meta )
@@ -401,8 +433,12 @@ class ZIM_Messages {
 		}
 
 		// Batch attachments + mentions.
-		$attachments_by_message = ZIM_Attachments::for_messages( $message_ids );
+		// Not even read for an account in Privacy View (reading one can mint its download token).
+		$pv                     = class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on();
+		$attachments_by_message = $pv ? array() : ZIM_Attachments::for_messages( $message_ids );
 		$mentions_by_message    = ZIM_Mentions::for_messages( $message_ids );
+		// The chat turn each of the viewer's own messages came from (ZIM_DM_Send), shown to them alone.
+		$from_chat = class_exists( 'ZIM_DM_Send' ) ? ZIM_DM_Send::sources_for_viewer( get_current_user_id(), $rows ) : array();
 
 		$out = array();
 		foreach ( $rows as $r ) {
@@ -413,7 +449,7 @@ class ZIM_Messages {
 				: (string) $r['body'];
 
 			// On soft-delete, hide attachments from UI but keep metadata.
-			$attachments = $is_deleted ? array() : ( $attachments_by_message[ $mid ] ?? array() );
+			$attachments = ( $is_deleted || $pv ) ? array() : ( $attachments_by_message[ $mid ] ?? array() );
 
 			$out[] = array(
 				'id'              => $mid,
@@ -431,6 +467,7 @@ class ZIM_Messages {
 				'can_edit_until'  => $is_deleted
 					? null
 					: self::iso_from_ts( strtotime( $r['created_at'] . ' UTC' ) + ZIM_EDIT_WINDOW_SECONDS ),
+				'from_chat'       => $from_chat[ $mid ] ?? null, // only ever set on the viewer's own message
 			);
 		}
 		return $out;

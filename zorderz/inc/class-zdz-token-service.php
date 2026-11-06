@@ -63,7 +63,36 @@
  *  6. BACK-COMPAT PROJECTION — after a successful refresh the new pair is
  *     mirrored into each of the provider's registered legacy option families
  *     that ALREADY exist on this install, so un-migrated readers keep working.
- *     Families are provider-registered, not hard-coded in the core.
+ *     Families are provider-registered, not hard-coded in the core. A family
+ *     whose own client_id names a DIFFERENT app is never written (logged once a
+ *     day), and a family the provider declares `separate_families` counts as
+ *     ours only when it names the platform app explicitly.
+ *  7. ONE APP — the credentials come from the provider's own store first (its
+ *     `credentials` resolver: the platform's credential store), as a matched
+ *     pair whose secret is usable plaintext; a caller's own pair is used only
+ *     when the store yields none. A caller naming a different client_id (an app
+ *     set up on its own registration) is refused and logged; it never rotates or
+ *     overwrites the shared store.
+ *  8. RECONNECT ADOPTION — a new refresh token written into any family by
+ *     someone other than this service (a "Connect" sign-in, or an app's own
+ *     refresher) is copied into the store; the re-auth flag and cooldown clear
+ *     and the access token is marked due, so the next caller (or the cron)
+ *     rotates once and projects everywhere. Watched on WordPress's real hooks,
+ *     "update_option_{$option}" and "add_option_{$option}". A token this service
+ *     already rotated away is never re-adopted (fingerprints of the last
+ *     RETIRED_KEEP are kept, never the tokens).
+ *  9. DEAD-STORE HEALING — the store's refresh token is spent first. When the
+ *     provider calls it dead, a differing, never-retired token held by the caller
+ *     or by one of the provider's `reconnect_families` (where a sign-in writes) is
+ *     tried once each: a reconnect this service did not see heals at the next
+ *     refresh instead of asking for another one. Spending a dead token revokes
+ *     nothing. A refresh that loses a race with a reconnect keeps the reconnect
+ *     and sets no re-auth flag. The store's own rows are read past the request's
+ *     option cache before every comparison.
+ *
+ * Family values are read decoded (ZDZ_Core_Crypto): the platform's own family
+ * keeps its tokens sealed at rest, and a sealed value is never sent, compared or
+ * adopted as if it were a token.
  *
  * ROLLBACK: no destructive migration. Legacy option families stay populated; a
  * consumer that stops calling this service reverts to its own refresher.
@@ -80,22 +109,34 @@ if ( ! class_exists( 'ZDZ_Token_Service' ) ) :
 
 class ZDZ_Token_Service {
 
-	const VER                 = '1.1.0';
+	const VER                 = '1.2.0';
 	const LOCK_STALE_SEC      = 60;   // stale-break for the options-row lock
 	const FOLLOW_WAIT_MS      = 500;  // follower poll interval
 	const FOLLOW_MAX_S        = 20;   // follower max wait
 	const COOLDOWN_SEC        = 300;  // dead-token circuit-breaker cooldown
 	const REFRESH_MARGIN_SEC  = 300;  // "still fresh" margin for leader adopt-fresh
 	const CRON_REFRESH_WINDOW = 600;  // proactively refresh when expiry is within this
+	const RETIRED_KEEP        = 8;    // fingerprints of rotated-away refresh tokens kept
+	const TOKEN_MAX           = 200;  // a refresh token longer than this is not a token
 
 	/** Canonical store suffixes, per provider store key. */
 	private static $store_suffixes = array(
 		'access_token', 'refresh_token', 'account_id', 'version',
 		'expires_at', 'reauth_needed', 'cooldown_until', 'last_refresh',
+		'retired_rt',
 	);
 
 	/** Active lock descriptor for this request: [ mode, name, row ]. */
 	private static $lock = array( 'mode' => '', 'name' => '', 'row' => '' );
+
+	/** True while this service writes the families (its own writes are not reconnects). */
+	private static $projecting = false;
+
+	/** Request memo of each provider's canonical app pair (only a found pair is kept). */
+	private static $canon = array();
+
+	/** Option names whose writes are already watched this request. */
+	private static $watched = array();
 
 	// ─────────────────────────────────────────────────────────────────
 	// PROVIDER REGISTRY (the registration API replaces all hard-coding)
@@ -153,6 +194,12 @@ class ZDZ_Token_Service {
 				? array_values( array_unique( array_map( 'strval', $p['legacy_options'] ) ) ) : array();
 			$p['legacy_cron']          = ( isset( $p['legacy_cron'] ) && is_array( $p['legacy_cron'] ) )
 				? array_values( array_unique( array_map( 'strval', $p['legacy_cron'] ) ) ) : array();
+			// Families that are a separate app registration unless they name the platform app.
+			$p['separate_families']    = ( isset( $p['separate_families'] ) && is_array( $p['separate_families'] ) )
+				? array_values( array_unique( array_map( 'strval', $p['separate_families'] ) ) ) : array();
+			// Families a "Connect" sign-in writes to: tried once when the store's token is dead.
+			$p['reconnect_families']   = ( isset( $p['reconnect_families'] ) && is_array( $p['reconnect_families'] ) )
+				? array_values( array_intersect( array_unique( array_map( 'strval', $p['reconnect_families'] ) ), $p['option_families'] ) ) : array();
 
 			$out[ $id ] = $p;
 		}
@@ -223,6 +270,17 @@ class ZDZ_Token_Service {
 
 		self::seed_if_empty( $provider );
 
+		// ── One app: a caller on a different app registration must not rotate (or
+		// overwrite) the shared store; it keeps its own path.
+		$caller_id = trim( (string) ( $args['client_id'] ?? '' ) );
+		$canon     = self::canonical_pair( $provider );
+		if ( '' !== $caller_id && '' !== $canon['client_id'] && ! hash_equals( $canon['client_id'], $caller_id ) ) {
+			self::log_once_daily_key( $provider['id'] . '_foreign_' . substr( md5( $caller_id ), 0, 8 ),
+				'[' . $provider['id'] . '] refresh REFUSED — caller client_id ' . substr( $caller_id, 0, 8 ) . '… is not the platform app '
+				. substr( $canon['client_id'], 0, 8 ) . '…; the shared store is left alone (origin=' . self::origin() . ')' );
+			return '';
+		}
+
 		// ── Circuit breaker: dead-token cooldown (storm killer) ──
 		$cooldown = (int) get_option( self::opt( $provider, 'cooldown_until' ), 0 );
 		if ( $cooldown > time() && empty( $args['force'] ) ) {
@@ -237,7 +295,7 @@ class ZDZ_Token_Service {
 			try {
 				// Double-check #1 — rotation counter: another worker may have
 				// rotated between our call start and lock acquisition.
-				$now_version = (int) get_option( self::opt( $provider, 'version' ), 0 );
+				$now_version = (int) self::fresh( self::opt( $provider, 'version' ), 0 );
 				if ( $now_version > $entry_version ) {
 					$adopted = (string) get_option( self::opt( $provider, 'access_token' ), '' );
 					self::log( '[' . $provider['id'] . '] leader adopt — rotation v' . $now_version . ' already published while acquiring (race avoided, origin=' . self::origin() . ')' );
@@ -348,76 +406,123 @@ class ZDZ_Token_Service {
 			$redirect_uris = array( '' ); // some providers do not require redirect_uri on refresh
 		}
 
-		$headers   = array_merge( self::default_headers( $provider ), $provider['request_headers'] );
-		$auth_dead = true; // assume dead unless a transient/protocol reason says otherwise
-		$last_code = 0;
-		$last_body = '';
+		$headers  = array_merge( self::default_headers( $provider ), $provider['request_headers'] );
+		$store_rt = $creds['refresh_token'];
 
-		foreach ( $redirect_uris as $ru ) {
-			for ( $attempt = 1; $attempt <= 2; $attempt++ ) { // grace retry (transient errors only)
-				$body = array_merge(
-					array(
-						'grant_type'    => $provider['grant'],
-						'client_id'     => $creds['client_id'],
-						'client_secret' => $creds['client_secret'],
-						'refresh_token' => $creds['refresh_token'],
-					),
-					$provider['body_extra']
-				);
-				if ( '' !== $ru ) {
-					$body['redirect_uri'] = $ru;
-				}
-
-				$resp = wp_remote_post( $provider['token_url'], array(
-					'timeout' => 20,
-					'headers' => $headers,
-					'body'    => ( 'form' === $provider['body_format'] ) ? $body : wp_json_encode( $body ),
-				) );
-
-				if ( is_wp_error( $resp ) ) {
-					$auth_dead = false; // network problem, not a dead token
-					self::log( '[' . $provider['id'] . '] refresh attempt failed (network: ' . $resp->get_error_message() . ') attempt=' . $attempt );
-					if ( 1 === $attempt ) {
-						usleep( 1500000 );
-						continue;
-					}
-					break; // next redirect_uri
-				}
-
-				$code      = (int) wp_remote_retrieve_response_code( $resp );
-				$body_str  = (string) wp_remote_retrieve_body( $resp );
-				$last_code = $code;
-				$last_body = substr( $body_str, 0, 300 );
-
-				if ( 200 === $code ) {
-					$tok = json_decode( $body_str, true );
-					if ( is_array( $tok ) && ! empty( $tok['access_token'] ) ) {
-						self::store_and_project( $provider, $tok, $entry_version );
-						return (string) $tok['access_token'];
-					}
-					self::log( '[' . $provider['id'] . '] refresh 200 but unparseable body — treating as transient' );
-					$auth_dead = false;
-					break;
-				}
-
-				if ( $code >= 500 ) {
-					$auth_dead = false; // upstream hiccup
-					self::log( '[' . $provider['id'] . '] refresh attempt got HTTP ' . $code . ' (transient) attempt=' . $attempt );
-					if ( 1 === $attempt ) {
-						usleep( 1500000 );
-						continue;
-					}
-					break;
-				}
-
-				// 400/401/403: try the next redirect_uri (a provider can 401 a
-				// refresh whose redirect_uri does not match the grant). Only if
-				// EVERY uri fails auth-class do we call the token dead.
-				self::log( '[' . $provider['id'] . '] refresh attempt got HTTP ' . $code . ' (trying next redirect_uri)' );
-				break; // no grace retry on auth-class responses
+		// The store's token is spent first. When the provider calls it dead, a differing
+		// token this service never rotated away — the caller's, or one a sign-in wrote
+		// into a reconnect family — is tried once each. Spending a dead token revokes
+		// nothing, so the extra tries are safe.
+		$candidates = array( $store_rt );
+		$extra      = array( trim( (string) ( $args['refresh_token'] ?? '' ) ) );
+		foreach ( $provider['reconnect_families'] as $fam ) {
+			if ( self::family_is_ours( $provider, $fam ) ) { // phpcs:ignore PHPCompatibility.Extensions.RemovedExtensions.famRemoved -- self::family_is_ours() is this class's own method, not the removed fam extension
+				$extra[] = self::plain_token( self::fresh( $fam . 'refresh_token', '' ) );
+			}
+		}
+		foreach ( $extra as $rt ) {
+			if ( self::is_token( $rt ) && ! in_array( $rt, $candidates, true )
+				&& ! in_array( self::fp( $rt ), self::retired_list( $provider ), true ) ) {
+				$candidates[] = $rt;
 			}
 		}
 
+		$auth_dead = true;
+		$last_code = 0;
+		$last_body = '';
+		foreach ( $candidates as $ci => $rt ) {
+			$auth_dead = true; // assume dead unless a transient/protocol reason says otherwise
+			if ( $ci > 0 ) {
+				self::log( '[' . $provider['id'] . '] store refresh token is dead; trying a different (never-retired) token once (#' . $ci . ')' );
+			}
+			foreach ( $redirect_uris as $ru ) {
+				for ( $attempt = 1; $attempt <= 2; $attempt++ ) { // grace retry (transient errors only)
+					$body = array_merge(
+						array(
+							'grant_type'    => $provider['grant'],
+							'client_id'     => $creds['client_id'],
+							'client_secret' => $creds['client_secret'],
+							'refresh_token' => $rt,
+						),
+						$provider['body_extra']
+					);
+					if ( '' !== $ru ) {
+						$body['redirect_uri'] = $ru;
+					}
+
+					$resp = wp_remote_post( $provider['token_url'], array(
+						'timeout' => 20,
+						'headers' => $headers,
+						'body'    => ( 'form' === $provider['body_format'] ) ? $body : wp_json_encode( $body ),
+					) );
+
+					if ( is_wp_error( $resp ) ) {
+						$auth_dead = false; // network problem, not a dead token
+						self::log( '[' . $provider['id'] . '] refresh attempt failed (network: ' . $resp->get_error_message() . ') attempt=' . $attempt );
+						if ( 1 === $attempt ) {
+							usleep( 1500000 );
+							continue;
+						}
+						break; // next redirect_uri
+					}
+
+					$code      = (int) wp_remote_retrieve_response_code( $resp );
+					$body_str  = (string) wp_remote_retrieve_body( $resp );
+					$last_code = $code;
+					$last_body = substr( $body_str, 0, 300 );
+
+					if ( 200 === $code ) {
+						$tok = json_decode( $body_str, true );
+						if ( is_array( $tok ) && ! empty( $tok['access_token'] ) ) {
+							if ( self::replaced_mid_flight( $provider, $store_rt ) ) {
+								// A reconnect was adopted while this request was on the network.
+								// Keep the person's grant; it is marked due, so the next caller
+								// rotates it. This caller still gets a working access token.
+								self::log( '[' . $provider['id'] . '] refresh succeeded, but the store adopted a reconnect meanwhile — keeping the reconnect; not storing this rotation' );
+								return (string) $tok['access_token'];
+							}
+							if ( empty( $tok['refresh_token'] ) ) {
+								$tok['refresh_token'] = $rt; // keep the token that worked, never the dead one
+							}
+							// A fallback token that was just spent is as dead as the store's: list
+							// it, so a later write of it is never adopted as live.
+							if ( ! hash_equals( (string) $tok['refresh_token'], (string) $rt ) ) {
+								self::retire( $provider, (string) $rt, (string) $tok['refresh_token'] );
+							}
+							self::store_and_project( $provider, $tok, $entry_version );
+							return (string) $tok['access_token'];
+						}
+						self::log( '[' . $provider['id'] . '] refresh 200 but unparseable body — treating as transient' );
+						$auth_dead = false;
+						break;
+					}
+
+					if ( $code >= 500 ) {
+						$auth_dead = false; // upstream hiccup
+						self::log( '[' . $provider['id'] . '] refresh attempt got HTTP ' . $code . ' (transient) attempt=' . $attempt );
+						if ( 1 === $attempt ) {
+							usleep( 1500000 );
+							continue;
+						}
+						break;
+					}
+
+					// 400/401/403: try the next redirect_uri (a provider can 401 a
+					// refresh whose redirect_uri does not match the grant). Only if
+					// EVERY uri fails auth-class do we call the token dead.
+					self::log( '[' . $provider['id'] . '] refresh attempt got HTTP ' . $code . ' (trying next redirect_uri)' );
+					break; // no grace retry on auth-class responses
+				}
+			}
+			if ( ! $auth_dead ) {
+				break; // transient: the store token is not known dead, so no second try
+			}
+		}
+
+		if ( $auth_dead && self::replaced_mid_flight( $provider, $store_rt ) ) {
+			self::log( '[' . $provider['id'] . '] refresh failed on a token the store replaced meanwhile (reconnect adopted) — no re-auth flag, no cooldown' );
+			return '';
+		}
 		if ( $auth_dead ) {
 			// Dead refresh token: the only recovery is a manual reconnect.
 			// NEVER blank the stored tokens; flag + cooldown + admin notice.
@@ -442,29 +547,46 @@ class ZDZ_Token_Service {
 
 		update_option( self::opt( $provider, 'access_token' ), $access, false );
 		if ( '' !== $refresh ) {
+			self::retire( $provider, (string) self::fresh( self::opt( $provider, 'refresh_token' ), '' ), $refresh );
 			update_option( self::opt( $provider, 'refresh_token' ), $refresh, false );
 		}
 		update_option( self::opt( $provider, 'expires_at' ), $expires, false );
 		update_option( self::opt( $provider, 'last_refresh' ), time(), false );
-		update_option( self::opt( $provider, 'version' ), $entry_version + 1, false );
+		$new_version = max( (int) self::fresh( self::opt( $provider, 'version' ), 0 ), (int) $entry_version ) + 1;
+		update_option( self::opt( $provider, 'version' ), $new_version, false );
 
 		// Success clears the breaker.
 		delete_option( self::opt( $provider, 'reauth_needed' ) );
 		delete_option( self::opt( $provider, 'cooldown_until' ) );
 
-		// Back-compat projection — only families already in use on this install.
+		// Back-compat projection — only families already in use on this install, and
+		// never into a family that names a different app registration.
 		$projected = array();
-		foreach ( $provider['option_families'] as $fam ) {
-			if ( false !== get_option( $fam . 'access_token', false ) || false !== get_option( $fam . 'refresh_token', false ) ) {
-				update_option( $fam . 'access_token', $access, false );
-				if ( '' !== $refresh ) {
-					update_option( $fam . 'refresh_token', $refresh, false );
+		$skipped   = array();
+		self::$projecting = true;
+		try {
+			foreach ( $provider['option_families'] as $fam ) {
+				if ( false !== get_option( $fam . 'access_token', false ) || false !== get_option( $fam . 'refresh_token', false ) ) {
+					if ( ! self::family_is_ours( $provider, $fam ) ) { // phpcs:ignore PHPCompatibility.Extensions.RemovedExtensions.famRemoved -- self::family_is_ours() is this class's own method, not the removed fam extension
+						$skipped[] = rtrim( $fam, '_' );
+						continue;
+					}
+					update_option( $fam . 'access_token', $access, false );
+					if ( '' !== $refresh ) {
+						update_option( $fam . 'refresh_token', $refresh, false );
+					}
+					$projected[] = rtrim( $fam, '_' );
 				}
-				$projected[] = rtrim( $fam, '_' );
 			}
+		} finally {
+			self::$projecting = false;
+		}
+		if ( $skipped ) {
+			self::log_once_daily_key( $provider['id'] . '_skip_' . implode( '_', $skipped ),
+				'[' . $provider['id'] . '] projection skipped [' . implode( ', ', $skipped ) . '] — their client_id names a different app registration' );
 		}
 
-		self::log( '[' . $provider['id'] . '] refresh SUCCESS — single network refresh; version now ' . ( $entry_version + 1 )
+		self::log( '[' . $provider['id'] . '] refresh SUCCESS — single network refresh; version now ' . $new_version
 			. '; expires in ' . round( ( $expires - time() ) / 3600, 1 ) . 'h'
 			. '; projected → [' . implode( ', ', $projected ) . '] (origin=' . self::origin() . ')' );
 	}
@@ -474,49 +596,255 @@ class ZDZ_Token_Service {
 	// ─────────────────────────────────────────────────────────────────
 
 	/**
-	 * Resolve credentials: caller-supplied first (already-decrypted), then the
-	 * provider's registered resolver. Matched-pair only — a caller id is never
-	 * mixed with a resolver secret.
+	 * Resolve credentials: the platform app's matched pair from the provider's own
+	 * store first (canonical_pair()); the caller's own pair only when the store
+	 * yields none. refresh() has already refused a caller naming a different app,
+	 * so a caller id here is either empty or the canonical one.
 	 *
-	 * This replaces the old behaviour of reaching into named plugin admin
-	 * classes: the kernel now resolves credentials from a provider-supplied
-	 * resolver that reads the platform's own credential store.
+	 * The refresh token spent is the STORE's, not the caller's copy: a reconnect
+	 * reaches the store through adopt_external(); a caller that differs holds an
+	 * old copy, and spending it would trip the breaker for everyone. (A differing
+	 * caller token is still tried once if the store's turns out dead.)
 	 */
 	private static function resolve_credentials( array $provider, array $args ) {
 		$id  = trim( (string) ( $args['client_id'] ?? '' ) );
 		$sec = trim( (string) ( $args['client_secret'] ?? '' ) );
 		$rt  = trim( (string) ( $args['refresh_token'] ?? '' ) );
 
-		if ( '' === $rt ) {
-			$rt = (string) get_option( self::opt( $provider, 'refresh_token' ), '' );
+		$store_rt = trim( (string) self::fresh( self::opt( $provider, 'refresh_token' ), '' ) );
+		if ( '' !== $store_rt ) {
+			if ( '' !== $rt && ! hash_equals( $store_rt, $rt ) ) {
+				self::log_once_daily_key( $provider['id'] . '_caller_rt_' . self::origin(), '[' . $provider['id'] . '] caller passed a refresh token that is not the store\'s — using the store\'s (origin=' . self::origin() . ')' );
+			}
+			$rt = $store_rt;
 		}
 
-		// A caller-supplied secret that looks ENCRYPTED is discarded (with its
-		// id, to honour the matched-pair rule) and re-resolved below.
-		$max = (int) $provider['plaintext_secret_max'];
-		if ( '' !== $sec && $max > 0 && strlen( $sec ) > $max ) {
-			self::log( '[' . $provider['id'] . '] caller-supplied client_secret looks ENCRYPTED (len=' . strlen( $sec ) . ') — discarding; resolving via provider resolver instead' );
+		$canon = self::canonical_pair( $provider );
+		if ( '' === $rt && '' !== $canon['refresh_token'] ) {
+			$rt = $canon['refresh_token'];
+		}
+		if ( '' !== $canon['client_id'] && '' !== $canon['client_secret'] ) {
+			return array( 'client_id' => $canon['client_id'], 'client_secret' => $canon['client_secret'], 'refresh_token' => $rt );
+		}
+
+		// No store pair: the caller's own (matched pair only; an encrypted-looking
+		// secret is discarded with its id).
+		if ( '' !== $sec && ! self::usable_secret( $provider, $sec ) ) {
+			self::log( '[' . $provider['id'] . '] caller-supplied client_secret looks ENCRYPTED (len=' . strlen( $sec ) . ') — discarding; no store pair to fall back on' );
 			$sec = '';
 			$id  = '';
 		}
+		return array( 'client_id' => $id, 'client_secret' => $sec, 'refresh_token' => $rt );
+	}
 
-		if ( ( '' === $id || '' === $sec ) && isset( $provider['credentials'] ) ) {
-			$resolved = self::invoke_resolver( $provider['credentials'], $provider );
-			if ( is_array( $resolved ) ) {
-				$r_id  = trim( (string) ( $resolved['client_id'] ?? '' ) );
-				$r_sec = trim( (string) ( $resolved['client_secret'] ?? '' ) );
-				if ( '' !== $r_id && '' !== $r_sec ) {
-					$id  = $r_id;
-					$sec = $r_sec;
-					self::log( '[' . $provider['id'] . '] credentials resolved via provider resolver (matched pair)' );
-				}
-				if ( '' === $rt && ! empty( $resolved['refresh_token'] ) ) {
-					$rt = trim( (string) $resolved['refresh_token'] );
+	/** A secret worth transmitting: one printable token, never a ciphertext blob. */
+	private static function usable_secret( array $provider, $sec ) {
+		$sec = (string) $sec;
+		$max = (int) $provider['plaintext_secret_max'];
+		return '' !== $sec && ( $max <= 0 || strlen( $sec ) <= $max ) && 1 === preg_match( '/^[\x21-\x7E]+$/', $sec );
+	}
+
+	/**
+	 * The provider's app as a MATCHED pair from its own store (the `credentials`
+	 * resolver), memoized per request once found. A store whose secret is not usable
+	 * plaintext yields nothing: id and secret always come from one source.
+	 *
+	 * @return array{client_id:string,client_secret:string,refresh_token:string}
+	 */
+	public static function canonical_pair( $provider = null ) {
+		if ( ! is_array( $provider ) ) {
+			$provider = self::resolve_provider( is_string( $provider ) ? $provider : null );
+		}
+		$none = array( 'client_id' => '', 'client_secret' => '', 'refresh_token' => '' );
+		if ( ! $provider ) {
+			return $none;
+		}
+		if ( isset( self::$canon[ $provider['id'] ] ) ) {
+			return self::$canon[ $provider['id'] ];
+		}
+		$pair = $none;
+		if ( isset( $provider['credentials'] ) ) {
+			$r = self::invoke_resolver( $provider['credentials'], $provider );
+			if ( is_array( $r ) ) {
+				$id  = trim( (string) ( $r['client_id'] ?? '' ) );
+				$sec = trim( (string) ( $r['client_secret'] ?? '' ) );
+				if ( '' !== $id && self::usable_secret( $provider, $sec ) ) {
+					$pair = array( 'client_id' => $id, 'client_secret' => $sec, 'refresh_token' => self::plain_token( $r['refresh_token'] ?? '' ) );
 				}
 			}
 		}
+		// Memoize only a found pair: a call made before the store has loaded must not
+		// pin "no app known" for the rest of the request.
+		if ( '' !== $pair['client_id'] ) {
+			self::$canon[ $provider['id'] ] = $pair;
+		}
+		return $pair;
+	}
 
-		return array( 'client_id' => $id, 'client_secret' => $sec, 'refresh_token' => $rt );
+	/** Forget the request memo (after the store's app changes, and between tests). */
+	public static function reset_memo() {
+		self::$canon = array();
+	}
+
+	/**
+	 * Is this option family on the platform's app? A family with its own client_id
+	 * must name the canonical one. A family with none inherits — except a
+	 * `separate_families` member, which must say so explicitly. With no canonical
+	 * app known, every family counts.
+	 */
+	public static function family_is_ours( array $provider, $prefix ) {
+		$canon = self::canonical_pair( $provider );
+		if ( '' === $canon['client_id'] ) {
+			return true;
+		}
+		$fid = self::plain_token( get_option( $prefix . 'client_id', '' ) );
+		if ( '' === $fid ) {
+			return ! in_array( $prefix, $provider['separate_families'], true );
+		}
+		return hash_equals( $canon['client_id'], $fid );
+	}
+
+	/** A stored family value as the provider expects it: decoded when it is sealed. */
+	private static function plain_token( $v ) {
+		$v = is_scalar( $v ) ? trim( (string) $v ) : '';
+		if ( '' !== $v && class_exists( 'ZDZ_Core_Crypto' ) ) {
+			$v = ZDZ_Core_Crypto::plain( $v );
+		}
+		return $v;
+	}
+
+	/** One printable token of sane length: anything else is never sent or adopted. */
+	private static function is_token( $v ) {
+		$v = (string) $v;
+		return '' !== $v && strlen( $v ) <= self::TOKEN_MAX && 1 === preg_match( '/^[\x21-\x7E]+$/', $v );
+	}
+
+	/** Did the store's refresh token change since this refresh began? */
+	private static function replaced_mid_flight( array $provider, $sent ) {
+		$now = (string) self::fresh( self::opt( $provider, 'refresh_token' ), '' );
+		return '' !== $now && ! hash_equals( $now, (string) $sent );
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	// RECONNECT ADOPTION
+	// ─────────────────────────────────────────────────────────────────
+
+	/** Watch each provider family's refresh_token for writes this service did not make. */
+	public static function watch_families() {
+		foreach ( self::providers() as $provider ) {
+			$id = $provider['id'];
+			foreach ( $provider['option_families'] as $fam ) {
+				$opt = $fam . 'refresh_token';
+				if ( isset( self::$watched[ $opt ] ) ) {
+					continue;
+				}
+				self::$watched[ $opt ] = true;
+				add_action( 'update_option_' . $opt, static function ( $old, $new ) use ( $id, $fam ) {
+					self::adopt_external( $id, $fam, $new );
+				}, 20, 2 );
+				add_action( 'add_option_' . $opt, static function ( $name, $new ) use ( $id, $fam ) {
+					self::adopt_external( $id, $fam, $new );
+				}, 20, 2 );
+			}
+		}
+	}
+
+	/**
+	 * A family got a refresh token from somewhere else — a "Connect" sign-in, or an
+	 * app's own refresher. Providers with single-use refresh tokens keep one live
+	 * token per user per app, so the newest one written is the live one and the store
+	 * must follow it, or the next refresh spends a dead token and trips the breaker.
+	 *
+	 * @return string what happened: skip|same|stale|foreign|adopted
+	 */
+	public static function adopt_external( $provider_id, $prefix, $value ) {
+		if ( self::$projecting || ! is_scalar( $value ) ) {
+			return 'skip';
+		}
+		$provider = self::resolve_provider( (string) $provider_id );
+		if ( ! $provider || $provider['id'] !== $provider_id ) {
+			return 'skip';
+		}
+		$value = self::plain_token( $value );
+		if ( ! self::is_token( $value ) ) {
+			return 'skip';
+		}
+		$current = (string) self::fresh( self::opt( $provider, 'refresh_token' ), '' );
+		if ( '' !== $current && hash_equals( $current, $value ) ) {
+			return 'same'; // already ours (e.g. a delegating caller syncing its own copy)
+		}
+		if ( in_array( self::fp( $value ), self::retired_list( $provider ), true ) ) {
+			// A stale copy. Put the live pair back so this family's readers don't keep it.
+			self::log( '[' . $provider['id'] . '] adopt IGNORED — ' . rtrim( $prefix, '_' ) . ' wrote a refresh token this service already rotated away; live pair written back' );
+			if ( '' !== $current && self::family_is_ours( $provider, $prefix ) ) { // phpcs:ignore PHPCompatibility.Extensions.RemovedExtensions.famRemoved -- self::family_is_ours() is this class's own method, not the removed fam extension
+				self::$projecting = true;
+				try {
+					$acc = (string) self::fresh( self::opt( $provider, 'access_token' ), '' );
+					if ( '' !== $acc ) {
+						update_option( $prefix . 'access_token', $acc, false );
+					}
+					update_option( $prefix . 'refresh_token', $current, false );
+				} finally {
+					self::$projecting = false;
+				}
+			}
+			return 'stale';
+		}
+		if ( ! self::family_is_ours( $provider, $prefix ) ) { // phpcs:ignore PHPCompatibility.Extensions.RemovedExtensions.famRemoved -- self::family_is_ours() is this class's own method, not the removed fam extension
+			return 'foreign'; // another app's token; never into the shared store
+		}
+
+		self::retire( $provider, $current, $value );
+		update_option( self::opt( $provider, 'refresh_token' ), $value, false );
+		$access = self::plain_token( get_option( $prefix . 'access_token', '' ) );
+		if ( '' !== $access ) {
+			update_option( self::opt( $provider, 'access_token' ), $access, false );
+		}
+		// Expiry unknown: mark it due. The next caller, or the cron, rotates once and
+		// projects the result to every family.
+		update_option( self::opt( $provider, 'expires_at' ), time(), false );
+		update_option( self::opt( $provider, 'last_refresh' ), time(), false );
+		// No version bump: a follower woken by it would take this family's access token,
+		// which may be the one from before the reconnect.
+		delete_option( self::opt( $provider, 'reauth_needed' ) );
+		delete_option( self::opt( $provider, 'cooldown_until' ) );
+		self::log( '[' . $provider['id'] . '] adopted a new refresh token written to ' . rtrim( $prefix, '_' ) . ' (reconnect or app refresh); re-auth flag cleared; rotation due (origin=' . self::origin() . ')' );
+		return 'adopted';
+	}
+
+	/**
+	 * Read one of the store's rows past the request's option cache. Another worker may
+	 * have rotated or adopted since this request first read it; comparisons against a
+	 * cached value adopt or overwrite the wrong token.
+	 */
+	private static function fresh( $name, $default = '' ) {
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( $name, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
+		return get_option( $name, $default );
+	}
+
+	/** Remember a refresh token being replaced, so a stale copy is never re-adopted. */
+	private static function retire( array $provider, $old, $new ) {
+		$old = (string) $old;
+		if ( '' === $old || $old === (string) $new ) {
+			return;
+		}
+		$list   = self::retired_list( $provider );
+		$list[] = self::fp( $old );
+		$list   = array_slice( array_values( array_unique( $list ) ), -self::RETIRED_KEEP );
+		update_option( self::opt( $provider, 'retired_rt' ), $list, false );
+	}
+
+	private static function retired_list( array $provider ) {
+		$l = self::fresh( self::opt( $provider, 'retired_rt' ), array() );
+		return is_array( $l ) ? array_values( array_filter( $l, 'is_string' ) ) : array();
+	}
+
+	/** 16-hex fingerprint; the token itself is never stored twice. */
+	private static function fp( $v ) {
+		return substr( hash( 'sha256', (string) $v ), 0, 16 );
 	}
 
 	private static function invoke_resolver( $resolver, array $provider ) {
@@ -582,11 +910,11 @@ class ZDZ_Token_Service {
 			return;
 		}
 		foreach ( $provider['option_families'] as $fam ) {
-			$rt = (string) get_option( $fam . 'refresh_token', '' );
-			if ( '' !== $rt ) {
+			$rt = self::plain_token( get_option( $fam . 'refresh_token', '' ) );
+			if ( self::is_token( $rt ) && self::family_is_ours( $provider, $fam ) ) { // phpcs:ignore PHPCompatibility.Extensions.RemovedExtensions.famRemoved -- self::family_is_ours() is this class's own method, not the removed fam extension
 				update_option( self::opt( $provider, 'refresh_token' ), $rt, false );
 
-				$at = (string) get_option( $fam . 'access_token', '' );
+				$at = self::plain_token( get_option( $fam . 'access_token', '' ) );
 				if ( '' !== $at && '' === (string) get_option( self::opt( $provider, 'access_token' ), '' ) ) {
 					update_option( self::opt( $provider, 'access_token' ), $at, false );
 				}
@@ -681,7 +1009,7 @@ class ZDZ_Token_Service {
 		} );
 
 		add_action( 'init', static function () {
-			// Retire any predecessor cron hooks a provider declares (e.g. a
+			// Retire any pre-rename cron hooks a provider declares (e.g. a
 			// legacy must-use plugin's hook), then ensure our single
 			// 15-minute maintenance tick is scheduled.
 			foreach ( self::providers() as $provider ) {
@@ -696,6 +1024,12 @@ class ZDZ_Token_Service {
 			}
 		} );
 		add_action( 'zdz_tok_cron', array( __CLASS__, 'cron_tick' ) );
+
+		// Reconnect watchers. Providers register on the zdz_token_providers filter, some
+		// late, so the watch is (re)built once the theme is set up and again at init;
+		// each option is watched once.
+		add_action( 'after_setup_theme', array( __CLASS__, 'watch_families' ), 1 );
+		add_action( 'init', array( __CLASS__, 'watch_families' ), PHP_INT_MAX );
 
 		// Deprecated-alias migration: publish each provider's old canonical option
 		// keys → the zdz_tok_<key>_* store, applied (copy-not-move) by the theme's
@@ -798,6 +1132,19 @@ class ZDZ_Token_Service {
 		error_log( '[ZDZ_Token_Service] ' . $msg );
 	}
 
+	private static function log_once_daily_key( $key, $msg ) {
+		static $seen = array();
+		if ( isset( $seen[ $key ] ) ) {
+			return;
+		}
+		$seen[ $key ] = true;
+		$k = 'zdz_tok_log_' . substr( md5( $key ), 0, 10 ) . '_' . gmdate( 'Ymd' );
+		if ( function_exists( 'get_transient' ) && ! get_transient( $k ) ) {
+			set_transient( $k, 1, DAY_IN_SECONDS );
+			self::log( $msg );
+		}
+	}
+
 	private static function log_once_daily( $msg ) {
 		$k = 'zdz_tok_boot_' . gmdate( 'Ymd' );
 		if ( ! get_transient( $k ) ) {
@@ -847,25 +1194,46 @@ if ( ! function_exists( 'zdz_register_freshbooks_token_provider' ) ) {
 			// row. Projection only writes to families ALREADY present on the
 			// install, so listing extras never seeds data.
 			'option_families' => array(
-				'zdz_core_fb_', 'zdz_surveys_fb_',
+				'zdz_core_fb_', 'zdz_surveys_fb_', 'zl_fb_', 'zic_fb_',
 				'tsa_fb_', 'tsec_fb_', 'tscc_fb_', 'tsl_fb_', 'tsic_fb_',
 				'ts_core_fb_', 'ts_surveys_fb_', 'tsemc_fb_', 'tser_fb_',
 			),
+			// Invoices is set up on its own FreshBooks app: its family is ours only when
+			// it names the platform app's client id itself.
+			'separate_families'  => array( 'zic_fb_', 'tsic_fb_' ),
+			// Where a "Connect FreshBooks" sign-in writes: Core's family, and Leads'.
+			'reconnect_families' => array( 'zdz_core_fb_', 'zl_fb_' ),
 			// Old canonical store prefix → migrated to zdz_tok_fb_* via zdz_rename_map.
 			'legacy_options'  => array( 'ts_tok_fb_' ),
-			// Predecessor maintenance cron hook to retire on upgrade.
+			// The pre-rename maintenance cron hook, retired on upgrade.
 			'legacy_cron'     => array( 'ts_tok_fb_cron' ),
 			// The kernel resolves credentials from the platform's OWN store, never
 			// by reaching into a plugin's admin class.
 			'credentials'     => 'zdz_freshbooks_token_credentials',
-			// A neutral base redirect. The app that owns the OAuth callback adds
-			// its URI via the zdz_token_redirect_uris filter.
-			'redirect_uris'   => array( admin_url( 'admin.php' ) ),
+			// A neutral base redirect, plus the callback of a bundled app that signs in
+			// to this app (FreshBooks rejects a refresh whose redirect_uri differs from
+			// the grant's). Any other app adds its URI via zdz_token_redirect_uris.
+			'redirect_uris'   => 'zdz_freshbooks_token_redirect_uris',
 		);
 		return $providers;
 	}
 }
 add_filter( 'zdz_token_providers', 'zdz_register_freshbooks_token_provider' );
+
+if ( ! function_exists( 'zdz_freshbooks_token_redirect_uris' ) ) {
+	/**
+	 * Redirect URIs a FreshBooks grant on this site may have been issued under.
+	 *
+	 * @return string[]
+	 */
+	function zdz_freshbooks_token_redirect_uris( $provider ) {
+		$uris = array( admin_url( 'admin.php' ) );
+		if ( class_exists( 'ZL_Admin', false ) ) {
+			$uris[] = admin_url( 'admin.php?page=zl-callback' ); // Leads' sign-in callback
+		}
+		return $uris;
+	}
+}
 
 if ( ! function_exists( 'zdz_freshbooks_token_credentials' ) ) {
 	/**

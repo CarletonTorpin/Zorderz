@@ -33,37 +33,39 @@ class ZDZ_Data_Permissions {
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'allow',
 			'view_others_commissions'   => 'allow',
-			'run_commission_calculation' => 'allow',  // Commissions v2.0
-			'edit_cogs_catalog'         => 'allow',  // Commissions v2.0
-			'view_commission_audit_trail'=> 'allow',  // Commissions v2.0
+			'run_commission_calculation' => 'allow',  // Commissions
+			'edit_cogs_catalog'         => 'allow',  // Commissions
+			'view_commission_audit_trail'=> 'allow',  // Commissions
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'allow',
 			'upload_to_knowledge_vault' => 'allow',
-			'lead_crew'                 => 'allow',  // v2.32.0 Crew Lead hierarchy
-			'handoff_jobs'              => 'allow',  // v2.32.0 job component handoff
+			'lead_crew'                 => 'allow',  // Crew Lead hierarchy
+			'handoff_jobs'              => 'allow',  // job component handoff
+			'view_team_projects'        => 'allow',
 		],
 		'zdz_admin' => [
 			'view_company_revenue'      => 'allow',
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'allow',
 			'view_others_commissions'   => 'allow',
-			'run_commission_calculation' => 'allow',  // Commissions v2.0
-			'edit_cogs_catalog'         => 'allow',  // Commissions v2.0
-			'view_commission_audit_trail'=> 'allow',  // Commissions v2.0
+			'run_commission_calculation' => 'allow',  // Commissions
+			'edit_cogs_catalog'         => 'allow',  // Commissions
+			'view_commission_audit_trail'=> 'allow',  // Commissions
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'allow',
 			'upload_to_knowledge_vault' => 'allow',
-			'lead_crew'                 => 'allow',  // v2.32.0
-			'handoff_jobs'              => 'allow',  // v2.32.0
+			'lead_crew'                 => 'allow',  //
+			'handoff_jobs'              => 'allow',  //
+			'view_team_projects'        => 'allow',
 		],
 		'zdz_sales' => [
 			'view_company_revenue'      => 'deny',
 			'view_others_data'          => 'deny',
 			'view_own_commission'       => 'allow',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'allow',  // Commissions v2.0
-			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
-			'view_commission_audit_trail'=> 'deny',   // Commissions v2.0
+			'run_commission_calculation' => 'allow',  // Commissions
+			'edit_cogs_catalog'         => 'deny',   // Commissions
+			'view_commission_audit_trail'=> 'deny',   // Commissions
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'deny',
 			'upload_to_knowledge_vault' => 'deny',
@@ -72,52 +74,56 @@ class ZDZ_Data_Permissions {
 			// Crew Lead by default - flip lead_crew per-user for anyone who leads.
 			'lead_crew'                 => 'deny',
 			'handoff_jobs'              => 'allow',
+			'view_team_projects'        => 'allow',  // every Project's basic info (no amounts); switch off per person
 		],
 		'zdz_operator' => [
 			'view_company_revenue'      => 'deny',
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'deny',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'allow',  // Commissions v2.0
-			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
-			'view_commission_audit_trail'=> 'allow',  // Commissions v2.0
+			'run_commission_calculation' => 'allow',  // Commissions
+			'edit_cogs_catalog'         => 'deny',   // Commissions
+			'view_commission_audit_trail'=> 'allow',  // Commissions
 			'access_web_research'       => 'deny',
 			'access_deep_research'      => 'deny',
 			'upload_to_knowledge_vault' => 'deny',
-			// v2.32.0: operators coordinate work, so they can lead a crew and hand off.
+			// operators coordinate work, so they can lead a crew and hand off.
 			'lead_crew'                 => 'allow',
 			'handoff_jobs'              => 'allow',
+			'view_team_projects'        => 'deny',
 		],
 		'zdz_mfg' => [
 			'view_company_revenue'      => 'deny',
 			'view_others_data'          => 'deny',
 			'view_own_commission'       => 'deny',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'deny',   // Commissions v2.0
-			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
-			'view_commission_audit_trail'=> 'deny',   // Commissions v2.0
+			'run_commission_calculation' => 'deny',   // Commissions
+			'edit_cogs_catalog'         => 'deny',   // Commissions
+			'view_commission_audit_trail'=> 'deny',   // Commissions
 			'access_web_research'       => 'deny',
 			'access_deep_research'      => 'deny',
 			'upload_to_knowledge_vault' => 'deny',
-			// v2.32.0: the shop foreman naturally leads a crew.
+			// the shop foreman naturally leads a crew.
 			'lead_crew'                 => 'allow',
 			'handoff_jobs'              => 'deny',
+			'view_team_projects'        => 'deny',
 		],
 		'zdz_tech' => [
 			'view_company_revenue'      => 'deny',
 			'view_others_data'          => 'allow',
 			'view_own_commission'       => 'deny',
 			'view_others_commissions'   => 'deny',
-			'run_commission_calculation' => 'deny',   // Commissions v2.0
-			'edit_cogs_catalog'         => 'deny',   // Commissions v2.0
-			'view_commission_audit_trail'=> 'deny',   // Commissions v2.0
+			'run_commission_calculation' => 'deny',   // Commissions
+			'edit_cogs_catalog'         => 'deny',   // Commissions
+			'view_commission_audit_trail'=> 'deny',   // Commissions
 			'access_web_research'       => 'allow',
 			'access_deep_research'      => 'allow',
 			'upload_to_knowledge_vault' => 'allow',
-			// v2.32.0: a field tech is not a Crew Lead by default, but an individual
+			// a field tech is not a Crew Lead by default, but an individual
 			// specialist can be made one per-user (the "ADD A SPECIFIC USER" case).
 			'lead_crew'                 => 'deny',
 			'handoff_jobs'              => 'deny',
+			'view_team_projects'        => 'deny',
 		],
 		// -- zdz_general (Shared Kiosk): ALL-DENY ----------------------------
 		// The most-shared, least-privileged account. Every data permission is
@@ -126,7 +132,7 @@ class ZDZ_Data_Permissions {
 		// device), and no Knowledge Vault uploads. This all-deny profile is the
 		// single source of truth that the assistant redaction, the dashboard
 		// KPI gate (class-zdz-kpi-metrics.php), and the analytics kiosk tier all
-		// read through the v2.17.0 bridge - so least privilege cascades from
+		// read through the bridge - so least privilege cascades from
 		// here without scattered per-account checks.
 		'zdz_general' => [
 			'view_company_revenue'       => 'deny',
@@ -139,8 +145,9 @@ class ZDZ_Data_Permissions {
 			'access_web_research'        => 'deny',
 			'access_deep_research'       => 'deny',
 			'upload_to_knowledge_vault'  => 'deny',
-			'lead_crew'                  => 'deny',  // v2.32.0 - a kiosk is never a lead (INV-10)
-			'handoff_jobs'               => 'deny',  // v2.32.0
+			'lead_crew'                  => 'deny',  // a kiosk is never a lead
+			'handoff_jobs'               => 'deny',  //
+			'view_team_projects'        => 'deny',
 		],
 	];
 
@@ -150,14 +157,15 @@ class ZDZ_Data_Permissions {
 		'view_others_data',
 		'view_own_commission',
 		'view_others_commissions',
-		'run_commission_calculation',     // Commissions v2.0
-		'edit_cogs_catalog',             // Commissions v2.0
-		'view_commission_audit_trail',   // Commissions v2.0
+		'run_commission_calculation',     // Commissions
+		'edit_cogs_catalog',             // Commissions
+		'view_commission_audit_trail',   // Commissions
 		'access_web_research',
 		'access_deep_research',
 		'upload_to_knowledge_vault',
-		'lead_crew',                     // v2.32.0 Crew Lead hierarchy
-		'handoff_jobs',                  // v2.32.0 job component handoff
+		'lead_crew',                     // Crew Lead hierarchy
+		'handoff_jobs',                  // job component handoff
+		'view_team_projects',            // every Project's basic info
 	];
 
 	public static function get_instance() {
@@ -222,6 +230,13 @@ class ZDZ_Data_Permissions {
 			}
 		}
 
+		// The shared device gets the shared-device profile whichever role carries the platform's trait
+		// (ZDZ_User_Roles::is_shared_device), never the profile of the role it happens to hold.
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' )
+			&& ZDZ_User_Roles::is_shared_device( (int) $user_id ) && isset( self::ROLE_DEFAULTS[ ZDZ_User_Roles::SHARED_DEVICE_ROLE ] ) ) {
+			$role = ZDZ_User_Roles::SHARED_DEVICE_ROLE;
+		}
+
 		if ( null === $role ) {
 			// Unknown role: start from all-deny. Explicit per-user overrides
 			// below can still grant, so an administrator retains the ability to
@@ -284,7 +299,7 @@ class ZDZ_Data_Permissions {
 		$user     = get_userdata( $user_id );
 		$role     = $user ? ( $user->roles[0] ?? 'unknown' ) : 'unknown';
 
-		$block  = "\n=== DATA PERMISSIONS (theme-level v2.17.0) ===\n";
+		$block  = "\n=== DATA PERMISSIONS ===\n";
 		$block .= "User: " . ( $user ? $user->display_name : 'Unknown' ) . " ({$role})\n";
 		$block .= "Resolved permissions:\n";
 
@@ -301,6 +316,7 @@ class ZDZ_Data_Permissions {
 			'upload_to_knowledge_vault' => 'Knowledge Vault uploads',
 			'lead_crew'                 => 'Lead a crew (assign & oversee)',
 			'handoff_jobs'              => 'Hand off job components',
+			'view_team_projects'        => 'Every Project\'s basic info (no amounts)',
 		];
 
 		foreach ( $resolved as $key => $val ) {

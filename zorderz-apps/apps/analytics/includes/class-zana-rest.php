@@ -3,8 +3,7 @@
  * ZANA_REST — the chat surface's HTTP routes, all under ZDZ_REST_NS.
  *
  * Never types the namespace literal — every route hangs off the single ZDZ_REST_NS
- * constant, so the whole surface moves with one edit (the v1.0.1 404 came from four
- * call sites still saying 'ts/v1').
+ * constant, so the whole surface moves with one edit.
  *
  * Routes (logged-in + app-access gated):
  *   POST  {ns}/analytics/chat                  — run one turn SYNCHRONOUSLY (kept intact)
@@ -12,6 +11,8 @@
  *   GET   {ns}/analytics/turn/<id>             — poll one async turn's status/result
  *   GET   {ns}/analytics/sessions              — list this user's sessions
  *   GET   {ns}/analytics/session/<id>          — one session's messages
+ *   POST  {ns}/analytics/action/<id>/confirm   — a person pressed Confirm on a held write (ZANA_Actions::confirm)
+ *   POST  {ns}/analytics/action/<id>/cancel    — a person pressed Cancel: the held write goes, nothing runs
  *
  * The async pair (enqueue + turn) exists so a slow turn cannot 502 behind a managed
  * host's gateway timeout: enqueue returns immediately and a background loopback runs
@@ -20,7 +21,8 @@
  *
  * Every route re-checks access server-side on the REAL user (ZDZ_Plugin_API::
  * user_can_access_app) — the model is never trusted to gate itself. The async pair
- * uses the very same permission_callback (can_access) as the sync chat route.
+ * and the Confirm / Cancel presses use the very same permission_callback (can_access)
+ * as the sync chat route; a press carries only the held row's id and its chat.
  *
  * @package Zorderz\Analytics
  */
@@ -96,6 +98,21 @@ class ZANA_REST {
 			)
 		);
 
+		foreach ( array( 'confirm', 'cancel' ) as $press ) {
+			register_rest_route(
+				$ns,
+				'/analytics/action/(?P<id>[a-f0-9]{32})/' . $press,
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'rest_action_' . $press ),
+					'permission_callback' => array( __CLASS__, 'can_access' ),
+					'args'                => array(
+						'session_id' => array( 'required' => true, 'sanitize_callback' => 'absint' ),
+					),
+				)
+			);
+		}
+
 		register_rest_route(
 			$ns,
 			'/analytics/session/(?P<id>\d+)',
@@ -158,6 +175,26 @@ class ZANA_REST {
 	public static function rest_sessions( WP_REST_Request $request ) {
 		$uid = get_current_user_id();
 		return rest_ensure_response( array( 'sessions' => ZANA_Chat::sessions( $uid ) ) );
+	}
+
+	/** A person pressed Confirm: the held write runs from its stored arguments, once. */
+	public static function rest_action_confirm( WP_REST_Request $request ) {
+		$uid = get_current_user_id();
+		$sid = (int) $request->get_param( 'session_id' );
+		$id  = strtolower( (string) $request->get_param( 'id' ) );
+		$r   = ZANA_Actions::confirm( $uid, $sid, $id );
+		ZANA_Chat::settle_card( $sid, $uid, $id, $r['success'] ? __( 'Confirmed', 'zorderz' ) . ': ' . $r['message'] : $r['message'] );
+		return rest_ensure_response( $r );
+	}
+
+	/** A person pressed Cancel: nothing runs. */
+	public static function rest_action_cancel( WP_REST_Request $request ) {
+		$uid = get_current_user_id();
+		$sid = (int) $request->get_param( 'session_id' );
+		$id  = strtolower( (string) $request->get_param( 'id' ) );
+		$ok  = ZANA_Actions::cancel( $uid, $sid, $id );
+		ZANA_Chat::settle_card( $sid, $uid, $id, __( 'Cancelled. Nothing was changed.', 'zorderz' ) );
+		return rest_ensure_response( array( 'success' => $ok, 'message' => $ok ? __( 'Cancelled. Nothing was changed.', 'zorderz' ) : __( 'That preview had already gone.', 'zorderz' ) ) );
 	}
 
 	public static function rest_session( WP_REST_Request $request ) {

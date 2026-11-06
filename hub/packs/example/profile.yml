@@ -1,0 +1,8 @@
+# The example identity pack: a fictional business, for trying the hub. Replace every file in a copy of this
+# folder with the business's own words, then point the hub's config `pack_dir` at the copy.
+name: Example Co
+charts:
+  description: >-
+    Example Co is a fictional exterior home-services company. It installs and services window film, shade sails,
+    gutter guards, chimney caps and patio lights for homeowners and a few businesses in the example region.
+  caption_description: an exterior home-services company

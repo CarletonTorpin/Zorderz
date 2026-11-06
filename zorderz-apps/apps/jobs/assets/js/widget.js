@@ -6,7 +6,7 @@
  *   - Idempotent init fired three ways: immediate (already in DOM),
  *     the SPA shell's `zdz_widgets_rendered` event, and DOMContentLoaded.
  *   - AJAX via fetch() + URLSearchParams against admin-ajax.php.
- *   - Server is authoritative (INV-1): this UI only mirrors what the caller
+ *   - Server is authoritative: this UI only mirrors what the caller
  *     may do; every write is re-checked server-side and failures surface inline.
  *
  * Globals via wp_localize_script (zjobWidget):
@@ -52,7 +52,8 @@
 		no_file:          'No photo received - try again.',
 		upload_failed:    'The photo upload failed - try again.',
 		save_failed:      'Could not save the photo - try again.',
-		media_unavailable:'The photo library is unavailable right now.'
+		media_unavailable:'The photo library is unavailable right now.',
+		moved:            'This job changed on another device. The list has been refreshed.'
 	};
 
 	function cfg() { return window.zjobWidget || {}; }
@@ -69,7 +70,7 @@
 	function digits(s) { return String(s == null ? '' : s).replace(/[^\d+]/g, ''); }
 
 	/* Deep-link an address to the native maps app for turn-by-turn directions.
-	   v1.6.2 (D-01): delegates to the ONE shared helper window.zdzMapsUrl() (theme
+	   v1.6.2: delegates to the ONE shared helper window.zdzMapsUrl() (theme
 	   app.js) so the Apple/Google map-URL rule can't drift across surfaces; the
 	   dossier wants DIRECTIONS (daddr / dir), so it passes { directions: true }.
 	   Falls back to the same rule inline when the shared helper is not on the page.
@@ -196,8 +197,41 @@
 		if (createBtn) { createBtn.addEventListener('click', function () { doCreate(root); }); }
 
 		if (root.getAttribute('data-can-handoff') === '1') { loadAssignees(root); }
-		loadList(root, 'present');
+		loadList(root, currentFilter(root));
 		drawIcons();
+
+		// A job changed on another device should not wait for a manual refresh: reload
+		// quietly when the app comes back to the front, and once a minute while it is
+		// in front (never while a form on the list is open).
+		document.addEventListener('visibilitychange', function () {
+			if (document.visibilityState === 'visible') { quietRefresh(root); }
+		});
+		setInterval(function () {
+			if (document.visibilityState === 'visible') { quietRefresh(root); }
+		}, 60000);
+	}
+
+	/* Reload the list without the loading placeholder, unless someone is mid-edit. */
+	function quietRefresh(root) {
+		if (!root || !document.body.contains(root)) { return; }
+		var editing = root.querySelector('.zjob-sched-form:not([hidden]), .zjob-ext-form:not([hidden]), .zjob-att-form:not([hidden])');
+		if (editing) { return; }
+		var listEl = root.querySelector('#zjob-list');
+		if (!listEl) { return; }
+		if (currentFilter(root) === 'next') {
+			if (window.ZJOBMyNext) {
+				post('zjob_my_next', {}).then(function (res) {
+					if (res && res.success) { window.ZJOBMyNext.render(listEl, res.data); }
+				}).catch(function () { /* quiet: the next refresh tries again */ });
+			}
+			return;
+		}
+		post('zjob_list', { bucket: currentFilter(root) }).then(function (res) {
+			if (res && res.success) {
+				renderList(root, (res.data && res.data.jobs) || []);
+				updatePendingBadge(root, res.data ? res.data.pending_close_count : 0);
+			}
+		}).catch(function () { /* quiet: the next refresh tries again */ });
 	}
 
 	function switchTab(root, name) {
@@ -224,6 +258,10 @@
 	function loadList(root, bucket) {
 		var listEl = root.querySelector('#zjob-list');
 		if (!listEl) { return; }
+		if (bucket === 'next') {
+			if (window.ZJOBMyNext) { window.ZJOBMyNext.load(listEl, post); }
+			return;
+		}
 		listEl.innerHTML = '<div class="zjob-empty zjob-loading">Loading&hellip;</div>';
 		post('zjob_list', { bucket: bucket || 'present' }).then(function (res) {
 			if (!res || !res.success) {
@@ -306,20 +344,21 @@
 		drawIcons();
 	}
 
-	function statusBtn(id, status, label, icon, variant) {
+	function statusBtn(id, status, label, icon, variant, from) {
 		return '<button class="zjob-mini' + (variant ? ' zjob-mini-' + variant : '') + '"' +
-			' data-act="status" data-id="' + id + '" data-status="' + status + '">' +
+			' data-act="status" data-id="' + id + '" data-status="' + status + '"' +
+			(from ? ' data-from="' + esc(from) + '"' : '') + '>' +
 			'<i data-lucide="' + icon + '"></i><span>' + label + '</span></button>';
 	}
 
-	/* Phase 7a: the worker completes THEIR part through the photo-gated capture flow
+	/* The worker completes THEIR part through the photo-gated capture flow
 	   (not a plain status flip). Shown only on their own active job. */
 	function completeBtn(id) {
 		return '<button class="zjob-mini zjob-mini-primary" data-act="complete" data-id="' + parseInt(id, 10) + '">' +
 			'<i data-lucide="camera"></i><span>Mark my part complete</span></button>';
 	}
 
-	/* Phase 7b: the originator's close-out button (only where can_close). */
+	/* The originator's close-out button (only where can_close). */
 	function closeBtn(id) {
 		return '<button class="zjob-mini zjob-mini-primary" data-act="close" data-id="' + parseInt(id, 10) + '">' +
 			'<i data-lucide="check-check"></i><span>Close out</span></button>';
@@ -542,7 +581,7 @@
 		var actions = [];
 		// Worker inbox: the worker's own OPEN job starts via "On my way" (no separate Start);
 		// a manager viewing someone else's open job keeps the plain Start.
-		if (r.status === 'open' && !mine) { actions.push(statusBtn(r.id, 'in_progress', 'Start', 'play')); }
+		if (r.status === 'open' && !mine) { actions.push(statusBtn(r.id, 'in_progress', 'Start', 'play', '', r.status)); }
 		if (mine && active) {
 			if (r.eta_status !== 'on_my_way') { actions.push(etaBtn(r.id, 'on_my_way')); }
 			if (r.eta_status !== 'running_late') { actions.push(etaBtn(r.id, 'running_late')); }
@@ -553,7 +592,7 @@
 		if (active && canComplete && mine) {
 			actions.push(completeBtn(r.id));
 		} else if (active) {
-			actions.push(statusBtn(r.id, 'done', 'Mark done', 'check'));
+			actions.push(statusBtn(r.id, 'done', 'Mark done', 'check', '', r.status));
 		}
 		var canClose = (r.can_close === true || r.can_close === 1 || r.can_close === '1');
 		var canSelfAttest = (r.can_self_attest === true || r.can_self_attest === 1 || r.can_self_attest === '1');
@@ -561,8 +600,8 @@
 		// Solo operator: no distinct second party, so the two-party Close is not offered;
 		// the worker records a single-party attestation instead (server-gated + logged).
 		else if (r.status === 'pending_close' && canSelfAttest) { actions.push(selfAttestBtn(r.id)); }
-		if (r.status === 'done' || r.status === 'cancelled' || r.status === 'pending_close') { actions.push(statusBtn(r.id, 'open', 'Reopen', 'rotate-ccw')); }
-		if (active) { actions.push(statusBtn(r.id, 'cancelled', 'Cancel', 'x', 'ghost')); }
+		if (r.status === 'done' || r.status === 'cancelled' || r.status === 'pending_close') { actions.push(statusBtn(r.id, 'open', 'Reopen', 'rotate-ccw', '', r.status)); }
+		if (active) { actions.push(statusBtn(r.id, 'cancelled', 'Cancel', 'x', 'ghost', r.status)); }
 		var actionsRow = actions.length ? '<div class="zjob-item-actions">' + actions.join('') + '</div>' : '';
 		var extForm = ( r.status === 'pending_close' && canClose ) ? extendForm(r.id) : '';
 		var attForm = ( r.status === 'pending_close' && !canClose && canSelfAttest ) ? attestForm(r.id) : '';
@@ -598,6 +637,7 @@
 		var act = el.getAttribute('data-act');
 		var id  = el.getAttribute('data-id');
 		if (act === 'status')       { return doStatus(root, el, id); }
+		if (act === 'clear-tests')  { return clearTests(root, el); }
 		if (act === 'complete')     { return openComplete(root, id); }
 		if (act === 'eta')          { return doEta(root, el, id); }
 		if (act === 'close')        { return doClose(root, el, id); }
@@ -688,7 +728,7 @@
 		});
 	}
 
-	/* Phase 7b close-out. Two-click confirm (a CRM lead gets closed) then post. */
+	/* Close-out. Two-click confirm (a CRM lead gets closed) then post. */
 	function doClose(root, el, id) {
 		if (el.getAttribute('data-confirm') !== '1') {
 			el.setAttribute('data-confirm', '1');
@@ -720,10 +760,15 @@
 
 	function doStatus(root, el, id) {
 		var status = el.getAttribute('data-status');
+		var from = el.getAttribute('data-from') || '';
 		el.disabled = true;
-		post('zjob_set_status', { id: id, status: status }).then(function (res) {
+		post('zjob_set_status', { id: id, status: status, expected: from }).then(function (res) {
 			if (res && res.success) {
 				loadList(root, currentFilter(root));
+			} else if (res && res.data && res.data.message === 'moved') {
+				// The job moved on another device: show where it is now, then say so.
+				loadList(root, currentFilter(root));
+				setTimeout(function () { flashRow(root, id, 'moved'); }, 600);
 			} else {
 				el.disabled = false;
 				flashRow(root, id, (res && res.data && res.data.message) || 'status_failed');
@@ -732,6 +777,21 @@
 			el.disabled = false;
 			flashRow(root, id, 'status_failed');
 		});
+	}
+
+	/* Administrators: cancel and hide every job whose customer name has the word "test" (never deleted). */
+	function clearTests(root, el) {
+		el.disabled = true;
+		post('zjob_test_jobs', {}).then(function (res) {
+			var n = res && res.success && res.data ? parseInt(res.data.count, 10) || 0 : 0;
+			if (!n) { el.disabled = false; window.alert('No test jobs to clear.'); return; }
+			var names = (res.data.names || []).join(', ');
+			if (!window.confirm('Clear ' + n + ' test job(s)? ' + names + '\nThey are cancelled and hidden, never deleted.')) { el.disabled = false; return; }
+			return post('zjob_clear_test_jobs', {}).then(function () {
+				el.disabled = false;
+				loadList(root, currentFilter(root));
+			});
+		}).catch(function () { el.disabled = false; });
 	}
 
 	/* Reveal/hide a job's date/time editor, prefilling the picker. */
@@ -876,7 +936,7 @@
 		var c = root.querySelector('#zjob-component'); if (c) { c.selectedIndex = 0; }
 	}
 
-	/* ---- completion capture modal (Phase 7a) ----------------------------- */
+	/* ---- completion capture modal ------------------------------------------ */
 	/* One modal at a time. State: the job, the uploaded photos (each with its own
 	   fix), the best fix seen (for the job-level verified flag), and a busy latch. */
 	var cState = null;
@@ -889,34 +949,34 @@
 
 		var minP = parseInt(cfg().minPhotos, 10) || 1;
 		var ov = document.createElement('div');
-		ov.className = 'tsjc-overlay';
+		ov.className = 'zjobc-overlay';
 		ov.innerHTML =
-			'<div class="tsjc-dialog" role="dialog" aria-modal="true" aria-label="Mark my part complete">' +
-				'<div class="tsjc-head">' +
-					'<span class="tsjc-title">Finish photos</span>' +
-					'<button class="tsjc-x" type="button" aria-label="Close">&times;</button>' +
+			'<div class="zjobc-dialog" role="dialog" aria-modal="true" aria-label="Mark my part complete">' +
+				'<div class="zjobc-head">' +
+					'<span class="zjobc-title">Finish photos</span>' +
+					'<button class="zjobc-x" type="button" aria-label="Close">&times;</button>' +
 				'</div>' +
-				'<div class="tsjc-sub">Add at least ' + minP + ' photo' + (minP === 1 ? '' : 's') +
+				'<div class="zjobc-sub">Add at least ' + minP + ' photo' + (minP === 1 ? '' : 's') +
 					' taken on site. Your location is recorded with each photo to confirm you were there.</div>' +
-				'<div class="tsjc-body">' +
-					'<div class="tsjc-grid" id="tsjc-grid"></div>' +
-					'<button class="tsjc-add" type="button" id="tsjc-add"><i data-lucide="camera"></i><span>Add photo</span></button>' +
-					'<input type="file" accept="image/*" capture="environment" class="tsjc-file" id="tsjc-file" hidden />' +
+				'<div class="zjobc-body">' +
+					'<div class="zjobc-grid" id="zjobc-grid"></div>' +
+					'<button class="zjobc-add" type="button" id="zjobc-add"><i data-lucide="camera"></i><span>Add photo</span></button>' +
+					'<input type="file" accept="image/*" capture="environment" class="zjobc-file" id="zjobc-file" hidden />' +
 				'</div>' +
-				'<div class="tsjc-foot">' +
-					'<span class="tsjc-status" id="tsjc-status" aria-live="polite"></span>' +
-					'<button class="tsjc-cancel" type="button">Cancel</button>' +
-					'<button class="tsjc-go" type="button" id="tsjc-go" disabled><i data-lucide="check"></i><span>Complete job</span></button>' +
+				'<div class="zjobc-foot">' +
+					'<span class="zjobc-status" id="zjobc-status" aria-live="polite"></span>' +
+					'<button class="zjobc-cancel" type="button">Cancel</button>' +
+					'<button class="zjobc-go" type="button" id="zjobc-go" disabled><i data-lucide="check"></i><span>Complete job</span></button>' +
 				'</div>' +
 			'</div>';
 		document.body.appendChild(ov);
 		cState.ov = ov;
 
 		ov.addEventListener('click', function (e) { if (e.target === ov) { closeComplete(); } });
-		ov.querySelector('.tsjc-x').addEventListener('click', closeComplete);
-		ov.querySelector('.tsjc-cancel').addEventListener('click', closeComplete);
-		var fileInput = ov.querySelector('#tsjc-file');
-		ov.querySelector('#tsjc-add').addEventListener('click', function () {
+		ov.querySelector('.zjobc-x').addEventListener('click', closeComplete);
+		ov.querySelector('.zjobc-cancel').addEventListener('click', closeComplete);
+		var fileInput = ov.querySelector('#zjobc-file');
+		ov.querySelector('#zjobc-add').addEventListener('click', function () {
 			if (cState && cState.busy) { return; }
 			fileInput.click();
 		});
@@ -925,7 +985,7 @@
 			fileInput.value = '';
 			if (f) { addPhoto(f); }
 		});
-		ov.querySelector('#tsjc-go').addEventListener('click', submitComplete);
+		ov.querySelector('#zjobc-go').addEventListener('click', submitComplete);
 		drawIcons();
 	}
 
@@ -936,18 +996,18 @@
 
 	function cStatus(msg, kind) {
 		if (!cState || !cState.ov) { return; }
-		var el = cState.ov.querySelector('#tsjc-status');
+		var el = cState.ov.querySelector('#zjobc-status');
 		if (!el) { return; }
 		el.textContent = msg || '';
-		el.className = 'tsjc-status' + (kind ? ' is-' + kind : '');
+		el.className = 'zjobc-status' + (kind ? ' is-' + kind : '');
 	}
 
 	function refreshGo() {
 		if (!cState || !cState.ov) { return; }
 		var minP = parseInt(cfg().minPhotos, 10) || 1;
-		var go = cState.ov.querySelector('#tsjc-go');
+		var go = cState.ov.querySelector('#zjobc-go');
 		if (go) { go.disabled = cState.busy || cState.photos.length < minP; }
-		var add = cState.ov.querySelector('#tsjc-add');
+		var add = cState.ov.querySelector('#zjobc-add');
 		if (add) { add.disabled = cState.busy; }
 	}
 
@@ -970,10 +1030,10 @@
 	}
 
 	function addBusyTile() {
-		var grid = cState.ov.querySelector('#tsjc-grid');
+		var grid = cState.ov.querySelector('#zjobc-grid');
 		var tile = document.createElement('div');
-		tile.className = 'tsjc-tile is-busy';
-		tile.innerHTML = '<span class="tsjc-tile-spin"></span>';
+		tile.className = 'zjobc-tile is-busy';
+		tile.innerHTML = '<span class="zjobc-tile-spin"></span>';
 		grid.appendChild(tile);
 		return tile;
 	}
@@ -1011,11 +1071,11 @@
 					var d = res.data;
 					cState.photos.push({ media_id: d.media_id, thumb: d.thumb_url, url: d.url, verified: !!d.verified, gps: fix || null });
 					if (fix && (cState.bestGps === null || fix.accuracy < cState.bestGps.accuracy)) { cState.bestGps = fix; }
-					tile.className = 'tsjc-tile is-done ' + (d.verified ? 'is-verified' : 'is-unverified');
+					tile.className = 'zjobc-tile is-done ' + (d.verified ? 'is-verified' : 'is-unverified');
 					tile.innerHTML = '<img src="' + esc(d.thumb_url || d.url || '') + '" alt="Finish photo" />' +
-						'<button class="tsjc-tile-x" type="button" aria-label="Remove photo">&times;</button>' +
-						'<span class="tsjc-tile-badge">' + (d.verified ? 'Verified' : 'Unverified') + '</span>';
-					tile.querySelector('.tsjc-tile-x').addEventListener('click', function () { removePhoto(d.media_id, tile); });
+						'<button class="zjobc-tile-x" type="button" aria-label="Remove photo">&times;</button>' +
+						'<span class="zjobc-tile-badge">' + (d.verified ? 'Verified' : 'Unverified') + '</span>';
+					tile.querySelector('.zjobc-tile-x').addEventListener('click', function () { removePhoto(d.media_id, tile); });
 					var n = cState.photos.length;
 					cStatus(n + ' photo' + (n === 1 ? '' : 's') + ' added.' + (fix ? '' : ' Location unavailable - marked unverified.'), fix ? 'ok' : 'warn');
 				} else {

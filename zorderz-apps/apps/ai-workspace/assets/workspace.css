@@ -1,0 +1,32 @@
+/* Ai Workspace: the thread, in its dashboard card and on its admin screen. Colours come from the platform's system
+   tokens where the theme provides them, with neutral fallbacks for wp-admin. */
+.zaw { max-width: 1280px; color: var(--sys-text, #1d2327); }
+.zaw [hidden] { display: none !important; }
+.zaw-lead { max-width: 70em; color: var(--sys-text-sec, #3c434a); }
+.zaw-mute { color: var(--sys-text-sec, #646970); }
+.zaw-box { background: var(--sys-surface, #fff); border: 1px solid var(--sys-border, #dcdcde); border-radius: 8px; padding: 16px 18px; max-width: 46em; }
+.zaw-warn { border-color: var(--sys-tint-warning-fg, #dba617); }
+.zaw-err, .zaw-msg { color: var(--sys-error, #b32d2e); min-height: 1.4em; margin: 6px 0 0; }
+.zaw-cols { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; align-items: start; }
+@media (max-width: 960px) { .zaw-cols { grid-template-columns: 1fr; } }
+.zaw-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.zaw-conv { min-width: 14em; max-width: 100%; }
+.zaw-btn { min-height: 36px; }
+.zaw-thread { background: var(--sys-surface, #fff); border: 1px solid var(--sys-border, #dcdcde); border-radius: 8px; padding: 12px; max-height: 62vh; overflow-y: auto; }
+.zaw-turn { border-bottom: 1px solid var(--sys-border, #f0f0f1); padding: 10px 2px 12px; }
+.zaw-turn:last-child { border-bottom: 0; }
+.zaw-q { font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+.zaw-q::before { content: "You  "; color: var(--sys-text-sec, #646970); font-weight: 400; }
+.zaw-a { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; line-height: 1.5; }
+.zaw-meta { margin-top: 6px; font-size: 12px; color: var(--sys-text-sec, #646970); }
+.zaw-error .zaw-meta, .zaw-failed .zaw-meta, .zaw-lost .zaw-meta, .zaw-refused .zaw-meta { color: var(--sys-error, #b32d2e); }
+.zaw-prog { margin-top: 6px; font-size: 12px; color: var(--sys-text-sec, #50575e); }
+.zaw-prog summary { cursor: pointer; }
+.zaw-prog ul { margin: 4px 0 0 18px; list-style: disc; }
+.zaw-note { color: var(--sys-tint-warning-fg, #996800); }
+.zaw-form { margin-top: 12px; }
+.zaw-input { width: 100%; box-sizing: border-box; font-size: 16px; }
+.zaw-acts { display: flex; gap: 8px; margin-top: 8px; }
+.zaw-stop { color: var(--sys-error, #b32d2e); border-color: var(--sys-error, #b32d2e); }
+.zaw-side-h { margin-top: 0; font-size: 1.1em; }
+.zaw-off { margin-top: 12px; color: var(--sys-error, #b32d2e); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }

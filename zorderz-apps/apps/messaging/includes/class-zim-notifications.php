@@ -85,13 +85,19 @@ class ZIM_Notifications {
 
 	/**
 	 * Queue a notification. Computes release_at based on the recipient's
-	 * quiet hours.
+	 * quiet hours. Returns the queued row's id (ZIM_Notices hands it to the
+	 * caller of zim_queue_notice), or 0 when nothing was queued.
 	 */
 	public static function queue( $user_id, $conversation_id, $message_id, $kind, array $payload ) {
 		global $wpdb;
+		// An account in Privacy View is never notified: no e-mail (it would carry the message unmasked and a
+		// reply-by-e-mail token), no push. It reads its one thread in the app, masked.
+		if ( class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on( (int) $user_id ) ) {
+			return 0;
+		}
 		$release_at = self::compute_release_at( $user_id );
 
-		$wpdb->insert(
+		$ok = $wpdb->insert(
 			$wpdb->prefix . 'zim_notification_queue',
 			array(
 				'user_id'         => $user_id,
@@ -104,6 +110,7 @@ class ZIM_Notifications {
 			),
 			array( '%d','%d','%d','%s','%s','%s','%s' )
 		);
+		return $ok ? (int) $wpdb->insert_id : 0;
 	}
 
 	/**
@@ -164,6 +171,16 @@ class ZIM_Notifications {
 		global $wpdb;
 		$user_id         = (int) $group[0]['user_id'];
 		$conversation_id = (int) $group[0]['conversation_id'];
+
+		// Another app's notice has no conversation. ZIM_Notices delivers it (one
+		// push, or a digest after quiet hours) and it is marked fired either way.
+		if ( 0 === $conversation_id ) {
+			if ( class_exists( 'ZIM_Notices' ) ) {
+				ZIM_Notices::fire( $group );
+			}
+			self::mark_fired( wp_list_pluck( $group, 'id' ) );
+			return;
+		}
 
 		// Verify the recipient still has access and is still a member.
 		// (Guards race: user removed from channel while their push was queued.)
@@ -282,12 +299,12 @@ class ZIM_Notifications {
 		if ( ! $user || empty( $user->user_email ) ) {
 			return;
 		}
-		$subject = '[Zorderz] ' . $payload['title'];
+		$subject = '[' . self::brand() . '] ' . $payload['title'];
 		$body    = $payload['title'] . "\n\n"
 			. ( $payload['body'] ?? '' ) . "\n\n"
 			. 'Open: ' . $payload['url'];
 
-		wp_mail( $user->user_email, $subject, $body );
+		wp_mail( $user->user_email, $subject, $body, self::mail_headers() );
 		update_user_meta( $user_id, $meta_key, time() );
 	}
 
@@ -364,9 +381,10 @@ class ZIM_Notifications {
 
 		$can_reply = ( '' !== $reply_to );
 
-		$subject = '[Zorderz] New message from ' . $author_name;
+		$brand   = self::brand();
+		$subject = '[' . $brand . '] New message from ' . $author_name;
 
-		$body  = 'You have a new message from ' . $author_name . " on Zorderz:\n\n";
+		$body  = 'You have a new message from ' . $author_name . ' on ' . $brand . ":\n\n";
 		$body .= "————————————————————\n";
 		$body .= $message_lines . "\n";
 		$body .= "————————————————————\n\n";
@@ -384,8 +402,9 @@ class ZIM_Notifications {
 
 		$headers = array();
 		if ( $can_reply ) {
-			$headers[] = 'Reply-To: ' . $author_name . ' via Zorderz <' . $reply_to . '>';
+			$headers[] = 'Reply-To: ' . self::header_text( $author_name . ' via ' . $brand ) . ' <' . $reply_to . '>';
 		}
+		$headers = self::mail_headers( $headers );
 
 		$sent = wp_mail( $user->user_email, $subject, $body, $headers );
 		self::dbg( sprintf(
@@ -396,6 +415,39 @@ class ZIM_Notifications {
 			$reply_to !== '' ? $reply_to : '(none)'
 		) );
 		update_user_meta( $user_id, $meta_key, time() );
+	}
+
+	/**
+	 * The business's name for mail subjects and lines ("[Example Co] New
+	 * message from Sam"): the Business Profile's, else the site's title.
+	 */
+	private static function brand() {
+		$n = class_exists( 'ZDZ_Business_Profile' ) ? trim( (string) ZDZ_Business_Profile::name() ) : '';
+		if ( '' === $n && function_exists( 'get_bloginfo' ) ) {
+			$n = trim( (string) get_bloginfo( 'name' ) );
+		}
+		return self::header_text( '' !== $n ? $n : 'Messages' );
+	}
+
+	/** One line of header text: no line breaks, no angle brackets. */
+	private static function header_text( $s ) {
+		return trim( (string) preg_replace( '/[\r\n<>]+/', ' ', (string) $s ) );
+	}
+
+	/**
+	 * Mail headers with the business's sending identity for messaging
+	 * (Business Profile sender 'messaging', which inherits from 'default').
+	 */
+	private static function mail_headers( array $headers = array() ) {
+		if ( class_exists( 'ZDZ_Business_Profile' ) && method_exists( 'ZDZ_Business_Profile', 'sender' ) ) {
+			$from  = ZDZ_Business_Profile::sender( 'messaging' );
+			$email = function_exists( 'sanitize_email' ) ? sanitize_email( (string) ( $from['email'] ?? '' ) ) : '';
+			if ( '' !== $email ) {
+				$name      = self::header_text( (string) ( $from['name'] ?? '' ) );
+				$headers[] = 'From: ' . ( '' !== $name ? $name . ' ' : '' ) . '<' . $email . '>';
+			}
+		}
+		return $headers;
 	}
 
 	/**
@@ -489,26 +541,43 @@ class ZIM_Notifications {
 
 	/**
 	 * Compute release_at in UTC MySQL datetime format, applying the user's
-	 * quiet hours window. Returns the current UTC time if not in quiet hours.
+	 * quiet hours window. Returns the given moment (now by default) when it is
+	 * not in quiet hours.
 	 *
-	 * Quiet hours default: 21:00–07:00 local time. User-overridable via
-	 * set_quiet_hours(). Crossing-midnight windows are handled by folding:
-	 * if end < start, the window spans midnight.
+	 * The window is the person's own (set from the widget or Settings ->
+	 * Notifications), else the business's (Zorderz -> Settings -> Quiet hours),
+	 * else Core's 21:00-07:00 (ZDZ_Quiet_Hours). A window that crosses midnight
+	 * (end before start) runs from start tonight until end tomorrow morning.
+	 *
+	 * @param int                    $user_id
+	 * @param DateTimeInterface|null $now  a given moment (tests); otherwise now
 	 */
-	public static function compute_release_at( $user_id ) {
+	public static function compute_release_at( $user_id, $now = null ) {
+		$ts     = $now instanceof DateTimeInterface ? $now->getTimestamp() : time();
 		$window = self::get_quiet_hours( $user_id );
 		$tz     = wp_timezone();
-		$now_local = new DateTime( 'now', $tz );
 
-		$start = self::parse_hm( $window['start'] );
-		$end   = self::parse_hm( $window['end'] );
+		if ( class_exists( 'ZDZ_Quiet_Hours' ) ) {
+			$local = ( new DateTimeImmutable( '@' . $ts ) )->setTimezone( $tz );
+			$w     = ZDZ_Quiet_Hours::normalize( $window );
+			return ZDZ_Quiet_Hours::release_at( $local, $w ? $w : array() )
+				->setTimezone( new DateTimeZone( 'UTC' ) )
+				->format( 'Y-m-d H:i:s' );
+		}
+
+		$now_local = ( new DateTime( '@' . $ts ) )->setTimezone( $tz );
+		$start     = self::parse_hm( $window['start'] );
+		$end       = self::parse_hm( $window['end'] );
 
 		// Boundaries today.
 		$start_dt = ( clone $now_local )->setTime( $start[0], $start[1], 0 );
 		$end_dt   = ( clone $now_local )->setTime( $end[0],   $end[1],   0 );
 
 		$in_window = false;
-		if ( $start_dt <= $end_dt ) {
+		if ( $start_dt == $end_dt ) {
+			// The same time twice: no quiet hours.
+			$in_window = false;
+		} elseif ( $start_dt < $end_dt ) {
 			// Same-day window (e.g., 13:00–14:00).
 			if ( $now_local >= $start_dt && $now_local < $end_dt ) {
 				$in_window = true;
@@ -528,15 +597,29 @@ class ZIM_Notifications {
 		}
 
 		if ( ! $in_window ) {
-			return gmdate( 'Y-m-d H:i:s' );
+			return gmdate( 'Y-m-d H:i:s', $ts );
 		}
 
 		$release_utc = ( clone $release_local )->setTimezone( new DateTimeZone( 'UTC' ) );
 		return $release_utc->format( 'Y-m-d H:i:s' );
 	}
 
+	/**
+	 * This person's window as [ start, end ] ("HH:MM"): their own when it is a
+	 * real setting, else the business's, else Core's. The same time twice
+	 * means "no quiet hours".
+	 */
 	public static function get_quiet_hours( $user_id ) {
 		$v = get_user_meta( (int) $user_id, self::OPT_QUIET_HOURS_PREFIX, true );
+		if ( class_exists( 'ZDZ_Quiet_Hours' ) ) {
+			$own = ZDZ_Quiet_Hours::normalize( $v );
+			if ( null !== $own ) {
+				return $own ? $own : array( 'start' => (string) $v['start'], 'end' => (string) $v['end'] );
+			}
+			// Nobody chose their own: the business's window, else Core's.
+			$w = ZDZ_Quiet_Hours::business_default();
+			return $w ? $w : array( 'start' => '00:00', 'end' => '00:00' );
+		}
 		if ( is_array( $v ) && ! empty( $v['start'] ) && ! empty( $v['end'] ) ) {
 			return $v;
 		}
@@ -546,9 +629,23 @@ class ZIM_Notifications {
 		);
 	}
 
+	/**
+	 * zdz_quiet_hours_for_user: this person's own window, when they chose one. Only a real setting answers; anything
+	 * else leaves the business's window in force.
+	 */
+	public static function own_quiet_hours( $w, $uid ) {
+		$v = get_user_meta( (int) $uid, self::OPT_QUIET_HOURS_PREFIX, true );
+		if ( class_exists( 'ZDZ_Quiet_Hours' ) ) {
+			return null !== ZDZ_Quiet_Hours::normalize( $v ) ? $v : $w;
+		}
+		return ( is_array( $v ) && ! empty( $v['start'] ) && ! empty( $v['end'] ) ) ? $v : $w;
+	}
+
 	public static function set_quiet_hours( $user_id, $start_hm, $end_hm ) {
-		if ( ! preg_match( '/^\d{2}:\d{2}$/', $start_hm )
-		     || ! preg_match( '/^\d{2}:\d{2}$/', $end_hm ) ) {
+		$ok = function ( $hm ) {
+			return is_string( $hm ) && preg_match( '/^([01]\d|2[0-3]):[0-5]\d$/', $hm );
+		};
+		if ( ! $ok( $start_hm ) || ! $ok( $end_hm ) ) {
 			return new WP_Error( 'zim_bad_hm', 'Times must be HH:MM.' );
 		}
 		update_user_meta( (int) $user_id, self::OPT_QUIET_HOURS_PREFIX, array(
@@ -583,3 +680,6 @@ class ZIM_Notifications {
 		), home_url( '/' ) );
 	}
 }
+
+// A person's own quiet hours, for the theme's ZDZ_Quiet_Hours::for_user().
+add_filter( 'zdz_quiet_hours_for_user', array( 'ZIM_Notifications', 'own_quiet_hours' ), 10, 2 );

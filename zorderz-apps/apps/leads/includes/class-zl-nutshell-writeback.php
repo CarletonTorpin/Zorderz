@@ -557,8 +557,8 @@ class ZL_Nutshell_Writeback {
 		if ( ! class_exists( 'ZL_Nutshell' ) || ! class_exists( 'ZL_Admin' ) ) {
 			return null;
 		}
-		$email   = ZL_Admin::get_shared_option( 'zl_ns_email', 'ts_surveys_ns_email' );
-		$api_key = ZL_Admin::decrypt_shared( 'zl_ns_api_key', 'ts_surveys_ns_api_key' );
+		$email   = ZL_Admin::get_shared_option( 'zl_ns_email', 'zdz_surveys_ns_email' );
+		$api_key = ZL_Admin::decrypt_shared( 'zl_ns_api_key', 'zdz_surveys_ns_api_key' );
 		if ( empty( $email ) || empty( $api_key ) ) {
 			return null;
 		}

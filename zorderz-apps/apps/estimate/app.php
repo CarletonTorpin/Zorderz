@@ -11,7 +11,7 @@
  *   compiled into the model prompt. Reads identity from ZDZ_Business_Profile,
  *   ZDZ_Item_Engine, ZDZ_Party, ZDZ_Core_FreshBooks, ZDZ_Core_Nutshell, ZDZ_Core_Poe and
  *   ZDZ_Core_Settings.
- * Version:     1.21.2
+ * Version:     1.27.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -38,7 +38,15 @@
  *                         (ZDZ_Core_Nutshell), AI (ZDZ_Core_Poe) — credentials/endpoints
  *                         owned by the theme; this module never stores a secret.
  *   - AI model roles    : call sites request a ROLE (parse/classify/fallback), resolved by
- *                         `zdz_ai_model_role` with a safe default — never a hardcoded model.
+ *                         `zdz_ai_model_role` with a safe default — never a hardcoded model;
+ *                         the platform's Ai router (ZDZ_Core_LLM) where it is set up
+ *                         (ZEST_Router_Client), the chat gateway otherwise.
+ *   - Price book        : ZDZ_Price_Book prices its families' lines, offers two choices as two
+ *                         options, and grants one-use entitlements (ZEST_Price_Book_Lines).
+ *   - Agreements        : ZAGR_API (guarded): the payment schedule, Approve's agreement and the
+ *                         business's signature, paper signings, the deposit limit of the job's
+ *                         legal packs (ZEST_Deposit_Limit).
+ *   - Sealed codes      : ZDZ_Sealed: gate and lockbox codes never leave in plain text.
  *
  * SAFETY FLOOR: nothing silent — every drop/skip/fallback is logged. Never trust the model
  * for a side effect: chat verbs draft → preview → confirm → re-verify server-side, are
@@ -52,7 +60,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /* ── Identity ──────────────────────────────────────────────────────── */
-define( 'ZEST_VERSION', '1.25.5' );
+define( 'ZEST_VERSION', '1.27.0' );
 define( 'ZEST_FILE', __FILE__ );
 define( 'ZEST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZEST_URL', plugin_dir_url( __FILE__ ) );
@@ -63,8 +71,7 @@ define( 'ZEST_APP_ID', 'estimate-creator' );
 /**
  * Chat/orchestrator protocol markers. Protocol tokens live in ONE place, referenced
  * by the bridge + parser + JS through this map and published via `zdz_chat_markers`
- * — never typed twice. Each carries its deprecated legacy alias so an install upgraded
- * from an earlier version keeps working for one release.
+ * — never typed twice. The `deprecated` lists are empty: only the current tokens are read.
  */
 if ( ! defined( 'ZEST_MARKER_CREATE' ) ) {
 	define( 'ZEST_MARKER_CREATE', '[ZDZ_EST_CREATE]' );
@@ -103,21 +110,26 @@ function zest_ai_model( string $role ): string {
 
 /**
  * The AI markers this module speaks, published to the chat engine as one map (never a
- * literal), each with its deprecated legacy alias.
+ * literal).
  *
  * @return array<string,array{token:string,deprecated:array}>
  */
 function zest_markers(): array {
+	// A verb's marker is a block: "[NAME]…[/NAME]" around the verb's JSON arguments, which the chat app runs through the
+	// verb registry (a write waits for the person's Confirm). `verb` names the registry verb it stands for.
+	$block = static function ( string $tok ): string {
+		return $tok . '…' . str_replace( '[', '[/', $tok );
+	};
 	return array(
-		'estimate.create'       => array( 'token' => ZEST_MARKER_CREATE, 'deprecated' => array( '[TSEC_CREATE]' ) ),
-		'estimate.modify'       => array( 'token' => ZEST_MARKER_UPDATE, 'deprecated' => array( '[TSEC_UPDATE]' ) ),
-		'estimate.send'         => array( 'token' => ZEST_MARKER_SEND, 'deprecated' => array( '[TSEC_SEND]' ) ),
-		'estimate.stub'         => array( 'token' => ZEST_MARKER_STUB, 'deprecated' => array( '[TSEC_STUB]' ) ),
-		'estimate.lookup'       => array( 'token' => ZEST_MARKER_LOOKUP, 'deprecated' => array( '[TSEC_LOOKUP]' ) ),
-		'estimate.widget'       => array( 'token' => ZEST_MARKER_WIDGET, 'deprecated' => array( '[TSEC_WIDGET]' ) ),
-		'estimate.list'         => array( 'token' => ZEST_MARKER_LIST, 'deprecated' => array( '[TSEC_LIST]' ) ),
-		'estimate.lead'         => array( 'token' => ZEST_MARKER_LEAD, 'deprecated' => array( '[TSEC_LEAD]' ) ),
-		'estimate.attach_email' => array( 'token' => ZEST_MARKER_ATTACH_EMAIL, 'deprecated' => array( '[TSEC_ATTACH_EMAIL]' ) ),
+		'estimate.create'       => array( 'verb' => 'estimate.create', 'token' => $block( ZEST_MARKER_CREATE ), 'deprecated' => array() ),
+		'estimate.modify'       => array( 'verb' => 'estimate.modify', 'token' => $block( ZEST_MARKER_UPDATE ), 'deprecated' => array() ),
+		'estimate.send'         => array( 'verb' => 'estimate.send', 'token' => $block( ZEST_MARKER_SEND ), 'deprecated' => array() ),
+		'estimate.stub'         => array( 'verb' => 'estimate.stub', 'token' => $block( ZEST_MARKER_STUB ), 'deprecated' => array() ),
+		'estimate.lookup'       => array( 'verb' => 'estimate.lookup', 'token' => $block( ZEST_MARKER_LOOKUP ), 'deprecated' => array() ),
+		'estimate.widget'       => array( 'token' => ZEST_MARKER_WIDGET, 'deprecated' => array() ),
+		'estimate.list'         => array( 'token' => ZEST_MARKER_LIST, 'deprecated' => array() ),
+		'estimate.lead'         => array( 'token' => ZEST_MARKER_LEAD, 'deprecated' => array() ),
+		'estimate.attach_email' => array( 'verb' => 'estimate.attach_email', 'token' => $block( ZEST_MARKER_ATTACH_EMAIL ), 'deprecated' => array() ),
 	);
 }
 
@@ -135,7 +147,66 @@ require_once ZEST_DIR . 'includes/class-zest-background.php';
 require_once ZEST_DIR . 'includes/class-zest-zana-bridge.php';
 require_once ZEST_DIR . 'includes/class-zest-admin.php';
 require_once ZEST_DIR . 'includes/class-zest-dashboard.php';
+require_once ZEST_DIR . 'includes/class-zest-territories.php';
 require_once ZEST_DIR . 'includes/class-zest-doc-renderer.php';
+require_once ZEST_DIR . 'includes/class-zest-deposit-limit.php';
+require_once ZEST_DIR . 'includes/class-zest-deposit-floor.php';
+require_once ZEST_DIR . 'includes/class-zest-deposit-rule.php';
+require_once ZEST_DIR . 'includes/class-zest-access.php';
+require_once ZEST_DIR . 'includes/class-zest-salesperson.php';
+require_once ZEST_DIR . 'includes/class-zest-access-requests.php';
+require_once ZEST_DIR . 'includes/class-zest-billing-doc.php';
+require_once ZEST_DIR . 'includes/class-zest-contract-address.php';
+require_once ZEST_DIR . 'includes/class-zest-payment-plan.php';
+require_once ZEST_DIR . 'includes/class-zest-terms-note.php';
+require_once ZEST_DIR . 'includes/class-zest-deposit-check.php';
+require_once ZEST_DIR . 'includes/class-zest-price-book-lines.php';
+require_once ZEST_DIR . 'includes/class-zest-warranty-note.php';
+require_once ZEST_DIR . 'includes/class-zest-sale-form.php';
+require_once ZEST_DIR . 'includes/class-zest-paper-signing.php';
+require_once ZEST_DIR . 'includes/class-zest-approve.php';
+require_once ZEST_DIR . 'includes/class-zest-sealed.php';
+require_once ZEST_DIR . 'includes/class-zest-edit-token.php';
+require_once ZEST_DIR . 'includes/class-zest-line-edits.php';
+require_once ZEST_DIR . 'includes/class-zest-client-index.php';
+require_once ZEST_DIR . 'includes/class-zest-router-client.php';
+require_once ZEST_DIR . 'includes/class-zest-accept-watch.php';
+require_once ZEST_DIR . 'includes/class-zest-doc-reader.php';
+require_once ZEST_DIR . 'includes/class-zest-settings.php';
+require_once ZEST_DIR . 'includes/class-zest-pack.php';
+require_once ZEST_DIR . 'includes/class-zest-line-options.php';
+require_once ZEST_DIR . 'includes/class-zest-pairs.php';
+require_once ZEST_DIR . 'includes/class-zest-added-measurements.php';
+require_once ZEST_DIR . 'includes/class-zest-door-handle.php';
+require_once ZEST_DIR . 'includes/class-zest-billing-view.php';
+require_once ZEST_DIR . 'includes/class-zest-reassign.php';
+
+/**
+ * The app's main actions, counted in the Usage view where each succeeded (ZDZ_Usage::record, which applies the
+ * usage-records consent and keeps the item's id only, never a name).
+ */
+add_filter( 'zdz_register_usage_actions', function ( $a ) {
+	$a = is_array( $a ) ? $a : array();
+	$a[ ZEST_APP_ID ] = array(
+		'estimate_created'         => __( 'Created an estimate', 'zorderz' ),
+		'estimate_resent'          => __( 'Re-sent an existing estimate', 'zorderz' ),
+		'estimate_edited'          => __( 'Edited an estimate', 'zorderz' ),
+		'estimate_approved'        => __( 'Approved an estimate', 'zorderz' ),
+		'estimate_sent'            => __( 'Sent an estimate', 'zorderz' ),
+		'estimate_accepted'        => __( 'Recorded an acceptance', 'zorderz' ),
+		'estimate_signed_on_paper' => __( 'Recorded a paper signing', 'zorderz' ),
+	);
+	return $a;
+} );
+
+if ( ! function_exists( 'zest_usage' ) ) {
+	/** Record one of this app's actions; $ref the item's id or 0. Nothing at all without the platform's usage records. */
+	function zest_usage( $key, $ref = 0, $opts = array() ) {
+		if ( class_exists( 'ZDZ_Usage' ) && method_exists( 'ZDZ_Usage', 'record' ) ) {
+			ZDZ_Usage::record( ZEST_APP_ID, (string) $key, $ref, (array) $opts );
+		}
+	}
+}
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
@@ -162,6 +233,9 @@ function zest_activate() {
 /** Deactivation — clear scheduled events + our transients (data + tables preserved). */
 function zest_deactivate() {
 	wp_clear_scheduled_hook( 'zest_daily_sync' );
+	ZEST_Client_Index::unschedule();
+	ZEST_Accept_Watch::unschedule();
+	ZEST_Line_Options::unschedule();
 	global $wpdb;
 	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_zest\_%' OR option_name LIKE '\_transient\_timeout\_zest\_%'" );
 }
@@ -213,6 +287,25 @@ add_action( 'plugins_loaded', function () {
 	ZEST_Background::boot();
 	ZEST_ZANA_Bridge::init();
 	ZEST_Admin::init();
+	ZEST_Salesperson::boot();
+	ZEST_Sealed::boot();
+	ZEST_Access_Requests::init();
+	ZEST_Deposit_Check::init();
+	ZEST_Sale_Form::init();
+	ZEST_Paper_Signing::init();
+	ZEST_Approve::init();
+	ZEST_Edit_Token::init();
+	ZEST_Line_Edits::init();
+	ZEST_Client_Index::init();
+	ZEST_Accept_Watch::init();
+	ZEST_Doc_Reader::init();
+	ZEST_Settings::init();
+	ZEST_Pack::init();
+	ZEST_Line_Options::init();
+	ZEST_Pairs::init();
+	ZEST_Added_Measurements::init();
+	ZEST_Billing_View::init();
+	ZEST_Reassign::init();
 
 	// Publish this module's chat markers to the orchestrator as one map.
 	add_filter( 'zdz_chat_markers', function ( $markers ) {
@@ -222,21 +315,13 @@ add_action( 'plugins_loaded', function () {
 		return array_merge( $markers, zest_markers() );
 	} );
 
-	// Publish estimate chat capabilities to the orchestrator registry (rows a central
-	// resolver reads; harmless until it exists).
+	// The chat's verbs on the platform's registry: flat rows with their tier, whether they write, and a summary
+	// (ZEST_ZANA_Bridge::verbs()). A write runs only on the person's Confirm.
 	add_filter( 'zdz_register_capabilities', function ( $caps ) {
-		if ( ! class_exists( 'ZEST_ZANA_Bridge' ) ) {
-			return $caps;
-		}
-		foreach ( array(
-			'estimate.create' => 'create_from_chat',
-			'estimate.modify' => 'update_from_chat',
-			'estimate.send'   => 'send_from_chat',
-			'estimate.lookup' => 'lookup_for_chat',
-			'estimate.stub'   => 'stub_from_lead',
-		) as $verb => $method ) {
-			if ( method_exists( 'ZEST_ZANA_Bridge', $method ) ) {
-				$caps[ $verb ] = array( 'callable' => array( 'ZEST_ZANA_Bridge', $method ) );
+		$caps = is_array( $caps ) ? $caps : array();
+		if ( class_exists( 'ZEST_ZANA_Bridge' ) ) {
+			foreach ( ZEST_ZANA_Bridge::verbs() as $verb => $row ) {
+				$caps[ $verb ] = $row;
 			}
 		}
 		return $caps;
@@ -263,7 +348,7 @@ add_action( 'zest_daily_sync', function () {
 	}
 } );
 
-/* ── Phase 1: printable FreshBooks-parity document view + generic import ── */
+/* ── Printable FreshBooks-parity document view + generic import ── */
 // A logged-in, access-gated printable page for an estimate: /?zest_doc=<id>.
 // No rewrite rules needed. The renderer escapes its own inputs.
 add_action( 'template_redirect', function () {
@@ -365,7 +450,7 @@ add_action( 'rest_api_init', function () {
 	) );
 } );
 
-/* ── Phase 2: invoice document view + estimate→invoice convert + payments ── */
+/* ── Invoice document view + estimate→invoice convert + payments ── */
 // Printable invoice at /?zest_inv=<id> (logged-in + access-gated), same renderer.
 add_action( 'template_redirect', function () {
 	if ( ! isset( $_GET['zest_inv'] ) ) {
@@ -450,7 +535,7 @@ add_action( 'rest_api_init', function () {
 
 /* ── Estimates & Invoices management console: /?zdz_docs=1 ────────────── */
 // Staff-usable page: lists estimates + invoices with View/Print, Convert, and
-// Record-Payment, wired to the Phase 2 REST endpoints. Self-contained (does not
+// Record-Payment, wired to the invoice REST endpoints. Self-contained (does not
 // touch the app widget JS). View is app-access-gated; the write actions themselves
 // re-check manage_options server-side at the REST layer.
 add_action( 'template_redirect', function () {
@@ -497,8 +582,9 @@ add_action( 'after_setup_theme', function () {
  */
 add_filter( 'zdz_rename_map', function ( $map ) {
 	$map['tables'] = array_merge( $map['tables'] ?? array(), array(
-		'tsec_estimates'  => 'zest_estimates',
-		'tsec_parse_jobs' => 'zest_parse_jobs',
+		'tsec_estimates'    => 'zest_estimates',
+		'tsec_parse_jobs'   => 'zest_parse_jobs',
+		'tsec_client_index' => 'zest_client_index',   // same columns: an existing copy of the client list is kept
 	) );
 	$map['options'] = array_merge( $map['options'] ?? array(), array(
 		'tsec_db_version'      => 'zest_db_version',
@@ -510,11 +596,16 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 		'tsec_ai_model'        => 'zest_ai_model',
 		'tsec_model_registry'  => 'zest_model_registry',
 		'tsec_territory_rules' => 'zest_legacy_territory_rules', // superseded by Service Area
+		'tsec_payment_notes_mode'  => 'zest_payment_notes_mode',
+		'tsec_client_index_state'  => 'zest_client_index_state',
+		'tsec_client_index_db'     => 'zest_client_index_db',
+		'tsec_accept_watch'        => 'zest_accept_watch',
+		'tsec_accept_watch_since'  => 'zest_accept_watch_since',
 	) );
 	$map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
 		'ts_user_initials'      => 'zdz_user_initials',      // Party short code
 		'ts_user_parenthetical' => 'zdz_user_parenthetical', // Party document pref
-		'tsec_notation_profile' => 'zdz_notation_profile',   // Party document pref (D15)
+		'tsec_notation_profile' => 'zdz_notation_profile',   // Party document pref
 		'tsec_can_create_estimate' => 'zest_can_create_estimate',
 		'tsec_can_create_invoice'  => 'zest_can_create_invoice',
 	) );
@@ -530,12 +621,12 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 	return $map;
 } );
 
-/* ── Estimate lifecycle expressed as Flow states (Plan 02 E8 — expression only) ─────
+/* ── Estimate lifecycle expressed as Flow states (expression only) ─────
  * No migration this release: the live `status` column keeps its current handling (the
  * provider-signal map stays authoritative). We DECLARE the documented state set and the
  * namespaced refs so the later migration onto the Zorderz Flow substrate is a mechanical
- * rename. accepted ≠ invoiced ≠ paid are three DISTINCT states (the §65 CH19 lesson: two
- * answers that scored 100% were the two worst — "accepted" presented as invoiced). Keys are
+ * rename. accepted ≠ invoiced ≠ paid are three DISTINCT states (an answer that presents
+ * "accepted" as invoiced reads as confident and is wrong). Keys are
  * (system, entity, external_id) — never a bare document number (estimate#5982 ≠ invoice#5982).
  */
 add_filter( 'zdz_work_item_ref_namespaces', function ( $list ) {
@@ -577,7 +668,7 @@ add_filter( 'zdz_flow_definitions', function ( $registry ) {
 } );
 
 /**
- * Estimate status vocabulary (Plan 02 E8 / S2-10). The accepted→invoiced→paid DISTINCTION
+ * Estimate status vocabulary. The accepted→invoiced→paid DISTINCTION
  * is [CORE] Flow semantics; the acceptance synonym set is a neutral English default a tenant
  * extends via the `knowledge` pack. "The provider has no 'signed' status (signature capture
  * is external)" is [IDENTITY→knowledge] and is not asserted here.

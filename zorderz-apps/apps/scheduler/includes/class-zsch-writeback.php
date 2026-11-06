@@ -1,6 +1,6 @@
 <?php
 /**
- * ZSCH_Writeback — connected-calendar write-back (Phase 2). SHIPS OFF.
+ * ZSCH_Writeback — connected-calendar write-back. SHIPS OFF.
  *
  * The first OUTBOUND sync: a copy of a work event written into each owner-or-
  * participant's OWN connected Google/Microsoft calendar. This is the highest-PII
@@ -10,7 +10,7 @@
  * tenant enables it and a per-user write scope exists. Nothing here books, writes,
  * or calls a provider while the flag is down.
  *
- * WHAT IS BUILT NOW (so Phase 2 is a wiring change, not a redesign):
+ * WHAT IS BUILT NOW (so enabling write-back is a wiring change, not a redesign):
  *   - is_enabled()       the single OFF-by-default gate (option + filter).
  *   - targets_for()      the ONE place "who gets a copy" is decided: owner ∪ active
  *                        participants, DEDUPED by user. (No copy is emitted now.)
@@ -33,7 +33,7 @@
  *   - writeback_detail default 'title_time' (not 'full') — a personal calendar may
  *     be shared with a spouse / synced to a car. [IDENTITY→profile] default.
  *
- * @since 1.9.0 (Phase 2 scaffold; engine OFF)
+ * @since 1.9.0 (write-back scaffold; engine OFF)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -90,7 +90,7 @@ class ZSCH_Writeback {
 		if ( ! self::is_enabled() ) {
 			return; // OFF — no network, no rows.
 		}
-		// Phase 2: enqueue copies for targets_for(); immediate push bounded, rest
+		// Write-back: enqueue copies for targets_for(); immediate push bounded, rest
 		// drained by cron with backoff. Intentionally unimplemented while OFF.
 	}
 
@@ -99,7 +99,7 @@ class ZSCH_Writeback {
 		if ( ! self::is_enabled() ) {
 			return;
 		}
-		// Phase 2: content_hash skips a no-op PATCH.
+		// Write-back: content_hash skips a no-op PATCH.
 	}
 
 	/** A copy is (would be) removed. No-op while OFF. */
@@ -107,7 +107,7 @@ class ZSCH_Writeback {
 		if ( ! self::is_enabled() ) {
 			return;
 		}
-		// Phase 2: INV-Orphan — purge each target's copy BEFORE any grant is revoked.
+		// Write-back: the no-orphan rule — purge each target's copy BEFORE any grant is revoked.
 	}
 
 	/* ===================================================================
@@ -117,7 +117,7 @@ class ZSCH_Writeback {
 	/**
 	 * Owner ∪ active participants, DEDUPED by user. This is the ONLY authority for
 	 * "who gets a copy". (Returns the set even while OFF — it is pure and testable;
-	 * no copy is emitted until Phase 2 is enabled.)
+	 * no copy is emitted until write-back is enabled.)
 	 *
 	 * @param int $appt_id
 	 * @return int[] user ids (owner first), deduped.
@@ -157,7 +157,7 @@ class ZSCH_Writeback {
 	 *            our Microsoft category label).
 	 * Called from the inbound reconcile so it holds EVEN WITH THE ENGINE OFF. While
 	 * OFF the map is empty and nothing is stamped, so it never matches — the guard
-	 * is simply pre-placed for when Phase 2 lands.
+	 * is simply pre-placed for when write-back is enabled.
 	 *
 	 * @param array $external_event a normalized/raw inbound event.
 	 * @return bool
@@ -199,7 +199,7 @@ class ZSCH_Writeback {
 	 * The payload of a copy — title/location/time ONLY at 'title_time' detail; a
 	 * neutral title when detail is minimal. NEVER a money figure. NEVER an
 	 * attendees[] on a delegated write (structurally absent from this shape). Used
-	 * by Phase 2; exposed now so the money-off / no-attendees rules are testable.
+	 * by write-back; exposed now so the money-off / no-attendees rules are testable.
 	 *
 	 * @param array $appt a raw appointment row.
 	 * @return array{subject:string,location:string,start_utc:string,end_utc:string,categories:array}

@@ -1,0 +1,16 @@
+{
+  "id": "us-federal",
+  "label": "United States: federal standard (FTC Cooling-Off Rule)",
+  "country": "US",
+  "region": "",
+  "layers_on": "",
+  "summary": "The Federal Trade Commission's Rule Concerning Cooling-Off Period for Sales Made at Homes or at Certain Other Locations, 16 CFR Part 429: three business days to cancel, the statement beside the buyer's signature, and the Notice of Cancellation in duplicate. The default for a business in the United States. A state pack for the job's state, when there is one, is layered on top of it.",
+  "requires_job_region": true,
+  "not_legal_advice": "This pack is a starting point drawn from public law, not legal advice. Have your own lawyer review it, and your agreement template, before any customer signs.",
+  "sources": [
+    { "what": "16 CFR 429.0 (definitions, including \"business day\")", "url": "https://www.law.cornell.edu/cfr/text/16/429.0", "checked": "2026-11-05" },
+    { "what": "16 CFR 429.1 (the statement and the Notice of Cancellation text)", "url": "https://www.law.cornell.edu/cfr/text/16/429.1", "checked": "2026-11-05" },
+    { "what": "16 CFR Part 429 as last amended at 80 FR 1332 (effective 2015-03-13)", "url": "https://www.ecfr.gov/current/title-16/chapter-I/subchapter-D/part-429", "checked": "2026-11-05" }
+  ],
+  "last_checked": "2026-11-05"
+}

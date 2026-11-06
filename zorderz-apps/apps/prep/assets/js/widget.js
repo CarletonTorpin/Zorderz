@@ -28,7 +28,7 @@
  *     card). Click a piece to lift it, drag to move (snaps to a 0.5" grid + to
  *     neighboring edges), Ctrl/Alt/right-click to rotate 90° CW, Save to write
  *     back. Overlaps blocked at save; edits flow to print/leftovers/CRM
- *     because they all read pieces[]. (Phase 1: within one sheet.)
+ *     because they all read pieces[]. (Within one sheet.)
  *   - v2.1.7 (internal preview, not shipped): first leftover-strip fill.
  *   - NEW: 🔍 Debug mode (off by default; ?zprep_debug=1 to auto-enable). After a
  *     Compute it shows the packer's report — trials run, winning search params,
@@ -142,10 +142,31 @@
     source: null, match: null, customer: null, leadId: null, cachedNotes: null,
     parsed: null, measurements: [], plan: null, useLeftovers: false, reservedLeftoverIds: [],
     pendingLeads: [], batchLeadIds: [], approvedJobs: [], appliedAdjustments: false, debug: false,
-    // Install date is DISPLAY-ONLY: baked server-side (S5-11), it is NEVER read as a gate,
+    // Install date is DISPLAY-ONLY: baked server-side, it is NEVER read as a gate,
     // a permission or a sort — only rendered. A baked install_fallback payload = {line,status,state}.
-    install: null
+    install: null,
+    // The best install payload seen per job key ('est:N' / 'lead:N'), merged with the same
+    // precedence the server uses (install-merge.js): a known date is never replaced by a guess.
+    installByKey: {},
+    remake: null,   // the remake being planned (a remake card), or null
+    cardRef: ''     // the queue card's own reference, for the per-job plan preview
   };
+
+  var IM = window.ZPREP_installMerge || { merge: function (a, b) { return b || a || null; } };
+  function jobKeys(j) {
+    var k = [];
+    if (j && j.estimate_number) k.push('est:' + j.estimate_number);
+    if (j && j.lead_id) k.push('lead:' + j.lead_id);
+    return k;
+  }
+  // Fold a payload for a job into the per-key map and return the merged answer for that job.
+  function absorbInstall(keys, payload) {
+    var best = null;
+    keys.forEach(function (k) { best = IM.merge(best, state.installByKey[k] || null); });
+    best = IM.merge(best, payload || null);
+    keys.forEach(function (k) { if (best) state.installByKey[k] = best; });
+    return best;
+  }
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { var d = document.createElement('div'); d.textContent = (s == null) ? '' : String(s); return d.innerHTML; }
@@ -212,6 +233,7 @@
         return;
       }
       var jobs = d.jobs || [];
+      jobs.forEach(function (j) { if (j.kind !== 'remake') j.install_fallback = absorbInstall(jobKeys(j), j.install_fallback); });
       state.approvedJobs = jobs;
       renderApprovedToCut(jobs, d.stage || '');
       // v2.1.18 — role-aware health notice (e.g. billing token expired).
@@ -293,7 +315,53 @@
   // v2.1.17 — how many jobs to show before the "Show More" button.
   var ATC_VISIBLE = 3;
 
+  function planPreviewHtml(pv) {
+    if (!pv || !(pv.pieces > 0)) return '';
+    var area = 0; Object.keys(pv.area || {}).forEach(function (c) { area += Number(pv.area[c]) || 0; });
+    var colors = Object.keys(pv.area || {}).filter(function (c) { return Number(pv.area[c]) > 0; });
+    return '<span class="zprep-w-atc-preview">' + esc(pv.pieces + ' piece' + (pv.pieces === 1 ? '' : 's') +
+      (area > 0 ? ' · ' + (Math.round(area * 10) / 10) + ' sq ft' : '') + (colors.length ? ' · ' + colors.join(' / ') : '')) + '</span>';
+  }
+  function assigneeHtml(j) {
+    return j.assignee_name ? '<span class="zprep-w-atc-assignee">' + esc('Assigned: ' + j.assignee_name) + '</span>' : '';
+  }
+  function cardJobKey(j) {
+    if (j.kind === 'remake') return j.job_key || '';
+    if (j.estimate_number) return 'est:' + j.estimate_number;
+    return j.lead_id ? 'lead:' + j.lead_id : '';
+  }
+  function wrapWithAssign(btn, j) {
+    if (!zprepWidgetData.canManage || !cardJobKey(j)) return btn;
+    var wrap = document.createElement('div');
+    wrap.className = 'zprep-w-atc-wrap';
+    wrap.appendChild(btn);
+    var a = document.createElement('button');
+    a.type = 'button';
+    a.className = 'zprep-w-btn zprep-w-btn-ghost zprep-w-atc-assign';
+    a.textContent = j.assignee_id ? 'Reassign' : 'Assign';
+    a.addEventListener('click', function () { openAssign(j); });
+    wrap.appendChild(a);
+    return wrap;
+  }
+  function buildRemakeCard(j) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'zprep-w-atc-card zprep-w-atc-remake';
+    var n = 0; (j.measurements || []).forEach(function (m) { n += Number(m.qty) || 0; });
+    btn.innerHTML =
+      '<span class="zprep-w-atc-card-body">' +
+        '<span class="zprep-w-atc-card-name">' + esc(j.title || 'Remake') + '</span>' +
+        '<span class="zprep-w-atc-card-meta">' + esc('Remake · ' + (j.reason_label || '') + (j.parent_label ? ' · for ' + j.parent_label : '')) + '</span>' +
+        assigneeHtml(j) +
+      '</span>' +
+      (n > 0 ? '<span class="zprep-w-atc-count">' + n + ' piece' + (n === 1 ? '' : 's') + '</span>' : '') +
+      '<span class="zprep-w-atc-chev" aria-hidden="true">›</span>';
+    btn.addEventListener('click', function () { planRemake(j); });
+    return wrapWithAssign(btn, j);
+  }
+
   function buildApprovedCard(j) {
+    if (j.kind === 'remake') return buildRemakeCard(j);
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'zprep-w-atc-card';
@@ -314,7 +382,7 @@
     var fbTag = j.fb_pending
       ? '<span class="zprep-w-atc-fbtag">' + esc(j.fb_note || 'Approved in billing') + '</span>'
       : '';
-    // Install chip (S5-10/S5-11): baked server-side, display-only — it decorates the card and
+    // Install chip: baked server-side, display-only — it decorates the card and
     // never changes which cards show or their order.
     var installChip = installChipHtml(j.install_fallback);
     btn.innerHTML =
@@ -322,6 +390,8 @@
         '<span class="zprep-w-atc-card-name">' + esc(name) + '</span>' +
         (metaHtml ? '<span class="zprep-w-atc-card-meta">' + metaHtml + '</span>' : '') +
         (installChip ? '<span class="zprep-w-atc-install-row">' + installChip + '</span>' : '') +
+        planPreviewHtml(j.plan_preview) +
+        assigneeHtml(j) +
         fbTag +
       '</span>' +
       count +
@@ -338,7 +408,7 @@
       }
       planFromLead(j);
     });
-    return btn;
+    return wrapWithAssign(btn, j);
   }
 
   function renderApprovedToCut(jobs, stageName) {
@@ -376,13 +446,17 @@
   // Tap a job -> load that lead straight into the parse->plan flow. We already
   // know the lead id, so the parse step fetches notes by id (no text search).
   function planFromLead(job) {
+    if (job && job.kind === 'remake') { planRemake(job); return; }
     if (!job || !job.lead_id) return;
+    state.remake = null;
+    state.cardRef = job.estimate_number ? String(job.estimate_number) : '';
     state.source = 'crm';
     state.leadId = job.lead_id;
     state.cachedNotes = null;           // force a fresh by-id fetch on the server
     state.batchLeadIds = [];
-    state.install = job.install_fallback || null;   // carry the baked install date to the cut sheet
+    state.install = absorbInstall(jobKeys(job), job.install_fallback);   // carry the install date to the cut sheet
     state.customer = {
+      customer_id: job.customer_id || '',
       name: job.customer || '',
       email: '', phone: '', address: '',
       estimate_number: job.estimate_number || '',
@@ -411,14 +485,15 @@
         return;
       }
 
+      state.remake = null; state.cardRef = '';
       if (d.source === 'crm') {
         state.leadId = d.lead_id; state.cachedNotes = d.notes || null; state.customer = d.customer || {};
-        state.install = d.install || null;   // server-baked install date for the cut sheet
+        state.install = absorbInstall(jobKeys({ lead_id: d.lead_id, estimate_number: (d.customer || {}).estimate_number }), d.install);
         renderMatch(); startParse();
       } else {
         var matches = d.matches || []; if (!matches.length) { setErr('zprep-w-lookup-error', 'No jobs found.'); return; }
         state.match = matches[0];
-        state.install = state.match.install_fallback || null;   // baked from the estimate arm
+        state.install = absorbInstall(jobKeys({ estimate_number: state.match.number }), state.match.install_fallback);
         state.customer = { name: (state.match.customer_detail && state.match.customer_detail.name) || state.match.customer_name, email: (state.match.customer_detail && state.match.customer_detail.email) || '', phone: (state.match.customer_detail && state.match.customer_detail.phone) || '', address: (state.match.customer_detail && state.match.customer_detail.address) || '', estimate_number: state.match.number, salesperson: '', total: '' };
         renderMatch(); startParse();
       }
@@ -701,12 +776,11 @@
   }
   function getForceRoll() {
     var sel = $('zprep-w-roll-select');
-    if (!sel) return { width: 0, color: '' };
-    var v = sel.value;
-    if (v === '36b') return { width: 36, color: 'black' };
-    if (v === '36w') return { width: 36, color: 'white' };
-    if (v === '60b') return { width: 60, color: 'black' };
-    return { width: 0, color: '' };
+    if (!sel || !sel.value || sel.value === '0') return { width: 0, color: '' };
+    // The options are the configured rolls; each carries its own width and colour.
+    var opt = sel.options[sel.selectedIndex];
+    var w = opt ? parseInt(opt.getAttribute('data-width'), 10) : 0;
+    return w > 0 ? { width: w, color: String(opt.getAttribute('data-color') || '') } : { width: 0, color: '' };
   }
 
   /* ── COMPUTE ── */
@@ -720,13 +794,18 @@
       });
     });
     state.useLeftovers = !!($('zprep-w-use-leftovers') && $('zprep-w-use-leftovers').checked);
-    var sourceJob = (state.customer && state.customer.estimate_number) ? String(state.customer.estimate_number) : '';
+    var sourceJob = state.remake ? state.remake.job_key : ((state.customer && state.customer.estimate_number) ? String(state.customer.estimate_number) : '');
     var ws = getWorkspace();
     var roll = getForceRoll();
+    if (state.remake && !roll.width && state.remake.force_roll) roll = { width: state.remake.force_roll, color: '' };
     post('zprep_compute_cuts', {
       measurements: flatMeasurements,
       use_leftovers: state.useLeftovers ? '1' : '0',
       source_job: sourceJob,
+      lead_id: state.remake ? 0 : (state.leadId || 0),
+      customer_name: state.remake ? '' : ((state.customer && state.customer.name) || ''),
+      customer_id: (state.customer && state.customer.customer_id) || '',
+      card_ref: state.cardRef || '',
       workspace: ws,
       force_roll: roll.width,
       debug: state.debug ? '1' : '0'
@@ -777,7 +856,7 @@
       var svg = renderNestingSVG(page, false, { fontIn: screenFont });
       var sqft = calcPageSqFt(page);
       var delHtml = (page.deliverables || []).map(function(d){ return '<div class="zprep-w-page-del">• ' + esc(d.qty) + ' × ' + esc(d.label) + (d.dims ? ' [' + esc(d.dims) + ']' : '') + '</div>'; }).join('');
-      pagesHtml += '<div class="zprep-w-page-card"><div class="zprep-w-page-header"><strong>' + esc(page.roll_width_in) + '" ' + esc(page.color.toUpperCase()) + '</strong><span>Sheet ' + (idx+1) + ' of ' + pages.length + '</span></div><div class="zprep-w-page-meta">Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft) · ' + page.piece_count + ' pcs · ' + sqft + ' sq ft</div><div class="zprep-w-diagram" tabindex="0" role="button" aria-label="Tap to enlarge">' + svg + '</div><div class="zprep-w-page-cardactions"><button type="button" class="zprep-w-editbtn" data-idx="' + idx + '">✎ Edit layout</button></div><div class="zprep-w-page-deliverables">' + delHtml + '</div></div>';
+      pagesHtml += '<div class="zprep-w-page-card"><div class="zprep-w-page-header"><strong>' + esc(page.roll_width_in) + '" ' + esc(page.color.toUpperCase()) + '</strong><span>Sheet ' + (idx+1) + ' of ' + pages.length + '</span></div><div class="zprep-w-page-meta">Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft) · ' + page.piece_count + ' pcs · ' + sqft + ' sq ft</div><div class="zprep-w-diagram" tabindex="0" role="button" aria-label="Tap to enlarge">' + svg + '</div><div class="zprep-w-page-cardactions"><button type="button" class="zprep-w-editbtn" data-idx="' + idx + '">✎ Edit layout</button></div><div class="zprep-w-page-deliverables">' + delHtml + '</div>' + (window.ZPREPSections ? window.ZPREPSections.pageExtra(page) : '') + '</div>';
     });
     $('zprep-w-pages').innerHTML = pagesHtml;
     document.querySelectorAll('#zprep-w-pages .zprep-w-diagram').forEach(function(d){ d.addEventListener('click', function(){ openModal(d.innerHTML); }); });
@@ -787,9 +866,16 @@
       var dimsStr = Object.keys(d.dimensions || {}).map(function(k){ return esc(k) + ' × ' + d.dimensions[k]; }).join(', ');
       var badge = d.not_cut ? '<span class="zprep-w-flag-sm zprep-w-flag-premade">PRE-MADE · NOT CUT</span>' : '';
       var reason = (d.not_cut && d.not_cut_reason) ? '<div class="zprep-w-deliverable-sub zprep-w-deliverable-note">' + esc(d.not_cut_reason) + '</div>' : '';
-      return '<label class="zprep-w-deliverable' + (d.not_cut ? ' zprep-w-deliverable-notcut' : '') + '"><input type="checkbox"><div><strong>' + esc(d.qty) + ' × ' + esc(d.label) + '</strong>' + badge + (dimsStr ? '<div class="zprep-w-deliverable-sub">' + dimsStr + '</div>' : '') + reason + '</div></label>';
+      return '<label class="zprep-w-deliverable' + (d.not_cut ? ' zprep-w-deliverable-notcut' : '') + '"><input type="checkbox"><div><strong>' + esc(d.qty) + ' × ' + esc(d.label) + '</strong>' + badge + (dimsStr ? '<div class="zprep-w-deliverable-sub">' + dimsStr + '</div>' : '') + reason + '</div></label>' +
+        (window.ZPREPSections ? window.ZPREPSections.runButton(d) : '');
     }).join('');
+    if (window.ZPREPSections && !state.remake) {
+      delFullHtml += '<button type="button" class="zprep-w-btn zprep-w-btn-secondary zprep-sec-open" data-run-dims="">Field measurements</button>';
+    }
     $('zprep-w-deliverables').innerHTML = delFullHtml;
+    document.querySelectorAll('#zprep-w-deliverables .zprep-sec-open').forEach(function (b) {
+      b.addEventListener('click', function () { openSections(b.getAttribute('data-run-dims') || ''); });
+    });
 
     // v2.0.3 — Material table: sq ft, no dollar amounts
     var costHtml = '<table class="zprep-w-cost-table"><tbody>';
@@ -802,7 +888,210 @@
     costHtml += '<tr class="zprep-w-cost-total"><td colspan="2">Total</td><td>' + totalSqFt + ' sq ft</td></tr></tbody></table>';
     $('zprep-w-cost').innerHTML = costHtml;
 
+    renderCutState(p.cut_state || null);
     renderDebugUI();
+  }
+
+  /* ── FIELD MEASUREMENTS (sections of a long run) ── */
+  function openSections(dims) {
+    if (!window.ZPREPSections || state.remake) return;
+    var sourceJob = (state.customer && state.customer.estimate_number) ? String(state.customer.estimate_number) : '';
+    window.ZPREPSections.open({
+      post: post,
+      job: { lead_id: state.leadId || 0, source_job: sourceJob },
+      colors: (zprepWidgetData.colors || []),
+      run: dims ? { dims: dims } : null,
+      done: function () { if (state.measurements && state.measurements.length) { computeCuts(); } }
+    });
+  }
+
+  /* ── CUT STATE ──
+   * What has been cut on this job (shop pieces; field runs when the plan has them). A remake
+   * has no CRM lead to send to, so its plan offers "Mark all cut" instead. */
+  function renderCutState(cs) {
+    var host = $('zprep-w-cutstate');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'zprep-w-cutstate';
+      host.className = 'zprep-w-cutstate';
+      var sum = $('zprep-w-plan-summary');
+      if (sum && sum.parentNode) sum.parentNode.insertBefore(host, sum.nextSibling);
+    }
+    var html = '';
+    if (cs && cs.headline) html += '<div class="zprep-w-cutstate-line">' + esc(cs.headline) + '</div>';
+    if (state.remake && cs && cs.bench && cs.bench.total > cs.bench.cut) {
+      html += '<button type="button" id="zprep-w-mark-all" class="zprep-w-btn zprep-w-btn-primary">Mark all cut</button>';
+    }
+    host.innerHTML = html;
+    host.style.display = html ? 'block' : 'none';
+    var b = $('zprep-w-mark-all');
+    if (b) b.addEventListener('click', function () { markAllCut(cs); });
+    var sync = $('zprep-w-sync');
+    if (sync) sync.style.display = state.remake ? 'none' : '';
+  }
+  function markAllCut(cs) {
+    var items = [];
+    (cs && cs.remaining || []).forEach(function (r) {
+      if (r.class === 'bench') items.push({ work_class: 'bench', item_key: r.item_key, item_label: r.label, qty_total: r.panels, qty_cut: r.panels });
+    });
+    if (!items.length) return;
+    var b = $('zprep-w-mark-all'); if (b) { b.disabled = true; b.textContent = 'Saving…'; }
+    post('zprep_cut_state_mark', { lead_id: 0, source_job: state.remake ? state.remake.job_key : '', items: items }).then(function (res) {
+      if (res && res.success && res.data) { renderCutState(res.data.state || null); }
+      else if (b) { b.disabled = false; b.textContent = 'Mark all cut'; setErr('zprep-w-parse-error', (res && res.data && res.data.message) || 'Could not save.'); }
+    }).catch(function () { if (b) { b.disabled = false; b.textContent = 'Mark all cut'; } });
+  }
+
+  /* ── REMAKES ──
+   * A remake carries its own rows, so tapping it plans directly (no CRM lookup). */
+  function planRemake(r) {
+    if (!r) return;
+    state.remake = r;
+    state.cardRef = '';
+    state.source = 'remake';
+    state.leadId = null;
+    state.cachedNotes = null;
+    state.install = null;
+    state.customer = { name: r.title || '', email: '', phone: '', address: '', estimate_number: '', salesperson: '', total: '' };
+    renderMatch();
+    state.measurements = prepareEditableRows({ measurements: r.measurements || [] });
+    renderMeasurementsEditor();
+    $('zprep-w-compute').disabled = !state.measurements.length;
+    showView('zprep-w-match');
+  }
+
+  function postForm(action, data) { return post(action, data).then(function (res) { return res || {}; }); }
+
+  function optionList(list, chosen, blank) {
+    var h = blank != null ? '<option value="">' + esc(blank) + '</option>' : '';
+    list.forEach(function (o) { h += '<option value="' + esc(o.v) + '"' + (String(o.v) === String(chosen) ? ' selected' : '') + '>' + esc(o.t) + '</option>'; });
+    return h;
+  }
+
+  var USERS = null;
+  function withUsers(cb) {
+    if (USERS) { cb(USERS); return; }
+    postForm('zprep_users_list', {}).then(function (res) { USERS = (res.success && res.data && res.data.users) || []; cb(USERS); });
+  }
+
+  function openAssign(j) {
+    withUsers(function (users) {
+      var key = cardJobKey(j);
+      openModal('<div class="zprep-w-form"><h3>Assign this job</h3>' +
+        '<p class="zprep-w-hint">' + esc(j.title || j.customer || key) + '</p>' +
+        '<label class="zprep-w-label" for="zprep-as-user">Person</label>' +
+        '<select id="zprep-as-user" class="zprep-w-input">' + optionList(users.map(function (u) { return { v: u.id, t: u.name + (u.role_label ? ' (' + u.role_label + ')' : '') }; }), j.assignee_id || '', 'Choose…') + '</select>' +
+        '<div class="zprep-w-form-row"><button type="button" id="zprep-as-save" class="zprep-w-btn zprep-w-btn-primary">Assign</button>' +
+        (j.assignee_id ? ' <button type="button" id="zprep-as-clear" class="zprep-w-btn zprep-w-btn-ghost">Unassign</button>' : '') + '</div>' +
+        '<div id="zprep-as-msg" class="zprep-w-error" style="display:none;"></div></div>');
+      $('zprep-as-save').addEventListener('click', function () {
+        var uid = $('zprep-as-user').value;
+        if (!uid) { setErr('zprep-as-msg', 'Choose a person.'); return; }
+        postForm('zprep_assign', { job_key: key, assignee_id: uid, job_label: j.title || j.customer || '' }).then(function (res) {
+          if (!res.success) { setErr('zprep-as-msg', (res.data && res.data.message) || 'Could not assign.'); return; }
+          closeModal(); loadApprovedToCut();
+        });
+      });
+      var clr = $('zprep-as-clear');
+      if (clr) clr.addEventListener('click', function () {
+        postForm('zprep_unassign', { job_key: key }).then(function (res) {
+          if (!res.success) { setErr('zprep-as-msg', (res.data && res.data.message) || 'Could not unassign.'); return; }
+          closeModal(); loadApprovedToCut();
+        });
+      });
+    });
+  }
+
+  var RM = { reasons: {}, colors: [], widths: [] };
+  function rmRowHtml(v) {
+    v = v || {};
+    var colorOpts = optionList(RM.colors.map(function (c) { return { v: c, t: c }; }), v.color || '', 'Job colour');
+    return '<div class="zprep-rm-row">' +
+      '<input class="zprep-w-input zprep-rm-qty" type="number" min="1" value="' + esc(v.qty || 1) + '" aria-label="Quantity">' +
+      '<input class="zprep-w-input zprep-rm-kind" type="text" value="' + esc(v.kind || 'custom') + '" aria-label="Kind">' +
+      '<input class="zprep-w-input zprep-rm-w" type="number" step="0.01" value="' + esc(v.width === '' ? '' : (v.width || '')) + '" placeholder="W" aria-label="Width (in)">' +
+      '<input class="zprep-w-input zprep-rm-h" type="number" step="0.01" value="' + esc(v.height === '' ? '' : (v.height || '')) + '" placeholder="H" aria-label="Height (in)">' +
+      '<select class="zprep-w-input zprep-rm-color" aria-label="Colour">' + colorOpts + '</select>' +
+      '<button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-rm-del" aria-label="Remove row">×</button></div>';
+  }
+  function rmCollect() {
+    var out = [];
+    document.querySelectorAll('#zprep-rm-rows .zprep-rm-row').forEach(function (row) {
+      out.push({
+        qty: row.querySelector('.zprep-rm-qty').value, kind: row.querySelector('.zprep-rm-kind').value,
+        width: row.querySelector('.zprep-rm-w').value, height: row.querySelector('.zprep-rm-h').value,
+        color: row.querySelector('.zprep-rm-color').value
+      });
+    });
+    return out;
+  }
+  function rmSetRows(rows) {
+    var host = $('zprep-rm-rows'); if (!host) return;
+    host.innerHTML = (rows && rows.length ? rows : [{}]).map(rmRowHtml).join('');
+  }
+  function openRemakes() {
+    postForm('zprep_remakes_list', {}).then(function (res) {
+      if (!res.success) return;
+      var d = res.data || {};
+      RM.reasons = d.reasons || {}; RM.colors = d.colors || []; RM.widths = d.widths || [];
+      withUsers(function (users) {
+        var reasons = Object.keys(RM.reasons).map(function (k) { return { v: k, t: RM.reasons[k] }; });
+        var list = (d.remakes || []).map(function (r) {
+          return '<div class="zprep-rm-item" data-id="' + esc(r.remake_id) + '"><strong>' + esc(r.title) + '</strong> · ' + esc(r.reason_label) +
+            ' · <em>' + esc(r.status) + '</em>' + (r.assignee_name ? ' · ' + esc(r.assignee_name) : '') +
+            ' <button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-rm-st" data-st="done">Done</button>' +
+            ' <button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-rm-st" data-st="void">Void</button></div>';
+        }).join('');
+        openModal('<div class="zprep-w-form"><h3>Remakes</h3>' +
+          '<label class="zprep-w-label" for="zprep-rm-customer">Customer / job</label><input id="zprep-rm-customer" class="zprep-w-input" type="text">' +
+          '<label class="zprep-w-label" for="zprep-rm-parent">For estimate # (optional)</label><input id="zprep-rm-parent" class="zprep-w-input" type="text" inputmode="numeric">' +
+          '<label class="zprep-w-label" for="zprep-rm-reason">Reason</label><select id="zprep-rm-reason" class="zprep-w-input">' + optionList(reasons, 'other') + '</select>' +
+          '<input id="zprep-rm-reason-text" class="zprep-w-input" type="text" placeholder="Details (optional)">' +
+          '<label class="zprep-w-label" for="zprep-rm-color">Colour</label><select id="zprep-rm-color" class="zprep-w-input">' + optionList(RM.colors.map(function (c) { return { v: c, t: c }; }), '', 'From the rows') + '</select>' +
+          '<label class="zprep-w-label" for="zprep-rm-roll">Roll width</label><select id="zprep-rm-roll" class="zprep-w-input">' + optionList(RM.widths.map(function (w) { return { v: w, t: w + '"' }; }), '', 'Auto') + '</select>' +
+          '<label class="zprep-w-label" for="zprep-rm-paste">Paste a cut list (optional)</label><textarea id="zprep-rm-paste" class="zprep-w-input" rows="3"></textarea>' +
+          '<button type="button" id="zprep-rm-read" class="zprep-w-btn zprep-w-btn-ghost">Read the rows</button>' +
+          '<div id="zprep-rm-rows"></div><button type="button" id="zprep-rm-add" class="zprep-w-btn zprep-w-btn-ghost">Add a row</button>' +
+          '<label class="zprep-w-label" for="zprep-rm-assignee">Assign to (optional)</label><select id="zprep-rm-assignee" class="zprep-w-input">' + optionList(users.map(function (u) { return { v: u.id, t: u.name }; }), '', 'Nobody') + '</select>' +
+          '<div class="zprep-w-form-row"><button type="button" id="zprep-rm-create" class="zprep-w-btn zprep-w-btn-primary">Add remake</button></div>' +
+          '<div id="zprep-rm-msg" class="zprep-w-error" style="display:none;"></div>' +
+          (list ? '<h4>Open remakes</h4>' + list : '') + '</div>');
+        rmSetRows([]);
+        $('zprep-rm-add').addEventListener('click', function () { var host = $('zprep-rm-rows'); host.insertAdjacentHTML('beforeend', rmRowHtml({})); });
+        $('zprep-rm-rows').addEventListener('click', function (e) { if (e.target.classList.contains('zprep-rm-del')) { var row = e.target.closest('.zprep-rm-row'); if (row) row.remove(); } });
+        $('zprep-rm-read').addEventListener('click', function () {
+          var txt = $('zprep-rm-paste').value.trim(); if (!txt) { setErr('zprep-rm-msg', 'Paste some text first.'); return; }
+          var b = $('zprep-rm-read'); b.disabled = true; b.textContent = 'Reading…';
+          postForm('zprep_remake_parse', { text: txt }).then(function (r) {
+            b.disabled = false; b.textContent = 'Read the rows';
+            if (!r.success) { setErr('zprep-rm-msg', (r.data && r.data.message) || 'Could not read that.'); return; }
+            setErr('zprep-rm-msg', '');
+            rmSetRows(r.data.pieces || []);
+            if (r.data.parent && r.data.parent.type === 'est' && !$('zprep-rm-parent').value) $('zprep-rm-parent').value = r.data.parent.num;
+          }).catch(function () { b.disabled = false; b.textContent = 'Read the rows'; setErr('zprep-rm-msg', 'Network error.'); });
+        });
+        $('zprep-rm-create').addEventListener('click', function () {
+          var parent = $('zprep-rm-parent').value.replace(/\D/g, '');
+          postForm('zprep_remake_create', {
+            customer_label: $('zprep-rm-customer').value, parent_job_key: parent ? 'est:' + parent : '', parent_label: parent ? 'Est #' + parent : '',
+            reason_code: $('zprep-rm-reason').value, reason_text: $('zprep-rm-reason-text').value,
+            color: $('zprep-rm-color').value, force_roll: $('zprep-rm-roll').value || 0,
+            pieces: rmCollect(), assignee_id: $('zprep-rm-assignee').value || 0
+          }).then(function (r) {
+            if (!r.success) { setErr('zprep-rm-msg', (r.data && r.data.message) || 'Could not add the remake.'); return; }
+            closeModal(); loadApprovedToCut();
+          });
+        });
+        document.querySelectorAll('.zprep-rm-st').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var item = b.closest('.zprep-rm-item');
+            postForm('zprep_remake_set_status', { remake_id: item.getAttribute('data-id'), status: b.getAttribute('data-st') }).then(function (r) {
+              if (r.success) { item.remove(); loadApprovedToCut(); }
+            });
+          });
+        });
+      });
+    });
   }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -1381,7 +1670,7 @@
     if (c.address) lines.push('Address: ' + c.address);
     if (c.estimate_number) lines.push('Estimate #: ' + c.estimate_number);
     lines.push('Cut by: ' + (zprepWidgetData.user && zprepWidgetData.user.name || 'Unknown'));
-    // Install date (S5-10): the real install date, only when baked (resolver present). Distinct
+    // Install date: the real install date, only when baked (resolver present). Distinct
     // from the cut date below — display-only, never a fault token.
     var il = installLine();
     if (il) lines.push('Install: ' + il);
@@ -1471,7 +1760,7 @@
           '<div class="zprep-print-premade-note">Ships with the order. Not cut from roll stock — not the cutter\u2019s responsibility for this job.</div></div>';
       }
 
-      // Install line (S5-10): a REAL install date, distinct from the print moment. Rendered only
+      // Install line: a REAL install date, distinct from the print moment. Rendered only
       // from the server-baked resolver string; omitted entirely when no install info was baked
       // (jobs resolver absent) — the relabels below still ship. Never a fault/overdue token.
       var installRow = installLine() ? ('<div><strong>Install:</strong> ' + esc(installLine()) + '</div>') : '';
@@ -1481,6 +1770,7 @@
         '<div class="zprep-print-roll"><strong>' + page.roll_width_in + '" ' + page.color.toUpperCase() + '</strong> — Sheet ' + (idx+1) + ' of ' + pages.length + ' — Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft · ' + sqft + ' sq ft)</div>' +
         '<div class="zprep-print-svg">' + svg + '</div>' +
         '<div class="zprep-print-checklist"><strong>CUT LIST:</strong>' + delHtml + '</div>' +
+        (window.ZPREPSections ? window.ZPREPSections.pageExtra(page) : '') +
         premadeHtml +
         '<div class="zprep-print-cost">Material: ' + page.linear_feet.toFixed(1) + ' ft of ' + page.roll_width_in + '" ' + page.color + ' — ' + sqft + ' sq ft</div>' +
         '<div class="zprep-print-signoff"><div>Cut by: <span class="zprep-sig-line"></span></div><div>Date cut: <span class="zprep-sig-line"></span></div></div>' +
@@ -1623,8 +1913,8 @@
   }
 
   function resetAll() {
-    state = { source:null, match:null, customer:null, leadId:null, cachedNotes:null, parsed:null, measurements:[], plan:null, useLeftovers:false, reservedLeftoverIds:[], pendingLeads:[], batchLeadIds:[], approvedJobs:[], appliedAdjustments:false, debug:false, install:null };
-    $('zprep-w-search').value = ''; setErr('zprep-w-lookup-error', ''); showView('zprep-w-lookup');
+    state = { source:null, match:null, customer:null, leadId:null, cachedNotes:null, parsed:null, measurements:[], plan:null, useLeftovers:false, reservedLeftoverIds:[], pendingLeads:[], batchLeadIds:[], approvedJobs:[], appliedAdjustments:false, debug:false, install:null, installByKey: state.installByKey || {}, remake:null, cardRef:'' };
+    if ($('zprep-w-search')) $('zprep-w-search').value = ''; setErr('zprep-w-lookup-error', ''); showView('zprep-w-lookup');
   }
 
   function init() {
@@ -1645,8 +1935,12 @@
     var atcReload = $('zprep-w-atc-reload');
     if (atcReload) atcReload.addEventListener('click', loadApprovedToCut);
     loadApprovedToCut();
-    $('zprep-w-lookup-btn').addEventListener('click', doLookup);
-    $('zprep-w-search').addEventListener('keydown', function(e){ if (e.key==='Enter') doLookup(); });
+    var lookupBtn = $('zprep-w-lookup-btn');   // absent for a person who works only assigned jobs
+    if (lookupBtn) lookupBtn.addEventListener('click', doLookup);
+    var searchBox = $('zprep-w-search');
+    if (searchBox) searchBox.addEventListener('keydown', function(e){ if (e.key==='Enter') doLookup(); });
+    var rmBtn = $('zprep-w-remakes-btn');
+    if (rmBtn) rmBtn.addEventListener('click', openRemakes);
     $('zprep-w-refresh-notes').addEventListener('click', startParse);
     $('zprep-w-compute').addEventListener('click', computeCuts);
     $('zprep-w-reset').addEventListener('click', resetAll);
@@ -1675,7 +1969,7 @@
   }
 
   if ($('zprep-widget')) { init(); } else {
-    document.addEventListener('ts_widgets_rendered', init, { once: true });
+    document.addEventListener('zdz_widgets_rendered', init, { once: true });
     document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ if ($('zprep-widget')) init(); }, 500); });
   }
 })();

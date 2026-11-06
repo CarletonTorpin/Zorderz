@@ -7,11 +7,9 @@
  *   wp_zcc_audit_log          — the calculation audit trail (the migration gate)
  *   wp_zcc_rep_overrides      — historical rep back-assignment
  *
- * DATA DISCIPLINE (Playbook §5): NOTHING is seeded. The old plugin seeded ~49
- * real supplier COGS rows and a classification cache on activation; both are
- * gone — the catalog now lives in the Item Engine (ships empty) and the
- * classification cache is a request-level, version-keyed memo that needs no
- * table. Schema migration ≠ data seeding.
+ * DATA DISCIPLINE: NOTHING is seeded. Supplier costs live in the Item Engine
+ * (ships empty) and the classification cache is a request-level, version-keyed
+ * memo that needs no table. Schema migration ≠ data seeding.
  *
  * @package Zorderz\Commission
  */

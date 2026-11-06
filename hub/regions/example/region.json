@@ -1,0 +1,154 @@
+{
+ "id": "example",
+ "name": "Example region",
+ "state": "XX",
+ "timezone": "America/Chicago",
+ "box": [
+  39.98,
+  40.2,
+  -100.22,
+  -99.98
+ ],
+ "cell": 0.001,
+ "county_name": "EXAMPLE",
+ "census": {
+  "zips": [
+   "00011",
+   "00012",
+   "00013",
+   "00014",
+   "00015"
+  ]
+ },
+ "labels": {
+  "safety_site": "Safety site",
+  "safety_council": "Safety council"
+ },
+ "source": "A fictional region for trying the hub. Every place, ZIP code and number here is invented.",
+ "words": {
+  "safety_site": [
+   "safety site",
+   "safety sites"
+  ],
+  "safety_council": [
+   "safety council",
+   "safety councils"
+  ]
+ },
+ "zip_prefixes": [
+  "000"
+ ],
+ "layers": {
+  "addresses": {
+   "kind": "file",
+   "path": "addresses.json",
+   "source": "invented address points",
+   "fields": {
+    "NUM": "house_num",
+    "FRAC": "house_frac",
+    "PREDIR": "pre_dir",
+    "NAME": "street_name",
+    "POSTDIR": "post_dir",
+    "SUFFIX": "street_type",
+    "UNIT": "unit_num",
+    "ZIP": "zip_code",
+    "PARCEL": "parcel_id",
+    "COMMUNITY": "place_name"
+   }
+  },
+  "points": {
+   "kind": "file",
+   "path": "points.json",
+   "source": "invented address points",
+   "fields": {
+    "NUM": "house_num",
+    "FRAC": "house_frac",
+    "PREDIR": "pre_dir",
+    "NAME": "street_name",
+    "POSTDIR": "post_dir",
+    "SUFFIX": "street_type",
+    "UNIT": "unit_num",
+    "JURIS": "juris_code",
+    "ZIP": "zip_code",
+    "SEGMENT": "segment_id",
+    "PARCEL": "parcel_id",
+    "COMMUNITY": "place_name",
+    "KIND": "addr_kind"
+   }
+  },
+  "parcels": {
+   "kind": "file",
+   "path": "parcels.json",
+   "source": "invented parcels",
+   "fields": {
+    "PARCEL": "parcel_id",
+    "ACRES": "lot_acres",
+    "CLASS": "use_class",
+    "JURIS": "juris_code"
+   }
+  },
+  "fires": {
+   "kind": "file",
+   "path": "fires.json",
+   "source": "an invented fire history",
+   "fields": {
+    "YEAR": "fire_year",
+    "NAME": "fire_name",
+    "ACRES": "burn_acres",
+    "ALARM": "start_date"
+   }
+  },
+  "tax": {
+   "kind": "file",
+   "path": "tax.json",
+   "source": "invented sales tax areas"
+  },
+  "coast": {
+   "kind": "file",
+   "path": "coast.json",
+   "source": "an invented lake shore"
+  },
+  "hazard": {
+   "kind": "file",
+   "path": "hazard.json",
+   "label": "Example hazard zones (invented)",
+   "fields": {
+    "CLASS": "hazard_class"
+   },
+   "classes": {
+    "very_high": [
+     3
+    ],
+    "high": [
+     2
+    ]
+   }
+  },
+  "safety_sites": {
+   "kind": "file",
+   "path": "safety_sites.layer.json",
+   "source": "an invented safety site",
+   "fields": {
+    "NAME": "SiteName",
+    "STATUS": "Status",
+    "CITY": "City",
+    "RESIDENTS": "Residents",
+    "YEAR": "YearRecognized"
+   }
+  },
+  "safety_councils": {
+   "kind": "file",
+   "path": "safety_councils.json",
+   "source": "an invented council"
+  }
+ },
+ "files": {
+  "zip_areas": "zip_areas.json",
+  "known_places": "known_places.json",
+  "safety_recipes": "safety_sites.json"
+ },
+ "building_classes": {
+  "1": "single-family",
+  "2": "multi-family"
+ }
+}

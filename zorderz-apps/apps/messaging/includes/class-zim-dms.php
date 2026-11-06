@@ -44,7 +44,7 @@ class ZIM_DMs {
 		// v1.0.24 — The initiator ($user_a, per the contract above) must have
 		// write access. The shared kiosk (`zdz_general`) is read-only: it cannot
 		// start a DM (or a self-DM "note") because doing so is a write. This
-		// also closes the DM half of the Brain-Bot draft path for the kiosk —
+		// also closes the DM half of the assistant's draft path for the kiosk —
 		// even if a [ZIM_DM_DRAFT] somehow reached confirmation, the
 		// conversation can't be created on this account.
 		if ( function_exists( 'zim_user_can_write' ) && ! zim_user_can_write( $user_a ) ) {

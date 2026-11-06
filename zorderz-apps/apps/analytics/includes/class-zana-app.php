@@ -4,9 +4,10 @@
  *
  * Registers under the STABLE app id 'sales-analytics' (kept: the theme grants and
  * labels it, and the KPI tiles + digest deep-link route to it). The surface itself
- * is the permanent bottom "Chat" tab, injected by assets/js/chat.js; this class also
- * renders the same surface into the app viewport so Bridge.loadApp('sales-analytics')
- * — used by the KPI tile prompts and the digest deep-link — lands on the chat too.
+ * is the permanent bottom "Chat" tab, injected by assets/js/chat.js, which also claims
+ * the shell's launches of this id (Bridge.loadApp('sales-analytics', {session|prompt}))
+ * and opens the chat tab with them. The container below is what the shell would draw
+ * if the chat script were missing.
  *
  * @package Zorderz\Analytics
  */
@@ -34,7 +35,7 @@ class ZANA_App implements \Zorderz\App_Interface {
 	}
 
 	public function render_mobile_view( int $user_id ): void {
-		// The chat UI mounts client-side into this container (see assets/js/chat.js).
+		// A placeholder for the shell's own launcher; chat.js opens the Chat tab instead (claimLaunches()).
 		echo '<div id="zana-chat-mount" data-zana-app="' . esc_attr( ZANA_APP_ID ) . '"></div>';
 	}
 }

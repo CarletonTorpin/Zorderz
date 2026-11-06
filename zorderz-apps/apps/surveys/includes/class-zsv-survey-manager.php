@@ -22,6 +22,12 @@ class ZSV_Survey_Manager {
 	/** Marker prefix our exclusion notes start with, so screening can find them again. */
 	const EXCLUSION_MARKER = '[Surveys] Excluded from survey';
 
+	/** Seconds one customer's CRM work may take after their e-mail (a hanging CRM costs the next customer this, not more). */
+	const SEND_BOOKKEEPING_S = 10;
+
+	/** Seconds a nightly sweep (auto-close, owed work) may run. */
+	const SWEEP_BUDGET_S = 40;
+
 	/** @var object|null Billing client (Core service). */
 	private $billing;
 
@@ -107,7 +113,7 @@ class ZSV_Survey_Manager {
 
 	/**
 	 * Resolve a salesperson code (initials) on an invoice to a display name using the
-	 * Party roster. No TS_SALESPERSON_MAP; the code is matched against the roster's
+	 * Party roster (no local roster constant); the code is matched against the roster's
 	 * published `initials` key (ZDZ_Party publishes id/name/initials/role) — exact, no
 	 * fuzzy/substring, case-insensitive because party initials are uppercase monograms
 	 * (matching the sibling leads/jobs roster consumers). Returns [code, name].
@@ -258,6 +264,13 @@ class ZSV_Survey_Manager {
 		}
 		$vocab = ZSV_Settings::status_vocabulary();
 
+		// A full voice mailbox is "not reached", even though the note may also say "call
+		// back" or "problem" (the mailbox's problem, not the customer's) — unless the same
+		// note shows the customer was reached (a satisfied phrase).
+		$vm_full = $this->matches_any( $t, $vocab['voicemail_full'] ?? array() );
+		if ( $vm_full && ! $this->matches_satisfied( $t, $vocab['satisfied'] ?? array() ) ) {
+			return 'left_vm';
+		}
 		// Issue language outranks positive language.
 		if ( $this->matches_any( $t, $vocab['issue'] ?? array() ) ) {
 			// An issue that also reports a resolution is a follow-up cleared later;
@@ -362,9 +375,20 @@ class ZSV_Survey_Manager {
 			}
 		}
 
+		// The newest "reached" note wins — except that a note a person must read
+		// (needs_attention) does not outrank a NEWER voicemail: the customer was not reached
+		// since. A genuinely reached outcome still outranks a later voicemail.
 		$reached = array( 'no_online_review', 'no_primary_account', 'needs_attention', 'satisfied' );
+		$vm_since = false;
 		for ( $i = $n - 1; $i >= 0; $i-- ) {
+			if ( 'left_vm' === $items[ $i ]['status'] ) {
+				$vm_since = true;
+				continue;
+			}
 			if ( in_array( $items[ $i ]['status'], $reached, true ) ) {
+				if ( 'needs_attention' === $items[ $i ]['status'] && $vm_since ) {
+					return array( 'status' => 'left_vm', 'reason' => '' );
+				}
 				return array( 'status' => $items[ $i ]['status'], 'reason' => '' );
 			}
 		}
@@ -599,7 +623,8 @@ class ZSV_Survey_Manager {
 		// WHICH outcome means "closed as a sale" is an Identity mapping. If the account
 		// defines no won-type outcome we REFUSE (leave the lead OPEN for a later sweep,
 		// once an outcome is pinned) rather than mis-file a satisfied customer.
-		$outcome = $this->crm->resolve_won_outcome();
+		$crm     = $this->crm;
+		$outcome = ZSV_Budget::call( function () use ( $crm ) { return $crm->resolve_won_outcome(); } );
 		if ( empty( $outcome ) || empty( $outcome['id'] ) ) {
 			ZSV_DB::disposition( 'close_unverified', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'reason' => 'no_won_outcome' ) );
 			return false; // untouched row → a legitimate retry, never a false Won.
@@ -609,7 +634,8 @@ class ZSV_Survey_Manager {
 			// Close by OUTCOME + verify by re-read. Gate the CRM note on the verified
 			// result: pass '' here and add the note ourselves only once the close is
 			// confirmed, so a "closing as Won" note never lands on a lead that did not close.
-			$res = $this->crm->close_lead_by_outcome( $crm_lead_id, (int) $outcome['id'], '' );
+			$oid = (int) $outcome['id'];
+			$res = ZSV_Budget::call( function () use ( $crm, $crm_lead_id, $oid ) { return $crm->close_lead_by_outcome( $crm_lead_id, $oid, '' ); } );
 		} catch ( \Throwable $e ) {
 			ZSV_DB::disposition( 'close_failed', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'error' => $e->getMessage() ) );
 			return false;
@@ -633,12 +659,13 @@ class ZSV_Survey_Manager {
 		}
 
 		// VERIFIED closed — and only now: write the CRM note, the local Won stamp and the
-		// success log. A failed note is non-fatal (the close already stands); it is logged.
-		try {
-			$this->crm->add_note( array( 'entity' => array( 'entityType' => 'leads', 'id' => $crm_lead_id ), 'note' => array( 'body' => $note ) ) );
-		} catch ( \Throwable $e ) {
-			ZSV_DB::disposition( 'close_note_failed', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'error' => $e->getMessage() ) );
+		// success log. The note is durable (ZSV_Owed): one not posted now is posted by the
+		// next sweep, so a close never ends up without its explanation.
+		$note_state = $this->post_note_durably( $reason, $crm_lead_id, $wp_lead_id, $note );
+		if ( 'posted' !== $note_state ) {
+			ZSV_DB::disposition( 'close_note_owed', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'state' => $note_state ) );
 		}
+		ZSV_Owed::won_owed_forget( $wp_lead_id );
 
 		if ( $wp_lead_id > 0 ) {
 			$wpdb->update(
@@ -660,6 +687,155 @@ class ZSV_Survey_Manager {
 	}
 
 	/**
+	 * Post a CRM note so that it cannot be lost: stored as owed first (with a Ref line), then
+	 * posted once; one not posted now stays owed and the next sweep posts it. When the store
+	 * cannot be written (its lock busy) one plain attempt is made.
+	 *
+	 * @return string 'posted' | 'maybe' | 'busy' | 'failed'
+	 */
+	public function post_note_durably( string $kind, int $crm_lead_id, int $wp_lead_id, string $body ): string {
+		if ( ! $this->crm || $crm_lead_id < 1 ) {
+			return 'failed';
+		}
+		$crm    = $this->crm;
+		$poster = static function ( array $entry ) use ( $crm ) {
+			return ZSV_Budget::call( static function () use ( $crm, $entry ) {
+				return $crm->add_note( array( 'entity' => array( 'entityType' => 'leads', 'id' => (int) $entry['crm'] ), 'note' => array( 'body' => (string) $entry['body'] ) ) );
+			} );
+		};
+		$ref = ZSV_Owed::new_ref();
+		if ( ZSV_Owed::owe( $kind, $crm_lead_id, $wp_lead_id, ZSV_Owed::with_ref( $body, $ref ), $ref ) ) {
+			return ZSV_Owed::post( $ref, $poster );
+		}
+		try {
+			return $poster( array( 'crm' => $crm_lead_id, 'body' => $body ) ) ? 'posted' : 'failed';
+		} catch ( \Throwable $e ) {
+			return 'failed';
+		}
+	}
+
+	/**
+	 * Is an owed note already on its lead (its Ref line among the lead's notes)? true / false,
+	 * or null when the lead's notes could not be read — then it is never posted a second time.
+	 */
+	public function note_is_on( array $entry ): ?bool {
+		if ( ! $this->crm ) {
+			return null;
+		}
+		$crm  = $this->crm;
+		$id   = (int) ( $entry['crm'] ?? 0 );
+		$acts = ZSV_Budget::call( static function () use ( $crm, $id ) {
+			return $crm->get_activities( array( 'entityType' => 'Leads', 'entityId' => $id ) );
+		} );
+		if ( ! is_array( $acts ) ) {
+			return null;
+		}
+		preg_match( '/Ref: (zsv-[0-9a-f]{12})/', (string) ( $entry['body'] ?? '' ), $m );
+		if ( empty( $m[1] ) ) {
+			return null;
+		}
+		return false !== strpos( (string) wp_json_encode( $acts ), $m[1] );
+	}
+
+	/**
+	 * The CRM's part of a send, AFTER the e-mail has gone, for this customer only, under a
+	 * short budget of its own (a hanging CRM costs the next customer SEND_BOOKKEEPING_S at
+	 * most): the Won mark is tried once (its note is durable); when it fails the close is
+	 * remembered as owed and the daily sweep makes it while the CRM still reads the lead
+	 * open. Never throws: the e-mail is sent, so the send succeeded either way.
+	 *
+	 * @return string 'won' | 'owed' | 'none'
+	 */
+	public function after_send_bookkeeping( int $wp_lead_id, int $crm_lead_id, string $channel ): string {
+		if ( $crm_lead_id < 1 ) {
+			return 'none';
+		}
+		$opened = ZSV_Budget::open( 'send', (float) self::SEND_BOOKKEEPING_S );
+		try {
+			$ok = false;
+			if ( ZSV_Budget::can_start( 3 ) ) {
+				try {
+					$ok = $this->mark_lead_won_with_reason( $wp_lead_id, $crm_lead_id, 'emailed', array( 'channel' => $channel ) );
+				} catch ( \Throwable $e ) {
+					$ok = false;
+				}
+			}
+			if ( ! $ok ) {
+				ZSV_Owed::won_owed_add( $wp_lead_id, $crm_lead_id );
+				error_log( sprintf( 'Zorderz Surveys: the Won mark after an e-mail did not go through for CRM lead #%d — the e-mail went; the close is owed and the daily sweep makes it while the lead is still open.', $crm_lead_id ) );
+				return 'owed';
+			}
+			return 'won';
+		} finally {
+			if ( $opened ) {
+				ZSV_Budget::close();
+			}
+		}
+	}
+
+	/**
+	 * The owed work, oldest first, while the open budget lets an item start: notes first (a
+	 * note waits on nothing), then owed Won marks — each closed only while the CRM still reads
+	 * the lead open; a lead closed since (any outcome) is settled and forgotten.
+	 *
+	 * @return array{notes:array,won:array{closed:int,settled:int,kept:int,expired:int,left:int}}
+	 */
+	public function settle_owed( bool $with_notes = true ): array {
+		$notes = $with_notes ? $this->drain_owed_notes() : array();
+		$won   = array( 'closed' => 0, 'settled' => 0, 'kept' => 0, 'expired' => 0, 'left' => 0 );
+		foreach ( ZSV_Owed::won_owed() as $wp_id => $entry ) {
+			if ( ! ZSV_Budget::can_start( 4 ) ) {
+				$won['left']++;
+				continue;
+			}
+			$status = $this->crm_status_of( (int) ( $entry['crm'] ?? 0 ) );
+			$what   = ZSV_Owed::won_decision( (array) $entry, $status );
+			if ( 'expired' === $what ) {
+				ZSV_Owed::won_owed_forget( (int) $wp_id );
+				error_log( sprintf( 'Zorderz Surveys: dropped an owed Won mark for CRM lead #%d after %d days — close it by hand if it should be.', (int) $entry['crm'], ZSV_Owed::EMAILED_LOOKBACK_DAYS ) );
+				$won['expired']++;
+			} elseif ( 'settled' === $what ) {
+				ZSV_Owed::won_owed_forget( (int) $wp_id );
+				$won['settled']++;
+			} elseif ( 'close' === $what && $this->mark_lead_won_with_reason( (int) $wp_id, (int) $entry['crm'], 'emailed', array( 'owed' => 'yes' ) ) ) {
+				$won['closed']++;
+			} else {
+				$won['kept']++;
+			}
+		}
+		return array( 'notes' => $notes, 'won' => $won );
+	}
+
+	/** Post the notes owed from earlier runs (ZSV_Owed::drain) through this manager's CRM client. */
+	public function drain_owed_notes(): array {
+		$crm = $this->crm;
+		return ZSV_Owed::drain(
+			static function ( array $entry ) use ( $crm ) {
+				return $crm ? ZSV_Budget::call( static function () use ( $crm, $entry ) {
+					return $crm->add_note( array( 'entity' => array( 'entityType' => 'leads', 'id' => (int) $entry['crm'] ), 'note' => array( 'body' => (string) $entry['body'] ) ) );
+				} ) : false;
+			},
+			array( $this, 'note_is_on' )
+		);
+	}
+
+	/** The CRM's status for a lead (0 = open), or null when it could not be read. */
+	private function crm_status_of( int $crm_lead_id ): ?int {
+		if ( ! $this->crm || $crm_lead_id < 1 || ! method_exists( $this->crm, 'get_lead' ) ) {
+			return null;
+		}
+		$crm  = $this->crm;
+		$lead = ZSV_Budget::call( static function () use ( $crm, $crm_lead_id ) { return $crm->get_lead( $crm_lead_id, 'REV_NEWEST' ); } );
+		if ( ! is_array( $lead ) || ! isset( $lead['status'] ) ) {
+			return null;
+		}
+		if ( is_numeric( $lead['status'] ) ) {
+			return (int) $lead['status'];
+		}
+		return ( is_array( $lead['status'] ) && isset( $lead['status']['id'] ) ) ? (int) $lead['status']['id'] : null;
+	}
+
+	/**
 	 * Grace-window sweep. Closes ONLY genuinely-satisfied leads as Won, and only when
 	 * the tenant opted in; everything else past its window is ESCALATED with a logged
 	 * disposition, never system-Won. This is the enforcement of the safety floor and
@@ -671,9 +847,6 @@ class ZSV_Survey_Manager {
 	public function auto_close_stale_leads( bool $dry_run = false ): array {
 		global $wpdb;
 		$t = ZSV_DB::leads_table();
-
-		$callback_hours = ZSV_Settings::grace_hours_callback();
-		$default_hours  = ZSV_Settings::grace_hours_default();
 
 		$candidates = $wpdb->get_results(
 			"SELECT id, crm_lead_id, first_name, last_name, operator_status, crm_status, created_at, email_sent_at, review_left
@@ -687,13 +860,54 @@ class ZSV_Survey_Manager {
 			ARRAY_A
 		);
 
-		$stats = array( 'scanned' => 0, 'closed' => 0, 'escalated' => 0, 'skipped' => 0, 'errors' => 0, 'details' => array() );
-		if ( empty( $candidates ) ) {
-			return $stats;
+		$stats  = array( 'scanned' => 0, 'closed' => 0, 'escalated' => 0, 'skipped' => 0, 'errors' => 0, 'deferred' => 0, 'details' => array() );
+		$opened = $dry_run ? false : ZSV_Budget::open( 'auto_close', (float) self::SWEEP_BUDGET_S );
+		try {
+			// Notes owed from earlier runs go first: each one waits on nothing.
+			if ( ! $dry_run ) {
+				$stats['owed_notes'] = $this->drain_owed_notes();
+			}
+			$this->auto_close_candidates( (array) $candidates, $dry_run, $stats );
+			// Then the Won marks owed after an e-mail — after this run's grace-window closes.
+			if ( ! $dry_run ) {
+				$owed              = $this->settle_owed( false );
+				$stats['owed_won'] = $owed['won'];
+			}
+		} finally {
+			if ( $opened ) {
+				ZSV_Budget::log_run( 'auto_close', $stats['closed'] + $stats['escalated'] + $stats['skipped'] + $stats['errors'], $stats['scanned'] + $stats['deferred'], $stats['deferred'] );
+				ZSV_Budget::close();
+			}
 		}
-		$now = current_time( 'timestamp' );
+		error_log(
+			sprintf(
+				'Zorderz Surveys: auto_close_stale_leads scanned=%d closed=%d escalated=%d skipped=%d errors=%d deferred=%d (dry_run=%s)',
+				$stats['scanned'],
+				$stats['closed'],
+				$stats['escalated'],
+				$stats['skipped'],
+				$stats['errors'],
+				$stats['deferred'],
+				$dry_run ? 'yes' : 'no'
+			)
+		);
+		return $stats;
+	}
+
+	/**
+	 * The grace-window decisions, one lead at a time, while the budget lets a close start.
+	 * Leads not reached for time are counted as deferred: the next run takes them first.
+	 */
+	private function auto_close_candidates( array $candidates, bool $dry_run, array &$stats ): void {
+		$callback_hours = ZSV_Settings::grace_hours_callback();
+		$default_hours  = ZSV_Settings::grace_hours_default();
+		$now            = current_time( 'timestamp' );
 
 		foreach ( $candidates as $lead ) {
+			if ( ! $dry_run && ! ZSV_Budget::can_start( 4 ) ) {
+				$stats['deferred']++;
+				continue;
+			}
 			$stats['scanned']++;
 			$status = strtolower( trim( (string) ( $lead['operator_status'] ?? '' ) ) );
 			$made   = ! empty( $lead['created_at'] ) ? strtotime( $lead['created_at'] ) : 0;
@@ -747,23 +961,7 @@ class ZSV_Survey_Manager {
 			} else {
 				$stats['errors']++;
 			}
-			if ( $stats['closed'] > 0 && 0 === $stats['closed'] % 25 ) {
-				sleep( 1 );
-			}
 		}
-
-		error_log(
-			sprintf(
-				'Zorderz Surveys: auto_close_stale_leads scanned=%d closed=%d escalated=%d skipped=%d errors=%d (dry_run=%s)',
-				$stats['scanned'],
-				$stats['closed'],
-				$stats['escalated'],
-				$stats['skipped'],
-				$stats['errors'],
-				$dry_run ? 'yes' : 'no'
-			)
-		);
-		return $stats;
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
@@ -879,7 +1077,7 @@ class ZSV_Survey_Manager {
 			$inv = $this->normalize_invoice( $raw );
 			$inv['batch_tag'] = $batch_tag;
 
-			// Distrust the source (crosswalk A6.12): a "settled" doc with an
+			// Distrust the source: a "settled" doc with an
 			// outstanding balance or a zero total is a source disagreement, logged.
 			if ( isset( $inv['outstanding'] ) && (float) $inv['outstanding'] > 0.01 ) {
 				ZSV_DB::disposition( 'source_disagreement', array( 'invoice_id' => $inv['invoice_id'], 'outstanding' => $inv['outstanding'], 'batch_tag' => $batch_tag ) );

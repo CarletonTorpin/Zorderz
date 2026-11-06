@@ -15,9 +15,10 @@
  * replies go out through wp_mail (WP Mail SMTP), same as receipts/surveys.
  *
  * CREDENTIALS. The vault has its own settings (options below). If they are
- * left empty and the scheduler's Microsoft connection (TSSCH_Settings) is
+ * left empty and the scheduler's Microsoft connection (ZSCH_Settings) is
  * configured, we transparently reuse those credentials — one Azure app for
- * the whole platform; CT only has to add the Mail.Read permission to it.
+ * the whole platform; an administrator only has to add the Mail.Read
+ * permission to it.
  * Secrets follow the platform posture: isolated option, non-autoloaded,
  * server-side only, never localized to JS, never returned by AJAX/REST.
  *
@@ -141,7 +142,7 @@ class ZKV_Mailbox {
 
 	/**
 	 * Effective Graph credentials — the vault's own, else the scheduler's
-	 * Microsoft connection (TSSCH_Settings) as a transparent fallback so the
+	 * Microsoft connection (ZSCH_Settings) as a transparent fallback so the
 	 * platform keeps ONE Azure app registration.
 	 *
 	 * @return array{tenant_id:string,client_id:string,secret:string,source:string}
@@ -157,9 +158,9 @@ class ZKV_Mailbox {
 			);
 		}
 		// Fallback: scheduler's app-only connection (same tenant, same app).
-		if ( class_exists( 'TSSCH_Settings' ) ) {
-			$s_cfg    = TSSCH_Settings::get_config();
-			$s_secret = TSSCH_Settings::get_secret();
+		if ( class_exists( 'ZSCH_Settings' ) && is_callable( array( 'ZSCH_Settings', 'get_config' ) ) && is_callable( array( 'ZSCH_Settings', 'get_secret' ) ) ) {
+			$s_cfg    = (array) ZSCH_Settings::get_config();
+			$s_secret = (string) ZSCH_Settings::get_secret();
 			if ( ! empty( $s_cfg['tenant_id'] ) && ! empty( $s_cfg['client_id'] ) && '' !== $s_secret ) {
 				return array(
 					'tenant_id' => $s_cfg['tenant_id'],

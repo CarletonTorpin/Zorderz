@@ -2,9 +2,9 @@
 /**
  * ZRCPT HEIC — server-side HEIC → JPEG conversion.
  *
- * Pre-v2.9.0 the plugin relied on Poe's bot to decode HEIC photos from
- * iPhones. Some Poe models handle HEIC; others silently return empty
- * content. Per Trap 6 we convert server-side before sending.
+ * Phones send HEIC photos; not every model reads them (the platform's Ai
+ * router takes JPEG, PNG, GIF and WebP only), so they are converted on the
+ * site before anything is sent.
  *
  * Uses Imagick when available (preferred — best fidelity). Falls back
  * to an error-with-log entry on failure, which the caller surfaces to

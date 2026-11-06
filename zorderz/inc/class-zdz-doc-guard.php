@@ -1,18 +1,18 @@
 <?php
 /**
- * Zdz_Doc_Guard — the shared value-floor / no-silent-unpricing guard (§62).
+ * Zdz_Doc_Guard — the shared value-floor / no-silent-unpricing guard.
  *
  * A priced document must not silently become unpriced. A write that would take a
  * document CURRENTLY carrying money down to $0.00 is refused, quoting BOTH figures.
  * Creating a deliberate $0 stub (no prior money) is untouched — that is the $0-stub
  * allowance matrix's job, not this guard's.
  *
- * DESIGN INVARIANTS, ported verbatim (§62):
+ * DESIGN INVARIANTS:
  *   - IDENTITY-BLIND. The guard forms no opinion about who the user is — no $uid, no
  *     role, no capability — so ONE call sits on a POST, an admin save and a chat marker
  *     without three rule copies.
  *   - FAIL-OPEN. An unreadable prior total ($prior === null) is NOT evidence of a hazard
- *     (INV-12 read in the forgotten direction): the write proceeds.
+ *     (honest output read in the forgotten direction): the write proceeds.
  *   - FILTER ESCAPE, NEVER A ROLE. The escape hatch is `zdz_allow_zero_regression`,
  *     a filter defaulting false.
  *   - INVOICES ARE EXEMPT. They append a revision, never replace lines — callers simply

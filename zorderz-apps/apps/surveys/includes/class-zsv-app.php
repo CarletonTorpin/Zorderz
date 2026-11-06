@@ -65,10 +65,15 @@ class ZSV_App implements \Zorderz\Widget_App_Interface {
 				<div class="zsv-stat"><span class="zsv-stat-val" id="zsv-st-reviews">--</span><span class="zsv-stat-label"><?php esc_html_e( 'Reviews', 'zorderz' ); ?></span></div>
 			</div>
 			<div class="zsv-w-actions">
-				<button class="zsv-btn zsv-btn-primary" id="zsv-run-batch"><?php esc_html_e( 'Run batch', 'zorderz' ); ?></button>
-				<button class="zsv-btn zsv-btn-secondary" id="zsv-sync"><?php esc_html_e( 'Sync operator notes', 'zorderz' ); ?></button>
-				<button class="zsv-btn zsv-btn-secondary" id="zsv-check-reviews"><?php esc_html_e( 'Check reviews', 'zorderz' ); ?></button>
+				<button type="button" class="zsv-btn zsv-btn-primary" id="zsv-run-batch"><?php esc_html_e( 'Run batch', 'zorderz' ); ?></button>
+				<button type="button" class="zsv-btn zsv-btn-secondary" id="zsv-sync"><?php esc_html_e( 'Sync operator notes', 'zorderz' ); ?></button>
 			</div>
+			<div class="zsv-progress" id="zsv-progress" role="status" aria-live="polite"></div>
+			<button type="button" class="zsv-btn zsv-btn-primary zsv-send" id="zsv-send" hidden></button>
+			<details class="zsv-more">
+				<summary><?php esc_html_e( 'More tools', 'zorderz' ); ?></summary>
+				<button type="button" class="zsv-btn zsv-btn-secondary" id="zsv-check-reviews"><?php esc_html_e( 'Check reviews', 'zorderz' ); ?></button>
+			</details>
 			<div class="zsv-w-list" id="zsv-list" aria-live="polite">
 				<div class="zsv-empty zsv-loading"><?php esc_html_e( 'Loading', 'zorderz' ); ?>&hellip;</div>
 			</div>

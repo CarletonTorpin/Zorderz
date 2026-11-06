@@ -1,0 +1,35 @@
+/* Settings -> Agreements (wp-admin; WordPress's own colors). */
+.zagr-admin .zagr-card { background: var(--sys-surface, #ffffff); border: 1px solid var(--sys-border, #c3c4c7); border-radius: 8px; padding: 12px 20px 16px; margin: 16px 0; max-width: 980px; }
+.zagr-admin .zagr-ready li.ok { color: var(--sys-ok, #1e6b34); }
+.zagr-admin .zagr-ready li.todo { color: var(--sys-bad, #a01818); font-weight: 600; }
+.zagr-admin .zagr-bad { color: var(--sys-bad, #a01818); font-weight: 600; }
+.zagr-admin td form { display: block; margin: 0 0 6px; }
+/* "Signed on paper" on a row, its record (the photos, each with whether it is unchanged) and its undo */
+.zagr-admin tr:has(+ tr.zagr-paper-tr) > td { border-bottom: 0; }
+.zagr-admin tr.zagr-paper-tr > td { padding-top: 0; }
+.zagr-admin .zagr-paper > summary, .zagr-admin .zagr-undo > summary { cursor: pointer; font-weight: 600; color: var(--sys-link, #2271b1); min-height: 32px; line-height: 32px; }
+.zagr-admin .zagr-paper-form, .zagr-admin .zagr-paper-done { max-width: 760px; }
+.zagr-admin .zagr-paper-form fieldset { border: 0; margin: 0 0 10px; padding: 0; }
+.zagr-admin .zagr-paper-form legend { padding: 0; margin-bottom: 4px; }
+.zagr-admin .zagr-older label, .zagr-admin .zagr-language label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; margin-right: 14px; }
+.zagr-admin .zagr-language .description, .zagr-admin .zagr-buyer-older { display: block; margin: 2px 0 0; }
+.zagr-admin .zagr-late { display: block; margin-top: 4px; }
+.zagr-admin .zagr-recent { display: flex; flex-wrap: wrap; gap: 10px; }
+.zagr-admin .zagr-recent legend { flex: 0 0 100%; }
+.zagr-admin .zagr-pick { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; width: 112px; font-size: 12px; text-align: center; cursor: pointer; }
+.zagr-admin .zagr-pick img, .zagr-admin .zagr-photo img { width: 96px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid var(--sys-border, #c3c4c7); background: var(--sys-surface-alt, #f0f0f1); }
+.zagr-admin .zagr-pick input:checked + img { outline: 3px solid var(--sys-link, #2271b1); outline-offset: 1px; }
+.zagr-admin .zagr-photos { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 10px; padding: 0; list-style: none; }
+.zagr-admin .zagr-photo { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 112px; font-size: 12px; text-align: center; }
+.zagr-admin .zagr-photo.is-same .zagr-pstate { color: var(--sys-ok, #1e6b34); font-weight: 600; }
+.zagr-admin .zagr-photo.is-changed .zagr-pstate, .zagr-admin .zagr-photo.is-missing .zagr-pstate { color: var(--sys-bad, #a01818); font-weight: 700; }
+.zagr-admin .zagr-nophoto { display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; border: 1px dashed var(--sys-border, #c3c4c7); border-radius: 6px; }
+/* a late paper signing waits for an administrator's confirmation */
+.zagr-admin .zagr-confirm { max-width: 760px; margin: 4px 0 10px; padding: 8px 12px; border: 1px solid var(--sys-border, #c3c4c7); border-left: 4px solid var(--sys-warning, #dba617); border-radius: 6px; background: var(--sys-surface-raised, #fcf9e8); }
+.zagr-admin .zagr-confirm p { margin: 6px 0; }
+.zagr-admin .zagr-confirm-form { margin: 0; }
+.zagr-admin .zagr-confirm-form input[type="text"] { box-sizing: border-box; max-width: 100%; }
+.zagr-admin .zagr-looked { display: flex; align-items: flex-start; gap: 8px; min-height: 36px; cursor: pointer; }
+.zagr-admin .zagr-looked input { flex: 0 0 auto; margin: 3px 0 0; }
+.zagr-admin .zagr-confirmed { font-weight: 600; border-left: 4px solid var(--sys-success, #1e6b34); padding-left: 8px; }
+@media (max-width: 600px) { .zagr-admin .zagr-paper-form input[type="text"], .zagr-admin .zagr-confirm-form input[type="text"] { width: 100%; } }

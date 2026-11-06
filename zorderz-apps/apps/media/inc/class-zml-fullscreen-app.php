@@ -3,7 +3,7 @@
  * ZML_Fullscreen_App — the full-screen GALLERY surface (bridge_type ajax_html).
  *
  * This is the roomy "see everything" view, opened by the widget's "See All"
- * button (window.TSMedia → Bridge.loadApp('zdz-media-all')) and also available
+ * button (window.ZMLMedia → Bridge.loadApp('zdz-media-all')) and also available
  * as its own dock tile. The theme injects this HTML into #app-body via
  * innerHTML.
  *
@@ -11,7 +11,7 @@
  *   innerHTML does NOT execute injected <script> (inline OR src), and Bridge
  *   v3.2 does not (yet) revive #app-body scripts. So instead of shipping a
  *   bootstrap that would silently never run, we ship ONLY markup. The globally-
- *   enqueued controller (window.TSMedia, loaded on the front page) detects this
+ *   enqueued controller (window.ZMLMedia, loaded on the front page) detects this
  *   host container and mounts into it. This works TODAY, with no dependency on
  *   the pending theme revival. If/when the theme revives #app-body scripts, a
  *   bootstrap could be added, but it is not required.
@@ -43,13 +43,13 @@ class ZML_Fullscreen_App implements \Zorderz\App_Interface {
 			'roles'       => [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'zdz_general' ],
 			'bridge_type' => 'ajax_html',
 			'admin_url'   => '',
-			// v2.0.1: This is the SECONDARY surface of the Media app. The PRIMARY
+			// This is the SECONDARY surface of the Media app. The PRIMARY
 			// user-facing entry is the 'zdz-media' dashboard widget (its tile +
 			// card); this full-screen gallery is reached from that widget's "See
 			// All" (Bridge.loadApp('zdz-media-all')). Registering it as a normal
 			// app made it render as its OWN second "Media" dock tile (the
-			// duplicate the owner saw), because the theme lists every app config
-			// with nm/icon/cc. `springboard:false` (theme v2.21.0) keeps the app
+			// duplicate tile), because the theme lists every app config
+			// with nm/icon/cc. `springboard:false` keeps the app
 			// fully loadable — it stays server-registered and in zdz_allowed_apps
 			// so /load-app authorizes it and the viewport header reads "Media
 			// Library" — but excludes it from the springboard grid, dock, recents,
@@ -67,7 +67,7 @@ class ZML_Fullscreen_App implements \Zorderz\App_Interface {
 	 * loading state inside the grid.
 	 */
 	public function render_mobile_view( int $user_id ): void {
-		// v2.3.0: the admin-only "All" scope (browse every photo org-wide,
+		// the admin-only "All" scope (browse every photo org-wide,
 		// incl. private) is rendered ONLY for admins. This mirrors the app's
 		// existing admin definition (delete-any-photo). The zml_list endpoint
 		// re-checks admin on every request, so hiding the tab is a convenience,
@@ -79,6 +79,7 @@ class ZML_Fullscreen_App implements \Zorderz\App_Interface {
 				<div class="zml-seg" role="tablist" aria-label="Library scope">
 					<button class="zml-seg-btn zml-active" data-scope="public" role="tab" aria-selected="true">Organization</button>
 					<button class="zml-seg-btn"            data-scope="mine"   role="tab" aria-selected="false">My&nbsp;Photos</button>
+					<button class="zml-seg-btn"            data-scope="shared" role="tab" aria-selected="false">Shared&nbsp;with&nbsp;me</button>
 					<?php if ( $is_admin ) : ?>
 					<button class="zml-seg-btn"            data-scope="all"    role="tab" aria-selected="false">All</button>
 					<?php endif; ?>
@@ -100,7 +101,7 @@ class ZML_Fullscreen_App implements \Zorderz\App_Interface {
 			</div>
 			<div class="zml-fs-scroll" id="zml-fs-scroll">
 				<div class="zml-fs-grid-wrap" id="zml-fs-grid-wrap">
-					<div class="zml-loading">Loading…</div>
+					<?php /* the kit's loader, the same in every app */ ?><div class="zdz-loading" role="status" aria-live="polite"><span class="zdz-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="zdz-loading-label">Loading…</span></div>
 				</div>
 				<div class="zml-sentinel" id="zml-fs-sentinel" aria-hidden="true"></div>
 			</div>

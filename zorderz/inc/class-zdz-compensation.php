@@ -10,7 +10,7 @@
  * reads its typed config from here instead of hardcoding a rate, a tier ladder
  * or a $/unit table.
  *
- * ── The layer split (Playbook §1) ─────────────────────────────────────
+ * ── The layer split ───────────────────────────────────────────────────
  *   MECHANISM is [CORE] and lives in code: the STRUCTURE enum, the SPLIT
  *   policy enum, the ledger-kind flag set, the marginal-tier math shape, the
  *   safety floor (never pay commission on refunded/non-sale money; never trust
@@ -19,18 +19,18 @@
  *   VALUES are [IDENTITY] and SHIP EMPTY: the commission rate, the tier
  *   ceilings, the piece $/unit table, the product-minimum floors, the card-fee
  *   rate, and every per-party plan. This is the most commercially sensitive
- *   data in the whole distribution — it is NEVER seeded, sampled or shipped
- *   (Playbook §5). An unconfigured install computes $0 and says so, loudly; it
- *   never invents a 20% default.
+ *   data a business keeps — it is NEVER seeded, sampled or shipped. An
+ *   unconfigured install computes $0 and says so, loudly; it never invents a
+ *   default rate.
  *
  * ── Data discipline ───────────────────────────────────────────────────
  *   - Activation creates NOTHING. There is no schema and no seed here; the
  *     store is a handful of wp_options (empty) plus per-party user meta (empty).
  *   - A party with no plan resolves to `configured => false`. Callers surface
  *     that as a disposition/flag and pay nothing — they never fall back to a
- *     baked-in rate (Playbook §7: nothing silent, fail loudly).
+ *     baked-in rate (nothing silent; fail loudly).
  *   - The per-party short code is read from ZDZ_Party under the key `initials`
- *     (NOT `code`) and matched case-insensitively (Playbook §13).
+ *     (NOT `code`) and matched case-insensitively.
  *
  * Self-boots via ::init() at file end, like the other Core services.
  *
@@ -116,15 +116,266 @@ class ZDZ_Compensation {
 		add_action( 'edit_user_profile', [ __CLASS__, 'render_admin_fields' ] );
 		add_action( 'personal_options_update', [ __CLASS__, 'save_admin_fields' ] );
 		add_action( 'edit_user_profile_update', [ __CLASS__, 'save_admin_fields' ] );
+
+		// An Identity Pack's compensation file fills the plans, piece rates, minimums and
+		// mechanism settings through the pack's preview → confirm → snapshot → revert flow.
+		add_filter( 'zdz_identity_pack_consumers', [ __CLASS__, 'pack_consumer' ] );
+	}
+
+	/* ==================================================================
+	 * IDENTITY PACK — compensation.yml
+	 *
+	 *   plans:            [ { party: { initials | email | login }, structure, rate_percent,
+	 *                         tiers: [ { ceiling, rate } ], base_pay, bonus_per_job, pay_period,
+	 *                         exclude_card_fees, split_policy, split_weight, split_own_share,
+	 *                         minimum_party, is_piece_worker, code } ]
+	 *   piece_rates:      [ { item, rate, unit } ]
+	 *   product_minimums: [ { id, item_subtype, min_job_gross, min_commission,
+	 *                         applies_to_structures, applies_to_parties: [ party refs ] } ]
+	 *   settings:         { payability, pay_calendar, splits, attribution, fees,
+	 *                       piece_rate_eligibility }   (merged over the safe Core defaults)
+	 *
+	 * A party is named by initials (the roster's short code), e-mail or login. A person the site
+	 * does not have is SKIPPED and said so: a plan is never given to someone else. The preview
+	 * names how many plans change, never a rate. Nothing is written until the pack is applied;
+	 * revert puts back every plan, rate and setting as it was (a plan the pack added is removed).
+	 * ================================================================== */
+
+	const PACK_SNAPSHOT = 'zdz_compensation_pack_snapshot';
+
+	/** The plan fields a pack may set, in save_plan()'s words. */
+	const PACK_PLAN_KEYS = [ 'structure', 'rate_percent', 'tiers', 'base_pay', 'bonus_per_job', 'pay_period', 'exclude_card_fees', 'split_policy', 'split_weight', 'split_own_share', 'minimum_party', 'is_piece_worker' ];
+
+	/** Every per-party meta key a plan uses (for snapshot and restore). */
+	const PACK_META = [ 'zdz_comp_structure', 'zdz_comp_rate_percent', 'zdz_comp_base_pay', 'zdz_comp_bonus_per_job', 'zdz_comp_tiers', 'zdz_comp_pay_period', 'zdz_comp_exclude_card_fees', 'zdz_comp_split_policy', 'zdz_comp_split_weight', 'zdz_comp_split_own_share', 'zdz_comp_minimum_party', 'zdz_comp_is_piece_worker', 'zdz_party_code' ];
+
+	public static function pack_consumer( $consumers ) {
+		$consumers = is_array( $consumers ) ? $consumers : [];
+		$consumers['compensation'] = [
+			'files'    => [ 'compensation' ],
+			'preview'  => [ __CLASS__, 'pack_preview' ],
+			'apply'    => [ __CLASS__, 'pack_apply' ],
+			'snapshot' => [ __CLASS__, 'pack_snapshot' ],
+			'restore'  => [ __CLASS__, 'pack_restore' ],
+		];
+		return $consumers;
+	}
+
+	/**
+	 * A pack's party reference → a user id, or 0. Exactly one person must match: two people
+	 * with the same initials is no match.
+	 *
+	 * @param mixed      $ref    { initials | email | login } or a bare initials string.
+	 * @param array|null $roster Tests pass [ [id, initials], … ]; null reads ZDZ_Party.
+	 */
+	public static function pack_party( $ref, ?array $roster = null ): int {
+		if ( is_string( $ref ) ) {
+			$ref = [ 'initials' => $ref ];
+		}
+		if ( ! is_array( $ref ) ) {
+			return 0;
+		}
+		if ( ! empty( $ref['email'] ) && function_exists( 'get_user_by' ) ) {
+			$u = get_user_by( 'email', (string) $ref['email'] );
+			return $u ? (int) $u->ID : 0;
+		}
+		if ( ! empty( $ref['login'] ) && function_exists( 'get_user_by' ) ) {
+			$u = get_user_by( 'login', (string) $ref['login'] );
+			return $u ? (int) $u->ID : 0;
+		}
+		$ini = strtoupper( trim( (string) ( $ref['initials'] ?? '' ) ) );
+		if ( '' === $ini ) {
+			return 0;
+		}
+		if ( null === $roster ) {
+			$roster = ( class_exists( 'ZDZ_Party' ) && method_exists( 'ZDZ_Party', 'selectable_people' ) ) ? (array) ZDZ_Party::selectable_people() : [];
+		}
+		$hits = [];
+		foreach ( $roster as $p ) {
+			if ( strtoupper( trim( (string) ( $p['initials'] ?? '' ) ) ) === $ini ) {
+				$hits[ (int) ( $p['id'] ?? $p['user_id'] ?? 0 ) ] = true;
+			}
+		}
+		unset( $hits[0] );
+		return 1 === count( $hits ) ? (int) array_key_first( $hits ) : 0;
+	}
+
+	/**
+	 * What a compensation file would do: [ plans => [ user_id => plan fields ], skipped =>
+	 * [ reason strings ], piece_rates, product_minimums, settings ] (null when absent).
+	 */
+	public static function pack_read( $file, ?array $roster = null ): array {
+		$file = is_array( $file ) ? $file : [];
+		$out  = [ 'plans' => [], 'skipped' => [], 'piece_rates' => null, 'product_minimums' => null, 'settings' => null ];
+		foreach ( (array) ( $file['plans'] ?? [] ) as $i => $p ) {
+			if ( ! is_array( $p ) ) {
+				continue;
+			}
+			$uid = self::pack_party( $p['party'] ?? '', $roster );
+			if ( $uid <= 0 ) {
+				$out['skipped'][] = sprintf( 'plan %d: no one on this site matches its party, skipped', (int) $i + 1 );
+				continue;
+			}
+			if ( isset( $out['plans'][ $uid ] ) ) {
+				$out['skipped'][] = sprintf( 'plan %d: the same person has two plans, the second skipped', (int) $i + 1 );
+				continue;
+			}
+			$plan = array_intersect_key( $p, array_flip( self::PACK_PLAN_KEYS ) );
+			if ( isset( $plan['structure'] ) && ! in_array( $plan['structure'], self::STRUCTURES, true ) ) {
+				$out['skipped'][] = sprintf( 'plan %d: unknown structure, skipped', (int) $i + 1 );
+				continue;
+			}
+			if ( isset( $p['code'] ) ) {
+				$plan['code'] = strtoupper( trim( (string) $p['code'] ) );
+			}
+			$out['plans'][ $uid ] = $plan;
+		}
+		if ( isset( $file['piece_rates'] ) && is_array( $file['piece_rates'] ) ) {
+			$rates = [];
+			foreach ( $file['piece_rates'] as $r ) {
+				if ( is_array( $r ) && '' !== sanitize_key( (string) ( $r['item'] ?? '' ) ) ) {
+					$rates[ sanitize_key( (string) $r['item'] ) ] = [ 'rate' => $r['rate'] ?? 0, 'unit' => $r['unit'] ?? 'per_item' ];
+				}
+			}
+			$out['piece_rates'] = $rates;
+		}
+		if ( isset( $file['product_minimums'] ) && is_array( $file['product_minimums'] ) ) {
+			$rules = [];
+			foreach ( $file['product_minimums'] as $r ) {
+				if ( ! is_array( $r ) ) {
+					continue;
+				}
+				$ids = [];
+				foreach ( (array) ( $r['applies_to_parties'] ?? [] ) as $ref ) {
+					$id = self::pack_party( $ref, $roster );
+					if ( $id > 0 ) {
+						$ids[] = $id;
+					} else {
+						$out['skipped'][] = 'a product minimum names someone this site does not have; that person is left out of it';
+					}
+				}
+				$r['applies_to_parties'] = $ids;
+				$rules[] = $r;
+			}
+			$out['product_minimums'] = $rules;
+		}
+		if ( isset( $file['settings'] ) && is_array( $file['settings'] ) ) {
+			$allowed = array_flip( [ 'payability', 'pay_calendar', 'splits', 'attribution', 'fees', 'piece_rate_eligibility' ] );
+			$out['settings'] = array_intersect_key( $file['settings'], $allowed );
+		}
+		return $out;
+	}
+
+	public static function pack_preview( array $files ) {
+		$r    = self::pack_read( $files['compensation'] ?? null );
+		$rows = [];
+		$new  = 0;
+		foreach ( array_keys( $r['plans'] ) as $uid ) {
+			if ( '' === (string) get_user_meta( $uid, self::META_STRUCTURE, true ) ) {
+				$new++;
+			}
+		}
+		$rows[] = [ 'file' => 'compensation', 'path' => 'plans', 'from' => (string) count( self::all_plans() ), 'to' => sprintf( '%d plan(s): %d new, %d changed (amounts on each person\'s profile)', count( $r['plans'] ), $new, count( $r['plans'] ) - $new ) ];
+		if ( null !== $r['piece_rates'] ) {
+			$rows[] = [ 'file' => 'compensation', 'path' => 'piece_rates', 'from' => (string) count( self::piece_rates() ), 'to' => count( $r['piece_rates'] ) . ' item(s)' ];
+		}
+		if ( null !== $r['product_minimums'] ) {
+			$rows[] = [ 'file' => 'compensation', 'path' => 'product_minimums', 'from' => (string) count( self::product_minimums() ), 'to' => count( $r['product_minimums'] ) . ' rule(s)' ];
+		}
+		if ( null !== $r['settings'] ) {
+			$rows[] = [ 'file' => 'compensation', 'path' => 'settings', 'from' => '', 'to' => implode( ', ', array_keys( $r['settings'] ) ) ];
+		}
+		foreach ( array_slice( $r['skipped'], 0, 10 ) as $why ) {
+			$rows[] = [ 'file' => 'compensation', 'path' => 'plans.skipped', 'from' => '', 'to' => $why ];
+		}
+		return $rows;
+	}
+
+	public static function pack_apply( array $files, $slug = '' ) {
+		$r   = self::pack_read( $files['compensation'] ?? null );
+		$msg = [];
+		foreach ( $r['plans'] as $uid => $plan ) {
+			$code = $plan['code'] ?? null;
+			unset( $plan['code'] );
+			self::save_plan( (int) $uid, $plan );
+			if ( null !== $code && preg_match( '/^[A-Z]{2,4}$/', $code ) ) {
+				update_user_meta( (int) $uid, 'zdz_party_code', $code );
+			}
+		}
+		$msg[] = sprintf( 'compensation: %d plan(s) set', count( $r['plans'] ) );
+		if ( null !== $r['piece_rates'] ) {
+			self::save_piece_rates( $r['piece_rates'] );
+			$msg[] = sprintf( 'compensation: %d piece rate(s)', count( $r['piece_rates'] ) );
+		}
+		if ( null !== $r['product_minimums'] ) {
+			self::save_product_minimums( $r['product_minimums'] );
+			$msg[] = sprintf( 'compensation: %d product minimum(s)', count( $r['product_minimums'] ) );
+		}
+		if ( null !== $r['settings'] ) {
+			$cur = get_option( self::OPT_SETTINGS, [] );
+			update_option( self::OPT_SETTINGS, array_merge( is_array( $cur ) ? $cur : [], $r['settings'] ), false );
+			$msg[] = 'compensation: settings merged';
+		}
+		foreach ( $r['skipped'] as $why ) {
+			$msg[] = 'compensation: ' . $why;
+		}
+		self::$code_map = null;
+		return $msg;
+	}
+
+	/** Everything a compensation apply may change, kept in its own option (it can be large). */
+	public static function pack_snapshot() {
+		$people = [];
+		foreach ( (array) get_users( [ 'fields' => [ 'ID' ], 'number' => -1 ] ) as $u ) {
+			$row = [];
+			foreach ( self::PACK_META as $k ) {
+				$v = get_user_meta( (int) $u->ID, $k, true );
+				if ( '' !== $v && null !== $v && false !== $v ) {
+					$row[ $k ] = $v;
+				}
+			}
+			$people[ (int) $u->ID ] = $row;
+		}
+		update_option( self::PACK_SNAPSHOT, [
+			'people'   => $people,
+			'rates'    => get_option( self::OPT_PIECE_RATES, null ),
+			'minimums' => get_option( self::OPT_MINIMUMS, null ),
+			'settings' => get_option( self::OPT_SETTINGS, null ),
+		], false );
+		return [ 'kept' => self::PACK_SNAPSHOT, 'people' => count( $people ) ];
+	}
+
+	public static function pack_restore( $kept ) {
+		$snap = get_option( self::PACK_SNAPSHOT, null );
+		if ( ! is_array( $snap ) ) {
+			return;
+		}
+		foreach ( (array) ( $snap['people'] ?? [] ) as $uid => $row ) {
+			foreach ( self::PACK_META as $k ) {
+				if ( array_key_exists( $k, (array) $row ) ) {
+					update_user_meta( (int) $uid, $k, $row[ $k ] );
+				} else {
+					delete_user_meta( (int) $uid, $k );
+				}
+			}
+		}
+		foreach ( [ 'rates' => self::OPT_PIECE_RATES, 'minimums' => self::OPT_MINIMUMS, 'settings' => self::OPT_SETTINGS ] as $k => $opt ) {
+			if ( null === ( $snap[ $k ] ?? null ) ) {
+				delete_option( $opt );
+			} else {
+				update_option( $opt, $snap[ $k ], false );
+			}
+		}
+		self::$code_map = null;
 	}
 
 	/* ==================================================================
 	 * GLOBAL MECHANISM CONFIG  — safe Core defaults, tenant-overridable.
 	 *
 	 * These are NOT sensitive business data: they carry no company, person or
-	 * product name and no money — only the safe mechanism defaults the Playbook
-	 * (§12) endorses shipping. A tenant narrows/extends them via the settings
-	 * option or the mirrored filters; nobody may weaken the safety floor.
+	 * product name and no money — only safe mechanism defaults. A business
+	 * narrows/extends them via the settings option or the mirrored filters;
+	 * nobody may weaken the safety floor.
 	 * ================================================================== */
 
 	private static function settings(): array {
@@ -138,10 +389,9 @@ class ZDZ_Compensation {
 	/**
 	 * Payability gate. SAFETY FLOOR: commission is earned only on money that
 	 * actually changed hands, and the provider's own status filter is never
-	 * trusted (it has been observed to leak drafts). The two historical
-	 * implementations disagreed on tolerance (0.005 vs 0.01) and status set
-	 * (paid+partial vs paid-only); the crosswalk resolves it to 0.005 +
-	 * [paid, partial], declared ONCE here.
+	 * trusted (it has been observed to leak drafts). Tolerance 0.005 and the
+	 * status set [paid, partial] are declared ONCE here, so every consumer
+	 * agrees on what "paid" means.
 	 */
 	public static function payability(): array {
 		$s = self::settings()['payability'] ?? [];
@@ -210,10 +460,10 @@ class ZDZ_Compensation {
 
 	/**
 	 * The card-processing fee rate used for RECONCILIATION only (the actual fee
-	 * is read off the invoice line). Ships NULL — the historical "4%" lived in a
-	 * comment with no constant; a tenant declares its own expected rate.
+	 * is read off the invoice line). Ships NULL — a business declares its own
+	 * expected rate.
 	 *
-	 * @return float|null Fraction (e.g. 0.04), or null when not configured.
+	 * @return float|null Fraction (e.g. 0.03), or null when not configured.
 	 */
 	public static function card_fee_rate(): ?float {
 		$s = self::settings()['fees']['card_processing_expected_rate'] ?? null;
@@ -223,8 +473,8 @@ class ZDZ_Compensation {
 
 	/* ==================================================================
 	 * PIECE RATES  — [IDENTITY], SHIP EMPTY. Keyed by ITEM ID (not an enum
-	 * key) so counts and rates join on the same catalog identity — the
-	 * parity contract (crosswalk CN-09 / CP-20).
+	 * key) so counts and rates join on the same catalog identity (the parity
+	 * contract: a count and its rate can never drift apart).
 	 * ================================================================== */
 
 	/**
@@ -260,11 +510,22 @@ class ZDZ_Compensation {
 		return $all[ $item_id ] ?? null;
 	}
 
-	/** Eligibility rules for piece-rate pay (shop-only, exclusions, caps). All admin-set; safe empties. */
+	/** The piece-rate modes. `per_job` (Core default): a job pays only the person recorded on it. */
+	const PIECE_RATE_MODES = [ 'per_job', 'company_wide' ];
+
+	/**
+	 * Eligibility rules for piece-rate pay (shop-only, exclusions, caps). All admin-set; safe empties.
+	 *
+	 * `mode`: `per_job` pays a piece worker only for jobs recorded for that person (a job with
+	 * nobody recorded is a review item). `company_wide`, a setting a business chooses, also
+	 * gives a job with nobody recorded to the piece worker when exactly one is configured.
+	 * An unknown value reads as `per_job`.
+	 */
 	public static function piece_rate_eligibility(): array {
-		$s   = self::settings()['piece_rate_eligibility'] ?? [];
-		$out = [
-			'mode'                 => (string) ( $s['mode'] ?? 'company_wide' ),
+		$s    = self::settings()['piece_rate_eligibility'] ?? [];
+		$mode = (string) ( $s['mode'] ?? 'per_job' );
+		$out  = [
+			'mode'                 => in_array( $mode, self::PIECE_RATE_MODES, true ) ? $mode : 'per_job',
 			'require_shop'         => (bool) ( $s['require_shop'] ?? true ),
 			'exclude_subtypes'     => is_array( $s['exclude_subtypes'] ?? null ) ? array_values( array_map( 'sanitize_key', $s['exclude_subtypes'] ) ) : [],
 			'hardware_max_line'    => isset( $s['hardware_max_line'] ) ? (float) $s['hardware_max_line'] : null,
@@ -295,7 +556,7 @@ class ZDZ_Compensation {
 	/* ==================================================================
 	 * PRODUCT-SCOPED MINIMUM-COMMISSION RULES  — [IDENTITY], SHIP EMPTY.
 	 *
-	 * Makes configurable a product-line minimum (e.g. a $500 job of a given subtype
+	 * Generalises a product-line minimum (e.g. a $500 job of a given subtype
 	 * guarantees the product-percentage rep at least $100): a rule attached to a
 	 * product SUBTYPE, applied only to configured parties and percentage
 	 * structures. Names no product; ships with no rules.
@@ -566,7 +827,7 @@ class ZDZ_Compensation {
 	 * Resolve a salesperson short code to a configured plan, or null.
 	 *
 	 * The code comes from the party roster: ZDZ_Party publishes it under the key
-	 * `initials` (NOT `code`), matched CASE-INSENSITIVELY (Playbook §13). A
+	 * `initials` (NOT `code`), matched CASE-INSENSITIVELY. A
 	 * request-level cache avoids re-scanning parties for every invoice.
 	 */
 	public static function plan_by_code( string $code ): ?array {
@@ -597,7 +858,7 @@ class ZDZ_Compensation {
 
 	/**
 	 * A party's short code. Reads ZDZ_Party's published roster and takes the
-	 * `initials` key (§13). Falls back to the WP display name's initials-free
+	 * `initials` key. Falls back to the WP display name's initials-free
 	 * meta only if the roster has no entry. Never hardcodes a code.
 	 */
 	private static function party_code( int $party_id ): string {

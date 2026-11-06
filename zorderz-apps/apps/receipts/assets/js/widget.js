@@ -76,11 +76,11 @@
    *  drag / lightbox). One set is reviewed at a time. */
   var selectedSessionId = null;
 
-  /** S5-06 — MULTI-SET selection: the ids of every set INCLUDED in the receipt,
+  /** MULTI-SET selection: the ids of every set INCLUDED in the receipt,
    *  in display order. Two crews' capture sets from the same property can be
    *  combined; the generate payload is the included sets concatenated in this
    *  order, each in its own photo order. A blocked set (loc_status off_site) or
-   *  an already-used set (S5-08) can never be included. */
+   *  an already-used set can never be included. */
   var includedSetIds = [];
 
   /** v3.4.0 — per-photo exclusions within the chosen set: media_id -> true.
@@ -672,6 +672,8 @@
   // a secondary "or use photos you already captured" shortcut below the
   // uploader. We never surface anyone else's photos, and when the tech has none
   // we show only the uploader (no error noise -- uploading is the expected path).
+  var lastPhotoMatch = null; // the job the photo sets were last loaded for (Which house? reloads them)
+
   function loadPhotoSets(match) {
     var section = $('zrcpt-w-photoset');
     var statusEl = $('zrcpt-w-photoset-status');
@@ -687,7 +689,7 @@
     if (emptyEl) hide(emptyEl);
     mediaSessions = [];
     selectedSessionId = null;
-    includedSetIds = [];       // S5-06
+    includedSetIds = [];
     photoExcluded = {};
     photoOrder = {};   // v3.8.0
     setPickerExpanded = false; // v3.8.1
@@ -708,11 +710,18 @@
       fd.append('near_lat', match.customer_detail.gps_lat);
       fd.append('near_lng', match.customer_detail.gps_lng);
     }
-    // S5-08 — the current job's own invoice number, so its OWN receipt's photos
+    // The current job's own invoice number, so its OWN receipt's photos
     // are not locked as "used" (a redo keeps its photos).
     if (match && match.number) {
       fd.append('invoice_numbers', JSON.stringify([ String(match.number) ]));
     }
+    // Which house? The customer's address (already on this screen) lets the server place each photo against
+    // this house; only statuses come back, never a coordinate.
+    if (match && match.customer_detail && match.customer_detail.address) {
+      fd.append('address', String(match.customer_detail.address));
+    }
+    lastPhotoMatch = match;
+    if (window.ZRCPTHouses) { window.ZRCPTHouses.reset(); }
 
     ajaxPost('zrcpt_match_media', fd).then(function (res) {
       hide(statusEl);
@@ -727,9 +736,9 @@
       mediaSessions = data.sessions || [];
       photoExcluded = {};
       photoOrder = {};   // v3.8.0
-      includedSetIds = [];  // S5-06
+      includedSetIds = [];
 
-      // S5-08 — pre-exclude photos the server flagged as already-used, so the
+      // Pre-exclude photos the server flagged as already-used, so the
       // preview matches what will generate (the server re-enforces this at
       // generate regardless, so a manual re-include is still dropped safely).
       mediaSessions.forEach(function (s) {
@@ -777,7 +786,7 @@
     return 'Earlier set';
   }
 
-  /* S5-07/S5-08 — the categorical location / one-time-use hint the SERVER sends
+  /* The categorical location / one-time-use hint the SERVER sends
    * (never a coordinate). on_site is selectable; off_site is blocked; used means
    * every photo is already on another receipt. */
   function locBadge(s) {
@@ -913,7 +922,7 @@
     // the picker (setPickerExpanded) shows them all again; choosing any set
     // re-collapses.
     var activeSession = selectedSessionId ? findSession(selectedSessionId) : null;
-    // S5-06 — only collapse the picker when a SINGLE set is in play; when 2+
+    // Only collapse the picker when a SINGLE set is in play; when 2+
     // sets are combined the tech needs to see every included set at once.
     var collapsed = !!(activeSession && !setPickerExpanded && includedSetIds.length <= 1);
     var toRender = collapsed ? [ activeSession ] : sessions;
@@ -946,7 +955,7 @@
           (isIncl ? ' zrcpt-w-sess-included' : '') + (selectable ? '' : ' zrcpt-w-sess-blocked-card') +
           '" data-sid="' + esc(s.id) + '" role="button" tabindex="0">' +
         '<div class="zrcpt-w-sess-head">' +
-          // S5-06 — a checkbox controls INCLUSION (combine several sets); blocked/
+          // A checkbox controls INCLUSION (combine several sets); blocked/
           // used sets are disabled and can never be included.
           '<input type="checkbox" class="zrcpt-w-sess-cb" data-sid="' + esc(s.id) + '"' +
             (isIncl ? ' checked' : '') + (selectable ? '' : ' disabled') +
@@ -957,6 +966,7 @@
             '<span class="zrcpt-w-sess-date">' + esc(s.date_display) + ' · ' + s.photo_count + ' photo' + (s.photo_count === 1 ? '' : 's') +
               locBadge(s) + '</span>' +
             blockedNote +
+            (window.ZRCPTHouses ? window.ZRCPTHouses.setHtml(s) : '') +
           '</div>' +
         '</div>' +
         sessThumbsHTML(s, isActive) +
@@ -975,6 +985,9 @@
     }
 
     el.innerHTML = html;
+    if (window.ZRCPTHouses) {
+      window.ZRCPTHouses.wire(el, function () { if (lastPhotoMatch) { loadPhotoSets(lastPhotoMatch); } });
+    }
 
     // v3.8.1 — expander wiring.
     var expandBtn = $('zrcpt-w-sess-expand');
@@ -992,7 +1005,7 @@
       });
     }
 
-    // S5-06 — inclusion checkboxes: toggle a set in/out of the receipt without
+    // Inclusion checkboxes: toggle a set in/out of the receipt without
     // opening it for review. Blocked/used sets are disabled and never toggle.
     el.querySelectorAll('.zrcpt-w-sess-cb').forEach(function (cb) {
       cb.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -1310,9 +1323,9 @@
       : '✓ Included — tap to leave out';
   }
 
-  /* S5-06/07/08 — a set may be INCLUDED in the receipt only when its server-side
+  /* A set may be INCLUDED in the receipt only when its server-side
    * classification says so: an off-site set (loc_status) or a fully-used set
-   * (S5-08) arrives with selectable === false and can never be combined. */
+   * arrives with selectable === false and can never be combined. */
   function setIsSelectable(s) {
     return !s || (s.selectable !== false);
   }
@@ -1346,7 +1359,7 @@
     selectedSessionId = sessionId;
     setPickerExpanded = false;   // v3.8.1 — choosing a set collapses the rest
 
-    // S5-06 — opening a SELECTABLE set for review also includes it (the common
+    // Opening a SELECTABLE set for review also includes it (the common
     // single-set flow: tap a set → reviewed AND included, exactly as before). A
     // blocked/used set opens for review so the tech can see WHY, but is not
     // included.
@@ -1397,7 +1410,7 @@
     return null;
   }
 
-  /* S5-06 — the INCLUDED sets, in display order (each set's photos in its own
+  /* The INCLUDED sets, in display order (each set's photos in its own
    * chosen order). A blocked/used set is never in includedSetIds, so it can
    * never contribute a photo even if it is the one open for review. */
   function includedSessions() {
@@ -1996,6 +2009,7 @@
       return { url: p.url, id: (p.attachment_id || 0), library: true };
     }));
     fd.append('photo_data', JSON.stringify(photoPayload));
+    if (window.ZRCPTHouses) { fd.append('vouched_media_ids', JSON.stringify(window.ZRCPTHouses.vouched())); }
 
     // Include lookup data if available. v3.3.0: when combining several invoices
     // into one receipt, merge every selected invoice's line items, and send the
@@ -3419,7 +3433,7 @@
     init();
   } else {
     // 2. Wait for theme to inject widget HTML
-    document.addEventListener('ts_widgets_rendered', init, { once: true });
+    document.addEventListener('zdz_widgets_rendered', init, { once: true });
     // 3. Fallback safety net
     document.addEventListener('DOMContentLoaded', function () {
       setTimeout(function () { if ($('zrcpt-widget')) init(); }, 500);

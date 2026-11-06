@@ -1,0 +1,246 @@
+{
+  "business_days": {
+    "excluded_weekdays": [
+      7
+    ],
+    "observed": "also",
+    "holidays": [
+      {
+        "name": "New Year's Day",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "name": "Washington's Birthday",
+        "month": 2,
+        "weekday": 1,
+        "nth": 3
+      },
+      {
+        "name": "Memorial Day",
+        "month": 5,
+        "weekday": 1,
+        "nth": -1
+      },
+      {
+        "name": "Independence Day",
+        "month": 7,
+        "day": 4
+      },
+      {
+        "name": "Labor Day",
+        "month": 9,
+        "weekday": 1,
+        "nth": 1
+      },
+      {
+        "name": "Columbus Day",
+        "month": 10,
+        "weekday": 1,
+        "nth": 2
+      },
+      {
+        "name": "Veterans' Day",
+        "month": 11,
+        "day": 11
+      },
+      {
+        "name": "Thanksgiving Day",
+        "month": 11,
+        "weekday": 4,
+        "nth": 4
+      },
+      {
+        "name": "Christmas Day",
+        "month": 12,
+        "day": 25
+      }
+    ],
+    "note": "Any calendar day except Sunday and the nine business holidays the section names. A holiday on a Saturday also takes the Friday before out of the count, and one on a Sunday the Monday after, which never gives an earlier deadline. The federal pack's own count runs too, and the later of the two deadlines is the one used.",
+    "citation": "Civ. Code 1689.5(e)",
+    "effective_from": "2021-01-01",
+    "last_checked": "2026-11-05"
+  },
+  "windows": [
+    {
+      "id": "standard",
+      "days": 3,
+      "word": "three",
+      "ordinal": "third",
+      "title": "Three-Day",
+      "when": {},
+      "citation": "Bus. & Prof. Code 7159(e)(6)(B)(i); Civ. Code 1689.6, 1689.7",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "senior",
+      "days": 5,
+      "word": "five",
+      "ordinal": "fifth",
+      "title": "Five-Day",
+      "when": {
+        "senior": "yes"
+      },
+      "citation": "Bus. & Prof. Code 7159(e)(6)(A), (B)(ii); Civ. Code 1689.5(f), 1689.6",
+      "effective_from": "2021-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "disaster",
+      "days": 7,
+      "word": "seven",
+      "ordinal": "seventh",
+      "title": "Seven-Day",
+      "when": {
+        "disaster": "yes"
+      },
+      "citation": "Bus. & Prof. Code 7159(e)(7); Civ. Code 1689.6, 1689.7",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    }
+  ],
+  "questions": [
+    {
+      "id": "senior",
+      "asked_of": "buyer",
+      "required": true,
+      "label": "Is any buyer 65 or older?",
+      "why": "California gives a buyer who is 65 or older five business days to cancel instead of three, so the answer decides which notice your agreement includes.",
+      "yes": "Yes. A buyer is 65 or older.",
+      "no": "No. No buyer is 65 or older.",
+      "citation": "Civ. Code 1689.5(f); Bus. & Prof. Code 7159(e)(6)(A)",
+      "effective_from": "2021-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "disaster",
+      "asked_of": "staff",
+      "required": true,
+      "label": "Is this work to repair or restore a home damaged by a sudden or catastrophic event for which a state of emergency or a local emergency was declared?",
+      "why": "Such a contract gets the Seven-Day Right to Cancel.",
+      "yes": "Yes, disaster repair",
+      "no": "No",
+      "citation": "Bus. & Prof. Code 7159(e)(7)(A)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    }
+  ],
+  "count_from": {
+    "value": "copy_received",
+    "note": "The period runs to midnight of the last business day after the buyer received a signed and dated copy of the contract that includes the notice.",
+    "citation": "Bus. & Prof. Code 7159(e)(6)(B)(i)",
+    "effective_from": "2026-01-01",
+    "last_checked": "2026-11-05"
+  },
+  "refund": {
+    "days": 10,
+    "unit": "days",
+    "citation": "Bus. & Prof. Code 7159(e)(6)(B)(i); Civ. Code 1689.10",
+    "effective_from": "2026-01-01",
+    "last_checked": "2026-11-05"
+  },
+  "deposit_cap": {
+    "fixed_cents": 100000,
+    "percent": 10,
+    "base": "contract_before_tax",
+    "whole_dollars": true,
+    "note": "The down payment may not exceed $1,000 or 10 percent of the contract price, whichever is less. The section doesn't define what the contract price includes; measuring 10 percent before tax gives the smaller limit, so the app never allows more than the law does.",
+    "citation": "Bus. & Prof. Code 7159(d)(8); 7159.5(a)(3)",
+    "effective_from": "2026-01-01",
+    "last_checked": "2026-11-05"
+  },
+  "language": {
+    "rule": "The notices are in the same language as the oral sales presentation. A contract negotiated primarily in Spanish, Chinese, Tagalog, Vietnamese or Korean needs a translation in that language before it is signed.",
+    "citation": "Bus. & Prof. Code 7159(e)(6)(C)(iv), (e)(7)(B)(iv); Civ. Code 1632",
+    "effective_from": "2026-01-01",
+    "last_checked": "2026-11-05"
+  },
+  "notices": {
+    "statement": {
+      "file": "right-to-cancel.html",
+      "what": "The Three-, Five- or Seven-Day Right to Cancel, in at least 12-point bold, next to the space where the buyer signs to acknowledge receiving it.",
+      "citation": "Bus. & Prof. Code 7159(e)(6)(A)-(C), (e)(7)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    "cancellation_form": {
+      "file": "cancellation-form.html",
+      "what": "The Notice of Cancellation form, completed, in duplicate and easily detachable.",
+      "citation": "Bus. & Prof. Code 7159(e)(6)(C)(vi); Civ. Code 1689.7",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    "first_page": {
+      "file": "first-page.html",
+      "what": "On the first page: the date the buyer signed; where the Notice of Cancellation may be sent (address and email), preceded by a statement saying so; and a phone number for help with the form.",
+      "citation": "Bus. & Prof. Code 7159(c)(3)(B)(i)-(iii)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    "deposit": {
+      "file": "down-payment.html",
+      "what": "The down payment notice, in at least 12-point bold.",
+      "citation": "Bus. & Prof. Code 7159(d)(8)(C)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    }
+  },
+  "replaces_notices": {
+    "slots": [
+      "statement",
+      "cancellation_form"
+    ],
+    "note": "California's notice and form give the buyer at least the federal rights and a longer period for some buyers, so they are printed in place of the federal wording. Have your lawyer confirm whether your agreement must also carry the federal text.",
+    "citation": "16 CFR 429.2",
+    "effective_from": "2015-03-13",
+    "last_checked": "2026-11-05"
+  },
+  "applies": {
+    "rule": "A home improvement contract whose aggregate contract price is more than $500.",
+    "thresholds": {
+      "contract_over_cents": 50000
+    },
+    "citation": "Bus. & Prof. Code 7159(b)",
+    "effective_from": "2026-01-01",
+    "last_checked": "2026-11-05"
+  },
+  "exemptions": null,
+  "flags": [
+    {
+      "id": "disaster_contract_void",
+      "text": "A contract for disaster repairs signed within the days the code sets after the disaster may be void unless the buyer asked for the visit at your place of business. Ask your lawyer before taking such work.",
+      "citation": "Civ. Code 1689.14",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "progress_payments",
+      "text": "No progress payment may be more than the value of the work done or the materials delivered.",
+      "citation": "Bus. & Prof. Code 7159(d)(9)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "change_orders",
+      "text": "Every change order is in writing and signed by both of you before the work it covers starts.",
+      "citation": "Bus. & Prof. Code 7159(c)(5), (d)(13)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "board_complaint",
+      "text": "A buyer who didn't get the Notice of Cancellation may complain to the Contractors State License Board.",
+      "citation": "Stats. 2025, Ch. 348 (AB 1327)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "electronic_signing",
+      "text": "Electronic signing follows the consumer consent of 15 U.S.C. 7001(c). Have your lawyer confirm that this kind of contract may be signed electronically in this state.",
+      "citation": "15 U.S.C. 7001(c); Civ. Code 1633.3",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    }
+  ]
+}

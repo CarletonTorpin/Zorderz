@@ -134,6 +134,10 @@
 	color: var(--sys-brand, #3B82F6);
 	outline: none;
 }
+/* The push bell, filled while this device gets Messages (ZDZPush). Fill follows the button's own ink. */
+#zim-w-push-btn.is-on { color: var(--sys-brand, #3B82F6); }
+#zim-w-push-btn.is-on svg path:first-child { fill: currentColor; }
+[data-theme="sunlight"] #zim-w-push-btn.is-on { color: var(--sys-text, #000); } /* a token, never a bare colour */
 .zim-w-icon-btn--sm {
 	width: 32px; height: 32px; min-height: 32px;
 	font-size: 17px;
@@ -156,7 +160,7 @@
 	align-items: center;
 	justify-content: space-between;
 	padding: 8px 16px 6px;
-	font-size: 12px;
+	font-size: var(--zdz-type-secondary, 12px);
 	font-weight: 600;
 	color: var(--sys-text-ter, #64748B);
 	text-transform: uppercase;
@@ -336,7 +340,7 @@
 	animation: zim-w-loading-spin 0.9s linear infinite;
 }
 .zim-w-loading__label {
-	font-size: 13px;
+	font-size: var(--zdz-type-secondary, 13px);
 	font-weight: 500;
 }
 @keyframes zim-w-loading-spin {
@@ -358,7 +362,7 @@
 /* End-of-history marker — shown when there are no more older messages. */
 .zim-w-end-of-history {
 	align-self: center;
-	font-size: 11px;
+	font-size: var(--zdz-type-meta, 11px);
 	font-weight: 500;
 	color: var(--sys-text-ter, #64748B);
 	text-align: center;
@@ -411,7 +415,7 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 13px;
+	font-size: var(--zdz-type-meta, 13px);
 	font-weight: 700;
 	margin-top: 4px;
 }
@@ -456,7 +460,7 @@
    timestamping every bubble. */
 .zim-w-time-sep {
 	align-self: center;
-	font-size: 11px;
+	font-size: var(--zdz-type-meta, 11px);
 	font-weight: 600;
 	color: var(--sys-text-ter, #64748B);
 	text-align: center;
@@ -472,7 +476,7 @@
    chrome. Old: 12px/600/text-sec (~4.3:1 dark). New: 13px/700/text
    (~12:1 dark). The message body at 17px/400 still dominates visually. */
 .zim-w-msg-name {
-	font-size: 13px;
+	font-size: var(--zdz-type-secondary, 13px);
 	font-weight: 700;
 	color: var(--sys-text, #0F172A);
 	margin-bottom: 2px;
@@ -617,7 +621,8 @@
 	margin: 0;
 }
 .zim-w-msg-text p + p {
-	margin-top: 6px;
+	/* A blank line between paragraphs reads as one (6px looked like a plain line break). */
+	margin-top: 0.85em;
 }
 
 /* ── Line breaks — no extra spacing needed, but ensure
@@ -645,7 +650,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	font-size: 13px;
+	font-size: var(--zdz-type-meta, 13px);
 	color: var(--sys-text-sec, #64748B);
 	padding: 2px 4px;
 	opacity: 0;
@@ -662,7 +667,7 @@
 }
 .zim-w-msg-actions { margin-left: auto; }
 .zim-w-msg-actions button {
-	font-size: 12px;
+	font-size: var(--zdz-type-meta, 12px);
 	color: var(--sys-text-sec, #64748B);
 	padding: 4px 8px;
 	border-radius: 4px;
@@ -700,7 +705,7 @@
 	background: rgba(148,163,184,0.10);
 	border: 1px solid var(--sys-border, rgba(148,163,184,0.18));
 	border-radius: 10px;
-	font-size: 13px;
+	font-size: var(--zdz-type-secondary, 13px);
 	max-width: 280px;
 	text-decoration: none;
 	color: inherit;
@@ -711,7 +716,7 @@
 }
 .zim-w-att-icon { font-size: 16px; display: inline-flex; align-items: center; color: var(--sys-text-sec, #475569); }
 .zim-w-att-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.zim-w-att-size { color: var(--sys-text-ter, #64748B); font-size: 11px; }
+.zim-w-att-size { color: var(--sys-text-ter, #64748B); font-size: var(--zdz-type-meta, 11px); }
 
 /* Preview chips — same approach, use surface-raised + border tokens */
 .zim-w-preview-chip {
@@ -723,7 +728,7 @@
 	background: var(--sys-surface-raised, rgba(0,0,0,0.06));
 	border: 1px solid var(--sys-border, transparent);
 	border-radius: 10px;
-	font-size: 13px;
+	font-size: var(--zdz-type-secondary, 13px);
 	cursor: pointer;
 	max-width: 280px;
 	text-decoration: none;
@@ -735,7 +740,7 @@
 }
 .zim-w-preview-chip .zim-w-preview-number { font-weight: 600; color: var(--sys-brand, #3B82F6); }
 .zim-w-preview-chip.is-loading { opacity: .6; }
-.zim-w-preview-chip .zim-w-preview-meta { font-size: 11px; color: var(--sys-text-sec, #475569); }
+.zim-w-preview-chip .zim-w-preview-meta { font-size: var(--zdz-type-meta, 11px); color: var(--sys-text-sec, #475569); }
 /* v1.0.20: Vault doc chips — amber accent to distinguish from blue FreshBooks chips */
 .zim-w-vault-chip {
   display: flex;
@@ -747,7 +752,7 @@
   border: 1px solid var(--sys-border, transparent);
   border-left: 3px solid var(--sys-warning, #D97706);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--zdz-type-secondary, 13px);
   cursor: pointer;
   max-width: 340px;
   text-decoration: none;
@@ -761,13 +766,13 @@
 .zim-w-vault-chip .zim-w-preview-number {
   font-weight: 600;
   color: var(--sys-warning, #D97706);
-  font-size: 13px;
+  font-size: var(--zdz-type-secondary, 13px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .zim-w-vault-chip .zim-w-preview-meta {
-  font-size: 11px;
+  font-size: var(--zdz-type-meta, 11px);
   color: var(--sys-text-sec, #475569);
   line-height: 1.3;
   display: -webkit-box;
@@ -784,7 +789,7 @@
 	justify-content: center;
 	width: 22px; height: 22px;
 	border-radius: 50%;
-	font-size: 13px;
+	font-size: var(--zdz-type-secondary, 13px);
 	font-style: normal;
 	color: var(--sys-text-ter, #64748B);
 	background: var(--sys-surface-subtle, rgba(0,0,0,0.04));
@@ -826,7 +831,7 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	font-size: 13px;
+	font-size: var(--zdz-type-secondary, 13px);
 	line-height: 1.35;
 	color: var(--sys-text-sec, #64748B);
 	text-align: center;
@@ -888,7 +893,7 @@
 	background: var(--sys-surface, #F8FAFC);
 	border: 1px solid var(--sys-border, #E2E8F0);
 	border-radius: 10px;
-	font-size: 12px;
+	font-size: var(--zdz-type-secondary, 12px);
 	max-width: 240px;
 	overflow: hidden;
 }
@@ -1017,7 +1022,7 @@
 	color: var(--sys-brand, #3B82F6);
 }
 .zim-w-mention-pop-item .zim-w-mention-login {
-	font-size: 12px;
+	font-size: var(--zdz-type-meta, 12px);
 	color: var(--sys-text-ter, #64748B);
 	margin-left: 6px;
 }
@@ -1083,12 +1088,12 @@
 	grid-template-columns: auto 1fr;
 	gap: 6px 14px;
 	margin: 8px 0 12px;
-	font-size: 14px;
+	font-size: var(--zdz-type-secondary, 14px);
 	line-height: 1.5;
 }
 .zim-w-overlay-body dt {
 	color: var(--sys-text-ter, #64748B);
-	font-size: 11px;
+	font-size: var(--zdz-type-meta, 11px);
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
@@ -1097,7 +1102,7 @@
 .zim-w-overlay-body dd {
 	color: var(--sys-text, #0F172A);
 	margin: 0;
-	font-size: 14px;
+	font-size: var(--zdz-type-secondary, 14px);
 	line-height: 1.5;
 }
 .zim-w-overlay-body > p > a,
@@ -1110,7 +1115,7 @@
 	color: var(--sys-text-brand, #FFFFFF);
 	border-radius: var(--ref-radius-sm, 8px);
 	font-weight: 600;
-	font-size: 14px;
+	font-size: var(--zdz-type-secondary, 14px);
 	text-decoration: none;
 	transition: background var(--ref-dur-fast, 150ms) var(--ref-ease);
 }
@@ -1259,7 +1264,7 @@
 		min-height: 360px;
 	}
 	.zim-w--inline .zim-w-main-title {
-		font-size: 14px;
+		font-size: var(--zdz-type-title, 14px);
 		max-width: 50vw;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1288,7 +1293,7 @@
 	/* Desktop font bumps for dashboard tile */
 	.zim-w--inline .zim-w-msg-bubble { font-size: 18px; }
 	.zim-w--inline .zim-w-msg-name { font-size: 15px; }
-	.zim-w--inline .zim-w-msg-meta { font-size: 14px; }
+	.zim-w--inline .zim-w-msg-meta { font-size: var(--zdz-type-meta, 14px); }
 	.zim-w--inline .zim-w-list li .zim-w-label { font-size: 18px; }
 	.zim-w--inline .zim-w-section-hdr { font-size: 15px; }
 	.zim-w--inline .zim-w-compose-input,
@@ -1337,13 +1342,13 @@
 /* Font bumps for readability in embed mode.
    v1.0.12 — larger bubble text and compose input for easier reading. */
 .zim-w--embed .zim-w-msg-text { font-size: 17px; line-height: 1.5; }
-.zim-w--embed .zim-w-msg-name { font-size: 14px; }
-.zim-w--embed .zim-w-msg-meta { font-size: 12px; }
+.zim-w--embed .zim-w-msg-name { font-size: var(--zdz-type-secondary, 14px); }
+.zim-w--embed .zim-w-msg-meta { font-size: var(--zdz-type-meta, 12px); }
 .zim-w--embed .zim-w-input textarea,
 .zim-w--embed .zim-w-input .zim-w-input-inner { font-size: 17px; }
 /* Sidebar text a little larger too — list rows should feel scannable */
 .zim-w--embed .zim-w-list li { font-size: 16px; padding: 12px 16px; min-height: 48px; }
-.zim-w--embed .zim-w-section-hdr { font-size: 13px; padding: 10px 16px 6px; }
+.zim-w--embed .zim-w-section-hdr { font-size: var(--zdz-type-secondary, 13px); padding: 10px 16px 6px; }
 .zim-w--embed .zim-w-logo { font-size: 19px; }
 /* Wider message bubbles — up to 85% at narrow widths, 70% at wide */
 .zim-w--embed .zim-w-msg { max-width: 85%; }
@@ -1518,15 +1523,15 @@
 .zim-w { font-size: 17px; }
 .zim-w-main-title { font-size: var(--ref-font-lg, 20px); }
 .zim-w-msg-bubble { font-size: 17px; line-height: 1.45; }
-.zim-w-msg-name { font-size: 14px; }
-.zim-w-msg-meta { font-size: 13px; }
-.zim-w-msg-avatar { font-size: 13px; }
-.zim-w-time-sep { font-size: 13px; }
-.zim-w-end-of-history { font-size: 13px; }
+.zim-w-msg-name { font-size: var(--zdz-type-secondary, 14px); }
+.zim-w-msg-meta { font-size: var(--zdz-type-meta, 13px); }
+.zim-w-msg-avatar { font-size: var(--zdz-type-meta, 13px); }
+.zim-w-time-sep { font-size: var(--zdz-type-meta, 13px); }
+.zim-w-end-of-history { font-size: var(--zdz-type-meta, 13px); }
 .zim-w-empty { font-size: 16px; }
 .zim-w-loading__label { font-size: 15px; }
 .zim-w-list li .zim-w-label { font-size: 17px; }
-.zim-w-section-hdr { font-size: 14px; }
+.zim-w-section-hdr { font-size: var(--zdz-type-secondary, 14px); }
 .zim-w-compose-input, .zim-w-compose-input textarea {
 	font-size: 17px !important;
 }
@@ -1541,7 +1546,7 @@
 	border: 1px solid var(--sys-border, #334155);
 	background: transparent;
 	color: var(--sys-text-sec, #94A3B8);
-	font-size: 13px;
+	font-size: var(--zdz-type-meta, 13px);
 	font-weight: 600;
 	cursor: pointer;
 	white-space: nowrap;
@@ -1623,7 +1628,7 @@
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	font-size: 14px;
+	font-size: var(--zdz-type-secondary, 14px);
 	font-weight: 600;
 	border-radius: 10px;
 	overflow: hidden;
@@ -1715,3 +1720,256 @@
 	color: var(--sys-text-sec);
 }
 .zim-w-msg-text .zim-video-embed__title { flex: 1 1 auto; line-height: 1.35; }
+
+/* ── Shared-media gallery cards + viewer ───────────────────────────────── */
+.zim-w-mshare{display:block;margin:6px 0;padding:10px;border:1px solid rgba(127,127,127,.28);border-radius:12px;background:rgba(127,127,127,.06);max-width:340px}
+.zim-w-mshare.is-loading{color:rgba(127,127,127,.9);font-size: var(--zdz-type-secondary, 13px)}
+.zim-w-mshare-head{font-weight:600;font-size: var(--zdz-type-secondary, 13px);margin-bottom:4px}
+.zim-w-mshare-note{font-size: var(--zdz-type-secondary, 13px);opacity:.85;margin:2px 0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.zim-w-mshare-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.zim-w-mshare-cell{position:relative;padding:0;border:0;background:rgba(127,127,127,.12);border-radius:8px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}
+.zim-w-mshare-cell img{width:100%;height:100%;object-fit:cover;display:block}
+.zim-w-mshare-cell--broken{display:flex;align-items:center;justify-content:center}
+.zim-w-mshare-cell--broken img{display:none}
+.zim-w-mshare-cell--broken::after{content:"\26A0";opacity:.6}
+.zim-w-mshare-play{position:absolute;right:4px;bottom:4px;font-size: var(--zdz-type-meta, 11px);line-height:1;color:#fff;background:rgba(0,0,0,.55);border-radius:50%;padding:4px 5px}
+.zim-w-mshare-foot{margin-top:8px}
+.zim-w-mshare-revoke{font-size: var(--zdz-type-meta, 12px);padding:4px 10px;border-radius:999px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;cursor:pointer}
+.zim-w-mshare-revoke:hover{background:rgba(127,127,127,.14)}
+.zim-w-mshare-revoke:disabled{opacity:.6;cursor:default}
+
+.zim-w-mviewer{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center}
+.zim-w-mviewer-stage{max-width:96vw;max-height:82vh;display:flex;align-items:center;justify-content:center;color:#eee;font-size: var(--zdz-type-secondary, 14px);text-align:center;padding:0 8px}
+.zim-w-mviewer-media{max-width:96vw;max-height:82vh;object-fit:contain;border-radius:6px}
+.zim-w-mviewer-close{position:absolute;top:12px;right:14px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:20px;cursor:pointer}
+.zim-w-mviewer-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border:0;background:rgba(255,255,255,.10);color:#fff;font-size:30px;line-height:1;cursor:pointer;border-radius:8px}
+.zim-w-mviewer-prev{left:10px}
+.zim-w-mviewer-next{right:10px}
+.zim-w-mviewer-nav:hover,.zim-w-mviewer-close:hover{background:rgba(255,255,255,.22)}
+.zim-w-mviewer-bar{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:12px;justify-content:center;padding:12px;color:#eee;font-size: var(--zdz-type-meta, 13px);background:linear-gradient(to top,rgba(0,0,0,.55),transparent)}
+.zim-w-mviewer-play{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:999px;padding:5px 12px;font-size: var(--zdz-type-meta, 12px);cursor:pointer}
+.zim-w-mviewer-play.is-playing{background:rgba(255,255,255,.16)}
+@media (max-width:480px){.zim-w-mshare{max-width:100%}.zim-w-mviewer-nav{width:38px;height:52px;font-size:24px}}
+
+
+/* ── Edit in place, a multi-line box in the message ── */
+.zim-w-msg.is-editing .zim-w-msg-bubble { min-width: min(92%, 520px); }
+.zim-w-edit { display: flex; flex-direction: column; gap: 8px; }
+.zim-w-edit-input {
+	width: 100%;
+	box-sizing: border-box;
+	min-height: 88px;
+	resize: vertical;
+	font: inherit;
+	line-height: 1.45;
+	padding: 10px 12px;
+	border-radius: var(--ref-radius-md, 12px);
+	border: 1px solid var(--sys-border, #E2E8F0);
+	background: var(--sys-bg, #FFFFFF);
+	color: var(--sys-text, #0F172A);
+}
+.zim-w-edit-error { font-size: var(--zdz-type-secondary, 13px); color: var(--sys-error, #B91C1C); }
+.zim-w-edit-row { display: flex; justify-content: flex-end; gap: 8px; }
+.zim-w-edit-row button {
+	min-height: 44px;
+	padding: 0 16px;
+	border-radius: var(--ref-radius-md, 12px);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	border: 1px solid var(--sys-border, #E2E8F0);
+	background: var(--sys-surface, #F8FAFC);
+	color: var(--sys-text, #0F172A);
+}
+.zim-w-edit-row .zim-w-edit-save {
+	background: var(--sys-brand, #2563EB);
+	border-color: var(--sys-brand, #2563EB);
+	color: var(--sys-on-brand, #FFFFFF);
+}
+.zim-w-edit-row button:disabled { opacity: 0.6; cursor: default; }
+
+/* ── Estimates and invoices in a message ── */
+/* The composer's "Share #1234 with Sam (this document only)" line. */
+.zim-w-share-line {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 44px;
+	padding: 2px 4px 4px;
+	font-size: var(--zdz-type-secondary, 14px);
+	color: var(--sys-text-sec, #475569);
+	cursor: pointer;
+}
+.zim-w-share-line[hidden] { display: none; }
+.zim-w-share-check { width: 20px; height: 20px; margin: 0; accent-color: var(--sys-brand, #2563EB); flex: none; }
+.zim-w-composer-error { margin: 0 4px 6px; font-size: var(--zdz-type-secondary, 14px); color: var(--sys-error, #B91C1C); }
+.zim-w-composer-error[hidden] { display: none; }
+/* The chip: who may not open it is told so before tapping. */
+.zim-w-preview-chip.is-denied .zim-w-preview-meta { font-style: italic; }
+/* The panel widens for the paper; ZDZ.ui.paper reflows to whatever width it gets. */
+.zim-w-overlay-card--side.is-paper { max-width: 880px; }
+.zim-w-paper-msg { margin: 8px 0 12px; font-size: 15px; line-height: 1.45; color: var(--sys-text, #0F172A); }
+.zim-w-paper-note { margin: 0 0 8px; font-size: var(--zdz-type-secondary, 14px); color: var(--sys-text-sec, #475569); }
+.zim-w-share-box {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border-radius: var(--ref-radius-md, 12px);
+	background: var(--sys-surface, #F8FAFC);
+	border: 1px solid var(--sys-border, #E2E8F0);
+}
+.zim-w-share-box[hidden] { display: none; }
+.zim-w-share-box p { margin: 0; flex: 1 1 220px; font-size: var(--zdz-type-secondary, 14px); color: var(--sys-text, #0F172A); }
+.zim-w-share-box .zim-w-share-hint { flex-basis: 100%; color: var(--sys-text-sec, #475569); font-size: var(--zdz-type-secondary, 13px); }
+.zim-w-share-box .zim-w-share-error { flex-basis: 100%; color: var(--sys-error, #B91C1C); }
+.zim-w-share-box .zim-w-share-error:empty { display: none; }
+/* Without the theme's paper (an older theme): the same facts as plain text. */
+.zim-w-paper-plain { display: flex; flex-direction: column; gap: 6px; font-size: var(--zdz-type-secondary, 14px); color: var(--sys-text, #0F172A); }
+.zim-w-paper-plain > div { white-space: pre-line; overflow-wrap: anywhere; }
+.zim-w-paper-plain-head { font-weight: 700; font-size: 16px; }
+.zim-w-paper-plain-line { padding: 6px 0; border-top: 1px solid var(--sys-border, #E2E8F0); }
+.zim-w-paper-plain-total { font-weight: 700; text-align: right; }
+
+/* ==========================================================================================================
+   LOOK: Messages reads like the rest of the app.
+     - the theme's type roles (--zdz-type-*): rows and messages at the body size, names and section labels at the
+       secondary size, times at the meta size; nothing under 14px;
+     - section labels drawn like the app's own (.section-label: uppercase, letter-spaced, semibold);
+     - the same bubble as the chat's: 18px corners, a 6px tail corner, 10px 16px padding, line height 1.45; theirs
+       on the app's surface with a hairline border, mine on the brand colour;
+     - times in --sys-text-sec (AA on every surface), the header title at the title role, "Choose a conversation"
+       as the app's empty state;
+     - the compact one-thread view the chat docks under its answer (.zim-w--compact, ?zim_compact=1).
+   Selectors start at #zim-widget so this block wins over the older inline / embed / media-query rules without
+   !important. Theme tokens only; each tinted background with its pair.
+   ========================================================================================================== */
+#zim-widget {
+  --zim-bubble-radius: 18px;
+  --zim-bubble-tail: 6px;
+  --zim-bubble-pad-y: 10px;
+  --zim-bubble-pad-x: 16px;
+  font-family: inherit;
+  font-size: var(--zdz-type-body, 20px);
+  line-height: var(--zdz-type-lh-body, 1.45);
+}
+body.zim-fullpage { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
+/* the sidebar: the app's list rows and section labels */
+#zim-widget .zim-w-logo { font-size: var(--zdz-type-title, 22px); font-weight: var(--sys-font-wt-b, 700); letter-spacing: -0.01em; }
+#zim-widget .zim-w-section-hdr {
+  font-size: var(--zdz-type-secondary, 18px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  color: var(--sys-text-ter, #64748B);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+#zim-widget .zim-w-list li {
+  font-size: var(--zdz-type-body, 20px);
+  line-height: var(--zdz-type-lh-tight, 1.2);
+  min-height: 52px;
+  padding: 12px 16px;
+}
+#zim-widget .zim-w-list li .zim-w-label { font-size: inherit; }
+#zim-widget .zim-w-list li:nth-child(even):not(.zim-w-active):not(:hover) { background: transparent; }
+#zim-widget .zim-w-list li .zim-w-badge {
+  font-size: 14px;            /* the floor: a count in a pill (the roles start at 16px) */
+  line-height: 20px;
+  min-width: 24px;
+  padding: 1px 8px;
+  color: var(--sys-text-inv, #FFFFFF);
+}
+
+/* the header: the app's page title */
+#zim-widget .zim-w-main-title {
+  font-size: var(--zdz-type-title, 22px);
+  font-weight: var(--sys-font-wt-b, 700);
+  line-height: var(--zdz-type-lh-tight, 1.2);
+  letter-spacing: -0.01em;
+}
+#zim-widget .zim-w-back-btn { font-size: var(--zdz-type-secondary, 18px); }
+
+/* nothing chosen yet: the app's empty state */
+#zim-widget .zim-w-empty {
+  font-size: var(--zdz-type-body, 20px);
+  color: var(--sys-text-sec, #475569);
+  max-width: 24ch;
+  line-height: var(--zdz-type-lh-body, 1.45);
+}
+#zim-widget .zim-w-empty::before {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 12px;
+  background-color: var(--sys-text-ter, #64748B);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z'/></svg>") center / contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z'/></svg>") center / contain no-repeat;
+}
+
+/* messages: the chat's bubble */
+#zim-widget .zim-w-messages { gap: 4px; padding: 14px 16px; }
+#zim-widget .zim-w-msg-bubble {
+  font-size: var(--zdz-type-body, 20px);
+  padding: var(--zim-bubble-pad-y) var(--zim-bubble-pad-x);
+  border-radius: var(--zim-bubble-radius);
+}
+#zim-widget .zim-w-msg-text { font-size: var(--zdz-type-body, 20px); line-height: var(--zdz-type-lh-body, 1.45); }
+#zim-widget .zim-w-msg--theirs .zim-w-msg-bubble {
+  border: 1px solid var(--sys-border, #E2E8F0);
+}
+/* your own posts in a channel keep their faint brand tint (they carry --theirs AND --channel-mine) */
+#zim-widget .zim-w-msg--theirs:not(.zim-w-msg--channel-mine) .zim-w-msg-bubble {
+  background: var(--sys-surface, #FFFFFF);
+  border-bottom-left-radius: var(--zim-bubble-tail);
+}
+#zim-widget .zim-w-msg--mine .zim-w-msg-bubble { border-bottom-right-radius: var(--zim-bubble-tail); }
+#zim-widget .zim-w-msg-name { font-size: var(--zdz-type-secondary, 18px); font-weight: var(--sys-font-wt-sb, 600); margin-bottom: 2px; }
+#zim-widget .zim-w-msg-avatar { width: 40px; height: 40px; font-size: var(--zdz-type-meta, 16px); }
+#zim-widget .zim-w-msg--theirs .zim-w-msg-meta { padding-left: 48px; }
+#zim-widget .zim-w-msg-meta,
+#zim-widget .zim-w-time-sep,
+#zim-widget .zim-w-end-of-history {
+  font-size: var(--zdz-type-meta, 16px);
+  color: var(--sys-text-sec, #475569);
+}
+#zim-widget .zim-w-time-sep { font-weight: var(--sys-font-wt-sb, 600); padding: 14px 0 8px; }
+#zim-widget .zim-w-msg-actions button { font-size: var(--zdz-type-meta, 16px); }
+
+/* "From your chat" under a message sent from a chat answer (the sender alone sees it) */
+#zim-widget .zim-w-from-chat {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sys-brand, #2C5F8A);
+  font: inherit;
+  font-size: var(--zdz-type-meta, 16px);
+  font-weight: var(--sys-font-wt-sb, 600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* the composer */
+#zim-widget .zim-w-composer textarea,
+#zim-widget #zim-w-input { font-size: var(--zdz-type-body, 20px) !important; line-height: var(--zdz-type-lh-body, 1.45); }
+#zim-widget .zim-w-readonly-msg { font-size: var(--zdz-type-secondary, 18px); color: var(--sys-text-sec, #475569); }
+#zim-widget .zim-w-search-bar input { font-size: var(--zdz-type-body, 20px); }
+
+/* the one-thread view the chat docks under its answer (?zim_compact=1): only the thread and the composer */
+body.zim-compact,
+body.zim-compact .zim-fullpage { background: var(--sys-bg, #FFFFFF); }
+#zim-widget.zim-w--compact { min-height: 0; height: 100vh; max-height: 100vh; border: 0; border-radius: 0; }
+#zim-widget.zim-w--compact .zim-w-sidebar,
+#zim-widget.zim-w--compact .zim-w-main-hdr,
+#zim-widget.zim-w--compact .zim-w-search-bar,
+#zim-widget.zim-w--compact .zim-w-pull-indicator { display: none !important; }
+#zim-widget.zim-w--compact .zim-w-main { display: flex !important; width: 100%; }
+#zim-widget.zim-w--compact .zim-w-messages { padding: 10px 12px; }
+#zim-widget.zim-w--compact .zim-w-composer { padding: 8px 10px; }
+#zim-widget.zim-w--compact .zim-w-composer textarea,
+#zim-widget.zim-w--compact #zim-w-input { font-size: var(--zdz-type-secondary, 18px) !important; min-height: 44px; }
+/* === END LOOK =========================================================================================== */

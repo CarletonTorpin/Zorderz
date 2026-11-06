@@ -104,7 +104,7 @@
   align-items: flex-end;    /* Slide up from bottom on mobile */
   justify-content: center;
   padding: 0;
-  /* v2.14.4 NEW-2: Respect safe-area on all edges */
+  /* NEW-2: Respect safe-area on all edges */
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
 }
@@ -115,7 +115,7 @@
   .zdz-bug-overlay {
     align-items: center;    /* Center on desktop */
     padding: var(--ref-space-4, 16px);
-    /* v2.14.4 NEW-2: Extra top padding on tablet to clear Safari chrome */
+    /* NEW-2: Extra top padding on tablet to clear Safari chrome */
     padding-top: max(var(--ref-space-4, 16px), env(safe-area-inset-top, 0));
   }
 }
@@ -129,11 +129,11 @@
   box-shadow: var(--sys-shadow-xl, 0 20px 60px rgba(0,0,0,.15));
   display: flex;
   flex-direction: column;
-  max-height: min(85dvh, calc(100vh - 60px));  /* v2.14.4: Account for Safari chrome on iPad */
+  max-height: min(85dvh, calc(100vh - 60px));  /* Account for Safari chrome on iPad */
   transform: translateY(100%);
   transition: transform var(--ref-dur-slow, 350ms) var(--ref-ease-spring, cubic-bezier(.32,.72,0,1));
   padding-bottom: env(safe-area-inset-bottom, 0);
-  /* v2.14.4 NEW-2: Safe-area insets prevent clipping on iPhone notch/Dynamic Island */
+  /* NEW-2: Safe-area insets prevent clipping on iPhone notch/Dynamic Island */
   margin-left: env(safe-area-inset-left, 0);
   margin-right: env(safe-area-inset-right, 0);
   box-sizing: border-box;

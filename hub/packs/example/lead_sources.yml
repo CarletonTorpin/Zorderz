@@ -1,0 +1,13 @@
+# How lead-source labels group into channels. Labels are matched as typed; a label in no group stays as typed.
+not_a_source: [paid, paid in full, deposit, invoice]
+strong: [google, referral, yelp]
+referred_by_a_person: Friend / family / neighbor
+groups:
+  Existing Customer: [existing customer, past customer, repeat]
+  Google Ads: [google ads, google ad, adwords]
+  Google organic: [google, google search]
+  Our website / form: [website, web form, contact form]
+  Friend / family / neighbor: [friend, family, neighbor, neighbour, referral]
+  Home show: [home show, fair]
+partners:
+  Acme Lawn: [acme lawn, acme]

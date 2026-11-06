@@ -2,8 +2,8 @@
 /**
  * Zdz_Flow — the app-local, Flow-shaped work-item WRITER and reader.
  *
- * The jobs app owns this substrate for now; it is shaped exactly like the future Core Flow
- * service (workflow-web.md §4) so promotion is a move, not a redesign. It is the SOLE writer of
+ * The jobs app owns this substrate for now; it is shaped exactly like a Core Flow service
+ * would be, so moving it to Core is a move, not a redesign. It is the SOLE writer of
  * a work item's `state` (INV-A): state is a materialized view of an append-only transition log,
  * written only by create() (the genesis) and transition() (every step thereafter).
  *
@@ -341,7 +341,7 @@ if ( ! class_exists( 'Zdz_Flow' ) ) {
 			}
 
 			// Guards (pure predicates). A denial is fail-closed; an unreachable guard is a denial
-			// unless it declares on_unavailable: allow (§4.3 — a visible config line, not an accident).
+			// unless it declares on_unavailable: allow (a visible config line, not an accident).
 			list( $evaluated, $denied ) = self::eval_guards( $guards, $item, $opts );
 			if ( null !== $denied ) {
 				return new WP_Error(
@@ -514,7 +514,7 @@ if ( ! class_exists( 'Zdz_Flow' ) ) {
 		 * inputs. Callers apply the result via a `recompute` transition, so the materialized `state`
 		 * is still only ever written by transition() — INV-A holds even for derived-status types.
 		 * The default is a no-op (returns the current state); the `project` five-branch derivation
-		 * (B2) hooks `zdz_flow_derive_state`.
+		 * hooks `zdz_flow_derive_state`.
 		 */
 		public static function derive_state( string $work_item_id ): string {
 			$item = self::get( $work_item_id );
@@ -694,7 +694,7 @@ if ( ! class_exists( 'Zdz_Flow' ) ) {
 		}
 
 		/* ===================================================================
-		 * TIMER HELPERS — keyed to fire once (§4.10 layer 4).
+		 * TIMER HELPERS — keyed to fire once (UNIQUE fire_key).
 		 * =================================================================== */
 
 		/** Start (or reschedule) a keyed timer. fire_key = sha256(item|timer|scheduled_for). */
@@ -906,7 +906,7 @@ if ( ! class_exists( 'Zdz_Flow' ) ) {
 			return $ok ? (string) $id : '';
 		}
 
-		/** Build the §4.5 event envelope. $meta carries the transition summary + actor. */
+		/** Build the event envelope. $meta carries the transition summary + actor. */
 		private static function build_envelope( array $item, array $meta, string $event_type, string $visibility, array $data, array $external_refs ): array {
 			$tenant        = (int) ( $item['tenant_id'] ?? Zdz_Flow_DB::tenant_id() );
 			$work_type     = (string) ( $item['work_type'] ?? '' );
@@ -948,11 +948,17 @@ if ( ! class_exists( 'Zdz_Flow' ) ) {
 			);
 		}
 
-		/** The item's external refs as a { "system.entity": external_id } map (for the envelope). */
+		/**
+		 * The item's external refs as a { "system.entity": external_id } map (for the envelope). An
+		 * item holding several ids in one namespace is named by its first (the one recorded first).
+		 */
 		private static function refs_map( string $work_item_id ): array {
 			$out = array();
 			foreach ( Zdz_Flow_Refs::for( $work_item_id ) as $r ) {
-				$out[ $r['system'] . '.' . $r['entity'] ] = $r['external_id'];
+				$k = $r['system'] . '.' . $r['entity'];
+				if ( ! isset( $out[ $k ] ) ) {
+					$out[ $k ] = $r['external_id'];
+				}
 			}
 			return $out;
 		}

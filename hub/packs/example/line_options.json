@@ -1,0 +1,26 @@
+{
+  "_about": "Tap-to-change options for estimate lines (a fictional example): which words in a line can be swapped for what, per product family.",
+  "colors": [
+    {"id": "black", "label": "Black", "say": ["black"]},
+    {"id": "white", "label": "White", "say": ["white"]},
+    {"id": "bronze", "label": "Bronze", "say": ["bronze"]}
+  ],
+  "color_context": {"trim_color": ["trim", "frame"]},
+  "slots": {
+    "film": {"label": "Film", "options": [
+      {"id": "solar", "label": "Solar", "say": ["solar"]},
+      {"id": "privacy", "label": "Privacy", "say": ["privacy", "frosted"]}
+    ]},
+    "brand": {"label": "Brand", "options": [
+      {"id": "brightline", "label": "Brightline", "say": ["brightline"]},
+      {"id": "northstar", "label": "Northstar", "say": ["northstar"]},
+      {"id": "classic", "label": "Classic", "say": ["classic"]}
+    ]},
+    "trim_color": {"label": "Trim color", "kind": "color"}
+  },
+  "families": [
+    {"id": "window_film", "label": "Window film", "match": ["window film", "film"], "slots": ["film", "brand", "trim_color"],
+     "color_default": "trim_color"},
+    {"id": "shade_sails", "label": "Shade sails", "match": ["shade sail", "sail"], "slots": ["brand"]}
+  ]
+}

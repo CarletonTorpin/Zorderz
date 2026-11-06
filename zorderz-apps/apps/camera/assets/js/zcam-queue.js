@@ -159,7 +159,7 @@
    * @param {Object}    meta   Extra metadata (e.g. { geo_source }).
    * @param {Object}    auth   { ajaxurl, nonce, rest_nonce, note } captured at
    *                           shutter time (rest_nonce = zdzData's wp_rest nonce,
-   *                           v1.2.8 — sent as X-WP-Nonce by page AND SW).
+   *                           sent as X-WP-Nonce by page AND SW).
    */
   function add(file, prov, meta, auth) {
     // Read the bytes BEFORE opening the write tx (a FileReader/arrayBuffer read
@@ -173,15 +173,21 @@
             buf: buf,                       // ORIGINAL bytes (iOS-safe) — EXIF intact
             filename: (file && file.name) || ('photo-' + Date.now() + '.jpg'),
             type: (file && file.type) || 'image/jpeg',
-            size: (buf && buf.byteLength) || 0, // v1.2.9: read-back integrity check
+            size: (buf && buf.byteLength) || 0, // read-back integrity check
             captured_at: prov.captured_at || null,
             gps_lat: (prov.gps_lat != null) ? prov.gps_lat : null,
             gps_lng: (prov.gps_lng != null) ? prov.gps_lng : null,
             meta: meta,
             note: auth.note || '',         // photo purpose; travels with the record
+            // when the capture was launched from a job, the idempotency
+            // key doubles as the link back to it. Anything NOT named explicitly
+            // in this record shape is DISCARDED on write -- that is why
+            // gps_accuracy rides inside `meta` (stored wholesale) rather than
+            // as a sibling of gps_lat/gps_lng.
+            source_ref: auth.source_ref || '',
             ajaxurl: auth.ajaxurl || '',
             nonce: auth.nonce || '',           // legacy fallback
-            rest_nonce: auth.rest_nonce || '', // v1.2.8: fresh wp_rest → X-WP-Nonce
+            rest_nonce: auth.rest_nonce || '', // fresh wp_rest → X-WP-Nonce
             status: 'pending',
             tries: 0,
             created_at: Date.now(),
@@ -328,11 +334,323 @@
     });
   }
 
-  global.TSCamQueue = {
+  global.ZCamQueue = {
     add: add, all: all, get: get, update: update, remove: remove,
     claim: claim, release: release, isLeasedByOther: isLeasedByOther,
     bufToBlob: bufToBlob, readToBuffer: readToBuffer,
     pendingCount: pendingCount,
     DB_NAME: DB_NAME, DB_VER: DB_VER, STORE: STORE, SYNC_TAG: SYNC_TAG
+  };
+})(window);
+
+
+/**
+ * Zorderz Camera — Durable VIDEO Chunk Queue (zcam-queue.js)
+ *
+ * A SEPARATE IndexedDB database ('zdz-camera-video') from the photo queue above,
+ * on purpose: the photo store, its DB_VER and the Service-Worker drain that
+ * reads it are battle-tested and MUST NOT be disturbed. Video is additive.
+ *
+ * The model mirrors the photo queue's hard-won lessons (ORIGINAL bytes stored as
+ * an ArrayBuffer — iOS Safari can't round-trip a Blob; size recorded for the
+ * empty-read-back guard; single-uploader lease; idempotency) but is shaped for
+ * streaming: one CLIP (a single MediaRecorder session, ≤2 min) is an ordered set
+ * of CHUNKS emitted by ondataavailable. Chunks upload WHILE recording, so by
+ * Stop nearly everything is already on the server.
+ *
+ * Two stores:
+ *   clips:  keyPath 'capture_uid'  — one row per clip; the manifest + status.
+ *           { capture_uid, reel_id, seq, mime, width, height, duration_ms,
+ *             captured_at, gps_lat, gps_lng, geo_source, gps_accuracy, job_id,
+ *             note, speaker_hint, status:'recording'|'complete'|'finalizing'|'done',
+ *             total_chunks(null until complete), ajaxurl, rest_nonce, nonce,
+ *             created_at, updated_at }
+ *   chunks: keyPath 'id' autoinc — the bytes. Index 'uid' groups a clip's chunks.
+ *           { id, capture_uid, idx, buf(ArrayBuffer), size, type, final(bool),
+ *             status:'pending'|'uploading'|'done', tries, lease_owner, lease_until,
+ *             created_at, updated_at }
+ *
+ * A clip is "done" (row + chunks deleted) only after the server ACKs finalize.
+ * That is what makes video capture lossless across reload / crash / offline —
+ * the same contract as photos.
+ */
+(function (global) {
+  'use strict';
+
+  var VDB_NAME = 'zdz-camera-video';
+  var VDB_VER  = 1;
+  var CLIPS    = 'clips';
+  var CHUNKS   = 'chunks';
+  var VSYNC    = 'zdz-video-sync';
+
+  function vOpen() {
+    return new Promise(function (resolve, reject) {
+      if (!global.indexedDB) { reject(new Error('no-indexeddb')); return; }
+      var req = indexedDB.open(VDB_NAME, VDB_VER);
+      req.onupgradeneeded = function (e) {
+        var db = e.target.result;
+        if (!db.objectStoreNames.contains(CLIPS)) {
+          db.createObjectStore(CLIPS, { keyPath: 'capture_uid' });
+        }
+        if (!db.objectStoreNames.contains(CHUNKS)) {
+          var cs = db.createObjectStore(CHUNKS, { keyPath: 'id', autoIncrement: true });
+          cs.createIndex('uid', 'capture_uid', { unique: false });
+          cs.createIndex('status', 'status', { unique: false });
+        }
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror   = function () { reject(req.error); };
+    });
+  }
+
+  function vuid() {
+    if (global.crypto && global.crypto.randomUUID) return global.crypto.randomUUID();
+    return 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  // Reuse the photo module's byte helpers if present; fall back to local copies.
+  function toBuffer(file) {
+    if (global.ZCamQueue && ZCamQueue.readToBuffer) return ZCamQueue.readToBuffer(file);
+    if (typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(fr.result); };
+      fr.onerror = function () { reject(fr.error || new Error('read-failed')); };
+      fr.readAsArrayBuffer(file);
+    });
+  }
+  function chunkToBlob(rec) {
+    if (!rec) return null;
+    if (rec.buf) { try { return new Blob([rec.buf], { type: rec.type || 'application/octet-stream' }); } catch (e) {} }
+    if (rec.blob) return rec.blob;
+    return null;
+  }
+
+  /** Create the clip manifest row (status 'recording'). Resolves the clip. */
+  function startClip(manifest) {
+    manifest = manifest || {};
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var now = Date.now();
+        var rec = {
+          capture_uid: manifest.capture_uid || vuid(),
+          reel_id: manifest.reel_id || '',
+          seq: (manifest.seq != null) ? manifest.seq : 0,
+          mime: manifest.mime || 'video/mp4',
+          width: manifest.width || 0,
+          height: manifest.height || 0,
+          duration_ms: manifest.duration_ms || 0,
+          captured_at: manifest.captured_at || null,
+          gps_lat: (manifest.gps_lat != null) ? manifest.gps_lat : null,
+          gps_lng: (manifest.gps_lng != null) ? manifest.gps_lng : null,
+          geo_source: manifest.geo_source || null,
+          gps_accuracy: (manifest.gps_accuracy != null) ? manifest.gps_accuracy : null,
+          job_id: manifest.job_id || 0,
+          note: manifest.note || '',
+          speaker_hint: manifest.speaker_hint || '',
+          status: 'recording',
+          total_chunks: null,
+          ajaxurl: manifest.ajaxurl || '',
+          rest_nonce: manifest.rest_nonce || '',
+          nonce: manifest.nonce || '',
+          created_at: now,
+          updated_at: now
+        };
+        var r = vStore(db, CLIPS, 'readwrite').put(rec);
+        r.onsuccess = function () { resolve(rec); };
+        r.onerror   = function () { reject(r.error); };
+      });
+    });
+  }
+
+  function vStore(db, name, mode) { return db.transaction(name, mode).objectStore(name); }
+
+  /**
+   * Persist one recorder chunk. Resolves once durably written (the chunk is SAFE
+   * from that instant). Stores the ORIGINAL bytes as an ArrayBuffer (iOS-safe).
+   */
+  function addChunk(capture_uid, idx, blob, isFinal) {
+    return toBuffer(blob).then(function (buf) {
+      return vOpen().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var rec = {
+            capture_uid: capture_uid,
+            idx: idx,
+            buf: buf,
+            size: (buf && buf.byteLength) || 0,
+            type: (blob && blob.type) || 'video/mp4',
+            final: !!isFinal,
+            status: 'pending',
+            tries: 0,
+            lease_owner: null,
+            lease_until: 0,
+            created_at: Date.now(),
+            updated_at: Date.now()
+          };
+          var r = vStore(db, CHUNKS, 'readwrite').add(rec);
+          r.onsuccess = function () { rec.id = r.result; resolve(rec); };
+          r.onerror   = function () { reject(r.error); };
+        });
+      });
+    });
+  }
+
+  function getClip(capture_uid) {
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var r = vStore(db, CLIPS, 'readonly').get(capture_uid);
+        r.onsuccess = function () { resolve(r.result || null); };
+        r.onerror   = function () { reject(r.error); };
+      });
+    });
+  }
+
+  function updateClip(capture_uid, patch) {
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var os = vStore(db, CLIPS, 'readwrite');
+        var g = os.get(capture_uid);
+        g.onsuccess = function () {
+          var rec = g.result;
+          if (!rec) { resolve(null); return; }
+          Object.keys(patch).forEach(function (k) { rec[k] = patch[k]; });
+          rec.updated_at = Date.now();
+          var p = os.put(rec);
+          p.onsuccess = function () { resolve(rec); };
+          p.onerror   = function () { reject(p.error); };
+        };
+        g.onerror = function () { reject(g.error); };
+      });
+    });
+  }
+
+  function allClips() {
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var r = vStore(db, CLIPS, 'readonly').getAll();
+        r.onsuccess = function () { resolve(r.result || []); };
+        r.onerror   = function () { reject(r.error); };
+      });
+    });
+  }
+
+  /** Clips not yet fully uploaded — used on relaunch to resume. */
+  function incompleteClips() {
+    return allClips().then(function (cs) {
+      return cs.filter(function (c) { return c.status !== 'done'; });
+    });
+  }
+
+  /** A clip's chunks, sorted by idx. */
+  function chunksFor(capture_uid) {
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var idx = vStore(db, CHUNKS, 'readonly').index('uid');
+        var r = idx.getAll(IDBKeyRange.only(capture_uid));
+        r.onsuccess = function () {
+          var arr = (r.result || []).sort(function (a, b) { return a.idx - b.idx; });
+          resolve(arr);
+        };
+        r.onerror = function () { reject(r.error); };
+      });
+    });
+  }
+
+  /** Oldest pending, unleased chunk for a clip (drain order = idx order). */
+  function nextChunk(capture_uid, owner) {
+    return chunksFor(capture_uid).then(function (arr) {
+      var now = Date.now();
+      for (var i = 0; i < arr.length; i++) {
+        var c = arr[i];
+        if (c.status === 'done') continue;
+        var leased = c.lease_until && c.lease_until > now && c.lease_owner !== owner;
+        if (leased) continue;
+        return c;
+      }
+      return null;
+    });
+  }
+
+  function claimChunk(id, owner, ttlMs) {
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var os = vStore(db, CHUNKS, 'readwrite');
+        var g = os.get(id);
+        g.onsuccess = function () {
+          var rec = g.result;
+          if (!rec || rec.status === 'done') { resolve(null); return; }
+          var now = Date.now();
+          if (rec.lease_until && rec.lease_until > now && rec.lease_owner !== owner) { resolve(null); return; }
+          rec.lease_owner = owner; rec.lease_until = now + (ttlMs || 60000);
+          rec.status = 'uploading'; rec.updated_at = now;
+          var p = os.put(rec);
+          p.onsuccess = function () { resolve(rec); };
+          p.onerror   = function () { reject(p.error); };
+        };
+        g.onerror = function () { reject(g.error); };
+      });
+    });
+  }
+
+  function releaseChunk(id, patch) {
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var os = vStore(db, CHUNKS, 'readwrite');
+        var g = os.get(id);
+        g.onsuccess = function () {
+          var rec = g.result;
+          if (!rec) { resolve(null); return; }
+          rec.lease_owner = null; rec.lease_until = 0;
+          if (patch) Object.keys(patch).forEach(function (k) { rec[k] = patch[k]; });
+          rec.updated_at = Date.now();
+          var p = os.put(rec);
+          p.onsuccess = function () { resolve(rec); };
+          p.onerror   = function () { reject(p.error); };
+        };
+        g.onerror = function () { reject(g.error); };
+      });
+    });
+  }
+
+  function removeChunk(id) {
+    return vOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var r = vStore(db, CHUNKS, 'readwrite').delete(id);
+        r.onsuccess = function () { resolve(true); };
+        r.onerror   = function () { reject(r.error); };
+      });
+    });
+  }
+
+  /** Delete a clip's manifest AND all its chunks (call after finalize is ACKed). */
+  function removeClip(capture_uid) {
+    return chunksFor(capture_uid).then(function (arr) {
+      return vOpen().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction([CLIPS, CHUNKS], 'readwrite');
+          tx.objectStore(CLIPS).delete(capture_uid);
+          var cs = tx.objectStore(CHUNKS);
+          arr.forEach(function (c) { cs.delete(c.id); });
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror    = function () { reject(tx.error); };
+        });
+      });
+    });
+  }
+
+  function pendingBytes(capture_uid) {
+    return chunksFor(capture_uid).then(function (arr) {
+      return arr.reduce(function (n, c) { return n + (c.status !== 'done' ? (c.size || 0) : 0); }, 0);
+    });
+  }
+
+  global.ZCamVideoQueue = {
+    startClip: startClip, addChunk: addChunk,
+    getClip: getClip, updateClip: updateClip, allClips: allClips, incompleteClips: incompleteClips,
+    chunksFor: chunksFor, nextChunk: nextChunk,
+    claimChunk: claimChunk, releaseChunk: releaseChunk,
+    removeChunk: removeChunk, removeClip: removeClip,
+    chunkToBlob: chunkToBlob, pendingBytes: pendingBytes, uid: vuid,
+    DB_NAME: VDB_NAME, DB_VER: VDB_VER, CLIPS: CLIPS, CHUNKS: CHUNKS, SYNC_TAG: VSYNC
   };
 })(window);

@@ -69,9 +69,9 @@ for _pass in 1 2 3 4 5; do
 done
 
 # One fixed-string term per line; drop blanks. (Fixed strings, case-insensitive, matched on
-# WORD BOUNDARIES via grep -F -w: a real token — a name like "Robin" or a code like "EM" — is
+# WORD BOUNDARIES via grep -F -w: a real token — a name like "Robin" or a code like "XY" — is
 # caught as a whole word, but NOT as a substring inside ordinary code such as "destroy",
-# "system", or "ImageOffset". Dash-/space-separated tokens like "00011-EM" still match, since
+# "system", or "ImageOffset". Dash-/space-separated tokens like "00011-XY" still match, since
 # the separators are themselves word boundaries.)
 pat="$work/.patterns"
 # Normalize the supplied wordlist: strip CR (CRLF files), trim surrounding whitespace, then

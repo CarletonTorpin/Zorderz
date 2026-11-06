@@ -1,0 +1,30 @@
+[
+ {
+  "site_name": "Westbrook Ridge",
+  "boundary": {
+   "method": "polygon",
+   "polygon": [
+    [
+     -100.18,
+     40.08
+    ],
+    [
+     -100.15,
+     40.08
+    ],
+    [
+     -100.15,
+     40.1
+    ],
+    [
+     -100.18,
+     40.1
+    ]
+   ]
+  },
+  "confidence": "example",
+  "evidence": [
+   "a fictional site for trying the hub"
+  ]
+ }
+]

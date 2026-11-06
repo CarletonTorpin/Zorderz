@@ -2,12 +2,19 @@
 /*
 Plugin Name: Zorderz Sketch Pad
 Description: Canvas-based drawing app for field sketches, diagrams, and visual notes. Save, manage, and share sketches across Zorderz apps.
-Version: 1.0.6
+Version: 1.0.7
 Author: Zorderz
 Requires at least: 6.0
 Requires PHP: 7.4
 
 == Changelog ==
+1.0.7
+  - When Sketch opens as its own page, the drawing canvas fills the screen under
+    the tabs and tools instead of stopping at 300px with the rest of the page
+    empty. The canvas carries the theme's data-zdz-fill="220" marker; a theme
+    with the page view sizes it to the space left and the existing resize
+    handler redraws the strokes at the new size. On the dashboard (or a theme
+    without the page view) the marker is ignored and the canvas stays 300px.
 1.0.6
   - Thumb-friendly Save: the full-screen "Save" button moved from the top-right
     corner (a long reach on a phone) down into the bottom action bar, right-
@@ -48,7 +55,7 @@ Requires PHP: 7.4
   - System theme dark mode fix, sticky save button.
 */
 if ( ! defined( 'ABSPATH' ) ) exit;
-define( 'ZSP_VERSION', '1.0.6' );
+define( 'ZSP_VERSION', '1.0.7' );
 define( 'ZSP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZSP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZSP_NONCE', 'zsp_nonce' );
@@ -80,7 +87,7 @@ add_action( 'after_setup_theme', function () {
 					<div class="zsp-w-panel" id="zsp-w-tab-draw">
 						<div class="zsp-w-canvas-wrap" id="zsp-w-canvas-wrap">
 							<span class="zsp-w-placeholder" id="zsp-w-placeholder">Draw here &mdash; or tap &#10138; to go full screen</span>
-							<canvas class="zsp-w-canvas" id="zsp-w-canvas"></canvas>
+							<canvas class="zsp-w-canvas" id="zsp-w-canvas" data-zdz-fill="220"></canvas>
 							<span class="zsp-w-canvas-hint" id="zsp-w-canvas-hint" aria-hidden="true">
 								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
 								Tap to draw
@@ -109,10 +116,7 @@ add_action( 'after_setup_theme', function () {
 }, 12 );
 
 add_action( 'init', function () {
-	// The widget posts zsp_* actions. 1.10.2 fixes these hooks, which were still registered
-	// under the pre-rename tssp_* names, so every save/list/load/delete answered admin-ajax's
-	// "0". The legacy names stay registered as aliases for one release, for pages cached by
-	// an older build.
+	// The widget posts zsp_* actions; each has a nopriv twin that refuses.
 	add_action( 'wp_ajax_zsp_save_sketch', 'zsp_ajax_save_sketch' );
 	add_action( 'wp_ajax_nopriv_zsp_save_sketch', 'zsp_deny_nopriv' );
 	add_action( 'wp_ajax_zsp_list_sketches', 'zsp_ajax_list_sketches' );
@@ -121,17 +125,7 @@ add_action( 'init', function () {
 	add_action( 'wp_ajax_nopriv_zsp_delete_sketch', 'zsp_deny_nopriv' );
 	add_action( 'wp_ajax_zsp_load_sketch', 'zsp_ajax_load_sketch' );
 	add_action( 'wp_ajax_nopriv_zsp_load_sketch', 'zsp_deny_nopriv' );
-	// Legacy aliases (pre-rename names), kept for one release.
-	add_action( 'wp_ajax_tssp_save_sketch', 'zsp_ajax_save_sketch' );
-	add_action( 'wp_ajax_nopriv_tssp_save_sketch', 'zsp_deny_nopriv' );
-	add_action( 'wp_ajax_tssp_list_sketches', 'zsp_ajax_list_sketches' );
-	add_action( 'wp_ajax_nopriv_tssp_list_sketches', 'zsp_deny_nopriv' );
-	add_action( 'wp_ajax_tssp_delete_sketch', 'zsp_ajax_delete_sketch' );
-	add_action( 'wp_ajax_nopriv_tssp_delete_sketch', 'zsp_deny_nopriv' );
-	add_action( 'wp_ajax_tssp_load_sketch', 'zsp_ajax_load_sketch' );
-	add_action( 'wp_ajax_nopriv_tssp_load_sketch', 'zsp_deny_nopriv' );
 	add_action( 'wp_ajax_zsp_debug_status', 'zsp_ajax_debug_status' );
-	add_action( 'wp_ajax_tssp_debug_status', 'zsp_ajax_debug_status' );
 } );
 
 function zsp_deny_nopriv() { wp_send_json_error( 'Authentication required.', 403 ); }

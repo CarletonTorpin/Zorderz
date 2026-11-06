@@ -12,6 +12,8 @@
  *   wp_zim_mentions             mention rows (preserved on soft-delete)
  *   wp_zim_push_subscriptions   Web Push endpoints
  *   wp_zim_notification_queue   deferred/in-flight push jobs
+ *   wp_zim_doc_grants           one estimate or invoice shared, read only, with
+ *                               the people in a conversation (ZIM_Doc_Shares)
  *
  * INDEX DISCIPLINE (Trap 8):
  *   - Indexes are declared at CREATE TABLE, not "added later".
@@ -132,9 +134,10 @@ class ZIM_Migrate_1_0_0 {
 
 		// ── push_subscriptions ────────────────────────────────────
 		// endpoint is globally unique across all users — Web Push contract.
-		// user_id ties it to the session that registered it; on logout we
-		// delete this row. On delivery we re-check user_id matches current
-		// session owner (Trap 6 / acceptance #13).
+		// user_id ties it to the person who registered it. session_hash is the
+		// sha256 of the WordPress session token that made the row: signing out
+		// deletes only that session's rows (ZIM_Push::on_logout), never every
+		// device of the person. dbDelta adds the column on an upgrade.
 		dbDelta( "CREATE TABLE {$p}zim_push_subscriptions (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			user_id bigint(20) unsigned NOT NULL,
@@ -145,13 +148,16 @@ class ZIM_Migrate_1_0_0 {
 			user_agent varchar(255) DEFAULT NULL,
 			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			rotated_at datetime DEFAULT NULL,
+			session_hash char(64) DEFAULT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY idx_endpoint (endpoint_hash),
-			KEY idx_user (user_id)
+			KEY idx_user (user_id),
+			KEY idx_session (session_hash)
 		) {$charset};" );
 
 		// ── notification_queue ────────────────────────────────────
-		// kind: 'mention' | 'first_unread' | 'digest'.
+		// kind: 'mention' | 'first_unread' | 'digest' | 'notice' (another app's
+		// notice, conversation_id 0: ZIM_Notices).
 		// release_at: when the cron may dispatch. During quiet hours this is
 		// shifted to the end-of-quiet-hours timestamp (Trap 7).
 		dbDelta( "CREATE TABLE {$p}zim_notification_queue (
@@ -169,6 +175,30 @@ class ZIM_Migrate_1_0_0 {
 			KEY idx_release (release_at, fired_at),
 			KEY idx_user_conv (user_id, conversation_id),
 			KEY idx_fired (fired_at)
+		) {$charset};" );
+
+		// ── doc_grants ────────────────────────────────────────────
+		// One row per person a sender let see ONE document (by number) from one
+		// message: that document only, never the customer's other documents. A
+		// row is live while revoked_at is NULL, expires_at is in the future and
+		// its message is not deleted; the sender's own right to the document is
+		// checked again every time it is opened (ZIM_Doc_Shares::preview_for).
+		// doc_kind is 'estimate' or 'invoice', from the message's own words.
+		dbDelta( "CREATE TABLE {$p}zim_doc_grants (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			doc_number varchar(20) NOT NULL,
+			doc_kind varchar(10) NOT NULL DEFAULT '',
+			grantee_user_id bigint(20) unsigned NOT NULL,
+			granted_by bigint(20) unsigned NOT NULL,
+			conversation_id bigint(20) unsigned NOT NULL,
+			message_id bigint(20) unsigned NOT NULL,
+			created_at datetime NOT NULL,
+			expires_at datetime NOT NULL,
+			revoked_at datetime DEFAULT NULL,
+			revoked_by bigint(20) unsigned DEFAULT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_grantee_doc (grantee_user_id, doc_number),
+			KEY idx_message (message_id)
 		) {$charset};" );
 
 		// ── FULLTEXT bootstrap on messages.body ──────────────────

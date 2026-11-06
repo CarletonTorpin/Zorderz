@@ -1,0 +1,259 @@
+{
+ "role": "read_document",
+ "note": "Drawn by tests/tools/make-llm-golden-media.py: made-up invoices, a timesheet, a route sheet and a note.",
+ "cases": [
+  {
+   "id": "doc-invoice-png",
+   "system": "Read the supplier invoice in the picture.",
+   "messages": [
+    {
+     "role": "user",
+     "content": [
+      {
+       "type": "image",
+       "file": "invoice-ex-1001.png",
+       "media_type": "image/png"
+      },
+      {
+       "type": "text",
+       "text": "Give the invoice number, the total in dollars, and how many product lines it has."
+      }
+     ]
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "invoice_number": {
+      "type": "string"
+     },
+     "total": {
+      "type": "number"
+     },
+     "line_count": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "invoice_number",
+     "total",
+     "line_count"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 3000,
+   "expect": {
+    "json": {
+     "invoice_number": "EX-1001",
+     "total": 257.52,
+     "line_count": 2
+    }
+   },
+   "example_answer": "{\"invoice_number\": \"EX-1001\", \"total\": 257.52, \"line_count\": 2}"
+  },
+  {
+   "id": "doc-invoice-pdf",
+   "system": "Read the supplier invoice in the PDF.",
+   "messages": [
+    {
+     "role": "user",
+     "content": [
+      {
+       "type": "pdf",
+       "file": "invoice-ex-2002.pdf",
+       "text": "Example Glass Co. INVOICE EX-2002. Date: 2026-10-20. Tempered glass panel 24x36, 2, 95.00, 190.00. Display shelf kit, 3, 44.00, 132.00. Delivery, 1, 90.00, 90.00. Total $412.00."
+      },
+      {
+       "type": "text",
+       "text": "Give the invoice number, the total in dollars, and how many lines it has."
+      }
+     ]
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "invoice_number": {
+      "type": "string"
+     },
+     "total": {
+      "type": "number"
+     },
+     "line_count": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "invoice_number",
+     "total",
+     "line_count"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 3000,
+   "expect": {
+    "json": {
+     "invoice_number": "EX-2002",
+     "total": 412,
+     "line_count": 3
+    }
+   },
+   "example_answer": "{\"invoice_number\": \"EX-2002\", \"total\": 412, \"line_count\": 3}"
+  },
+  {
+   "id": "doc-timesheet",
+   "system": "Read the photographed timesheet. Hours worked each day are out minus in minus lunch.",
+   "messages": [
+    {
+     "role": "user",
+     "content": [
+      {
+       "type": "image",
+       "file": "timesheet-ex.jpg",
+       "media_type": "image/jpeg"
+      },
+      {
+       "type": "text",
+       "text": "Give each day's hours worked and the total."
+      }
+     ]
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "days": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "day": {
+         "type": "string"
+        },
+        "hours": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "day",
+        "hours"
+       ],
+       "additionalProperties": false
+      }
+     },
+     "total_hours": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "days",
+     "total_hours"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 3000,
+   "expect": {
+    "json": {
+     "total_hours": 20,
+     "days.0.hours": 8,
+     "days.1.hours": 7,
+     "days.2.hours": 5
+    }
+   },
+   "example_answer": "{\"days\": [{\"day\": \"Mon 10/19\", \"hours\": 8}, {\"day\": \"Tue 10/20\", \"hours\": 7}, {\"day\": \"Wed 10/21\", \"hours\": 5}], \"total_hours\": 20}"
+  },
+  {
+   "id": "doc-route-sheet",
+   "system": "Read the printed delivery route sheet.",
+   "messages": [
+    {
+     "role": "user",
+     "content": [
+      {
+       "type": "image",
+       "file": "route-sheet-ex.png",
+       "media_type": "image/png"
+      },
+      {
+       "type": "text",
+       "text": "How many stops are on it, and what is the first stop's address exactly as printed?"
+      }
+     ]
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "stop_count": {
+      "type": "integer"
+     },
+     "first_stop": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "stop_count",
+     "first_stop"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 3000,
+   "expect": {
+    "json": {
+     "stop_count": 5,
+     "first_stop": "101 Example Way"
+    }
+   },
+   "example_answer": "{\"stop_count\": 5, \"first_stop\": \"101 Example Way\"}"
+  },
+  {
+   "id": "doc-note-photo",
+   "system": "Read the salesperson's handwritten measuring note.",
+   "messages": [
+    {
+     "role": "user",
+     "content": [
+      {
+       "type": "image",
+       "file": "note-photo-ex.jpg",
+       "media_type": "image/jpeg"
+      },
+      {
+       "type": "text",
+       "text": "How many shelving units and cabinets, and the door size as written (width x height)?"
+      }
+     ]
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "shelving_units": {
+      "type": "integer"
+     },
+     "cabinets": {
+      "type": "integer"
+     },
+     "door_size": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "shelving_units",
+     "cabinets",
+     "door_size"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 3000,
+   "expect": {
+    "json": {
+     "shelving_units": 3,
+     "cabinets": 2,
+     "door_size": "36 x 80"
+    }
+   },
+   "example_answer": "{\"shelving_units\": 3, \"cabinets\": 2, \"door_size\": \"36 x 80\"}"
+  }
+ ]
+}

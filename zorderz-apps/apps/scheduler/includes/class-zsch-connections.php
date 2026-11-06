@@ -8,7 +8,7 @@
  * (provider, label, status, counts) — never tokens, never other users' feed
  * details beyond names.
  *
- * @since 1.6.0 (Connected Calendars Phase 0)
+ * @since 1.6.0 (Connected Calendars)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

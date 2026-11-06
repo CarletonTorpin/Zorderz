@@ -8,24 +8,32 @@
  * every app the same way.
  *
  * Two layers behind sounds_like(): Layer 1 = metaphone key (name_sound_key), which folds most
- * soundalikes onto one key for free; Layer 2 = the curated map (name-homophones.json beside
- * this file), which repairs the pairs the key splits and the short-vowel pairs the length-gated
- * Levenshtein misses. Suggestion-grade recall ONLY: name_score() raises a record to a
+ * soundalikes onto one key for free (Casey/Kacie); Layer 2 = the curated map, which repairs the
+ * pairs the key splits (Quinn/Kwin) and the short-vowel pairs the length-gated Levenshtein
+ * misses (Sean/Shawn). Suggestion-grade recall ONLY: name_score() raises a record to a
  * SUGGESTION; it never auto-fills and never merges two distinct-but-confusable records
- * (INV-12) — that stays with each app's strict email/phone gate.
+ * (honest output) — that stays with each app's strict email/phone gate.
  *
- * IDENTITY: this class is pure mechanism and carries no business data. The shipped
- * name-homophones.json is a neutral, general-English seed with NO tenant records; a business's
- * own confirmed spelling corrections layer in at runtime through the `zdz_name_homophones_map`
- * filter (an Identity Pack consumer populates it — empty by default, so a fresh install ships
- * with general-English recall only and never any customer's name).
+ * THE CURATED MAP IS PRIVATE DATA. A business's soundalike groups are learned from its own
+ * customers' surnames, and surnames identify people far more than first names do, so no name
+ * list ships with the code. The map lives in the site option `zdz_name_homophones` (never
+ * autoloaded, never a file a browser can fetch), and an Identity Pack or a plugin may extend it
+ * at runtime through the `zdz_name_homophones_map` filter. Core ships the generic layers only:
+ * the metaphone key, the typo tolerance and the nickname table. With nothing stored, recall
+ * narrows to those layers; nothing breaks.
+ *
+ * An older build kept the list in `name-homophones.json` beside this file. migrate_legacy_file()
+ * merges such a file into the option and deletes it (run on `init` only while the file is there).
+ * To restore or replace the list by hand:
+ *   wp option update zdz_name_homophones --format=json --autoload=no < list.json
  *
  * PARITY: the pure helpers below are the single source of truth for the logic. An app that
  * keeps an inline fallback (the estimate app does) must keep it byte-identical — fix the logic
  * HERE and let the fallback follow, or back-port; the two must not drift.
  *
- * Zero hard WordPress dependencies (the one WP reference, apply_filters in load_homophone_map,
- * is function_exists-guarded), so the class loads and its suite runs standalone under CLI.
+ * Zero hard WordPress dependencies (every WP call — get_option, add_option, update_option,
+ * get_transient, set_transient, apply_filters — is function_exists-guarded), so the class loads
+ * and its suite runs standalone under CLI.
  *
  * @package ZorderzTheme
  * @since   theme v1.10.0
@@ -36,25 +44,147 @@ if ( ! class_exists( 'ZDZ_Name_Match' ) ) :
 
 class ZDZ_Name_Match {
 
-	const VERSION = '1.0.0';
+	const VERSION = '1.1.0';
+
+	/** Where the curated map lives: a site option, never autoloaded, never in a file that ships. */
+	const OPTION = 'zdz_name_homophones';
+
+	/** The file an older build read; only ever read to move it into OPTION, then deleted. */
+	const LEGACY_FILE = 'name-homophones.json';
+
+	/** The buckets of the map. */
+	const BUCKETS = array( 'surnames', 'given_names', 'distinct_but_confusable', 'not_soundalike_flags' );
+
+	/** While a move could not finish, it is tried at most once an hour, not on every request. */
+	const WAIT_KEY = 'zdz_name_homophones_move_wait';
 
 	/**
-	 * Load the curated homophone/soundalike name map (name-homophones.json beside this
-	 * file), memoised. Extensible via the `zdz_name_homophones_map` filter when WP is present —
-	 * this is the seam an Identity Pack uses to add a tenant's own confirmed spellings.
-	 * Returns [] if the asset is missing (callers then fall back to the metaphone layer).
+	 * Load the curated homophone/soundalike name map from the site's private option, memoised.
+	 * Extensible via the `zdz_name_homophones_map` filter when WP is present — the seam an
+	 * Identity Pack uses to add a business's own confirmed spellings. Returns [] if nothing is
+	 * stored (callers then fall back to the metaphone layer: recall narrows, nothing breaks).
 	 */
 	public static function load_homophone_map() {
 		static $map = null;
 		if ( $map !== null ) return $map;
-		$raw  = @file_get_contents( __DIR__ . '/name-homophones.json' );
-		$data = ( $raw !== false && $raw !== '' ) ? json_decode( $raw, true ) : null;
-		$map  = is_array( $data ) ? $data : array();
+		$map = array();
+		if ( function_exists( 'get_option' ) ) {
+			$stored = get_option( self::OPTION, null );
+			if ( is_string( $stored ) && $stored !== '' ) {
+				$stored = json_decode( $stored, true );
+			}
+			if ( is_array( $stored ) ) $map = $stored;
+		}
 		if ( function_exists( 'apply_filters' ) ) {
 			$filtered = apply_filters( 'zdz_name_homophones_map', $map );
 			if ( is_array( $filtered ) ) $map = $filtered;
 		}
 		return $map;
+	}
+
+	/** Does this look like the curated map (a list of surname groups, each with spellings)? */
+	public static function is_map( $data ) {
+		if ( ! is_array( $data ) || empty( $data['surnames'] ) || ! is_array( $data['surnames'] ) ) return false;
+		foreach ( $data['surnames'] as $g ) {
+			if ( ! is_array( $g ) || empty( $g['spellings'] ) || ! is_array( $g['spellings'] ) ) return false;
+		}
+		return true;
+	}
+
+	/** The key that says two entries are the same group: their spellings/names, lower-cased and sorted. */
+	private static function entry_key( $entry ) {
+		$names = array();
+		foreach ( array( 'spellings', 'names' ) as $k ) {
+			if ( isset( $entry[ $k ] ) && is_array( $entry[ $k ] ) ) {
+				foreach ( $entry[ $k ] as $n ) $names[] = strtolower( trim( (string) $n ) );
+			}
+		}
+		sort( $names );
+		return implode( '|', $names );
+	}
+
+	/** $base plus every group of $add it does not already hold (never removes anything). */
+	public static function merge_maps( array $base, array $add ) {
+		foreach ( $add as $k => $v ) {
+			if ( ! in_array( $k, self::BUCKETS, true ) ) {
+				if ( ! array_key_exists( $k, $base ) ) $base[ $k ] = $v;
+				continue;
+			}
+			$have = array();
+			foreach ( ( isset( $base[ $k ] ) && is_array( $base[ $k ] ) ) ? $base[ $k ] : array() as $e ) $have[ self::entry_key( $e ) ] = true;
+			foreach ( is_array( $v ) ? $v : array() as $e ) {
+				if ( ! is_array( $e ) ) continue;
+				$key = self::entry_key( $e );
+				if ( $key !== '' && ! isset( $have[ $key ] ) ) { $base[ $k ][] = $e; $have[ $key ] = true; }
+			}
+		}
+		return $base;
+	}
+
+	/** How many groups a map holds, over all buckets. */
+	public static function group_count( $map ) {
+		$n = 0;
+		foreach ( self::BUCKETS as $b ) $n += ( is_array( $map ) && isset( $map[ $b ] ) && is_array( $map[ $b ] ) ) ? count( $map[ $b ] ) : 0;
+		return $n;
+	}
+
+	/**
+	 * Move an older build's name-homophones.json (beside this file, or in $dir) into the private
+	 * option, then delete the file. The file's groups are MERGED into whatever the option already
+	 * holds (a smaller list already stored never costs the file's groups), written with autoload
+	 * off, and read back; the file is deleted only once the option holds every group of it. Logs
+	 * counts, never a name.
+	 *
+	 * @param string|null $dir Folder holding the old file (default: this file's folder).
+	 * @return string What happened: 'none' | 'imported' | 'merged' | 'kept' | 'invalid' | 'failed' | 'wait'
+	 */
+	public static function migrate_legacy_file( $dir = null ) {
+		$file = rtrim( (string) ( $dir !== null ? $dir : __DIR__ ), '/' ) . '/' . self::LEGACY_FILE;
+		if ( ! is_file( $file ) || ! function_exists( 'get_option' ) ) return 'none';
+		if ( function_exists( 'get_transient' ) && get_transient( self::WAIT_KEY ) ) return 'wait';
+		$raw  = @file_get_contents( $file );
+		$data = ( $raw !== false && $raw !== '' ) ? json_decode( $raw, true ) : null;
+		if ( ! self::is_map( $data ) ) {
+			if ( ! is_file( $file ) ) return 'none';   // another request finished the move a moment ago
+			self::wait_and_log( 'Zorderz Name Match: the old sound-alike file is not a valid list; left in place for a person to check.' );
+			return 'invalid';
+		}
+		$existing = get_option( self::OPTION, null );
+		if ( is_string( $existing ) && $existing !== '' ) $existing = json_decode( $existing, true );
+		$base   = self::is_map( $existing ) ? $existing : array();
+		$merged = self::merge_maps( $base, $data );
+		if ( $base && self::group_count( $merged ) === self::group_count( $base ) ) {
+			$result = 'kept';                                     // the option already holds every group
+		} else {
+			if ( false === get_option( self::OPTION, false ) ) {
+				add_option( self::OPTION, $merged, '', 'no' );
+			} else {
+				update_option( self::OPTION, $merged, false );
+			}
+			$back = get_option( self::OPTION, null );
+			if ( ! self::is_map( $back ) || self::group_count( self::merge_maps( $back, $data ) ) !== self::group_count( $back ) ) {
+				self::wait_and_log( 'Zorderz Name Match: could not store the sound-alike list privately; the old file was kept.' );
+				return 'failed';
+			}
+			$result = $base ? 'merged' : 'imported';
+		}
+		$gone = @unlink( $file ) || ! is_file( $file );
+		if ( ! $gone ) {
+			self::wait_and_log( 'Zorderz Name Match: the sound-alike list is private now, but the public file could NOT be deleted - delete '
+				. basename( dirname( $file ) ) . '/' . self::LEGACY_FILE . ' by hand.' );
+			return $result;
+		}
+		if ( function_exists( 'error_log' ) ) {
+			$now = get_option( self::OPTION, null );
+			error_log( sprintf( 'Zorderz Name Match: sound-alike list %s (%d groups); the public file was deleted.',
+				'kept' === $result ? 'already private' : 'moved into a private setting', self::group_count( $now ) ) );
+		}
+		return $result;
+	}
+
+	private static function wait_and_log( $msg ) {
+		if ( function_exists( 'set_transient' ) ) set_transient( self::WAIT_KEY, 1, 3600 );
+		if ( function_exists( 'error_log' ) ) error_log( $msg );
 	}
 
 	/**
@@ -74,7 +204,7 @@ class ZDZ_Name_Match {
 	/**
 	 * Full name-match score for one candidate: the pure surname/first-name points PLUS the
 	 * additional soundalike points, in one call. >= 5 means "surface as a suggestion".
-	 * auto_fill stays each caller's own email/phone decision (INV-12).
+	 * auto_fill stays each caller's own email/phone decision.
 	 */
 	public static function name_score( $cand_fname, $cand_lname, $search_fname_norm, $search_lname_lower ) {
 		return self::name_match_points( $cand_fname, $cand_lname, $search_fname_norm, $search_lname_lower )
@@ -106,10 +236,10 @@ class ZDZ_Name_Match {
 			'chris' => 'christopher', 'ken' => 'kenneth', 'kenny' => 'kenneth',
 			'ed' => 'edward', 'eddie' => 'edward', 'ted' => 'edward',
 			'tony' => 'anthony', 'nick' => 'nicholas', 'matt' => 'matthew',
-			'greg' => 'gregory', 'Blake' => 'jeffrey', 'Robin' => 'ronald', 'don' => 'donald',
+			'greg' => 'gregory', 'jeff' => 'jeffrey', 'ron' => 'ronald', 'don' => 'donald',
 			'sam' => 'samuel', 'ben' => 'benjamin', 'andy' => 'andrew', 'drew' => 'andrew',
 			'pat' => 'patrick', 'gabe' => 'gabriel', 'phil' => 'philip', 'fred' => 'frederick',
-			'kathy' => 'katherine', 'kate' => 'katherine', 'Robin' => 'katherine', 'cathy' => 'catherine',
+			'kathy' => 'katherine', 'kate' => 'katherine', 'katie' => 'katherine', 'cathy' => 'catherine',
 			'liz' => 'elizabeth', 'beth' => 'elizabeth', 'betty' => 'elizabeth', 'sue' => 'susan',
 			'peggy' => 'margaret', 'meg' => 'margaret', 'maggie' => 'margaret',
 			'jen' => 'jennifer', 'jenny' => 'jennifer', 'becky' => 'rebecca',

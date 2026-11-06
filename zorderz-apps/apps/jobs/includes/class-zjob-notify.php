@@ -4,11 +4,15 @@
  *
  * The moment a job becomes a person's to act on, they get a real message. We do NOT
  * invent a parallel notifier — we send through the platform's existing DM system
- * (the Messaging app, ZIM). One DM gives the message, the in-app unread badge and a
- * push notification at once, via ZIM's own machinery.
+ * (the Messaging app, ZIM), on its own seam `zim_dm_send`: Messages decides who may
+ * send and receive and makes the post. One DM gives the message, the in-app unread
+ * badge and a push notification at once, via ZIM's own machinery.
  *
- *   scheduled / reassigned -> the WORKER (assignee) hears "a job is now yours".
+ *   scheduled / reassigned -> the WORKER (assignee) hears "a job is now yours" (and a bell row
+ *                             through the alert router, ZJOB_Accept_Notice::job_assigned).
  *   worker marked complete  -> the ORIGINATOR (created_by) hears "ready to close".
+ *   a project message       -> each person on the project hears the start of it, with a link.
+ * A notice never carries an access code: every body is cut through ZJOB_Sealed first.
  * The sender defaults to the actor who caused the transition, overridable via
  * `zdz_job_notify_sender` so a site can route through a dedicated bot user.
  *
@@ -24,7 +28,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZJOB_Notify {
 
-	/** Is the Messaging DM path available? */
+	/** Can a direct message be sent? Through the Messaging app's own seam (`zim_dm_send`) only. */
+	public static function can_send(): bool {
+		return function_exists( 'has_filter' ) && false !== has_filter( 'zim_dm_send' );
+	}
+
+	/** Can a direct conversation be opened (the People block's link)? */
 	public static function available(): bool {
 		return class_exists( 'ZIM_DMs' ) && class_exists( 'ZIM_Messages' )
 			&& method_exists( 'ZIM_DMs', 'get_or_create_conversation' )
@@ -36,6 +45,10 @@ class ZJOB_Notify {
 	 * DMs the assignee. $actor_id is the dispatcher who scheduled/reassigned it.
 	 */
 	public static function job_assigned( array $row, int $actor_id ): bool {
+		// A bell row beside the message. In-app only: the message already pushes.
+		if ( class_exists( 'ZJOB_Accept_Notice' ) ) {
+			ZJOB_Accept_Notice::job_assigned( $row, $actor_id );
+		}
 		$to        = (int) ( $row['assigned_user_id'] ?? 0 );
 		$comp      = self::component_label( (string) ( $row['component'] ?? '' ) );
 		$customer  = trim( (string) ( $row['customer_name'] ?? '' ) );
@@ -80,6 +93,63 @@ class ZJOB_Notify {
 		return self::dm_from_actor( $worker_id, $to, $body, 'ready_to_close' );
 	}
 
+	/**
+	 * A new message in a project's conversation. Messages one recipient from the author, with the
+	 * start of the message and a link that opens the project. Never self, never the shared device.
+	 */
+	public static function project_note( array $project, int $author_id, int $to, string $text ): bool {
+		$customer = trim( (string) ( $project['customer_name'] ?? ( $project['customer']['name'] ?? '' ) ) );
+		$code     = trim( (string) ( $project['human_code'] ?? ( $project['code'] ?? '' ) ) );
+		$snippet  = trim( (string) preg_replace( '/\s+/', ' ', $text ) );
+		if ( ( function_exists( 'mb_strlen' ) ? mb_strlen( $snippet ) : strlen( $snippet ) ) > 240 ) {
+			$snippet = ( function_exists( 'mb_substr' ) ? mb_substr( $snippet, 0, 237 ) : substr( $snippet, 0, 237 ) ) . '...';
+		}
+		$link = class_exists( 'ZJOB_Accept_Notice' ) ? ZJOB_Accept_Notice::link( (string) ( $project['id'] ?? '' ), '' ) : home_url( '/' );
+		$body = sprintf(
+			/* translators: 1: customer or "a project", 2: " (PRJ-…)" or "", 3: the start of the message, 4: link */
+			__( 'On %1$s%2$s: "%3$s" Reply in Projects: %4$s', 'zorderz' ),
+			'' !== $customer ? $customer : __( 'a project', 'zorderz' ),
+			'' !== $code ? ' (' . $code . ')' : '',
+			$snippet,
+			$link
+		);
+		return self::dm_from_actor( $author_id, $to, $body, 'project_note' );
+	}
+
+	/**
+	 * Can $viewer start a direct message with $to from a project's People block? The same questions
+	 * the Messaging app asks before it makes one: both may use Messages, the viewer may write (never
+	 * the shared device), and it is not themselves. Reads only.
+	 */
+	public static function dm_ready( int $viewer, int $to ): bool {
+		if ( $viewer <= 0 || $to <= 0 || $viewer === $to || ! self::available() ) {
+			return false;
+		}
+		if ( class_exists( 'ZDZ_Hierarchy' ) && ( ZDZ_Hierarchy::is_kiosk( $viewer ) || ZDZ_Hierarchy::is_kiosk( $to ) ) ) {
+			return false;
+		}
+		if ( ! function_exists( 'zim_user_has_access' ) || ! function_exists( 'zim_user_can_write' ) ) {
+			return false;
+		}
+		return zim_user_can_write( $viewer ) && zim_user_has_access( $viewer ) && zim_user_has_access( $to ) && false !== get_userdata( $to );
+	}
+
+	/**
+	 * The address of the viewer's direct conversation with $to in Messages (made if it does not exist
+	 * yet), on Messages' own deep link. Nothing is sent. '' when it cannot be opened.
+	 */
+	public static function dm_url( int $viewer, int $to ): string {
+		try {
+			if ( ! self::dm_ready( $viewer, $to ) ) {
+				return '';
+			}
+			$conv = (int) ZIM_DMs::get_or_create_conversation( $viewer, $to );
+			return $conv > 0 ? add_query_arg( array( 'zim_page' => 1, 'c' => $conv ), home_url( '/' ) ) : '';
+		} catch ( \Throwable $e ) {
+			return '';
+		}
+	}
+
 	/* =======================================================================
 	 * INTERNALS
 	 * ======================================================================= */
@@ -90,7 +160,7 @@ class ZJOB_Notify {
 	 */
 	private static function dm_from_actor( int $actor_id, int $to, string $body, string $context ): bool {
 		try {
-			if ( ! self::available() ) {
+			if ( ! self::can_send() ) {
 				return false;
 			}
 			/**
@@ -109,11 +179,12 @@ class ZJOB_Notify {
 				return false; // the shared device is not a person
 			}
 
-			$conv = (int) ZIM_DMs::get_or_create_conversation( $from, $to );
-			if ( $conv <= 0 ) {
-				return false;
+			// A notice never carries an access code.
+			if ( class_exists( 'ZJOB_Sealed' ) ) {
+				$body = (string) ZJOB_Sealed::cut( $body );
 			}
-			$res = ZIM_Messages::post( $conv, $from, $body );
+			// Messages owns the write: who may send and receive, the conversation, the post.
+			$res = apply_filters( 'zim_dm_send', null, $from, $to, $body, array() );
 			return is_array( $res ) && ! empty( $res['message_id'] );
 		} catch ( \Throwable $e ) {
 			return false;

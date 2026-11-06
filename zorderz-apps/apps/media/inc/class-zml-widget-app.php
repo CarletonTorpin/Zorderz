@@ -6,7 +6,7 @@
  * .dash-widget-body. The theme supplies the card chrome (icon, title, reorder
  * arrows) and revives the inline bootstrap <script> we emit here (see app.js
  * "Activate inline <script> tags inside widget HTML"). The bootstrap simply
- * hands off to the globally-enqueued controller window.TSMedia.mountWidget().
+ * hands off to the globally-enqueued controller window.ZMLMedia.mountWidget().
  *
  * Design: this is an at-a-glance surface, NOT the full gallery. It honours the
  * theme's WIDGET-OVERFLOW-CONTRACT (no nested scroll container — the body grows
@@ -55,7 +55,7 @@ class ZML_Widget_App implements \Zorderz\Widget_App_Interface {
 	 * "heavy data loads async after render" guidance).
 	 */
 	public function render_dashboard_widget( int $user_id ): ?string {
-		// v2.3.0: admins additionally get the "All" scope on the widget (browse
+		// admins additionally get the "All" scope on the widget (browse
 		// every photo incl. private). Non-admins see only Mine / Organization.
 		// The server re-authorizes scope=all on every request regardless.
 		$is_admin = function_exists( 'zml_current_user_is_admin' ) && zml_current_user_is_admin();
@@ -66,6 +66,7 @@ class ZML_Widget_App implements \Zorderz\Widget_App_Interface {
 				<div class="zml-seg" role="tablist" aria-label="Library scope">
 					<button class="zml-seg-btn zml-active" data-scope="mine"   role="tab" aria-selected="true">My&nbsp;Photos</button>
 					<button class="zml-seg-btn"            data-scope="public" role="tab" aria-selected="false">Organization</button>
+					<button class="zml-seg-btn"            data-scope="shared" role="tab" aria-selected="false">Shared&nbsp;with&nbsp;me</button>
 					<?php if ( $is_admin ) : ?>
 					<button class="zml-seg-btn"            data-scope="all"    role="tab" aria-selected="false">All</button>
 					<?php endif; ?>
@@ -87,7 +88,7 @@ class ZML_Widget_App implements \Zorderz\Widget_App_Interface {
 				<button class="zml-chip" data-type="sketch">Sketches</button>
 			</div>
 			<div class="zml-w-grid" id="zml-w-grid" aria-live="polite">
-				<div class="zml-loading">Loading…</div>
+				<?php /* the kit's loader, the same in every app */ ?><div class="zdz-loading" role="status" aria-live="polite"><span class="zdz-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="zdz-loading-label">Loading…</span></div>
 			</div>
 		</div>
 		<script>
@@ -96,8 +97,8 @@ class ZML_Widget_App implements \Zorderz\Widget_App_Interface {
 		 * .dash-widget-body scripts (app.js). It is intentionally tiny. */
 		(function () {
 			function boot() {
-				if (window.TSMedia && typeof window.TSMedia.mountWidget === 'function') {
-					window.TSMedia.mountWidget(document.getElementById('zml-w'));
+				if (window.ZMLMedia && typeof window.ZMLMedia.mountWidget === 'function') {
+					window.ZMLMedia.mountWidget(document.getElementById('zml-w'));
 				} else {
 					// Controller not parsed yet — retry briefly, then on the
 					// theme's widgets-rendered event as a backstop.

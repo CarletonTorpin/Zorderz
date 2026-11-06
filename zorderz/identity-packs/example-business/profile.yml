@@ -58,6 +58,10 @@ locale:
 email:
   primary_domain: "example.com"
   staff_address_pattern: "{first}@{primary_domain}"
+  # Calendars connected from these mail domains are work calendars: a colleague
+  # sees the titles of their events. Exactly these domains, nothing below them.
+  # Leave it out and no titles are shown at all.
+  work_domains: [example.com]
 
 messaging:
   senders:

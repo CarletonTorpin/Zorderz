@@ -20,12 +20,28 @@
  *   we delete the sub. User re-authorizes on next visit — new sub gets the
  *   new key. Rotations are transparent.
  *
- * LOGOUT (Trap 6 / acceptance #13):
- *   clear_auth_cookie fires on logout. on_logout() deletes push subscription
- *   rows tied to the current user. If the logout request can't also unsubscribe
- *   the browser endpoint (would require client-side cooperation), that's fine —
- *   delivery checks user_id match before firing, so mismatched subs stay
- *   silent.
+ * LOGOUT (Trap 6 / acceptance #13), scoped to the device:
+ *   clear_auth_cookie fires on logout. Each subscription records a hash of the
+ *   WordPress session that made it (session_hash = sha256 of
+ *   wp_get_session_token(), the same verifier WordPress keeps in usermeta), and
+ *   on_logout() deletes only the rows of the session signing out. Deleting every
+ *   row of the person would mean that signing out on a desktop or a shared
+ *   computer silently stopped pushes to their phone. Rows made before the
+ *   session column existed carry no hash and are left alone; nothing ever
+ *   deletes everything. The shared-device protection holds: the device that
+ *   signs out loses its own subscription, and the next person's sign-in
+ *   re-assigns the endpoint to them only if they turn notifications on.
+ *
+ * ENDPOINTS: stored and sent to only on a known browser push service
+ *   (ZDZ_Push_Endpoint), checked when a browser subscribes and again before
+ *   every send; a stored row that fails the check is dropped. Sends go through
+ *   ZDZ_Push_Endpoint::post() (no redirects, no private addresses), and
+ *   nothing of the service's reply is passed on, only its status code.
+ *
+ * SETTINGS: the registry read verb messaging.push_setup describes this channel
+ *   to the theme's Settings -> Notifications (key, worker, endpoints, this
+ *   person's current subscriptions, quiet hours). The writes stay here, at
+ *   zim_push_subscribe / _unsubscribe / _test (ZIM_Dashboard).
  *
  * PAYLOAD:
  *   JSON, under 4 KB. Frontend SW reads it. We include enough context for
@@ -44,6 +60,27 @@ class ZIM_Push {
 	const OPT_VAPID_PUBLIC  = 'zim_vapid_public_b64';
 	const OPT_VAPID_CREATED = 'zim_vapid_created_at';
 	const OPT_VAPID_SUBJECT = 'zim_vapid_subject';
+
+	/** Send me a test: at most this many per person per hour. */
+	const TEST_LIMIT     = 5;
+	const TEST_WINDOW    = 3600;
+	const META_TESTS     = 'zim_push_tests';
+	const VERB_SETUP     = 'messaging.push_setup';
+
+	/** @var bool|null per request: does the table have session_hash yet (has the migration run)? */
+	private static $has_session_col = null;
+
+	/** The test push: "<business name> test", and one line saying it works. */
+	public static function test_payload() {
+		$name = class_exists( 'ZDZ_Business_Profile' ) ? trim( (string) ZDZ_Business_Profile::name() ) : '';
+		return array(
+			/* translators: %s: the business's name */
+			'title' => '' !== $name ? sprintf( __( '%s test', 'zorderz' ), $name ) : __( 'Test notification', 'zorderz' ),
+			'body'  => __( 'Notifications work on this device (notices and Messages).', 'zorderz' ),
+			'url'   => home_url( '/' ),
+			'tag'   => 'zdz-push-test-messages',
+		);
+	}
 
 	/**
 	 * Ensure a VAPID keypair exists and return the public key (base64url,
@@ -121,15 +158,18 @@ class ZIM_Push {
 	 * @param string $auth          b64url-encoded subscriber auth secret
 	 * @param string $user_agent
 	 */
-	public static function subscribe( $user_id, $endpoint, $p256dh, $auth, $user_agent = '' ) {
+	public static function subscribe( $user_id, $endpoint, $p256dh, $auth, $user_agent = '', $session_hash = null ) {
 		global $wpdb;
 		$user_id  = (int) $user_id;
 		$endpoint = (string) $endpoint;
+		// The session that made it, so signing out removes this device only (on_logout()).
+		$session_hash = null === $session_hash ? self::session_hash() : (string) $session_hash;
+		$with_session = self::has_session_col();
 		if ( $user_id <= 0 || '' === $endpoint ) {
 			return new WP_Error( 'zim_bad_sub', 'Invalid subscription.' );
 		}
-		if ( ! preg_match( '#^https://#i', $endpoint ) ) {
-			return new WP_Error( 'zim_bad_sub', 'Endpoint must be https://.' );
+		if ( ! self::endpoint_ok( $endpoint ) ) {
+			return new WP_Error( 'zim_bad_sub', __( 'This browser\'s notification service is not one this site sends to', 'zorderz' ) );
 		}
 
 		$hash = hash( 'sha256', $endpoint );
@@ -141,36 +181,51 @@ class ZIM_Push {
 			$hash
 		) );
 		if ( $existing ) {
-			$wpdb->update(
-				$wpdb->prefix . 'zim_push_subscriptions',
-				array(
-					'user_id'    => $user_id,
-					'p256dh'     => sanitize_text_field( $p256dh ),
-					'auth'       => sanitize_text_field( $auth ),
-					'user_agent' => sanitize_text_field( substr( (string) $user_agent, 0, 250 ) ),
-					'rotated_at' => null,
-				),
-				array( 'id' => (int) $existing->id ),
-				array( '%d','%s','%s','%s','%s' ),
-				array( '%d' )
+			$row = array(
+				'user_id'    => $user_id,
+				'p256dh'     => sanitize_text_field( $p256dh ),
+				'auth'       => sanitize_text_field( $auth ),
+				'user_agent' => sanitize_text_field( substr( (string) $user_agent, 0, 250 ) ),
+				'rotated_at' => null,
 			);
+			$fmt = array( '%d','%s','%s','%s','%s' );
+			if ( $with_session ) {
+				$row['session_hash'] = '' !== $session_hash ? $session_hash : null;
+				$fmt[] = '%s';
+			}
+			$wpdb->update( $wpdb->prefix . 'zim_push_subscriptions', $row, array( 'id' => (int) $existing->id ), $fmt, array( '%d' ) );
 			return (int) $existing->id;
 		}
 
-		$wpdb->insert(
-			$wpdb->prefix . 'zim_push_subscriptions',
-			array(
-				'user_id'       => $user_id,
-				'endpoint'      => $endpoint,
-				'endpoint_hash' => $hash,
-				'p256dh'        => sanitize_text_field( $p256dh ),
-				'auth'          => sanitize_text_field( $auth ),
-				'user_agent'    => sanitize_text_field( substr( (string) $user_agent, 0, 250 ) ),
-				'created_at'    => current_time( 'mysql', true ),
-			),
-			array( '%d','%s','%s','%s','%s','%s','%s' )
+		$row = array(
+			'user_id'       => $user_id,
+			'endpoint'      => $endpoint,
+			'endpoint_hash' => $hash,
+			'p256dh'        => sanitize_text_field( $p256dh ),
+			'auth'          => sanitize_text_field( $auth ),
+			'user_agent'    => sanitize_text_field( substr( (string) $user_agent, 0, 250 ) ),
+			'created_at'    => current_time( 'mysql', true ),
 		);
+		$fmt = array( '%d','%s','%s','%s','%s','%s','%s' );
+		if ( $with_session ) {
+			$row['session_hash'] = '' !== $session_hash ? $session_hash : null;
+			$fmt[] = '%s';
+		}
+		$wpdb->insert( $wpdb->prefix . 'zim_push_subscriptions', $row, $fmt );
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * May the server store and send to this endpoint? Only on a known browser push service (ZDZ_Push_Endpoint: https,
+	 * port 443, a push service's host name, never an IP address). Without the kernel check nothing is sent.
+	 */
+	public static function endpoint_ok( $endpoint ) {
+		return class_exists( 'ZDZ_Push_Endpoint' ) && '' !== ZDZ_Push_Endpoint::validate( (string) $endpoint );
+	}
+
+	/** A send result that means "drop this row": the service called it gone, or it is not on a known push service. */
+	public static function is_dead( $result ) {
+		return is_wp_error( $result ) && in_array( $result->get_error_code(), array( 'gone', 'not_found', 'zim_endpoint_refused' ), true );
 	}
 
 	/**
@@ -188,20 +243,235 @@ class ZIM_Push {
 	}
 
 	/**
-	 * Logout handler — nuke all subscriptions tied to the logged-out user.
-	 * Prevents the shared-device leak (Trap 6 / acceptance #13).
+	 * Logout handler (Trap 6 / acceptance #13): removes the subscription(s) of the session signing out - this device -
+	 * and nothing else, never every device of the person. No session token, no session column, or no rows of that
+	 * session: nothing is deleted. Rows made before the session column existed (no hash) are left alone.
 	 */
 	public static function on_logout() {
-		$user_id = get_current_user_id();
-		if ( $user_id <= 0 ) {
+		$user_id = (int) get_current_user_id();
+		$sh      = self::session_hash();
+		if ( $user_id <= 0 || '' === $sh || ! self::has_session_col() ) {
 			return;
 		}
 		global $wpdb;
 		$wpdb->delete(
 			$wpdb->prefix . 'zim_push_subscriptions',
-			array( 'user_id' => (int) $user_id ),
-			array( '%d' )
+			array( 'user_id' => $user_id, 'session_hash' => $sh ),
+			array( '%d', '%s' )
 		);
+	}
+
+	/** sha256 of this request's WordPress session token ('' when there is none). Never the token itself. */
+	public static function session_hash() {
+		$t = function_exists( 'wp_get_session_token' ) ? (string) wp_get_session_token() : '';
+		return '' === $t ? '' : hash( 'sha256', $t );
+	}
+
+	/** Has the migration added session_hash? Checked once per request; a failed migration never breaks a write. */
+	public static function has_session_col() {
+		if ( null === self::$has_session_col ) {
+			global $wpdb;
+			self::$has_session_col = 'session_hash' === (string) $wpdb->get_var( "SHOW COLUMNS FROM {$wpdb->prefix}zim_push_subscriptions LIKE 'session_hash'" );
+		}
+		return self::$has_session_col;
+	}
+
+	/** The endpoint hashes of this person's subscriptions that can still be delivered (made under the current key). */
+	public static function subscribed_hashes( $user_id ) {
+		global $wpdb;
+		$h = $wpdb->get_col( $wpdb->prepare(
+			"SELECT endpoint_hash FROM {$wpdb->prefix}zim_push_subscriptions WHERE user_id = %d AND rotated_at IS NULL",
+			(int) $user_id
+		) );
+		return array_values( array_map( 'strval', (array) $h ) );
+	}
+
+	/**
+	 * Of those, the ones made (or last re-stamped) in THIS sign-in session. A listed subscription that is not here was
+	 * made in an earlier session, or before the session column existed: the app posts it again so the row carries this
+	 * session, or signing out on this device would not find it.
+	 */
+	public static function current_hashes( $user_id ) {
+		$sh = self::session_hash();
+		if ( '' === $sh || ! self::has_session_col() ) {
+			return array();
+		}
+		global $wpdb;
+		$h = $wpdb->get_col( $wpdb->prepare(
+			"SELECT endpoint_hash FROM {$wpdb->prefix}zim_push_subscriptions WHERE user_id = %d AND rotated_at IS NULL AND session_hash = %s",
+			(int) $user_id, $sh
+		) );
+		return array_values( array_map( 'strval', (array) $h ) );
+	}
+
+	// ─────────────────────────────────────────────────────────────
+	// The registry verb messaging.push_setup (Settings -> Notifications)
+	// ─────────────────────────────────────────────────────────────
+
+	/**
+	 * messaging.push_setup - what the theme's Settings needs to turn this channel on or off on a device.
+	 *
+	 * Who gets what:
+	 *   - anyone with Messages (tech, staff, admin): the public key, the worker and its scope, the subscribe /
+	 *     unsubscribe / test actions with nonces for THEM, the endpoint hashes of their own current subscriptions (so a
+	 *     device can tell whether it is on; never an endpoint, never anyone else's), which of those carry THIS sign-in
+	 *     session (current_hashes: the app re-posts the others, so signing out on this device finds them), and their
+	 *     quiet hours (their own, else the business's, else Core's: ZDZ_Quiet_Hours);
+	 *   - the shared device, an account in Privacy View, the signed-out, someone without Messages: refused.
+	 * Viewer tier, not staff: field roles get notices and Messages too. needs_app false: the callback applies Messages'
+	 * own access rule (zim_user_has_access + ZIM_Widget::should_render, which also refuses customer-facing mode).
+	 */
+	public static function register_capabilities( $caps ) {
+		$caps = is_array( $caps ) ? $caps : array();
+		$caps[ self::VERB_SETUP ] = array(
+			'callable'   => array( __CLASS__, 'from_capability' ),
+			'descriptor' => array(
+				'verb'          => self::VERB_SETUP,
+				'source'        => 'zdz-internal-messaging',
+				'app'           => 'internal-messaging',
+				'min_tier'      => 'viewer',
+				'kiosk'         => false,
+				'kiosk_bounded' => false,
+				'side_effect'   => false,
+				'confirm'       => false,
+				'needs_app'     => false,
+				'summary'       => 'How this person turns on phone notifications for notices and Messages on a device: key, worker, endpoints, and which of their subscriptions are current. Never for the shared device.',
+			),
+		);
+		return $caps;
+	}
+
+	public static function from_capability( $args ) {
+		$args = is_array( $args ) ? $args : array();
+		$uid  = (int) ( $args['user_id'] ?? 0 );
+		$no   = array( 'success' => false, 'error' => __( 'Messages notifications are not available on this account.', 'zorderz' ) );
+		if ( $uid <= 0 || ! empty( $args['is_kiosk'] ) || self::refused( $uid ) ) {
+			return $no;
+		}
+		if ( ! function_exists( 'zim_user_has_access' ) || ! zim_user_has_access( $uid )
+			|| ( class_exists( 'ZIM_Widget' ) && ! ZIM_Widget::should_render() ) ) {
+			return $no;
+		}
+		$key = self::get_public_key();
+		if ( '' === (string) $key ) {
+			return array( 'success' => false, 'error' => __( 'Messages notifications are not set up on the server.', 'zorderz' ) );
+		}
+		$sw    = ZIM_PLUGIN_URL . 'assets/js/sw.js';
+		$path  = (string) wp_parse_url( $sw, PHP_URL_PATH );
+		$scope = substr( $path, 0, strrpos( $path, '/' ) + 1 );
+		$nonce = wp_create_nonce( ZIM_NONCE );
+		$quiet = class_exists( 'ZIM_Notifications' ) && method_exists( 'ZIM_Notifications', 'get_quiet_hours' )
+			? (array) ZIM_Notifications::get_quiet_hours( $uid )
+			: array( 'start' => ZIM_DEFAULT_QUIET_START, 'end' => ZIM_DEFAULT_QUIET_END );
+		return array(
+			'success'           => true,
+			'channel'           => 'messages',
+			'label'             => __( 'Notices and Messages', 'zorderz' ),
+			'parts'             => array( __( 'notices', 'zorderz' ), __( 'Messages', 'zorderz' ) ),
+			'vapid_public_key'  => (string) $key,
+			'sw_url'            => $sw,
+			'sw_scope'          => $scope,
+			'subscribe'         => array( 'action' => 'zim_push_subscribe', 'nonce' => $nonce ),
+			'unsubscribe'       => array( 'action' => 'zim_push_unsubscribe', 'nonce' => $nonce ),
+			'test'              => array( 'action' => 'zim_push_test', 'nonce' => $nonce ),
+			'subscribed_hashes' => self::subscribed_hashes( $uid ),
+			'current_hashes'    => self::current_hashes( $uid ),
+			'quiet_hours'       => array(
+				'start'  => (string) ( $quiet['start'] ?? ZIM_DEFAULT_QUIET_START ),
+				'end'    => (string) ( $quiet['end'] ?? ZIM_DEFAULT_QUIET_END ),
+				'action' => 'zim_set_quiet_hours',
+				'nonce'  => $nonce,
+			),
+		);
+	}
+
+	/**
+	 * Never phone notifications for: the shared device (whatever other roles it holds), a messaging read-only role,
+	 * or an account in Privacy View (it reads its one thread in the app, masked; a push or an e-mail would not be).
+	 */
+	public static function refused( $uid ) {
+		$uid = (int) $uid;
+		if ( $uid <= 0 ) {
+			return true;
+		}
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $uid ) ) {
+			return true;
+		}
+		if ( class_exists( 'ZDZ_Hierarchy' ) && method_exists( 'ZDZ_Hierarchy', 'is_kiosk' ) && ZDZ_Hierarchy::is_kiosk( $uid ) ) {
+			return true;
+		}
+		if ( function_exists( 'zim_user_is_read_only' ) && zim_user_is_read_only( $uid ) ) {
+			return true;
+		}
+		return class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on( $uid );
+	}
+
+	// ─────────────────────────────────────────────────────────────
+	// Send me a test
+	// ─────────────────────────────────────────────────────────────
+
+	/**
+	 * Send the fixed test push to the asker's own subscriptions - only this device's when it names its endpoint (which
+	 * must be theirs). Immediate: it ignores quiet hours, because the person asked for it. At most TEST_LIMIT an hour.
+	 *
+	 * @return array|WP_Error { sent, pruned, failed }
+	 */
+	public static function send_test( $user_id, $endpoint = '' ) {
+		global $wpdb;
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return new WP_Error( 'zim_test_signed_out', __( 'Sign in first.', 'zorderz' ) );
+		}
+		if ( self::refused( $user_id ) ) {
+			return new WP_Error( 'zim_test_refused', __( 'Messages notifications are not available on this account.', 'zorderz' ) );
+		}
+		$now   = time();
+		$stamp = get_user_meta( $user_id, self::META_TESTS, true );
+		$stamp = array_values( array_filter( is_array( $stamp ) ? array_map( 'intval', $stamp ) : array(), function ( $t ) use ( $now ) {
+			return $t > $now - self::TEST_WINDOW;
+		} ) );
+		if ( count( $stamp ) >= self::TEST_LIMIT ) {
+			$wait = max( 1, (int) ceil( ( min( $stamp ) + self::TEST_WINDOW - $now ) / 60 ) );
+			/* translators: 1: tests allowed per hour, 2: minutes to wait */
+			return new WP_Error( 'zim_test_limit', sprintf( __( 'That is %1$d tests this hour. Try again in %2$d min.', 'zorderz' ), self::TEST_LIMIT, $wait ) );
+		}
+		$endpoint = (string) $endpoint;
+		if ( '' !== $endpoint ) {
+			$rows = $wpdb->get_results( $wpdb->prepare(
+				"SELECT id, endpoint, p256dh, auth FROM {$wpdb->prefix}zim_push_subscriptions WHERE user_id = %d AND endpoint_hash = %s",
+				$user_id, hash( 'sha256', $endpoint )
+			) );
+			if ( ! $rows ) {
+				return new WP_Error( 'zim_test_not_this_device', __( 'This device is not subscribed for notices and Messages. Turn notifications on first.', 'zorderz' ) );
+			}
+		} else {
+			$rows = $wpdb->get_results( $wpdb->prepare(
+				"SELECT id, endpoint, p256dh, auth FROM {$wpdb->prefix}zim_push_subscriptions WHERE user_id = %d AND rotated_at IS NULL",
+				$user_id
+			) ); // a row made under a rotated key cannot be delivered
+			if ( ! $rows ) {
+				return new WP_Error( 'zim_test_none', __( 'No device is subscribed for notices and Messages yet.', 'zorderz' ) );
+			}
+		}
+		$stamp[] = $now;
+		update_user_meta( $user_id, self::META_TESTS, $stamp );
+
+		$json = wp_json_encode( self::test_payload() );
+		$sent = 0; $pruned = 0; $failed = 0;
+		foreach ( $rows as $row ) {
+			$r = self::send_one( $row->endpoint, $row->p256dh, $row->auth, $json );
+			if ( true === $r ) {
+				$sent++;
+				continue;
+			}
+			if ( self::is_dead( $r ) ) {
+				$wpdb->delete( $wpdb->prefix . 'zim_push_subscriptions', array( 'id' => (int) $row->id ), array( '%d' ) );
+				$pruned++;
+			} else {
+				$failed++;
+			}
+		}
+		return array( 'sent' => $sent, 'pruned' => $pruned, 'failed' => $failed );
 	}
 
 	/**
@@ -213,6 +483,9 @@ class ZIM_Push {
 	public static function send_to_user( $user_id, $payload ) {
 		global $wpdb;
 		$user_id = (int) $user_id;
+		if ( self::refused( $user_id ) ) {
+			return array( 'sent' => 0, 'pruned' => 0 );   // the shared device never gets a push, whoever queued it
+		}
 		$rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT id, endpoint, p256dh, auth
 			   FROM {$wpdb->prefix}zim_push_subscriptions
@@ -233,9 +506,8 @@ class ZIM_Push {
 		foreach ( $rows as $row ) {
 			$result = self::send_one( $row->endpoint, $row->p256dh, $row->auth, $json );
 			if ( is_wp_error( $result ) ) {
-				$code = $result->get_error_code();
-				if ( 'gone' === $code || 'not_found' === $code ) {
-					// Subscription dead — prune.
+				if ( self::is_dead( $result ) ) {
+					// Subscription dead, or not on a known push service: prune it.
 					$wpdb->delete(
 						$wpdb->prefix . 'zim_push_subscriptions',
 						array( 'id' => (int) $row->id ),
@@ -252,9 +524,15 @@ class ZIM_Push {
 
 	/**
 	 * Send one encrypted push payload to a specific endpoint.
-	 * Returns true on 2xx, WP_Error otherwise.
+	 * Returns true on 2xx, WP_Error otherwise. An endpoint that is not on a known push service (a row stored before
+	 * the check existed) is never sent to: WP_Error 'zim_endpoint_refused', and the callers drop the row. The send goes
+	 * through ZDZ_Push_Endpoint::post() (redirects off, private addresses refused); only the status code comes back.
 	 */
 	public static function send_one( $endpoint, $p256dh_b64, $auth_b64, $payload ) {
+		$endpoint = (string) $endpoint;
+		if ( ! self::endpoint_ok( $endpoint ) ) {
+			return new WP_Error( 'zim_endpoint_refused', 'Not a known push service.' );
+		}
 		$public_key = self::get_public_key();
 		$private_pem = get_option( self::OPT_VAPID_PRIVATE, '' );
 		if ( ! $public_key || ! $private_pem ) {
@@ -289,7 +567,7 @@ class ZIM_Push {
 			'Authorization'    => 'vapid t=' . $jwt . ', k=' . $public_key,
 		);
 
-		$response = wp_remote_post( $endpoint, array(
+		$response = ZDZ_Push_Endpoint::post( $endpoint, array(
 			'headers'  => $headers,
 			'body'     => $enc,
 			'timeout'  => 10,
@@ -297,7 +575,9 @@ class ZIM_Push {
 		) );
 
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return 'zdz_push_endpoint_refused' === $response->get_error_code()
+				? new WP_Error( 'zim_endpoint_refused', 'Not a known push service.' )
+				: new WP_Error( 'zim_push_unreachable', 'The push service could not be reached.' );
 		}
 		$code = (int) wp_remote_retrieve_response_code( $response );
 		if ( $code >= 200 && $code < 300 ) {

@@ -16,7 +16,7 @@
 	'use strict';
 
 	var cfg = window.zjobNav || {};
-	// Kiosk / no-access users never get the Jobs nav (INV-10; server still gates).
+	// Kiosk / no-access users never get the Jobs nav (a shared device is not a person; the server still gates).
 	if (cfg.canSeeJobs === false) { return; }
 
 	function drawIcons() {
@@ -54,6 +54,26 @@
 		}
 		drawIcons();
 		return true;
+	}
+
+	// A project link (/?zprj=<id>[&at=orders]) opens the Projects app on that project.
+	function openProjectLink() {
+		var id = '', at = '';
+		try {
+			var qs = new URLSearchParams(window.location.search);
+			id = qs.get('zprj') || '';
+			at = qs.get('at') || '';
+		} catch (e) { return; }
+		if (!id || typeof window.openApp !== 'function') { return false; }
+		window.zjobOpenProject = { id: id, at: at };
+		window.openApp('projects');
+		return true;
+	}
+	if (!openProjectLink()) {
+		document.addEventListener('zdz_widgets_rendered', function once() {
+			document.removeEventListener('zdz_widgets_rendered', once);
+			openProjectLink();
+		});
 	}
 
 	// Fire now + on the usual lifecycle events, plus a couple of delayed retries

@@ -20,8 +20,9 @@
  *     or 'one_off'. Subtypes are WordPress taxonomy terms — we use the platform's
  *     own taxonomy engine rather than a parallel store.
  *   - PER-ITEM PRICING SCHEMES the owner defines: flat / per_unit / per_hour /
- *     per_area / per_visit / tiered / formula(cost x markup) / quote_only. Named
- *     schemes are reusable, cloneable, and editable globally or per item.
+ *     per_area / per_visit / tiered / formula(cost x markup) / quote_only / grid
+ *     (a price list of variants by SKU and size: the price book, ZDZ_Price_Book).
+ *     Named schemes are reusable, cloneable, and editable globally or per item.
  *   - THE COUNTS CONTRACT is catalog-driven. Count categories are Items, not a
  *     fixed enum. count_categories() / classify() / kinds() / aliases() are the
  *     single authority; there are NO hardcoded product names anywhere here.
@@ -86,7 +87,7 @@ class ZDZ_Item_Engine {
 	 * rate, which is exactly the proof the method belongs to the platform.
 	 */
 	const PRICING_METHODS = [
-		'flat', 'per_unit', 'per_hour', 'per_area', 'per_visit', 'tiered', 'formula', 'quote_only',
+		'flat', 'per_unit', 'per_hour', 'per_area', 'per_visit', 'tiered', 'formula', 'quote_only', 'grid',
 	];
 
 	/** The counts-contract shape discriminator. Consumers branch on this, never by probing for keys. */
@@ -467,7 +468,7 @@ class ZDZ_Item_Engine {
 	}
 
 	/* ============================================================== *
-	 *  CONFLICT DETECTION  (§77 Fix A — mutually-exclusive trait pairs)
+	 *  CONFLICT DETECTION  (mutually-exclusive trait pairs)
 	 * ============================================================== */
 
 	/**
@@ -475,7 +476,7 @@ class ZDZ_Item_Engine {
 	 * within a small token window in ONE stream (the raw input, and separately each single
 	 * line item — never across items, which fragment-splits and both mis-flags and misses).
 	 * Proximity, not "both words present". The engine is the authority; a caller sets
-	 * needs_review and neutralises the reference on a hit (INV-12).
+	 * needs_review and neutralises the reference on a hit.
 	 *
 	 * CORE MECHANISM, NAMES NOTHING. The trait pairs come from `zdz_item_conflict_pairs`
 	 * (ships EMPTY) — each pair `{ a:[token-prefix…], b:[token-prefix…], reason }`. A
@@ -1004,6 +1005,9 @@ class ZDZ_Item_Engine {
 			case 'tiered':
 				return self::resolve_tiered( $scheme, $ctx );
 
+			case 'grid':
+				return self::resolve_grid( $scheme, $ctx );
+
 			case 'formula':
 				$vars = array_merge(
 					[ 'qty' => $qty, 'quantity' => $qty ],
@@ -1033,6 +1037,51 @@ class ZDZ_Item_Engine {
 			$amt = (float) ( $tier['amount'] ?? $amt );
 		}
 		return self::price_result( $amt, $scheme, sprintf( 'tiered @ %s', $axis ) );
+	}
+
+	/**
+	 * A grid: a list of variants (params.variants: sku, price, double_price, dims.max_width_in / max_height_in,
+	 * attributes). The context names a variant by `sku`, or gives a size (width_in, height_in) and `attributes` to
+	 * match, and the smallest covering variant is priced; `pair` asks for its pair price. A variant without a price,
+	 * or no variant, is quote only. Words on an estimate line are read by ZDZ_Price_Book::match_line(), not here.
+	 */
+	private static function resolve_grid( array $scheme, array $ctx ) {
+		$qty   = (float) ( $ctx['qty'] ?? $ctx['quantity'] ?? 1 );
+		$pick  = null;
+		$want  = isset( $ctx['sku'] ) ? (string) $ctx['sku'] : '';
+		$w     = isset( $ctx['width_in'] ) ? (float) $ctx['width_in'] : null;
+		$h     = isset( $ctx['height_in'] ) ? (float) $ctx['height_in'] : null;
+		$attrs = is_array( $ctx['attributes'] ?? null ) ? $ctx['attributes'] : [];
+		foreach ( (array) ( $scheme['params']['variants'] ?? [] ) as $v ) {
+			if ( ! is_array( $v ) ) {
+				continue;
+			}
+			if ( '' !== $want ) {
+				if ( (string) ( $v['sku'] ?? '' ) === $want ) {
+					$pick = $v;
+					break;
+				}
+				continue;
+			}
+			$mw = isset( $v['dims']['max_width_in'] ) ? (float) $v['dims']['max_width_in'] : null;
+			$mh = isset( $v['dims']['max_height_in'] ) ? (float) $v['dims']['max_height_in'] : null;
+			if ( null === $mw || null === $mh || ( null !== $w && $mw + 1e-6 < $w ) || ( null !== $h && $mh + 1e-6 < $h ) ) {
+				continue;
+			}
+			foreach ( $attrs as $k => $val ) {
+				if ( isset( $v['attributes'][ $k ] ) && (string) $v['attributes'][ $k ] !== (string) $val ) {
+					continue 2;
+				}
+			}
+			if ( null === $pick || [ $mw, $mh ] < [ (float) $pick['dims']['max_width_in'], (float) $pick['dims']['max_height_in'] ] ) {
+				$pick = $v;
+			}
+		}
+		if ( ! $pick || null === ( $pick['price'] ?? null ) ) {
+			return [ 'amount' => null, 'method' => 'grid', 'quote_only' => true, 'explain' => __( 'No listed price: quote by hand.', 'zorderz' ) ];
+		}
+		$unit = ! empty( $ctx['pair'] ) ? (float) ( $pick['double_price'] ?? 2 * (float) $pick['price'] ) : (float) $pick['price'];
+		return self::price_result( $unit * $qty, $scheme, sprintf( 'grid %s', (string) ( $pick['sku'] ?? '' ) ) );
 	}
 
 	private static function price_result( $amount, array $scheme, $explain ) {
@@ -1075,7 +1124,7 @@ class ZDZ_Item_Engine {
 	 * does not recognise yields 0 — the evaluator refuses rather than guessing.
 	 *
 	 * This is the CORE mechanism the whole Pricing Scheme model rests on; it is
-	 * intentionally small and closed. It is the one thing not to make configurable loosely.
+	 * intentionally small and closed. It is the one thing not to generalise loosely.
 	 */
 	public static function eval_formula( $expr, array $vars = [] ) {
 		$expr = (string) $expr;
@@ -1618,6 +1667,27 @@ class ZDZ_Item_Engine {
 
 	// ───────────────────────────────────────────────────────── REST (publishes the vocabulary)
 
+	/** Attribute keys that hold what an item costs the business. */
+	const COST_ATTRS = [ 'cost', 'cost_type', 'cost_percent', 'cost_formula' ];
+
+	/**
+	 * An item as the signed-in person may read it over REST: a cost an older catalog keeps in an
+	 * item's attributes is left out for anyone who may not see costs (ZDZ_Price_Book's rule:
+	 * the admin tier, never Privacy View, never the shared device). Server-side readers
+	 * (get(), all()) are unchanged.
+	 */
+	public static function for_viewer( $item ) {
+		if ( ! is_array( $item ) || ! is_array( $item['attributes'] ?? null ) ) {
+			return $item;
+		}
+		$uid = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+		$may = class_exists( 'ZDZ_Price_Book' ) ? ZDZ_Price_Book::may_see_costs( $uid ) : ( function_exists( 'user_can' ) && $uid > 0 && user_can( $uid, 'manage_options' ) );
+		if ( ! $may ) {
+			$item['attributes'] = array_diff_key( $item['attributes'], array_flip( self::COST_ATTRS ) );
+		}
+		return $item;
+	}
+
 	public static function register_rest() {
 		$read = static function () {
 			return is_user_logged_in();
@@ -1636,7 +1706,7 @@ class ZDZ_Item_Engine {
 							'empty'    => self::is_empty(),
 							'types'    => self::TYPES,
 							'subtypes' => self::subtypes(),
-							'items'    => array_values( self::all() ),
+							'items'    => array_values( array_map( array( __CLASS__, 'for_viewer' ), self::all() ) ),
 						]
 					);
 				},
@@ -1675,7 +1745,7 @@ class ZDZ_Item_Engine {
 					return rest_ensure_response(
 						[
 							'kind' => $item ? $item['id'] : null,
-							'item' => $item,
+							'item' => $item ? self::for_viewer( $item ) : $item,
 						]
 					);
 				},

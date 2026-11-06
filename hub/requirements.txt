@@ -1,0 +1,9 @@
+# The Charts hub's Python packages (Python 3.11 or newer). Install into the hub user's own virtual environment:
+#   python3 -m venv ~/zorderz-hub-venv && ~/zorderz-hub-venv/bin/pip install -r requirements.txt
+pynacl>=1.5        # the sealed envelope (libsodium crypto_box)
+pandas>=2.1        # the store and every chart's numbers
+numpy>=1.26
+pyyaml>=6.0        # the identity pack
+jsonschema>=4.20   # the chart spec schema
+# optional: survey drives (transcription runs on the hub computer)
+#   mlx-whisper (Apple silicon) or another Whisper build, and ffmpeg on the PATH

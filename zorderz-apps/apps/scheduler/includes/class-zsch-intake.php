@@ -17,8 +17,8 @@
  *   3. asks Zsch_Suggest for genuinely-free start times (local reads only).
  *   4. STASHES the bundle under a 32-char, single-user, single-use, TTL token,
  *      SERVER-SIDE. The origin `{ns, ref_id}` is held under that token and NEVER
- *      travels to the client, a query arg, the URL, referrer, or history (INV-1 /
- *      the PII-in-transit control). Only the opaque token handle goes to the
+ *      travels to the client, a query arg, the URL, referrer, or history (the
+ *      server is the boundary; the PII-in-transit control). Only the opaque token handle goes to the
  *      browser.
  *
  * ON SAVE the create route resolves the token → origin and passes it to
@@ -28,7 +28,7 @@
  * Even so, the receiver RE-DERIVES its own gate: the born-linked write re-runs both
  * of Jobs' fail-closed gates (Zjob_Schedule_Context::on_created → attach()).
  *
- * The Core-default token TTL is 2h (raised from 15 min per S4-06's slow-save fix).
+ * The Core-default token TTL is 2h, so a token outlives a slow save.
  * The authoritative value is Jobs' Zjob_Schedule_Context::token_ttl(); this reads
  * it when present and otherwise the same `zdz_compose_context_token_ttl` filter, so
  * the TTL is never a second hardcode of an already-configurable value.
@@ -90,7 +90,7 @@ class Zsch_Intake {
 
 		// Fire the compose contract. The context's origin comes from the launch;
 		// the CONTRIBUTOR re-gates the actor and decides what (if anything) to
-		// return. INV-1: origin is trusted only here (hook payload), never a body.
+		// return. The origin is trusted only here (hook payload), never a body.
 		$context = array( 'ns' => $ns, 'ref_id' => $ref, 'actor' => $actor );
 		$bundle  = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_compose_context', array(), $context ) : array();
 		$bundle  = is_array( $bundle ) ? $bundle : array();

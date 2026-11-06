@@ -1,0 +1,6 @@
+{ "version": "starter-1", "language": "en", "layout": "paper", "starter": true,
+  "sections": ["header","schedule","right-to-cancel","project","notices","sign-agreement","sign-notice",
+               "notice-of-cancellation","change-order","consent"],
+  "order": ["header","project","schedule","right-to-cancel","notices","sign-notice","sign-agreement","notice-of-cancellation"],
+  "age_sections": ["right-to-cancel","project","sign-notice","sign-agreement","notice-of-cancellation"],
+  "statutory": [] }

@@ -28,15 +28,15 @@
  * rebuilt whenever any crew changes (so a member is never claimed by two leads).
  *
  * -----------------------------------------------------------------------------
- * THE OVERSIGHT GATE (mirrors TSL_Lead_Assignment::current_user_can_act_on_lead)
+ * THE OVERSIGHT GATE (mirrors ZL_Lead_Assignment::current_user_can_act_on_lead)
  * -----------------------------------------------------------------------------
  * can_oversee($actor, $target):
- *   * kiosk (zdz_general) actor            -> NEVER (INV-10; a shared device is not a person)
+ *   * kiosk (zdz_general) actor            -> NEVER (a shared device is not a person)
  *   * admin/owner (is_admin_role)         -> yes, anyone
  *   * a Crew Lead (has `lead_crew` cap)   -> yes, but ONLY for members of their own crew
  *   * everyone else                       -> only themselves
  * Every server-side handler that lets a Lead see/act on a crew member's work MUST
- * call this (INV-1: the endpoint, not the UI, is the boundary).
+ * call this (the endpoint, not the UI, is the boundary).
  *
  * @package Zorderz
  * @since   2.32.0
@@ -83,9 +83,19 @@ class ZDZ_Hierarchy {
 		return (bool) array_intersect( [ 'administrator', 'zdz_owner', 'zdz_admin' ], (array) $user->roles );
 	}
 
-	/** Is this user on the shared-kiosk tier (zdz_general)? Never treated as a person. */
+	/**
+	 * Is this user the shared device? Never treated as a person. The platform's trait decides
+	 * (ZDZ_User_Roles::is_shared_device(): the zdz_is_shared_device capability, whichever role carries it, or the
+	 * shared-device role); the role slug alone is read only when that class is missing.
+	 */
 	public static function is_kiosk( int $user_id ): bool {
-		$user = $user_id ? get_userdata( $user_id ) : null;
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) ) {
+			return ZDZ_User_Roles::is_shared_device( $user_id );
+		}
+		$user = get_userdata( $user_id );
 		return $user && in_array( 'zdz_general', (array) $user->roles, true );
 	}
 
@@ -100,7 +110,7 @@ class ZDZ_Hierarchy {
 			return false;
 		}
 		if ( self::is_kiosk( $user_id ) ) {
-			return false; // INV-10 - a shared device is never a lead
+			return false; // a shared device is never a lead
 		}
 		if ( self::is_admin( $user_id ) ) {
 			return true;
@@ -184,7 +194,7 @@ class ZDZ_Hierarchy {
 			return false;
 		}
 		if ( self::is_kiosk( $actor_id ) ) {
-			return false; // INV-10
+			return false; // a shared device oversees no one
 		}
 		if ( $actor_id === $target_id ) {
 			return true;

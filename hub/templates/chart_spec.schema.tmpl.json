@@ -1,0 +1,479 @@
+{
+  "name": "chart_spec",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "intent": {
+        "type": "string",
+        "enum": [
+          "chart",
+          "number",
+          "clarify",
+          "unsupported"
+        ]
+      },
+      "title": {
+        "type": "string",
+        "maxLength": 90
+      },
+      "measure": {
+        "type": "string",
+        "enum": [
+          "revenue",
+          "jobs",
+          "customers",
+          "units",
+          "avg_job"
+        ]
+      },
+      "split": {
+        "type": "string",
+        "enum": "@splits"
+      },
+      "facet": {
+        "type": "string",
+        "enum": [
+          "none",
+          "product",
+          "work_type",
+          "salesperson",
+          "area",
+          "account"
+        ]
+      },
+      "time_grain": {
+        "type": "string",
+        "enum": [
+          "none",
+          "year",
+          "quarter",
+          "month"
+        ]
+      },
+      "date_from": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "date_to": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "filters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@products"
+            },
+            "uniqueItems": true
+          },
+          "work_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@work_types"
+            },
+            "uniqueItems": true
+          },
+          "salespeople": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@salespeople"
+            },
+            "uniqueItems": true
+          },
+          "areas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@areas"
+            },
+            "uniqueItems": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@tags"
+            },
+            "uniqueItems": true
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(ACCOUNT_[1-9]|ac_[0-9a-f]{16})$"
+            },
+            "maxItems": 5,
+            "uniqueItems": true
+          },
+          "customers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^cu_[0-9a-f]{16}$"
+            },
+            "maxItems": 1,
+            "uniqueItems": true
+          },
+          "lead_sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9 &'./-]{1,40}$"
+            },
+            "maxItems": 6,
+            "uniqueItems": true
+          },
+          "partners": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9 &'./()-]{1,40}$"
+            },
+            "maxItems": 6,
+            "uniqueItems": true
+          },
+          "original_sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9 &'./-]{1,40}$"
+            },
+            "maxItems": 6,
+            "uniqueItems": true
+          },
+          "exclude_lead_sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9 &'./-]{1,40}$"
+            },
+            "maxItems": 6,
+            "uniqueItems": true
+          },
+          "customer_type": {
+            "type": "string",
+            "enum": [
+              "any",
+              "residential",
+              "business"
+            ]
+          },
+          "repeat_customers_only": {
+            "type": "boolean"
+          },
+          "exclude_products": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@products"
+            },
+            "uniqueItems": true
+          },
+          "exclude_tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@tags"
+            },
+            "uniqueItems": true
+          },
+          "exclude_areas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@areas"
+            },
+            "uniqueItems": true
+          },
+          "exclude_salespeople": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@salespeople"
+            },
+            "uniqueItems": true
+          },
+          "exclude_work_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": "@work_types"
+            },
+            "uniqueItems": true
+          },
+          "exclude_partners": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9 &'./()-]{1,40}$"
+            },
+            "uniqueItems": true,
+            "maxItems": 6
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "uniqueItems": true,
+            "maxItems": 12
+          },
+          "day_cut": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "zips": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9]{5}$"
+            },
+            "uniqueItems": true,
+            "maxItems": 50
+          },
+          "firewise_sites": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 90
+            },
+            "uniqueItems": true,
+            "maxItems": 60
+          },
+          "fire_safe_councils": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 90
+            },
+            "uniqueItems": true,
+            "maxItems": 80
+          },
+          "tax_areas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "uniqueItems": true,
+            "maxItems": 30
+          },
+          "coast_bands": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 30
+            },
+            "uniqueItems": true,
+            "maxItems": 6
+          },
+          "coast_sides": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "Coastal",
+                "Inland",
+                "(not placed)"
+              ]
+            },
+            "uniqueItems": true,
+            "maxItems": 3
+          },
+          "payment": {
+            "type": "string",
+            "enum": [
+              "any",
+              "paid",
+              "unpaid"
+            ]
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "uniqueItems": true,
+            "maxItems": 12
+          },
+          "job_min": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "job_max": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 10000000
+          }
+        },
+        "required": [
+          "products",
+          "work_types",
+          "salespeople",
+          "areas",
+          "tags",
+          "accounts",
+          "customer_type",
+          "repeat_customers_only"
+        ]
+      },
+      "include_unpaid": {
+        "type": "boolean"
+      },
+      "@switches": null,
+      "chart_type": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "stacked_bar",
+          "grouped_bar",
+          "percent_bar",
+          "line",
+          "area",
+          "pie",
+          "donut",
+          "waffle",
+          "venn",
+          "single_number",
+          "table",
+          "map"
+        ]
+      },
+      "orientation": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "vertical",
+          "horizontal"
+        ]
+      },
+      "labels": {
+        "type": "string",
+        "enum": [
+          "none",
+          "value",
+          "percent",
+          "value_percent"
+        ]
+      },
+      "venn_by": {
+        "type": "string",
+        "enum": [
+          "none",
+          "product",
+          "work_type",
+          "salesperson",
+          "tag"
+        ]
+      },
+      "venn_sets": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "maxItems": 3,
+        "uniqueItems": true
+      },
+      "top_n": {
+        "type": "integer",
+        "minimum": 3,
+        "maximum": 15
+      },
+      "assumptions": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "maxItems": 4
+      },
+      "clarify_question": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 200
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "clarify_options": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "maxItems": 3
+      },
+      "merge_groups": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "maxProperties": 8
+      }
+    },
+    "required": [
+      "intent",
+      "title",
+      "measure",
+      "split",
+      "facet",
+      "time_grain",
+      "date_from",
+      "date_to",
+      "filters",
+      "include_unpaid",
+      "@switches",
+      "chart_type",
+      "orientation",
+      "labels",
+      "venn_by",
+      "venn_sets",
+      "top_n",
+      "assumptions",
+      "clarify_question",
+      "clarify_options"
+    ]
+  }
+}

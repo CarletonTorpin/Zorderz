@@ -17,12 +17,35 @@ class ZKV_Indexer {
 			return array( 'success' => false, 'error' => 'Document not found.' );
 		}
 
-		// Update status.
-		$wpdb->update( $wpdb->prefix . 'zkv_documents',
-			array( 'status' => 'processing', 'updated_at' => current_time( 'mysql' ) ),
-			array( 'id' => (int) $document_id ),
-			array( '%s', '%s' ), array( '%d' )
-		);
+		// A Private document is never read for an AI service - not its text, its pages, its name. It
+		// is "indexed" from the person's own words only (ZKV_Private::finish_private), and its file is encrypted if
+		// it arrived plain (mail-in, an upload that chose Private). Fails closed: no ZKV_Private, no indexing at all.
+		if ( ! empty( $doc['is_private'] ) ) {
+			if ( ! class_exists( 'ZKV_Private' ) ) {
+				return array( 'success' => false, 'error' => 'Private documents need ZKV_Private.' );
+			}
+			$r = ZKV_Private::finish_private( $doc );
+			if ( true === $r && class_exists( 'ZKV_Email_Ingest' ) ) {
+				ZKV_Email_Ingest::after_indexed( (int) $document_id, $doc );
+			}
+			return true === $r ? array( 'success' => true, 'synopsis' => '' ) : array( 'success' => false, 'error' => (string) $r );
+		}
+
+		// Update status. CLAIM the document in one UPDATE that also says "not Private", so a
+		// "make Private" that began a moment ago (it sets the flag first, in its own single UPDATE) and this run can
+		// never both proceed: one of the two updates matches nothing.
+		$claimed = $wpdb->query( $wpdb->prepare(
+			"UPDATE {$wpdb->prefix}zkv_documents SET status = 'processing', updated_at = %s WHERE id = %d AND is_private = 0",
+			current_time( 'mysql' ), (int) $document_id
+		) );
+		if ( 1 !== (int) $claimed ) {
+			$fresh = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}zkv_documents WHERE id = %d", (int) $document_id ), ARRAY_A );
+			if ( $fresh && ! empty( $fresh['is_private'] ) && class_exists( 'ZKV_Private' ) ) {
+				ZKV_Private::finish_private( $fresh );
+				return array( 'success' => true, 'synopsis' => '' );
+			}
+			if ( ! $fresh ) { return array( 'success' => false, 'error' => 'Document not found.' ); }
+		}
 
 		// Extract text.
 		$text = self::extract_text( $doc );
@@ -50,7 +73,7 @@ class ZKV_Indexer {
 			return array( 'success' => false, 'error' => 'Poe API key not configured.' );
 		}
 
-		$model = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::get_ai_model() : 'Gemini-3.1-Pro';
+		$model = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::get_ai_model() : ''; // the registry's model; '' = none configured
 
 		// Resolve file path (handles both filesystem paths and URLs).
 		$file_path = self::resolve_file_path( $doc );
@@ -146,6 +169,9 @@ class ZKV_Indexer {
 			return array( 'success' => false, 'error' => 'AI returned invalid JSON.' );
 		}
 
+		// Made Private while the AI was reading it - keep nothing the AI wrote.
+		if ( self::went_private( $document_id ) ) { return array( 'success' => true, 'synopsis' => '' ); }
+
 		// Store index.
 		$synopsis     = sanitize_textarea_field( $parsed['synopsis'] ?? '' );
 		$key_entities = wp_json_encode( $parsed['key_entities'] ?? new \stdClass() );
@@ -164,8 +190,10 @@ class ZKV_Indexer {
 			}
 			$entities_flat = implode( ', ', $parts );
 		}
+		// A title the person chose is kept; the AI's title still helps search find it.
+		$locked      = ! empty( $doc['title_locked'] );
 		$search_text = implode( ' ', array_filter( array(
-			$ai_title ?: $doc['title'], $synopsis, $entities_flat, $facts_flat, $tags,
+			$locked ? $doc['title'] : ( $ai_title ?: $doc['title'] ), $locked ? $ai_title : '', $synopsis, $entities_flat, $facts_flat, $tags,
 			$doc['description'] ?? '', $doc['user_context'] ?? '',
 		) ) );
 
@@ -198,14 +226,14 @@ class ZKV_Indexer {
 			'indexed_at' => current_time( 'mysql' ),
 			'updated_at' => current_time( 'mysql' ),
 		);
-		if ( ! empty( $ai_title ) ) { $update['title'] = $ai_title; }
+		if ( ! empty( $ai_title ) && empty( $doc['title_locked'] ) ) { $update['title'] = $ai_title; }   // never over a person's title
 		$wpdb->update( $wpdb->prefix . 'zkv_documents', $update,
 			array( 'id' => (int) $document_id ),
 			array_fill( 0, count( $update ), '%s' ), array( '%d' )
 		);
 
 		// Set AI-determined category + generate pretty URL slug.
-		self::apply_category_and_slug( $document_id, $parsed, $ai_title ?: $doc['title'] );
+		self::apply_category_and_slug( $document_id, $parsed, empty( $doc['title_locked'] ) ? ( $ai_title ?: $doc['title'] ) : $doc['title'], $doc );
 
 		// v1.3.0: Store extracted text in searchable content chunks.
 		// This enables FULLTEXT search against the ACTUAL document content
@@ -264,6 +292,54 @@ class ZKV_Indexer {
 	}
 
 	// ──────────────────────────────────────────────────────────────
+	//  pdftotext in ONE place: exec() is checked once, the program
+	//  is looked for at fixed absolute paths first (falling back to
+	//  the bare name on PATH, so no host loses PDF text), and every
+	//  caller goes through pdftotext(). Hosts that block exec() get
+	//  null, and the browser-side extraction carries on.
+	// ──────────────────────────────────────────────────────────────
+
+	/** True when this host lets PHP run exec(). */
+	public static function exec_allowed() {
+		return function_exists( 'exec' )
+			&& ! in_array( 'exec', array_map( 'trim', explode( ',', (string) ini_get( 'disable_functions' ) ) ), true );
+	}
+
+	/**
+	 * Absolute path of the pdftotext program, or '' when none is installed.
+	 * Fixed locations only; a host that keeps it elsewhere adds the path
+	 * with the zkv_pdftotext_paths filter.
+	 *
+	 * @return string
+	 */
+	public static function pdftotext_bin() {
+		$paths = apply_filters( 'zkv_pdftotext_paths', array( '/usr/bin/pdftotext', '/usr/local/bin/pdftotext', '/bin/pdftotext', '/opt/homebrew/bin/pdftotext', '/opt/local/bin/pdftotext' ) );
+		foreach ( (array) $paths as $p ) {
+			if ( is_string( $p ) && '' !== $p && '/' === $p[0] && @is_executable( $p ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors -- open_basedir may hide the path
+				return $p;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Text of a PDF from pdftotext, or null when it cannot run or gives nothing.
+	 *
+	 * @param string $path PDF on disk.
+	 * @param int    $ret  Set to the exit code; -1 when exec() is blocked, 127 when the program is missing.
+	 * @return string|null
+	 */
+	public static function pdftotext( $path, &$ret = null ) {
+		$ret = -1;
+		if ( ! self::exec_allowed() ) { return null; }
+		$bin = self::pdftotext_bin();
+		if ( '' === $bin ) { $bin = 'pdftotext'; } // not at a fixed path (or open_basedir hides it): the shell's PATH
+		$out = array();
+		@exec( escapeshellarg( $bin ) . ' ' . escapeshellarg( (string) $path ) . ' - 2>/dev/null', $out, $ret ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- sentinel:allow both arguments are escapeshellarg()'d; the program is a fixed path or the bare name pdftotext
+		return ( 0 === $ret && ! empty( $out ) ) ? implode( "\n", $out ) : null;
+	}
+
+	// ──────────────────────────────────────────────────────────────
 
 	/**
 	 * Quick text extraction for pre-analysis. Public static so the
@@ -294,13 +370,9 @@ class ZKV_Indexer {
 			$raw = file_get_contents( $file_path );
 			$text = self::parse_json_transcript( $raw );
 		} elseif ( $mime === 'application/pdf' ) {
-			// Try exec(pdftotext) — only works on hosts that allow exec().
-			$exec_ok = function_exists( 'exec' ) && ! in_array( 'exec', array_map( 'trim', explode( ',', ini_get( 'disable_functions' ) ) ), true );
-			if ( $exec_ok ) {
-				$out = array(); $ret = -1;
-				@exec( 'pdftotext ' . escapeshellarg( $file_path ) . ' - 2>/dev/null', $out, $ret );
-				if ( $ret === 0 && ! empty( $out ) ) { $text = implode( "\n", $out ); }
-			}
+			// Pdftotext — only on hosts that allow exec().
+			$pdf = self::pdftotext( $file_path );
+			if ( null !== $pdf ) { $text = $pdf; }
 			// If no text extracted, return empty — AI will use filename instead.
 			// PHP PDF reader disabled: produces binary garbage on embedded-font PDFs
 			// that confuses AI worse than having no text at all.
@@ -361,13 +433,9 @@ class ZKV_Indexer {
 
 		// PDF — try exec(pdftotext) only.
 		if ( $mime === 'application/pdf' ) {
-			$exec_ok = function_exists( 'exec' ) && ! in_array( 'exec', array_map( 'trim', explode( ',', ini_get( 'disable_functions' ) ) ), true );
-			if ( $exec_ok ) {
-				$out = array(); $ret = -1;
-				@exec( 'pdftotext ' . escapeshellarg( $path ) . ' - 2>/dev/null', $out, $ret );
-				if ( $ret === 0 && ! empty( $out ) ) {
-					return self::truncate( implode( "\n", $out ) );
-				}
+			$pdf = self::pdftotext( $path ); // one helper
+			if ( null !== $pdf ) {
+				return self::truncate( $pdf );
 			}
 			// Return empty — AI will use filename + metadata for analysis.
 			return '';
@@ -495,7 +563,9 @@ Content:
 			$cat_id = (int) $cat['id'];
 			// Fetch up to 8 document titles in this category for context.
 			$docs = $wpdb->get_col( $wpdb->prepare(
-				"SELECT title FROM {$wpdb->prefix}zkv_documents WHERE category_id = %d AND status = 'indexed' ORDER BY created_at DESC LIMIT 8",
+				// Only titles every employee may see, never a Private one (this goes to the AI service;
+				// it used to list admin-only and transcript titles too).
+				"SELECT title FROM {$wpdb->prefix}zkv_documents WHERE category_id = %d AND status = 'indexed' AND visibility = 'all_employees' AND is_private = 0 ORDER BY created_at DESC LIMIT 8",
 				$cat_id
 			) );
 			$line = '- "' . $cat['slug'] . '" (' . $cat['label'] . '): ' . $cat['description'];
@@ -512,30 +582,31 @@ Content:
 	/**
 	 * After AI processing, set the category and slug on the document.
 	 */
-	private static function apply_category_and_slug( $document_id, $parsed, $title ) {
+	private static function apply_category_and_slug( $document_id, $parsed, $title, $doc = array() ) {
 		global $wpdb;
 
-		// Set category from AI's choice.
-		$cat_slug = sanitize_title( $parsed['category_slug'] ?? 'general' );
-		$cat = null;
-		if ( class_exists( 'ZKV_Categories' ) ) {
-			$cat = ZKV_Categories::get_by_slug( $cat_slug );
+		// Generate pretty URL slug from the title - a person's title keeps the link it already has.
+		$set = array();
+		if ( empty( $doc['title_locked'] ) || '' === (string) ( $doc['slug'] ?? '' ) ) {
+			$set['slug'] = zkv_generate_slug( $title, $document_id );
 		}
-		$category_id = $cat ? (int) $cat['id'] : null;
 
-		// Generate pretty URL slug from the AI title.
-		$slug = zkv_generate_slug( $title, $document_id );
+		// Set category from AI's choice - unless a person chose it, or the AI chose none.
+		if ( empty( $doc['category_locked'] ) && '' !== trim( (string) ( $parsed['category_slug'] ?? '' ) ) ) {
+			$cat_slug = sanitize_title( $parsed['category_slug'] );
+			$cat = null;
+			if ( class_exists( 'ZKV_Categories' ) ) {
+				$cat = ZKV_Categories::get_by_slug( $cat_slug );
+			}
+			$set['category_id'] = $cat ? (int) $cat['id'] : null;
+		}
 
-		$wpdb->update(
-			$wpdb->prefix . 'zkv_documents',
-			array(
-				'category_id' => $category_id,
-				'slug'        => $slug,
-			),
-			array( 'id' => (int) $document_id ),
-			array( '%d', '%s' ),
-			array( '%d' )
-		);
+		if ( ! $set ) {
+			return;
+		}
+		$fmt = array();
+		foreach ( array_keys( $set ) as $k ) { $fmt[] = 'slug' === $k ? '%s' : '%d'; }
+		$wpdb->update( $wpdb->prefix . 'zkv_documents', $set, array( 'id' => (int) $document_id ), $fmt, array( '%d' ) );
 	}
 
 	/**
@@ -572,6 +643,14 @@ Content:
 			$att_path = get_attached_file( (int) $doc['attachment_id'] );
 			if ( $att_path && file_exists( $att_path ) ) {
 				return $att_path;
+			}
+		}
+
+		// The file was given a random name after this row was read.
+		if ( ! empty( $path ) && class_exists( 'ZKV_File_Names' ) ) {
+			$renamed = ZKV_File_Names::renamed( $path );
+			if ( '' !== $renamed ) {
+				return $renamed;
 			}
 		}
 
@@ -655,14 +734,14 @@ Content:
 	public static function reindex( $document_id ) {
 		global $wpdb;
 
-		// Reset status so it gets re-processed.
-		$wpdb->update(
-			$wpdb->prefix . 'zkv_documents',
-			array( 'status' => 'pending', 'processing_error' => null, 'updated_at' => current_time( 'mysql' ) ),
-			array( 'id' => (int) $document_id ),
-			array( '%s', '%s', '%s' ),
-			array( '%d' )
-		);
+		// Reset status so it gets re-processed - never while a "make Private" is encrypting it.
+		$reset = $wpdb->query( $wpdb->prepare(
+			"UPDATE {$wpdb->prefix}zkv_documents SET status = 'pending', processing_error = NULL, updated_at = %s WHERE id = %d AND status <> 'encrypting'",
+			current_time( 'mysql' ), (int) $document_id
+		) );
+		if ( 1 !== (int) $reset && 'encrypting' === (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}zkv_documents WHERE id = %d", (int) $document_id ) ) ) {
+			return array( 'success' => false, 'error' => 'It is being made Private right now.' );
+		}
 
 		// Delete old index entries.
 		$wpdb->delete( $wpdb->prefix . 'zkv_index', array( 'document_id' => (int) $document_id ), array( '%d' ) );
@@ -701,8 +780,23 @@ Content:
 	 * @param array  $doc         Document row from wp_zkv_documents.
 	 * @return array Result array with 'success' key.
 	 */
+	/**
+	 * was the document made Private since this run read it? Then finish it as Private (its own words
+	 * only) and tell the caller to stop - nothing the AI wrote is kept.
+	 */
+	private static function went_private( $document_id ) {
+		global $wpdb;
+		if ( ! class_exists( 'ZKV_Private' ) || ! ZKV_Private::is_private( (int) $document_id ) ) { return false; }
+		$fresh = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}zkv_documents WHERE id = %d", (int) $document_id ), ARRAY_A );
+		if ( $fresh ) { ZKV_Private::finish_private( $fresh ); }
+		return true;
+	}
+
 	public static function process_large_pdf( $document_id, $text, $doc ) {
 		global $wpdb;
+		if ( ! empty( $doc['is_private'] ) ) { // never for a Private document
+			return array( 'success' => false, 'error' => 'A Private document is not sent to the AI service.' );
+		}
 
 		// Get API key and model.
 		$api_key = '';
@@ -713,7 +807,7 @@ Content:
 			return array( 'success' => false, 'error' => 'Poe API key not configured.' );
 		}
 
-		$model = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::get_ai_model() : 'Gemini-3.1-Pro';
+		$model = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::get_ai_model() : ''; // the registry's model; '' = none configured
 
 		// Split into chunks.
 		$chunks = self::split_into_chunks( $text, 8000, 500 );
@@ -761,6 +855,11 @@ Content (chunk %d of %d):
 		foreach ( $chunks as $idx => $chunk ) {
 			$chunk_num = $idx + 1;
 			$prompt = sprintf( $chunk_prompt_base, $chunk_num, $total_chunks, $chunk_num, $total_chunks, $chunk );
+
+			// Before EVERY chunk - made Private meanwhile? Stop, keep nothing the AI wrote.
+			// And keep the claim fresh, so "make Private" keeps waiting for this run instead of starting under it.
+			if ( self::went_private( $document_id ) ) { return array( 'success' => true, 'synopsis' => '' ); }
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}zkv_documents SET updated_at = %s WHERE id = %d AND status = 'processing'", current_time( 'mysql' ), (int) $document_id ) );
 
 			$response = ZKV_Dashboard::poe_query( $api_key, $prompt, $model );
 
@@ -837,7 +936,7 @@ Content (chunk %d of %d):
 			'key_entities'  => $all_entities,
 			'key_facts'     => $all_facts,
 			'tags'          => array_slice( $all_tags, 0, 15 ),
-			'category_slug' => 'general',
+			'category_slug' => '',   // this path never chose a category - it used to say 'general' and reset it
 		);
 
 		// Store index record — same logic as process_document().
@@ -853,10 +952,14 @@ Content (chunk %d of %d):
 				$entities_flat .= implode( ', ', $group ) . ' ';
 			}
 		}
+		$locked      = ! empty( $doc['title_locked'] );   // the person's title, with the AI's beside it for search
 		$search_text = implode( ' ', array_filter( array(
-			$combined['title'], $synopsis, trim( $entities_flat ), $facts_flat, $tags_str,
+			$locked ? $doc['title'] : $combined['title'], $locked ? $combined['title'] : '', $synopsis, trim( $entities_flat ), $facts_flat, $tags_str,
 			$doc['description'] ?? '', $doc['user_context'] ?? '',
 		) ) );
+
+		// Made Private while the AI was reading it - keep nothing the AI wrote.
+		if ( self::went_private( $document_id ) ) { return array( 'success' => true, 'synopsis' => '' ); }
 
 		// Mark old index rows as not-current.
 		$wpdb->update( $wpdb->prefix . 'zkv_index',
@@ -887,14 +990,14 @@ Content (chunk %d of %d):
 			'indexed_at' => current_time( 'mysql' ),
 			'updated_at' => current_time( 'mysql' ),
 		);
-		if ( ! empty( $ai_title ) ) { $update['title'] = sanitize_text_field( $ai_title ); }
+		if ( ! empty( $ai_title ) && empty( $doc['title_locked'] ) ) { $update['title'] = sanitize_text_field( $ai_title ); }
 		$wpdb->update( $wpdb->prefix . 'zkv_documents', $update,
 			array( 'id' => (int) $document_id ),
 			array_fill( 0, count( $update ), '%s' ), array( '%d' )
 		);
 
-		// Apply category + slug.
-		self::apply_category_and_slug( $document_id, $combined, $ai_title ?: $doc['title'] );
+		// Apply category + slug. this path always says 'general' - it never overrides a person's category now.
+		self::apply_category_and_slug( $document_id, $combined, empty( $doc['title_locked'] ) ? ( $ai_title ?: $doc['title'] ) : $doc['title'], $doc );
 
 		// v1.3.0: Store the full extracted text in searchable content chunks.
 		// Large PDFs especially benefit — their full content becomes FULLTEXT searchable.
@@ -966,6 +1069,12 @@ Content (chunk %d of %d):
 
 		// Delete old chunks for this document (handles re-index cleanly).
 		$wpdb->delete( $table, array( 'document_id' => (int) $document_id ), array( '%d' ) );
+
+		// A Private document keeps no extracted text (the row's flag, re-read from the table: a caller's
+		// copy of the row may be older than a "make Private" a moment ago).
+		if ( ! empty( $doc['is_private'] ) || ( class_exists( 'ZKV_Private' ) && ZKV_Private::is_private( (int) $document_id ) ) ) {
+			return 0;
+		}
 
 		// Try to get FULL text from the source file (not truncated).
 		$full_text = self::extract_full_text( $doc );
@@ -1065,15 +1174,13 @@ Content (chunk %d of %d):
 
 		// PDF — try pdftotext for full extraction.
 		if ( $mime === 'application/pdf' ) {
-			$exec_ok = function_exists( 'exec' )
-				&& ! in_array( 'exec', array_map( 'trim', explode( ',', ini_get( 'disable_functions' ) ) ), true );
-			if ( $exec_ok ) {
-				$out = array(); $ret = -1;
-				@exec( 'pdftotext ' . escapeshellarg( $path ) . ' - 2>/dev/null', $out, $ret );
-				if ( $ret === 0 && ! empty( $out ) ) {
-					return implode( "\n", $out );
-				}
-				error_log( 'ZKV indexer: pdftotext failed (exit=' . $ret . ') for ' . basename( $path ) );
+			$ret = -1;
+			$pdf = self::pdftotext( $path, $ret );
+			if ( null !== $pdf ) {
+				return $pdf;
+			}
+			if ( -1 !== $ret ) {
+				error_log( 'ZKV indexer: pdftotext ' . ( 127 === $ret ? 'not installed' : ( 0 === $ret ? 'gave no text (image-only PDF?)' : 'failed (exit=' . $ret . ')' ) ) . ' for ' . basename( $path ) );
 			} else {
 				error_log( 'ZKV indexer: exec() disabled — cannot run pdftotext for ' . basename( $path )
 					. ' (' . round( filesize( $path ) / 1048576, 1 ) . ' MB). Chunks will be empty.'

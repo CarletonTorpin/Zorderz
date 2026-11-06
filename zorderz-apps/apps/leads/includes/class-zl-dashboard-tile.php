@@ -3,7 +3,7 @@
  * ZL Dashboard Tile — surface a salesperson's assigned leads on their dashboard.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * WHAT THIS IS (Phase 2 of the per-user-leads program)
+ * WHAT THIS IS
  * ─────────────────────────────────────────────────────────────────────────────
  * Two jobs, both server-authoritative:
  *

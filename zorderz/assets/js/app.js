@@ -1,24 +1,31 @@
 'use strict';
 
 // ---- DATA ----
-const CATEGORIES = [
-  { id: 'Sales', color: '#7C3AED' },
-  { id: 'Finance', color: '#059669' },
-  { id: 'Service', color: '#2563EB' },
-  { id: 'Field', color: '#EA580C' },
-  { id: 'Admin', color: '#DC2626' },
-  { id: 'Ops', color: '#0891B2' },
-  { id: 'Team', color: '#DB2777' }
-];
+// An app's colour means its group, and the THEME decides both (ZDZ_App_Groups: Sales orange · Field green · Team sky
+// blue · Office blue · Tools pink; vermilion only for "needs you"). Every app lands in one of the five groups (an app
+// with no entry is grouped from the category it declares), so none falls out of the grouped grid.
+const ZDZ_GROUPS = (typeof zdzData !== 'undefined' && zdzData.appGroups && Array.isArray(zdzData.appGroups.groups) && zdzData.appGroups.groups.length)
+  ? zdzData.appGroups.groups
+  : [ { id: 'sales', label: 'Sales', color: '#E69F00', ink: '#1A1A1A' }, { id: 'field', label: 'Field', color: '#009E73', ink: '#1A1A1A' },
+      { id: 'team', label: 'Team', color: '#56B4E9', ink: '#1A1A1A' }, { id: 'office', label: 'Office', color: '#0072B2', ink: '#FFFFFF' },
+      { id: 'tools', label: 'Tools', color: '#CC79A7', ink: '#1A1A1A' } ];
+const CATEGORIES = ZDZ_GROUPS.map(g => ({ id: g.label, color: g.color, ink: g.ink }));
+// The icon plate: the group's color, the ink that reads on it, and the app id the "needs you" badge finds it by.
+function zdzPlate(a) {
+  a = a || {};
+  const id = String(a.id || '').replace(/[^a-z0-9_-]/gi, '');
+  const hx = (c, f) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : f);
+  return 'data-zdz-app="' + id + '" style="background:' + hx(a.cc, '#5B5B5B') + ';color:' + hx(a.ink, '#FFFFFF') + '"';
+}
 
 const PINNED = {
-  administrator: ['sales-analytics','estimate-creator','lead-generator','satisfaction-surveys'],
+  administrator: ['sales-analytics','estimate-creator','leads','surveys'],
   zdz_owner: ['estimate-creator','sales-analytics'],
-  zdz_admin: ['sales-analytics','estimate-creator','lead-generator','satisfaction-surveys'],
-  zdz_sales: ['estimate-creator','sales-analytics','lead-generator','game','internal-messaging'],
-  zdz_operator: ['estimate-creator','satisfaction-surveys'],
+  zdz_admin: ['sales-analytics','estimate-creator','leads','surveys'],
+  zdz_sales: ['estimate-creator','sales-analytics','leads','game','internal-messaging'],
+  zdz_operator: ['estimate-creator','surveys'],
   zdz_mfg: ['estimate-creator'],
-  zdz_tech: ['estimate-creator','sales-analytics','satisfaction-surveys','lead-generator','knowledge-vault','stock-checker','game','internal-messaging']
+  zdz_tech: ['estimate-creator','sales-analytics','surveys','leads','knowledge-vault','stock','game','internal-messaging']
 };
 
 // ---- STATE ----
@@ -45,50 +52,241 @@ const Haptics = {
   error() { try { navigator.vibrate?.([40,80,40,80,40]) } catch(e){} }
 };
 
-// ---- v2.17.1: ACTIVITY TRACKING ----
-// Fire-and-forget audit log entries via REST. Covers app opens,
-// view switches, dashboard loads, and session heartbeat so the
-// audit log shows continuous user activity — not just login/logout.
-var _tsTrackQueue = [];
-var _tsTrackTimer = null;
-function zdzTrack(actionType, detail, appId) {
-  _tsTrackQueue.push({
-    action_type: actionType || 'page_view',
-    detail: detail || '',
-    app_id: appId || ''
-  });
+// ---- ACTIVITY TRACKING ----
+// Fire-and-forget usage events via REST: app opens and how long each stays open, view switches, dashboard loads, the
+// heartbeat, searches (never the words) and the actions apps count. Each event carries the device class (phone /
+// desktop_app / browser), this page load's session id and how long ago it happened (age, measured here, so a wrong
+// phone clock cannot move it); app_close carries how long the app was open (secs) and app_action an app's registered
+// action key (act) and a number (ref).
+// Nothing is queued when zdzData.track.rec is false: ZDZ_Consent says this person is not recorded. A batch is kept in
+// localStorage until the server answers it with JSON; one that failed (401, 403, 5xx, a host's error page, no answer
+// before the page closed) is resent ONCE on the next visit, under the same batch id, which the server writes only once.
+var _zdzTrackQueue = [];
+var _zdzTrackTimer = null;
+var ZDZ_TRACK_SID = (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)).slice(-12);
+function _zdzTrackOff() { return typeof zdzData !== 'undefined' && zdzData && zdzData.track && zdzData.track.rec === false; }
+function zdzTrack(actionType, detail, appId, extra) {
+  if (_zdzTrackOff()) return;
+  var e = { action_type: actionType || 'page_view', detail: detail || '', app_id: appId || '', device: zdzDeviceClass(), sid: ZDZ_TRACK_SID, at: Date.now() };
+  if (extra) { ['secs', 'act', 'ref'].forEach(function (k) { if (extra[k] !== undefined && extra[k] !== null) e[k] = extra[k]; }); }
+  _zdzTrackQueue.push(e);
   // Debounce: flush after 2s of quiet, or immediately if queue is large
-  clearTimeout(_tsTrackTimer);
-  if (_tsTrackQueue.length >= 5) {
-    _tsFlushTrack();
+  clearTimeout(_zdzTrackTimer);
+  if (_zdzTrackQueue.length >= 5) {
+    _zdzFlushTrack();
   } else {
-    _tsTrackTimer = setTimeout(_tsFlushTrack, 2000);
+    _zdzTrackTimer = setTimeout(_zdzFlushTrack, 2000);
   }
 }
-function _tsFlushTrack() {
-  if (!_tsTrackQueue.length) return;
-  var batch = _tsTrackQueue.splice(0, 20);
+function _zdzFlushTrack() {
+  if (!_zdzTrackQueue.length) return;
+  var batch = _zdzTrackQueue.splice(0, 20);
+  // a page left open for hours renews its REST nonce first, where the shell offers a way to (a stale one is refused)
+  if (typeof window.zdzFreshNonce === 'function' && document.visibilityState === 'visible' && Date.now() - _zdzPageAt > 6 * 3600 * 1000) {
+    window.zdzFreshNonce().then(function () { _zdzSendTrack(batch); }, function () { _zdzSendTrack(batch); });
+    return;
+  }
+  _zdzSendTrack(batch);
+}
+function _zdzSendTrack(batch, resend) {
   try {
-    // v1.6.1 fix: navigator.sendBeacon() cannot set the X-WP-Nonce header, so the
-    // REST cookie-auth treated the /track POST as logged-out and rejected it with 401
-    // (the fetch fallback never ran because sendBeacon "succeeds" at queuing). Use
-    // fetch({keepalive:true}) instead — it survives page close like sendBeacon AND
-    // carries the nonce, so the request authenticates and records correctly.
-    var payload = JSON.stringify({ events: batch });
+    // fetch with keepalive (it outlives the page and carries the X-WP-Nonce header, so the request is signed in);
+    // the batch waits in localStorage until the answer is JSON. Ages are worked out at the moment of sending.
+    var bid = (resend && resend.bid) || ('b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+    if (!resend) _zdzPendingPut({ bid: bid, events: batch, made: Date.now() });
+    var now = Date.now();
+    var events = batch.map(function (e) { var o = {}; for (var k in e) { if (k !== 'at') o[k] = e[k]; } o.age = Math.max(0, Math.round((now - (e.at || now)) / 1000)); return o; });
+    var body = { bid: bid, events: events };
+    if (resend) body.re = 1;   // from an earlier visit: the server does not throttle it (its batch id guards it)
+    var payload = JSON.stringify(body);
     var url = zdzData.apiUrl + 'track';
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
-      body: payload,
-      keepalive: true
-    }).catch(function(){});
+    // sendBeacon cannot send an X-WP-Nonce header, so a browser without fetch carries the nonce in the URL
+    var beaconUrl = url + (url.indexOf('?') === -1 ? '?' : '&') + '_wpnonce=' + encodeURIComponent(zdzData.nonce || '');
+    var done = function () { _zdzPendingDrop(bid); };
+    if (typeof fetch === 'function') {
+      var p;
+      try {
+        p = fetch(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
+          body: payload, keepalive: true, credentials: 'same-origin'
+        });
+      } catch (err) { p = null; }
+      if (p) {
+        p.then(function (r) {
+          return r.text().then(function (t) {
+            var j = null;
+            try { j = JSON.parse(t); } catch (x) { /* a host's error page or a PHP error: not an answer */ }
+            if (r.ok && j && j.success) { done(); return; }
+            if (resend) done();   // one resend, never more
+          });
+        }).catch(function () { if (resend) done(); });
+        return;
+      }
+    }
+    if (navigator.sendBeacon) {
+      var blob = new Blob([payload], { type: 'application/json' });
+      navigator.sendBeacon(beaconUrl, blob);   // no answer to read: the batch waits; its id stops a double write
+      if (resend) done();
+    }
   } catch(e) {}
 }
-// Flush on page hide (tab close, navigate away)
+// The batches still waiting for an answer, per person on this device. At most 30 (two hours of heartbeats offline),
+// none over 2 days old. They are resent on the next visit, not when the signal comes back.
+function _zdzPendingKey() { return 'zdz_track_pending_' + String((typeof zdzData !== 'undefined' && zdzData && zdzData.userId) || 0).replace(/[^0-9]/g, ''); }
+function _zdzPendingGet() {
+  var list = [];
+  try { list = JSON.parse(localStorage.getItem(_zdzPendingKey()) || '[]'); } catch (e) { list = []; }
+  var cut = Date.now() - 2 * 86400000;
+  return (Array.isArray(list) ? list : []).filter(function (b) { return b && typeof b.bid === 'string' && Array.isArray(b.events) && b.made > cut; });
+}
+function _zdzPendingSet(list) {
+  try { if (list.length) localStorage.setItem(_zdzPendingKey(), JSON.stringify(list.slice(-30))); else localStorage.removeItem(_zdzPendingKey()); } catch (e) { /* private window: nothing is kept */ }
+}
+function _zdzPendingPut(b) { var l = _zdzPendingGet(); l.push(b); _zdzPendingSet(l); }
+function _zdzPendingDrop(bid) { _zdzPendingSet(_zdzPendingGet().filter(function (b) { return b.bid !== bid; })); }
+// On the next visit: each batch left from an earlier page is resent once, then forgotten.
+function zdzTrackResend() {
+  if (_zdzTrackOff()) { _zdzPendingSet([]); return; }
+  var left = _zdzPendingGet().filter(function (b) { return b.made < _zdzPageAt; });
+  if (!left.length) return;
+  var mine = {}; left.forEach(function (b) { mine[b.bid] = 1; });
+  _zdzPendingSet(_zdzPendingGet().filter(function (b) { return !mine[b.bid]; }));   // never a second resend
+  var go = function () { left.forEach(function (b) { _zdzSendTrack(b.events, { bid: b.bid }); }); };
+  if (typeof window.zdzFreshNonce === 'function') { window.zdzFreshNonce().then(go, go); } else { go(); }
+}
+var _zdzPageAt = Date.now();
+// The device class: a phone or tablet; the installed desktop app (a standalone window); or a browser tab.
+function zdzDeviceClass() {
+  try {
+    var ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod|Android|Mobile/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'phone';
+    var mm = function (q) { return !!(window.matchMedia && window.matchMedia(q).matches); };
+    return (navigator.standalone === true || mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)')) ? 'desktop_app' : 'browser';
+  } catch (e) { return ''; }
+}
+// ---- A fresh REST nonce ----
+// WordPress nonces last 12-24 hours, but the installed app and the desktop app stay open for days: a page left open
+// overnight sends a stale nonce and WordPress answers "Cookie check failed". zdzFreshNonce() asks the server for a
+// new one (admin-ajax zdz_fresh_nonce, cookie only) and keeps it in zdzData.nonce, which everything here reads. It
+// also says whether THIS device is in Demo Mode. Called before Demo Mode's calls, and when the page comes back
+// to the front after 6 hours.
+var _zdzNonceAt = Date.now();
+function zdzFreshNonce() {
+  var body = new URLSearchParams();
+  body.append('action', 'zdz_fresh_nonce');
+  return fetch(zdzData.ajaxUrl || '/wp-admin/admin-ajax.php', {
+    method: 'POST', body: body, credentials: 'same-origin'
+  }).then(function (r) {
+    return r.text().then(function (t) {
+      var j = null;
+      try { j = JSON.parse(t); } catch (e) { /* a host's error page or a PHP error page: not an answer */ }
+      if (!r.ok || !j || !j.success || !j.data || !j.data.rest) { throw new Error(r.status === 401 || r.status === 400 ? 'signed_out' : 'no_answer'); }
+      zdzData.nonce = j.data.rest;
+      _zdzNonceAt = Date.now();
+      return { nonce: j.data.rest, demo: !!j.data.demo };
+    });
+  });
+}
+window.zdzFreshNonce = zdzFreshNonce;
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'hidden') _tsFlushTrack();
+  if (document.visibilityState !== 'visible') return;
+  if (zdzData.kioskDemoActive) {
+    // An administrator may end this device's Demo Mode from wp-admin. Then every call from this
+    // page would fail "Cookie check failed" (its nonce is the General account's), so check on coming to the front
+    // and reload as the administrator.
+    // Signed out from wp-admin ("Sign the device out"): reload too, to the sign-in page. A lost signal is not that.
+    zdzFreshNonce().then(function (st) { if (!st.demo) window.location.reload(); },
+      function (e) { if (e && e.message === 'signed_out') window.location.reload(); });
+  } else if (Date.now() - _zdzNonceAt > 6 * 3600 * 1000) {
+    zdzFreshNonce().catch(function(){});
+  }
+});
+// Flush on page hide (tab close, navigate away); an app open at that moment sends its time open so far first (the
+// page may never come back).
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden') { _zdzAppPause(); _zdzFlushTrack(); }
+  else _zdzAppResume();
 });
 window.zdzTrack = zdzTrack;
+// An app records one of its own actions. The key must be registered for that app on the server's
+// zdz_register_usage_actions filter (or it is dropped there); ref is a number only (a project number), never a name or
+// free text. window.zdzTrackAction('estimate-creator', 'estimate_sent', 6523).
+window.zdzTrackAction = function (appId, key, ref) {
+  if (!/^[a-z0-9_-]{1,64}$/.test(String(appId || '')) || !/^[a-z][a-z0-9_]{0,39}$/.test(String(key || ''))) return;
+  var r = (ref === undefined || ref === null) ? '' : String(ref);
+  zdzTrack('app_action', '', appId, { act: key, ref: /^\d{1,12}$/.test(r) ? r : undefined });
+};
+
+// ---- How long an app stays open ----
+// Bridge.currentApp is set whenever an app opens as a page and cleared when it closes, so watching it times every app
+// without each app doing anything. Only the time the page is in front counts: when it goes to the back, the time so
+// far is sent as an app_close; back in front, the same app carries on as a new stretch, with no new app_open (so opens
+// are never double-counted). An inline card that never opens as a page has no time open.
+var _zdzOpenNow = null;   // { id, since: ms or 0 while hidden, secs }
+function _zdzOpenSecs(o) { return o.secs + (o.since ? Math.max(0, (Date.now() - o.since) / 1000) : 0); }
+function _zdzAppOpened(id) {
+  // an app's own id only, never a synthetic surface (a built-in web page)
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(String(id || ''))) { _zdzOpenNow = null; return; }
+  _zdzOpenNow = { id: id, since: document.visibilityState === 'visible' ? Date.now() : 0, secs: 0 };
+}
+function _zdzAppClosed() {
+  var o = _zdzOpenNow; _zdzOpenNow = null;
+  if (!o || (!o.since && !o.secs)) return;
+  zdzTrack('app_close', '', o.id, { secs: Math.round(_zdzOpenSecs(o)) });
+}
+function _zdzAppPause() {
+  var o = _zdzOpenNow;
+  if (!o || !o.since) return;
+  zdzTrack('app_close', '', o.id, { secs: Math.round(_zdzOpenSecs(o)) });
+  o.secs = 0; o.since = 0;
+}
+function _zdzAppResume() { if (_zdzOpenNow && !_zdzOpenNow.since) _zdzOpenNow.since = Date.now(); }
+function zdzUsageWatchApps() {
+  var B = window.Bridge;
+  if (!B || B.__zdzWatched) return;
+  var cur = B.currentApp;
+  try {
+    Object.defineProperty(B, 'currentApp', {
+      configurable: true, enumerable: true,
+      get: function () { return cur; },
+      set: function (v) {
+        var a = cur && cur.id, b = v && v.id;
+        cur = v;
+        if (a !== b) { if (a) _zdzAppClosed(); if (b) _zdzAppOpened(b); }
+      }
+    });
+    B.__zdzWatched = true;
+  } catch (e) { return; }
+  if (cur && cur.id) _zdzAppOpened(cur.id);
+}
+
+// ---- Searches, without the words ----
+// "search" says only that a search ran, once per search (until the box is emptied), and in which box: 'ask' (the ask
+// bar) or 'apps' (the app search). "command_palette" says only which kind of result was opened: 'app', 'ask' (the
+// chat), 'action' (a shortcut), 'answer' (an inline answer) or 'quick_answer' (Enter on a quick answer). The typed
+// words never leave this page in these events (the server also keeps nothing else).
+var _zdzSearchRan = {};
+function zdzUsageWatchSearch() {
+  if (window.__zdzSearchWatched) return;
+  window.__zdzSearchWatched = true;
+  document.addEventListener('input', function (e) {
+    var t = e.target, box = t && (t.id === 'cmd-input' ? 'ask' : (t.id === 'app-search' ? 'apps' : ''));
+    if (!box) return;
+    if (!String(t.value || '').trim()) { _zdzSearchRan[box] = false; return; }
+    if (!_zdzSearchRan[box]) { _zdzSearchRan[box] = true; zdzTrack('search', box); }
+  }, true);
+  document.addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('#cmd-results .cmd-item, #search-results .search-item') : null;
+    if (!el) return;
+    var on = el.getAttribute('onclick') || '';
+    var kind = on.indexOf('zdzRunInline') !== -1 ? 'answer'
+      : (on.indexOf('PendingShellAction') !== -1 ? 'action'
+      : (on.indexOf("'sales-analytics'") !== -1 ? 'ask' : 'app'));
+    var m = /openApp\('([a-z0-9_-]{1,64})'/.exec(on);
+    zdzTrack('command_palette', kind, kind === 'app' && m ? m[1] : '');
+    _zdzSearchRan = {};
+  }, true);
+}
 
 // ---- TOAST ----
 function showToast(msg, duration = 2500) {
@@ -105,11 +303,13 @@ function refreshIcons() {
   try { if (window.lucide) lucide.createIcons(); } catch(e) {}
 }
 
-// ---- TEXT SCALE (v2.31.0 accessibility) ----
+// ---- TEXT SCALE (accessibility) ----
 function applyTextScale(on) {
   if (on) { document.documentElement.setAttribute('data-zdz-textscale', 'lg'); }
   else { document.documentElement.removeAttribute('data-zdz-textscale'); }
   try { localStorage.setItem('zdz_textscale', on ? 'lg' : 'off'); } catch(e) {}
+  // launcher names are fitted to the size this sets.
+  if (typeof zdzFitLabels === 'function') { try { zdzFitLabels(); } catch (e) {} }
 }
 function toggleTextScale() {
   applyTextScale(document.documentElement.getAttribute('data-zdz-textscale') !== 'lg');
@@ -132,8 +332,8 @@ function applyTheme(t) {
   updateNavLogo();
 }
 
-// ---- NAV LOGO (theme-aware + v2.14.4 A5 vertical sidebar variant) ----
-// v2.16.0 T12: PHP-side fallback now ensures both logoDark and logoLight
+// ---- NAV LOGO (theme-aware + A5 vertical sidebar variant) ----
+// PHP-side fallback now ensures both logoDark and logoLight
 // are always populated (if either is set). JS cascade is kept as a safety net.
 function updateNavLogo() {
   const img = document.getElementById('bnav-logo-img');
@@ -146,7 +346,7 @@ function updateNavLogo() {
   const isDark = (t === 'dark') ||
     (t === 'system' && window.matchMedia('(prefers-color-scheme:dark)').matches);
 
-  // v2.14.4 A5: On sidebar (≥820px), prefer the vertical logo if available
+  // On sidebar (≥820px), prefer the vertical logo if available
   const isSidebar = window.matchMedia('(min-width: 820px)').matches;
   if (isSidebar && vertical) {
     img.src = vertical;
@@ -164,7 +364,7 @@ function updateNavLogo() {
 
 // ---- NAVIGATION ----
 function switchView(viewId) {
-  // v2.25.2: BLACK-FLASH FIX. `.sub-view.active{animation:viewFadeIn}` plays an
+  // BLACK-FLASH FIX. `.sub-view.active{animation:viewFadeIn}` plays an
   // opacity 0→1 fade whenever `.active` is (re)added. Tapping an app icon while
   // already on the dashboard called switchView('sv-dash') again, which removed
   // then re-added `.active` on #sv-dash — RESTARTING the fade from opacity:0, so
@@ -176,6 +376,9 @@ function switchView(viewId) {
   // plays the fade) and resets scroll to top.
   var target = document.getElementById(viewId);
   var isSameView = target && target.classList.contains('active');
+  // an app open as a page lives in the dashboard view; going to another view closes it first, or it
+  // would stay "open" but hidden with the bottom bar gone.
+  if (viewId !== 'sv-dash' && window.Bridge && Bridge._focused) Bridge.closeApp();
   if (!isSameView) {
     document.querySelectorAll('.sub-view').forEach(v => v.classList.remove('active'));
     target?.classList.add('active');
@@ -198,18 +401,20 @@ function switchView(viewId) {
   }
 
   state.currentView = viewId;
-  // v2.25.2: only reset scroll to top on a genuine view CHANGE. On a same-view
+  // home shown again: fit its names (a browser without ResizeObserver has no other signal).
+  if (viewId === 'sv-dash' && !isSameView && typeof zdzFitLabels === 'function') { setTimeout(function () { try { zdzFitLabels(); } catch (e) {} }, 0); }
+  // only reset scroll to top on a genuine view CHANGE. On a same-view
   // re-entry (e.g. tapping a dock icon while already on the dashboard) leave the
   // scroll alone so the caller's launch scroll (bridge.js) isn't fought by a
   // top-reset, and there's no jump-to-top → jump-to-widget flicker.
   if (!isSameView) document.getElementById(viewId)?.scrollTo(0, 0);
   Haptics.tap();
   refreshIcons();
-  // v2.17.1: Track view navigation for audit log
+  // Track view navigation for audit log
   zdzTrack('view_switch', viewId);
 }
 
-// ---- GREETING (v2.16.0 T1: 3-tier greeting) ----
+// ---- GREETING (T1: 3-tier greeting) ----
 function renderGreeting() {
   const el = document.getElementById('greeting-row');
   if (!el) return;
@@ -218,7 +423,7 @@ function renderGreeting() {
   if      (hour >= 5  && hour < 12) greeting = 'Good morning';
   else if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
   else                               greeting = 'Good evening';
-  // v2.16.0 T2: Inner wrapper for greeting + refresh button
+  // Inner wrapper for greeting + refresh button
   el.innerHTML = `<div class="greeting-row-inner">
     <h2>${greeting}, ${state.user.firstName}</h2>
     <button class="zdz-refresh-btn" id="zdz-refresh-btn" aria-label="Refresh" title="Refresh">
@@ -236,7 +441,7 @@ function renderGreeting() {
   }
 }
 
-// v2.24.2: tiny, subtle build stamp at the bottom of the dashboard so the
+// tiny, subtle build stamp at the bottom of the dashboard so the
 // CURRENTLY-LOADED theme build is verifiable at a glance (the stale-PWA-shell
 // problem: data can be live while the cached shell/CSS is old). Reads the
 // version localized into zdzData by functions.php. Fails silently.
@@ -249,7 +454,7 @@ function renderBuildStamp() {
   } catch (e) {}
 }
 
-// ---- v2.21.3: LEADS ACTION TILE ----
+// ---- LEADS ACTION TILE ----
 // Surfaces the signed-in salesperson's "you have N leads to contact" at the top
 // of the dashboard, sourced from the platform's unified action-items feed
 // (GET /zorderz/v1/dashboard-items, which plugins populate via zdz_dashboard_action_items).
@@ -284,9 +489,9 @@ function renderLeadsTile() {
     .then(function (data) {
       if (!data || !data.success || !Array.isArray(data.items)) return;
 
-      // Find the Leads item(s). The producer uses app_id 'lead-generator'.
+      // Find the Leads item(s). The producer uses app_id 'leads'.
       const leadItems = data.items.filter(function (it) {
-        return it && it.app_id === 'lead-generator' && (it.count | 0) > 0;
+        return it && it.app_id === 'leads' && (it.count | 0) > 0;
       });
       if (!leadItems.length) return; // nothing pending → keep it clean
 
@@ -316,14 +521,14 @@ function renderLeadsTile() {
       if (btn) {
         btn.addEventListener('click', function () {
           if (typeof Haptics !== 'undefined' && Haptics.tap) { Haptics.tap(); }
-          openApp('lead-generator', { view: 'my-leads', source: 'dashboard-tile' });
+          openApp('leads', { view: 'my-leads', source: 'dashboard-tile' });
         });
       }
     })
     .catch(function () { /* tile is optional — never break the dashboard */ });
 }
 
-// ---- QUICK STATS / KPI METRICS (role-based v2.8.0) ----
+// ---- QUICK STATS / KPI METRICS (role-based) ----
 function renderQuickStats() {
   const el = document.getElementById('quick-stats');
   if (!el) return;
@@ -341,183 +546,33 @@ function renderQuickStats() {
     return;
   }
 
-  // ── OPERATOR: No stats — dashboard is widget-focused ──
-  if (state.role === 'zdz_operator') {
-    el.style.display = 'none';
-    return;
-  }
+  // ── OPERATOR: the operator's own tile set below: the survey call list, who was talked with, notes to read,
+  //    review e-mails. ──
   el.style.display = '';
 
-  // ── OWNER / ADMIN: Large KPI metric boxes (v2.10.1) ──
-  // data-zdz-kpi        — populated by fetchKPIMetrics() from REST API.
-  // data-zdz-kpi-action — click behaviour:
-  //   "analytics:<prompt>" → Opens Analytics with the given prompt.
-  //   "app:<appId>"        → Scrolls to / opens the named app.
-  if (state.role === 'zdz_owner' || state.role === 'administrator' || state.role === 'zdz_admin') {
-    el.className = 'kpi-grid';
-    el.setAttribute('aria-label', 'Key performance metrics');
-    el.innerHTML = `
-      <div class="kpi-card kpi-primary kpi-action"
-           data-zdz-kpi-action="analytics:What is my year-to-date revenue? Give me the current YTD figure and how it compares to the same period last year.">
-        <div class="kpi-label">YTD Revenue</div>
-        <div class="kpi-value" data-zdz-kpi="ytd-revenue">—</div>
-        <div class="kpi-sub">FreshBooks · tap for details</div>
-      </div>
-      <div class="kpi-card kpi-primary kpi-action"
-           data-zdz-kpi-action="analytics:What is my month-to-date revenue? Give me the current MTD figure and compare it to last month.">
-        <div class="kpi-label">MTD Revenue</div>
-        <div class="kpi-value" data-zdz-kpi="mtd-revenue">—</div>
-        <div class="kpi-sub">FreshBooks · tap for details</div>
-      </div>
-      <div class="kpi-card kpi-action"
-           data-zdz-kpi-action="analytics:How many estimates have we created this month? Show me the MTD count and how it compares to last month.">
-        <div class="kpi-icon" style="color:#3B82F6"><i data-lucide="file-text"></i></div>
-        <div class="kpi-value" data-zdz-kpi="estimates-mtd">—</div>
-        <div class="kpi-label">Estimates MTD</div>
-      </div>
-      <div class="kpi-card kpi-action"
-           data-zdz-kpi-action="app:satisfaction-surveys">
-        <div class="kpi-icon" style="color:#8B5CF6"><i data-lucide="mail-check"></i></div>
-        <div class="kpi-value" data-zdz-kpi="surveys-month">—</div>
-        <div class="kpi-label">Surveys This Month</div>
-      </div>
-      <div class="kpi-card kpi-action"
-           data-zdz-kpi-action="analytics:How many Google reviews do we currently have? What is our recent review trend?">
-        <div class="kpi-icon" style="color:#F59E0B"><i data-lucide="star"></i></div>
-        <div class="kpi-value" data-zdz-kpi="google-reviews">—</div>
-        <div class="kpi-label">Google Reviews</div>
-      </div>
-      <div class="kpi-card kpi-action"
-           data-zdz-kpi-action="analytics:How many website reviews do we have on our Ovation reviews page?">
-        <div class="kpi-icon" style="color:#A855F7"><i data-lucide="message-square-heart"></i></div>
-        <div class="kpi-value" data-zdz-kpi="website-reviews">—</div>
-        <div class="kpi-label">Website Reviews</div>
-      </div>
-      <div class="kpi-card kpi-action"
-           data-zdz-kpi-action="analytics:Show me our current new leads. How many open leads do we have and what is the trend?">
-        <div class="kpi-icon" style="color:#10B981"><i data-lucide="user-plus"></i></div>
-        <div class="kpi-value" data-zdz-kpi="new-leads">—</div>
-        <div class="kpi-label">New Leads (MTD)</div>
-      </div>
-      <div class="kpi-card kpi-action"
-           data-zdz-kpi-action="analytics:How many leads have been contacted? Give me the current contacted count and conversion rate.">
-        <div class="kpi-icon" style="color:#06B6D4"><i data-lucide="phone-call"></i></div>
-        <div class="kpi-value" data-zdz-kpi="leads-contacted">—</div>
-        <div class="kpi-label">Contacted (MTD)</div>
-      </div>
-      <div class="kpi-card kpi-action"
-           data-zdz-kpi-action="analytics:How many leads have converted to jobs? Show me the leads-to-jobs conversion rate.">
-        <div class="kpi-icon" style="color:#EC4899"><i data-lucide="briefcase"></i></div>
-        <div class="kpi-value" data-zdz-kpi="leads-to-jobs">—</div>
-        <div class="kpi-label">Leads → Jobs (MTD)</div>
-      </div>
-    `;
-    refreshIcons();
-    initKPIClicks();
+  // ── OWNER / ADMIN: the home tiles ──
+  // Each tile is drawn here once, then filled by zdzKpiPaint() from GET /zorderz/v1/kpi-metrics, where every number comes
+  // from the app that owns it (the Analytics ledger, Surveys, the website's review bridge) with its definition and the
+  // DATA's time.
+  // data-zdz-kpi       — the card's id for drag-to-reorder (dashboard-personalization.js), kept so a saved order still
+  //                     applies (Leads won keeps "leads-to-jobs", the card it replaces).
+  // data-zdz-kpi-tile  — the server's tile key; a tap opens the tile's sheet (what it counts, from where, as of when,
+  //                     and the same question in chat).
+  // a tile set per role. The salesperson's four tiles are drawn and filled the same way.
+  // the field tech's set too; its cards follow the order the server last sent (zdzKpiCardsFor).
+  var kpiSet = zdzKpiSetFor(state.role);
+  if (kpiSet) {
+    zdzKpiDrawSet(el, kpiSet, zdzKpiStoredOrder(kpiSet));
     return;
   }
 
-  // ── MANUFACTURING / SHOP FOREMAN: Job queue focus ──
-  if (state.role === 'zdz_mfg') {
-    el.className = 'kpi-grid kpi-grid-compact';
-    el.setAttribute('aria-label', 'Shop floor metrics');
-    el.innerHTML = `
-      <div class="kpi-card">
-        <div class="kpi-icon" style="color:#EF4444"><i data-lucide="clipboard-list"></i></div>
-        <div class="kpi-value" data-zdz-kpi="jobs-today">—</div>
-        <div class="kpi-label">Jobs Today</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon" style="color:#3B82F6"><i data-lucide="calendar"></i></div>
-        <div class="kpi-value" data-zdz-kpi="jobs-week">—</div>
-        <div class="kpi-label">This Week</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon" style="color:#F59E0B"><i data-lucide="package"></i></div>
-        <div class="kpi-value" data-zdz-kpi="supply-status">—</div>
-        <div class="kpi-label">Supply Status</div>
-      </div>
-      <div class="kpi-card kpi-action" id="kpi-supply-request">
-        <div class="kpi-icon" style="color:#10B981"><i data-lucide="shopping-cart"></i></div>
-        <div class="kpi-value" style="font-size:var(--ref-font-sm)">Request</div>
-        <div class="kpi-label">Supply Order</div>
-      </div>
-    `;
-    refreshIcons();
-    return;
-  }
-
-  // ── SALES / TECH / DEFAULT: KPI stat cards with analytics tap (v2.14.4.3) ──
+  // ── SALES / TECH / DEFAULT: KPI stat cards with analytics tap ──
   el.className = 'quick-stats';
   el.setAttribute('aria-label', 'Quick statistics');
 
-  if (state.role === 'zdz_sales') {
-    el.innerHTML = `
-      <div class="stat-pill kpi-action"
-           data-zdz-kpi-action="analytics:How many open estimates do I have right now? Show me the current count and any recent trend.">
-        <div class="stat-icon" style="background:#F59E0B15;color:#F59E0B">
-          <i data-lucide="file-text"></i>
-        </div>
-        <div>
-          <div class="stat-val" data-zdz-kpi="estimates-mtd">—</div>
-          <div class="stat-label">Open Estimates</div>
-        </div>
-      </div>
-      <div class="stat-pill kpi-action"
-           data-zdz-kpi-action="analytics:How many paid jobs do we have this month? Give me the MTD count and revenue.">
-        <div class="stat-icon" style="background:#3B82F615;color:#3B82F6">
-          <i data-lucide="briefcase"></i>
-        </div>
-        <div>
-          <div class="stat-val" data-zdz-kpi="mtd-revenue">—</div>
-          <div class="stat-label">Paid Jobs MTD</div>
-        </div>
-      </div>
-      <div class="stat-pill kpi-action"
-           data-zdz-kpi-action="analytics:What does our current sales pipeline look like? Show me open leads and estimated value.">
-        <div class="stat-icon" style="background:#10B98115;color:#10B981">
-          <i data-lucide="trending-up"></i>
-        </div>
-        <div>
-          <div class="stat-val" data-zdz-kpi="new-leads">—</div>
-          <div class="stat-label">Pipeline</div>
-        </div>
-      </div>
-    `;
-  } else if (state.role === 'zdz_tech') {
-    el.innerHTML = `
-      <div class="stat-pill kpi-action"
-           data-zdz-kpi-action="analytics:How many jobs are scheduled for today?">
-        <div class="stat-icon" style="background:#EF444415;color:#EF4444">
-          <i data-lucide="map-pin"></i>
-        </div>
-        <div>
-          <div class="stat-val" data-zdz-kpi="jobs-today">—</div>
-          <div class="stat-label">Jobs Today</div>
-        </div>
-      </div>
-      <div class="stat-pill kpi-action"
-           data-zdz-kpi-action="analytics:How many hours have been logged today across the team?">
-        <div class="stat-icon" style="background:#3B82F615;color:#3B82F6">
-          <i data-lucide="clock"></i>
-        </div>
-        <div>
-          <div class="stat-val">—</div>
-          <div class="stat-label">Hours Today</div>
-        </div>
-      </div>
-      <div class="stat-pill kpi-action"
-           data-zdz-kpi-action="analytics:Are any supply items running low? Show me the current stock status.">
-        <div class="stat-icon" style="background:#F59E0B15;color:#F59E0B">
-          <i data-lucide="boxes"></i>
-        </div>
-        <div>
-          <div class="stat-val">—</div>
-          <div class="stat-label">Low Stock</div>
-        </div>
-      </div>
-    `;
-  } else {
+  // the field tech's old strip (Jobs Today, Hours Today, Low Stock: three dashes that only opened the
+  // chat, which a tech's role does not have) is gone; the tech set above replaces it.
+  {
     // Default — same as sales
     el.innerHTML = `
       <div class="stat-pill kpi-action"
@@ -546,124 +601,365 @@ function renderQuickStats() {
   initKPIClicks(); // Wire tap-to-analytics for stat pills too
 }
 
-// ---- KPI DATA FETCH (v2.9.0 — Live dashboard data) ----
-function fetchKPIMetrics() {
-  // v2.14.4.3: All roles with KPI/stat cards now fetch live data
-  const kpiRoles = ['zdz_owner', 'administrator', 'zdz_admin', 'zdz_mfg', 'zdz_sales', 'zdz_tech'];
-  if (!kpiRoles.includes(state.role)) return;
+// ---- KPI DATA ----
+// The tiles, in order. key = the server's tile key; dom = data-zdz-kpi (kept for saved card orders). Labels here are the
+// first paint only: the server's `label` wins (a salesperson-shaped answer says "Your estimates this month").
+var ZDZ_KPI_TILES = [
+  { key: 'ytd_revenue', dom: 'ytd-revenue', label: 'Revenue this year', primary: true },
+  { key: 'mtd_revenue', dom: 'mtd-revenue', label: 'Revenue this month', primary: true },
+  { key: 'estimates_mtd', dom: 'estimates-mtd', label: 'Estimates this month', icon: 'file-text', color: '#3B82F6' },
+  { key: 'surveys_month', dom: 'surveys-month', label: 'Surveys this month', icon: 'mail-check', color: '#8B5CF6' },
+  { key: 'google_reviews', dom: 'google-reviews', label: 'Google reviews', icon: 'star', color: '#F59E0B' },
+  { key: 'website_reviews', dom: 'website-reviews', label: 'Website reviews', icon: 'message-square-heart', color: '#A855F7' },
+  { key: 'new_leads', dom: 'new-leads', label: 'New leads this month', icon: 'user-plus', color: '#10B981' },
+  { key: 'leads_contacted', dom: 'leads-contacted', label: 'Contacted', icon: 'phone-call', color: '#06B6D4' },
+  // dom stays 'leads-to-jobs' (the card it replaces): a saved card order keeps it in its place
+  { key: 'leads_won', dom: 'leads-to-jobs', label: 'Leads won this month', icon: 'trophy', color: '#EC4899' }
+];
+// the tile set per role, as the server answers it (ZDZ_KPI_Metrics::SETS). The salesperson's: counts
+// only, no dollars. dom ids are new: no saved order to keep.
+var ZDZ_KPI_SETS = {
+  company: ZDZ_KPI_TILES,
+  sales: [
+    { key: 'my_estimates', dom: 'my-estimates', label: 'Your estimates this month', icon: 'file-text', color: '#3B82F6' },
+    { key: 'my_invoices', dom: 'my-invoices', label: 'Your invoices this month', icon: 'receipt', color: '#8B5CF6' },
+    { key: 'my_leads', dom: 'my-leads', label: 'Leads to contact', icon: 'phone-call', color: '#10B981' },
+    { key: 'my_installed', dom: 'my-installed', label: 'Jobs installed this month', icon: 'house', color: '#F59E0B' }
+  ],
+  // the shop's: Prep's jobs, then up to three item counts the business names (the Commission app's counts). The item
+  // cards' words are the server's (first paint: "Items this month"); the server sends only the ones configured.
+  shop: [
+    { key: 'shop_prep', dom: 'shop-prep', label: 'Prep jobs', icon: 'scissors', color: '#EF4444' },
+    { key: 'shop_item_1', dom: 'shop-item-1', label: 'Items this month', icon: 'package', color: '#3B82F6' },
+    { key: 'shop_item_2', dom: 'shop-item-2', label: 'Items this month', icon: 'boxes', color: '#8B5CF6' },
+    { key: 'shop_item_3', dom: 'shop-item-3', label: 'Items this month', icon: 'layers', color: '#10B981' }
+  ],
+  // the operator's: the survey call list now, who was talked with this month, notes to read, review e-mails
+  operator: [
+    { key: 'op_to_call', dom: 'op-to-call', label: 'Customers to call', icon: 'phone-outgoing', color: '#3B82F6' },
+    { key: 'op_talked', dom: 'op-talked', label: 'Talked with this month', icon: 'messages-square', color: '#10B981' },
+    { key: 'op_attention', dom: 'op-attention', label: 'Needs a look', icon: 'circle-alert', color: '#F59E0B' },
+    { key: 'op_reviews', dom: 'op-reviews', label: 'Review e-mails this month', icon: 'mail-check', color: '#8B5CF6' }
+  ],
+  // the field tech's POOL: My hours first, then three of the other four, in the order the server sends
+  // (`order`, from the tech's own use). Before the first answer the role's starting order is drawn (zdzKpiCardsFor).
+  tech: [
+    { key: 'tech_hours', dom: 'tech-hours', label: 'My hours this week', icon: 'clock', color: '#3B82F6' },
+    { key: 'tech_jobs', dom: 'tech-jobs', label: 'My installs this week', icon: 'house', color: '#F59E0B' },
+    { key: 'tech_schedule', dom: 'tech-schedule', label: 'Appointments today', icon: 'calendar-days', color: '#10B981' },
+    { key: 'tech_media', dom: 'tech-media', label: 'Photos this week', icon: 'camera', color: '#8B5CF6' },
+    { key: 'tech_messages', dom: 'tech-messages', label: 'Unread messages', icon: 'message-circle', color: '#EF4444' }
+  ]
+};
+// the cards a set draws, in order: the keys the server sent last (`order`: the tiles the business chose for the set,
+// and the tech's in their own order of use). Before any answer, a set draws its whole list, the shop Prep's card and
+// the tech the starting four. A key the page does not know is skipped, never invented.
+var ZDZ_KPI_TECH_START = ['tech_hours', 'tech_jobs', 'tech_schedule', 'tech_media'];
+function zdzKpiCardsFor(set, order) {
+  var list = ZDZ_KPI_SETS[set] || [];
+  var given = Array.isArray(order);
+  if (!given && set !== 'tech' && set !== 'shop') { return list; }
+  var keys = given ? order : (set === 'shop' ? ['shop_prep'] : ZDZ_KPI_TECH_START);
+  return keys.map(function (k) { return list.filter(function (t) { return t.key === k; })[0]; }).filter(Boolean);
+}
+// The order kept with the last answer on this device, for this set (none: the starting order).
+function zdzKpiStoredOrder(set) {
+  var copy = null;
+  try { copy = JSON.parse(localStorage.getItem(zdzKpiStoreKey()) || 'null'); } catch (e) { copy = null; }
+  return (copy && copy.set === set && Array.isArray(copy.order)) ? copy.order : null;
+}
+function zdzKpiDrawnKeys() {
+  return Array.prototype.map.call(document.querySelectorAll('[data-zdz-kpi-tile]'), function (c) { return c.getAttribute('data-zdz-kpi-tile'); });
+}
+// Draw a set's cards into the strip (here, so the tech's cards can be redrawn in the server's order).
+function zdzKpiDrawSet(el, kpiSet, order) {
+  el.style.display = '';
+  el.className = 'kpi-grid';
+  el.setAttribute('aria-label', kpiSet === 'sales' ? 'Your numbers this month' : (kpiSet === 'shop' ? 'Shop this month' : (kpiSet === 'operator' ? 'Calls and surveys' : (kpiSet === 'tech' ? 'Your day' : 'Key performance metrics'))));
+  el.innerHTML = zdzKpiCardsFor(kpiSet, order).map(function (t) {
+    return '<div class="kpi-card kpi-action' + (t.primary ? ' kpi-primary' : '') + '" data-zdz-kpi-tile="' + t.key + '" role="button" tabindex="0">' +
+      (t.primary ? '' : '<div class="kpi-icon" style="color:' + t.color + '"><i data-lucide="' + t.icon + '"></i></div>') +
+      (t.primary ? '<div class="kpi-label">' + escapeHtml(t.label) + '</div>' : '') +
+      // the tech's cards carry no data-zdz-kpi, so the drag-to-reorder script leaves them alone: their
+      // order is the tech's use, picked on the server, and a redraw would drop its handles anyway.
+      '<div class="kpi-value"' + (kpiSet === 'tech' ? '' : ' data-zdz-kpi="' + t.dom + '"') + '>—</div>' +
+      (t.primary ? '' : '<div class="kpi-label">' + escapeHtml(t.label) + '</div>') +
+      '<div class="kpi-sub"></div><div class="kpi-when"></div>' +
+    '</div>';
+  }).join('');
+  refreshIcons();
+  initKPIClicks();
+}
+// the answer's own order differs from the cards on screen (the tech's use moved one up, the business chose other
+// tiles): draw them again first. In the sets a person may reorder by dragging, only a different choice of cards
+// redraws, never the person's own order.
+function zdzKpiFollowOrder(json) {
+  var set = json ? (json.set || 'company') : '';
+  if (!json || !Array.isArray(json.order)) { return; }
+  var want = zdzKpiCardsFor(set, json.order).map(function (t) { return t.key; });
+  var have = zdzKpiDrawnKeys();
+  var own = set === 'tech' || set === 'shop';
+  if ((own ? want : want.slice().sort()).join(',') === (own ? have : have.slice().sort()).join(',')) { return; }
+  var el = document.getElementById('quick-stats');
+  if (el) { zdzKpiDrawSet(el, set, json.order); }
+}
+// Which set a role gets ('' = none yet: the role keeps its own strip and asks for nothing).
+function zdzKpiSetFor(role) {
+  if (role === 'zdz_owner' || role === 'administrator' || role === 'zdz_admin') { return 'company'; }
+  if (role === 'zdz_sales') { return 'sales'; }
+  if (role === 'zdz_mfg') { return 'shop'; }
+  if (role === 'zdz_operator') { return 'operator'; }
+  if (role === 'zdz_tech') { return 'tech'; }
+  return '';
+}
+var ZDZ_KPI_REFRESH_MS = 120000; // the server keeps each person's answer 2 minutes; a page left open asks again after that
+function zdzKpiStoreKey() { return 'zdz_kpi_v2_' + String((typeof zdzData !== 'undefined' && zdzData && zdzData.userId) || 0).replace(/[^0-9]/g, ''); }
+// The month now, in the answer's own time zone (the site's): a copy from another month is never shown as "this month".
+function zdzKpiMonthNow(tz) {
+  try {
+    var parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'America/Los_Angeles', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+    var y = '', m = '';
+    parts.forEach(function (p) { if (p.type === 'year') { y = p.value; } if (p.type === 'month') { m = p.value; } });
+    return y && m ? y + '-' + m : '';
+  } catch (e) { return ''; }
+}
+// an answer that names its day (the tech's: today's appointments, this week's installs) is
+// current only on that day, so yesterday's copy is never painted as today's.
+function zdzKpiDayNow(tz) {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+  catch (e) { return ''; }
+}
+function zdzKpiThisMonth(data) { return !!(data && data.month && data.month === zdzKpiMonthNow(data.tz) && (!data.day || data.day === zdzKpiDayNow(data.tz))); }
+function zdzKpiState() { if (!window.__zdzKpiS) { window.__zdzKpiS = { data: null, failed: false, at: 0, inflight: false }; } return window.__zdzKpiS; }
 
-  // v2.17.1: Restore cached KPI values instantly to avoid shimmer/flicker.
-  // Only show shimmer on first-ever load (no cache).
-  var cached = null;
-  try { cached = JSON.parse(sessionStorage.getItem('zdz_kpi_cache')); } catch(e) {}
-  if (cached && typeof cached === 'object') {
-    Object.keys(cached).forEach(function(key) {
-      var domKey = key.replace(/_/g, '-');
-      var el = document.querySelector('[data-zdz-kpi="' + domKey + '"]');
-      if (el && cached[key] && cached[key].value && cached[key].value !== '—') {
-        el.textContent = cached[key].value;
-        el.classList.add('kpi-loaded');
-      }
-    });
-  } else {
-    // No cache — show shimmer loading animation
-    document.querySelectorAll('[data-zdz-kpi]').forEach(el => {
-      el.classList.add('kpi-loading');
-    });
+// The data's age, in words: "as of 10:31" today, "as of 3 Oct" before; a typed number says "entered".
+function zdzKpiAgeWords(t) {
+  if (!t || !t.as_of) { return t && t.as_of_kind === 'entered' ? 'no date kept' : ''; }
+  var d = new Date(t.as_of * 1000), now = new Date();
+  var same = d.toDateString() === now.toDateString();
+  var when = same ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                  : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  return (t.as_of_kind === 'entered' ? 'entered ' : 'as of ') + when;
+}
+// Old = older than its interval, or the app that owns the number marked it stale, or it could not be refreshed. Never "just now" for a copy.
+function zdzKpiIsOld(t, failed) {
+  if (!t) { return false; }
+  if (failed || t.state === 'stale' || t.state === 'error') { return true; }
+  if (t.stale_after && t.as_of) { return (Date.now() / 1000 - t.as_of) > t.stale_after; }
+  return false;
+}
+function zdzKpiSubParts(t, failed) {
+  var lead = '', age = '', old = false;
+  switch (t.state) {
+    case 'held': lead = 'not counted yet'; break;
+    case 'unavailable': lead = 'not available'; break;
+    case 'empty': lead = 'not entered yet'; break;
+    case 'counting': lead = 'being counted'; break;   // the owner's first count is on its way; never 0
+    case 'error':
+      lead = 'couldn’t refresh';
+      if (t.last_good) { age = zdzKpiAgeWords({ as_of: t.last_good.as_of, as_of_kind: t.as_of_kind }); }
+      old = true;
+      break;
+    default:
+      lead = failed ? 'couldn’t refresh' : (t.detail || '');
+      age = zdzKpiAgeWords(t);
+      old = zdzKpiIsOld(t, failed);
+  }
+  return { lead: lead, age: age, old: old };
+}
+function zdzKpiPaintCard(card, t, failed) {
+  var val = card.querySelector('.kpi-value'), sub = card.querySelector('.kpi-sub');
+  var labels = card.querySelectorAll('.kpi-label');
+  card.hidden = t.state === 'not_shown';
+  if (t.label && labels.length) { labels[0].textContent = t.label; }
+  var shown = (t.state === 'error' && t.last_good) ? t.last_good.display : (t.display || '—');
+  if (val) {
+    val.textContent = shown;
+    val.classList.remove('kpi-loading');
+    val.classList.add('kpi-loaded');
+    val.classList.toggle('kpi-value-word', t.state === 'held');
+  }
+  var p = zdzKpiSubParts(t, failed);
+  card.classList.toggle('kpi-stale', p.old);
+  card.classList.toggle('kpi-error-card', t.state === 'error' || t.state === 'unavailable' || !!failed);
+  card.classList.toggle('kpi-held', t.state === 'held');
+  card.setAttribute('data-zdz-kpi-state', failed ? 'failed' : t.state);
+  // Two lines: what it is, then how old it is. On one line a phone cut the age off.
+  if (sub) { sub.textContent = p.lead; }
+  var when = card.querySelector('.kpi-when');
+  if (when) {
+    when.textContent = '';
+    if (p.age) {
+      var a = document.createElement('span');
+      a.className = 'kpi-age' + (p.old ? ' is-old zdz-pair' : '');
+      a.textContent = p.age;
+      when.appendChild(a);
+    }
+  }
+  card.setAttribute('aria-label', (t.label || '') + ': ' + shown + (p.lead ? ', ' + p.lead : '') + (p.age ? ', ' + p.age : '') + '. Tap for what it counts.');
+}
+function zdzKpiPaint(data, failed) {
+  if (!data || !data.tiles) { return; }
+  var S = zdzKpiState();
+  S.data = data; S.failed = !!failed;
+  Object.keys(data.tiles).forEach(function (k) {
+    var card = document.querySelector('[data-zdz-kpi-tile="' + k + '"]');
+    if (card) { zdzKpiPaintCard(card, data.tiles[k], failed); }
+  });
+}
+// A failed fetch never shows 0: with no copy of THIS month to fall back on, every card says it could not load (whatever
+// it showed before: a page left open past the month's end must not keep last month's figures under "this month").
+function zdzKpiNoData() {
+  document.querySelectorAll('[data-zdz-kpi-tile]').forEach(function (card) {
+    var v = card.querySelector('.kpi-value');
+    if (v) { v.classList.remove('kpi-loading', 'kpi-value-word'); v.textContent = '\u2014'; }
+    var sub = card.querySelector('.kpi-sub'), when = card.querySelector('.kpi-when');
+    if (sub) { sub.textContent = 'couldn\u2019t load'; }
+    if (when) { when.textContent = ''; }
+    card.hidden = false;
+    card.classList.remove('kpi-stale', 'kpi-held');
+    card.classList.add('kpi-error-card');
+    card.setAttribute('data-zdz-kpi-state', 'failed');
+  });
+}
+
+// the cards on screen are another role's (View As): say so on each, never a number, never "couldn't load".
+function zdzKpiOtherSet() {
+  document.querySelectorAll('[data-zdz-kpi-tile]').forEach(function (card) {
+    var v = card.querySelector('.kpi-value');
+    if (v) { v.classList.remove('kpi-loading', 'kpi-value-word'); v.textContent = '\u2014'; }
+    var sub = card.querySelector('.kpi-sub'), when = card.querySelector('.kpi-when');
+    if (sub) { sub.textContent = 'their own figures'; }
+    if (when) { when.textContent = 'shown when they sign in'; }
+    card.hidden = false;
+    card.classList.remove('kpi-stale', 'kpi-held', 'kpi-error-card');
+    card.setAttribute('data-zdz-kpi-state', 'other');
+  });
+}
+
+function fetchKPIMetrics(force) {
+  // Only the roles the server answers: owners and admins (the company set), from salespeople (their own set) and,
+  // from, the shop foreman (zdz_mfg: the shop set), from the operator (zdz_operator: the operator set), from
+  // the field tech (zdz_tech: the tech set).
+  // The other roles' strips wait for their sets.
+  var want = zdzKpiSetFor(state.role);
+  if (!want) { return; }
+  if (!document.querySelector('[data-zdz-kpi-tile]')) { return; }
+  var S = zdzKpiState();
+  if (S.inflight) { return; }
+  try { sessionStorage.removeItem('zdz_kpi_cache'); } catch (e) { /* the ≤ per-tab copy */ }
+
+  // The last answer for THIS person, from this device (not per tab: a new tab or a PWA launch paints at once). Its ages
+  // are the data's, so an old copy reads as old.
+  if (!S.data) {
+    var copy = null;
+    try { copy = JSON.parse(localStorage.getItem(zdzKpiStoreKey()) || 'null'); } catch (e) { copy = null; }
+    // a copy of another set (the person's role changed) is not this screen's: copies carry no set and were the company's
+    if (copy && copy.tiles && copy.shape === 2 && zdzKpiThisMonth(copy) && (copy.set || 'company') === want) { zdzKpiFollowOrder(copy); zdzKpiPaint(copy, false); }
+    else { document.querySelectorAll('[data-zdz-kpi-tile] .kpi-value').forEach(function (v) { v.classList.add('kpi-loading'); }); }
   }
 
-  fetch(zdzData.apiUrl + 'kpi-metrics', {
+  S.inflight = true;
+  // A request that hangs is given up after 15 s, so the tiles say so and a later look can ask again.
+  var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var giveUp = ac ? setTimeout(function () { ac.abort(); }, 15000) : 0;
+  fetch(zdzData.apiUrl + 'kpi-metrics' + (force ? '?force_refresh=1' : ''), {
     method: 'GET',
     headers: { 'X-WP-Nonce': zdzData.nonce },
-    credentials: 'same-origin'
+    credentials: 'same-origin',
+    signal: ac ? ac.signal : undefined
   })
-  .then(r => {
-    if (!r.ok) throw new Error('KPI fetch failed: ' + r.status);
-    return r.json();
-  })
-  .then(json => {
-    if (!json.success || !json.data) return;
-    const data = json.data;
-
-    // v2.17.1: Cache the response for instant render on next load
-    // v2.17.2: Merge with existing cache so partial responses don't erase old data
-    var existingCache = null;
-    try { existingCache = JSON.parse(sessionStorage.getItem('zdz_kpi_cache')); } catch(e) {}
-    var merged = Object.assign({}, existingCache || {}, data);
-    try { sessionStorage.setItem('zdz_kpi_cache', JSON.stringify(merged)); } catch(e) {}
-
-    // Map API keys (underscores) to DOM data attributes (hyphens)
-    // v2.17.2: Use merged cache so missing keys keep their previous values
-    // v2.20.0: Handle error states — show warning icon instead of misleading $0
-    Object.keys(merged).forEach(key => {
-      if (key.charAt(0) === '_') return; // skip meta keys like _ts, _fb_status
-      const domKey = key.replace(/_/g, '-');
-      const el = document.querySelector(`[data-zdz-kpi="${domKey}"]`);
-      if (!el) return;
-
-      const metric = merged[key];
-      if (metric && metric.error) {
-        // v2.20.0: API error — show warning instead of misleading data
-        el.textContent = '⚠';
-        el.classList.remove('kpi-loading');
-        el.classList.add('kpi-loaded', 'kpi-error');
-        // Add error hint below the card
-        const card = el.closest('.kpi-card, .stat-pill');
-        if (card) {
-          card.classList.add('kpi-error-card');
-          // Add hint if not already present
-          if (!card.querySelector('.kpi-error-hint')) {
-            var hint = document.createElement('div');
-            hint.className = 'kpi-error-hint';
-            hint.textContent = metric.error === 'not_configured' ? 'Not connected' : 'Tap to retry';
-            card.appendChild(hint);
-          }
-        }
-      } else if (metric && metric.value && metric.value !== '—') {
-        el.textContent = metric.value;
-        el.classList.remove('kpi-loading', 'kpi-error');
-        el.classList.add('kpi-loaded');
-        // Remove any error hints
-        const card = el.closest('.kpi-card, .stat-pill');
-        if (card) {
-          card.classList.remove('kpi-error-card');
-          var oldHint = card.querySelector('.kpi-error-hint');
-          if (oldHint) oldHint.remove();
-        }
-      } else if (el) {
-        el.classList.remove('kpi-loading');
-      }
-    });
-
-    // v2.16.0 T16: Update KPI freshness timestamp in sub-line text
-    const ts = json.data._ts || (Date.now() / 1000);
-    document.querySelectorAll('.kpi-sub').forEach(sub => {
-      const ago = formatTimeAgo(ts);
-      if (ago) sub.textContent = sub.textContent.replace(/·.*/, '· updated ' + ago);
+  .then(function (r) {
+    // A 502 wall page or a login page is text, not JSON: read the text, and anything that is not our answer is a failure.
+    return r.text().then(function (txt) {
+      var j = null;
+      try { j = JSON.parse(txt); } catch (e) { j = null; }
+      if (!r.ok || !j || j.shape !== 2 || !j.tiles) { throw new Error('KPI fetch failed: HTTP ' + r.status); }
+      return j;
     });
   })
-  .catch(err => {
-    console.warn('KPI metrics fetch error:', err);
-    // v2.17.2: On error, restore cached values so cards don't go blank
-    var fallback = null;
-    try { fallback = JSON.parse(sessionStorage.getItem('zdz_kpi_cache')); } catch(e) {}
-    if (fallback && typeof fallback === 'object') {
-      Object.keys(fallback).forEach(function(key) {
-        if (key.charAt(0) === '_') return;
-        var domKey = key.replace(/_/g, '-');
-        var el = document.querySelector('[data-zdz-kpi="' + domKey + '"]');
-        if (el && fallback[key] && fallback[key].value && fallback[key].value !== '—') {
-          el.textContent = fallback[key].value;
-          el.classList.remove('kpi-loading');
-          el.classList.add('kpi-loaded');
-        }
-      });
-    }
-    // Remove shimmer from any remaining cells
-    document.querySelectorAll('.kpi-loading').forEach(el => {
-      el.classList.remove('kpi-loading');
-    });
+  .then(function (json) {
+    clearTimeout(giveUp);
+    S.inflight = false; S.at = Date.now();
+    // the server answers the SIGNED-IN person's set. In View As (an owner previewing a salesperson's
+    // home) the page draws the other role's cards: that answer is not theirs, so it is neither painted nor kept.
+    if ((json.set || 'company') !== want) { S.data = null; S.other = true; zdzKpiOtherSet(); return; }
+    S.other = false;
+    zdzKpiFollowOrder(json);   // the tech's cards in the order this answer gives
+    zdzKpiPaint(json, false);
+    // a tile still being counted is asked for again shortly (the server keeps such an answer 15 s),
+    // a few times, so the count appears without leaving the app.
+    var counting = Object.keys(json.tiles).some(function (k) { return json.tiles[k] && json.tiles[k].state === 'counting'; });
+    if (counting && (S.recount || 0) < 6) { S.recount = (S.recount || 0) + 1; setTimeout(function () { fetchKPIMetrics(); }, 20000); }
+    else if (!counting) { S.recount = 0; }
+    try { delete json.cached; localStorage.setItem(zdzKpiStoreKey(), JSON.stringify(json)); } catch (e) { /* storage full or blocked */ }
+  })
+  .catch(function (err) {
+    clearTimeout(giveUp);
+    S.inflight = false; S.at = Date.now();
+    console.warn('KPI metrics fetch error:', err && err.message);
+    // the copy on screen is shown as "couldn't refresh" only while it is still this month's
+    if (S.data && zdzKpiThisMonth(S.data)) { zdzKpiPaint(S.data, true); } else { S.data = null; zdzKpiNoData(); }
   });
+}
+
+// A home screen left open asks again when it comes back to the front (the answer is 2 minutes old or more).
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState !== 'visible') { return; }
+  var S = zdzKpiState();
+  if (S.at && (Date.now() - S.at) >= ZDZ_KPI_REFRESH_MS) { fetchKPIMetrics(); }
+});
+
+// A tile's sheet: the number, what it counts, where it comes from and as of when; the same question in chat.
+function zdzKpiOpenSheet(key) {
+  var S = zdzKpiState(), t = S.data && S.data.tiles ? S.data.tiles[key] : null;
+  var meta = ZDZ_KPI_SETS.company.concat(ZDZ_KPI_SETS.sales, ZDZ_KPI_SETS.shop, ZDZ_KPI_SETS.operator, ZDZ_KPI_SETS.tech).filter(function (x) { return x.key === key; })[0] || { label: '' };
+  if (!window.ZDZ || !ZDZ.ui || !ZDZ.ui.sheet) { if (t && t.ask) { openApp('sales-analytics', { prompt: t.ask }); } return; }
+  var body = document.createElement('div');
+  body.className = 'kpi-sheet';
+  var add = function (tag, cls, text) { var n = document.createElement(tag); if (cls) { n.className = cls; } n.textContent = text; body.appendChild(n); return n; };
+  if (!t) {
+    add('p', 'kpi-sheet-state', S.other ? 'These are this person’s own figures. They show on their home screen when they sign in, not in View As.' : (S.failed ? 'The figures couldn’t be loaded just now. Try again in a minute.' : 'Still loading…'));
+  } else {
+    var p = zdzKpiSubParts(t, S.failed);
+    var shown = (t.state === 'error' && t.last_good) ? t.last_good.display : (t.display || '—');
+    add('div', 'kpi-sheet-value' + (t.state === 'held' ? ' kpi-value-word' : ''), shown);
+    var detail = (t.state === 'error' && t.last_good) ? t.last_good.detail : t.detail;
+    if (detail && t.state !== 'held') { add('div', 'kpi-sheet-detail', detail); }
+    // .x: the tile's own split, e.g. Billed / Collected / Still owed / Invoices (revenue). Text nodes only.
+    if (t.parts && t.parts.length && t.state !== 'error') {
+      var dl = document.createElement('dl'); dl.className = 'kpi-sheet-parts';
+      t.parts.forEach(function (p) {
+        var dt = document.createElement('dt'); dt.textContent = p.label || '';
+        var dd = document.createElement('dd'); dd.textContent = p.display || '';
+        dl.appendChild(dt); dl.appendChild(dd);
+      });
+      body.appendChild(dl);
+    }
+    var said = S.failed ? 'This is the last answer on this device; the home screen couldn’t refresh it just now.' : (t.message || '');
+    if (t.state === 'error') { said = (t.message || 'It couldn’t be refreshed just now.') + (t.last_good ? ' Showing the last good figure.' : ''); }
+    if (t.state === 'stale' && !said) { said = 'This figure is older than it should be: its source has not caught up.'; }
+    if (said) { add('p', 'kpi-sheet-state' + (p.old ? ' is-old zdz-pair' : ''), said); }
+    if (t.definition) { add('h3', 'kpi-sheet-h', 'What it counts'); add('p', 'kpi-sheet-p', t.definition); }
+    if (t.source || p.age) {
+      add('h3', 'kpi-sheet-h', 'From');
+      var ago = t.as_of ? formatTimeAgo(t.as_of) : '';
+      add('p', 'kpi-sheet-p', [t.source, p.age ? p.age + (ago && ago !== 'just now' && t.as_of_kind !== 'entered' ? ' (' + ago + ')' : '') : ''].filter(Boolean).join(' · '));
+    }
+  }
+  var actions = [];
+  var go = function (fn) {
+    // Open the next screen once the sheet's own history entry is gone (Back would otherwise close the app instead).
+    return function () {
+      var done = false, run = function () { if (done) { return; } done = true; window.removeEventListener('popstate', run); setTimeout(fn, 0); };
+      window.addEventListener('popstate', run);
+      setTimeout(run, 400);
+    };
+  };
+  if (t && t.ask) { actions.push({ label: 'Ask in chat', kind: 'primary', onClick: go(function () { openApp('sales-analytics', { prompt: t.ask }); }) }); }
+  if (t && t.open) { actions.push({ label: t.open_label || 'Open', onClick: go(function () { openApp(t.open); }) }); }
+  actions.push({ label: 'Close' });
+  ZDZ.ui.sheet({ title: (t && t.label) || meta.label, body: body, actions: actions });
 }
 
 // ---- RECENT APPS ----
@@ -671,7 +967,7 @@ function addRecent(appId) {
   state.recentApps = [appId, ...state.recentApps.filter(a => a !== appId)].slice(0, 5);
   try { localStorage.setItem('zdz_recent', JSON.stringify(state.recentApps)); } catch(e) {}
   renderRecentApps();
-  // v2.17.1: Track app open for audit log
+  // Track app open for audit log
   var appMeta = (zdzData.apps || []).find(function(a){ return a.id === appId; });
   zdzTrack('app_open', appMeta ? appMeta.nm : appId, appId);
 }
@@ -690,12 +986,12 @@ function renderRecentApps() {
     if (label) label.textContent = 'Suggested';
     el.innerHTML = apps.map(a => `
       <button class="recent-chip" onclick="openApp('${a.id}')" aria-label="Open ${a.nm}">
-        <div class="rc-icon" style="background:${a.cc}"><i data-lucide="${a.icon}"></i></div>
+        <div class="rc-icon" ${zdzPlate(a)}><i data-lucide="${a.icon}"></i></div>
         <span class="rc-name">${a.nm}</span>
       </button>
     `).join('');
   } else {
-    // v2.16.0 T6: Show max 3 recent apps; hide section if fewer than 2
+    // Show max 3 recent apps; hide section if fewer than 2
     const apps = state.recentApps.slice(0, 3).map(id => zdzData.apps.find(a => a.id === id)).filter(Boolean).filter(a => !isSecondarySurface(a));
     if (apps.length < 2) { section.style.display = 'none'; return; }
     section.style.display = '';
@@ -703,7 +999,7 @@ function renderRecentApps() {
     if (label) label.textContent = 'Recently Used';
     el.innerHTML = apps.map(a => `
       <button class="recent-chip" onclick="openApp('${a.id}')" aria-label="Open ${a.nm}">
-        <div class="rc-icon" style="background:${a.cc}"><i data-lucide="${a.icon}"></i></div>
+        <div class="rc-icon" ${zdzPlate(a)}><i data-lucide="${a.icon}"></i></div>
         <span class="rc-name">${a.nm}</span>
       </button>
     `).join('');
@@ -711,7 +1007,7 @@ function renderRecentApps() {
 }
 
 // ---- APP GRID ----
-// v2.21.0: A plugin may register an app that is openable (via Bridge.loadApp /
+// A plugin may register an app that is openable (via Bridge.loadApp /
 // the command palette / "See All" deep-links) but should NOT appear as its own
 // springboard/dock tile, recent chip, or search result — e.g. a secondary
 // full-screen surface of an app whose PRIMARY tile is a dashboard widget (the
@@ -725,7 +1021,7 @@ function isSecondarySurface(app) {
   return !!app && app.springboard === false;
 }
 
-// v2.21.0: long dock/grid labels (e.g. "Knowledge", "Commission") crowd or wrap
+// long dock/grid labels (e.g. "Knowledge", "Commission") crowd or wrap
 // at the default size. Return ' is-long' for names at/above the length where the
 // short labels (Prep, Leads, Media, Camera, Receipt…) never reach, so CSS can
 // shrink ONLY those to a single line. Threshold 9 catches "Knowledge" (9) and up;
@@ -735,8 +1031,32 @@ function longLabelClass(name) {
   return (name && String(name).length >= ZDZ_LONG_LABEL_MIN) ? ' is-long' : '';
 }
 
+/* an app's short name (snm, ten characters at most, from its registration or the theme's
+   fallback list) is what the launcher tile, the dock and the sticky strip draw; its full name (nm) is everywhere
+   else: the app's page header, search, the large cards, the ask bar, and each tile's title and spoken label. An app
+   with no short name draws its full name, ending in "…" if it does not fit. */
+function zdzAppShort(a) {
+  var s = a && typeof a.snm === 'string' ? a.snm.trim() : '';
+  return s || (a && a.nm) || '';
+}
+// A name as text: a plugin may register an entity-encoded name (esc_html__('Q&A') is "Q&amp;A"), which the old raw
+// templates drew as "Q&A". Decode it once, then escape it for HTML, so every place shows the same text.
+var _zdzNameDec = null;
+function zdzNameText(s) {
+  s = (s === null || s === undefined) ? '' : String(s);
+  if (s.indexOf('&') < 0) return s;
+  try { _zdzNameDec = _zdzNameDec || document.createElement('textarea'); _zdzNameDec.innerHTML = s; return _zdzNameDec.value; } catch (e) { return s; }
+}
+function zdzNameHtml(s) { return escapeHtml(zdzNameText(s)); }
+// The tile's spoken label holds the words it shows: "Open Doorhangers", or "Open Doorhangers (Doors)" once
+// the tile shows a short name.
+function zdzAppSpoken(a) {
+  var full = zdzNameText(a && a.nm), short = zdzNameText(zdzAppShort(a));
+  return 'Open ' + full + (short && short !== full ? ' (' + short + ')' : '');
+}
+
 function getVisibleApps() {
-  // v2.17.2: Prefer server-persisted order, fall back to localStorage, then unsorted.
+  // Prefer server-persisted order, fall back to localStorage, then unsorted.
   var saved = null;
   if (zdzData.appOrder && Array.isArray(zdzData.appOrder) && zdzData.appOrder.length) {
     saved = zdzData.appOrder;
@@ -744,7 +1064,9 @@ function getVisibleApps() {
   if (!saved) {
     try { saved = JSON.parse(localStorage.getItem('zdz_app_order')); } catch(e) {}
   }
-  var apps = (zdzData.apps || []).filter(a => !!a.nm && !!a.icon && !!a.cc && !isSecondarySurface(a));
+  // the theme now gives every app a color, so "registered without a color" (which kept an app off the
+  // launcher) is read from the plugin's own color, cc_plugin.
+  var apps = (zdzData.apps || []).filter(a => !!a.nm && !!a.icon && !!a.cc && (!a.grp || !!a.cc_plugin) && !isSecondarySurface(a));
   // Apply saved order if available
   if (saved && Array.isArray(saved) && saved.length) {
     var order = {};
@@ -758,7 +1080,7 @@ function getVisibleApps() {
   return apps;
 }
 
-// v2.17.2: Persist dock/sticky bar order to localStorage + server
+// Persist dock/sticky bar order to localStorage + server
 function saveAppOrder(order) {
   try { localStorage.setItem('zdz_app_order', JSON.stringify(order)); } catch(e) {}
   // Update in-memory so getVisibleApps() reads it this session
@@ -784,7 +1106,7 @@ function renderAppGrid() {
     let html = '<div class="app-grid-hero">';
     html += apps.map(a => `
       <button class="action-card" onclick="openApp('${a.id}')" aria-label="Open ${a.nm}">
-        <div class="ac-icon" style="background:${a.cc}"><i data-lucide="${a.icon}"></i></div>
+        <div class="ac-icon" ${zdzPlate(a)}><i data-lucide="${a.icon}"></i></div>
         <div class="ac-text">
           <div class="ac-name">${a.nm}</div>
           <div class="ac-desc">${a.desc || ''}</div>
@@ -793,31 +1115,368 @@ function renderAppGrid() {
     `).join('');
     html += '</div>';
     container.innerHTML = html;
+    // no "At work" row here; say which mode the clock gave, so the minute tick does not redraw these
+    // cards every minute.
+    container.setAttribute('data-zdz-fy-mode', '');
+    container.setAttribute('data-zdz-fy-clock', zdzForYouData() ? (zdzForYouMode() || '') : '');
+    container.setAttribute('data-zdz-fy-slot', zdzForYouData() ? zdzForYouCell() : '');   // or the tick redraws these every minute
     return;
+  }
+
+  // on the focus home, this person's apps for now come first ("At work" or "After hours"), and the
+  // rest follow in their groups without them. With the view off, or for the kiosk, the grid is as before.
+  // the tile draws the short name; its title and spoken label carry the full one.
+  const tile = a => `
+          <button class="app-ic" onclick="openApp('${a.id}')" aria-label="${escapeHtml(zdzAppSpoken(a))}" title="${zdzNameHtml(a.nm)}">
+            <div class="ic" ${zdzPlate(a)}><i data-lucide="${a.icon}"></i></div>
+            <span class="nm${longLabelClass(zdzAppShort(a))}">${zdzNameHtml(zdzAppShort(a))}</span>
+          </button>`;
+  let html = '';
+  let rest = apps;
+  const fy = zdzForYouPick(apps);
+  // A redraw keeps the keyboard where it was: on the same tile, or on the switch.
+  const ae = document.activeElement;
+  const keep = (ae && container.contains(ae))
+    ? (ae.classList.contains('zdz-fy-switch') ? { sw: true } : { id: (ae.querySelector('.ic') || {}).getAttribute ? ae.querySelector('.ic').getAttribute('data-zdz-app') : '' })
+    : null;
+  const finish = () => {
+    // The mode the clock gave at this draw, even when no row was drawn, so the minute tick sees a change.
+    container.setAttribute('data-zdz-fy-mode', fy ? fy.mode : '');
+    container.setAttribute('data-zdz-fy-clock', zdzForYouData() ? (zdzForYouMode() || '') : '');
+    container.setAttribute('data-zdz-fy-slot', zdzForYouData() ? zdzForYouCell() : '');   // the hour band drawn
+    zdzFitLabels(container);
+    if (keep) {
+      const el = keep.sw ? container.querySelector('.zdz-fy-switch')
+        : (keep.id ? (container.querySelector('.ic[data-zdz-app="' + String(keep.id).replace(/[^a-z0-9_-]/gi, '') + '"]') || {}).parentNode : null);
+      if (el && typeof el.focus === 'function') { try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
+    }
+  };
+  if (fy) {
+    const taken = {};
+    fy.apps.forEach(a => { taken[a.id] = 1; });
+    rest = apps.filter(a => !taken[a.id]);
+    const other = fy.mode === 'work' ? 'Show after-hours apps' : 'Show work apps';
+    // Offered only when the other mode would draw a row of its own; else the row and its switch would vanish and
+    // leave no way back until the hours change.
+    const canSwitch = !!zdzForYouPick(apps, fy.mode === 'work' ? 'off' : 'work');
+    html += `<div class="cat-section zdz-fy-section" data-zdz-fy-mode="${fy.mode}">
+      <div class="cat-label zdz-fy-label"><span class="zdz-fy-title">${fy.mode === 'work' ? 'At work' : 'After hours'}</span>
+        ${canSwitch ? `<button type="button" class="zdz-fy-switch" aria-label="${other}. Now showing ${fy.mode === 'work' ? 'work' : 'after-hours'} apps" onclick="zdzForYouSwitch()">${other}</button>` : ''}</div>
+      <div class="app-grid zdz-fy-grid">${fy.apps.map(tile).join('')}
+      </div>
+    </div>`;
   }
 
   // Standard category grid for 5+ apps
   const grouped = {};
   CATEGORIES.forEach(c => { grouped[c.id] = []; });
-  apps.forEach(a => { if (grouped[a.cat]) grouped[a.cat].push(a); });
+  // an app outside the five groups (an older plugin, a client-side tile) lands in the last group
+  // rather than vanishing from the grid, which is how Camera, Media, Sketch, Game, Email and Dot Plot went missing.
+  const lastCat = CATEGORIES[CATEGORIES.length - 1].id;
+  rest.forEach(a => { (grouped[a.cat] || grouped[lastCat]).push(a); });
 
-  let html = '';
+  // once "At work" / "After hours" leads, the rest sit under one label in group order (the icon
+  // colors still say the group). Five group rows, each part-filled once the row has taken its apps, pushed the
+  // last apps two screens down on a phone; one grid keeps every app on the first screen of a 390 x 844 phone and
+  // of a 1200 x 616 desktop window.
+  if (fy) {
+    const more = [];
+    CATEGORIES.forEach(cat => { (grouped[cat.id] || []).forEach(a => more.push(a)); });
+    if (more.length) {
+      html += `<div class="cat-section zdz-fy-more">
+      <div class="cat-label">More apps</div>
+      <div class="app-grid">${more.map(tile).join('')}
+      </div>
+    </div>`;
+    }
+    container.innerHTML = html;
+    finish();
+    return;
+  }
+
   CATEGORIES.forEach(cat => {
     if (!grouped[cat.id]?.length) return;
     html += `<div class="cat-section">
       <div class="cat-label"><span class="cat-dot" style="background:${cat.color}"></span>${cat.id}</div>
       <div class="app-grid">
-        ${grouped[cat.id].map(a => `
-          <button class="app-ic" onclick="openApp('${a.id}')" aria-label="Open ${a.nm}">
-            <div class="ic" style="background:${a.cc}"><i data-lucide="${a.icon}"></i></div>
-            <span class="nm${longLabelClass(a.nm)}">${a.nm}</span>
-          </button>
-        `).join('')}
+        ${grouped[cat.id].map(tile).join('')}
       </div>
     </div>`;
   });
   container.innerHTML = html;
+  finish();
 }
+
+/* ── Each person's apps, at work and after hours ──────────────────────────────
+   The apps each person is most likely to need for their role come first, and the set changes with the clock: an
+   "at work" set in their work hours and an "after hours" set the rest of the time. The server
+   ranks both lists (ZDZ_For_You: the role's starting list plus what this person opens, by mode) and sends the
+   hours and the site's time zone; the mode is worked out here from the clock, so a page left open across the end
+   of the day changes over by itself. "Show after-hours apps" switches until the hours next change. */
+var ZDZ_FY_DAYS = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+function zdzForYouData() {
+  var f = (typeof zdzData !== 'undefined' && zdzData) ? zdzData.forYou : null;
+  if (!f || typeof f !== 'object' || !f.hours || !Array.isArray(f.work) || !Array.isArray(f.off)) return null;
+  return f;
+}
+// The ISO weekday (1 = Monday) and minutes since midnight in the site's zone; the browser's own zone if the
+// site's is not one Intl knows.
+var _zdzFyFmt = {};
+function zdzSiteClock(tz, now) {
+  var d = now || new Date();
+  try {
+    var key = tz || '';
+    // One formatter per zone: making one is the slow part.
+    var fmt = _zdzFyFmt[key] || (_zdzFyFmt[key] = new Intl.DateTimeFormat('en-US', { timeZone: tz || undefined, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }));
+    var parts = fmt.formatToParts(d);
+    var get = function (t) { var p = parts.find(function (x) { return x.type === t; }); return p ? p.value : ''; };
+    var h = parseInt(get('hour'), 10) % 24, m = parseInt(get('minute'), 10);
+    var dow = ZDZ_FY_DAYS[get('weekday')];
+    if (dow && !isNaN(h) && !isNaN(m)) return { dow: dow, min: h * 60 + m };
+  } catch (e) { /* an unknown zone: fall through */ }
+  return { dow: ((d.getDay() + 6) % 7) + 1, min: d.getHours() * 60 + d.getMinutes() };
+}
+function zdzHhmm(v) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '')); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+// 'work' or 'off' (the same rule as ZDZ_For_You::mode_at: hours past midnight belong to the day they start on).
+function zdzWorkMode(hours, clock) {
+  if (!hours) return 'off';
+  var s = zdzHhmm(hours.start), e = zdzHhmm(hours.end);
+  var days = (Array.isArray(hours.days) ? hours.days : []).map(function (x) { return parseInt(x, 10); });
+  if (s === null || e === null || s === e) return 'off';
+  var on = function (dw) { return days.indexOf(dw) !== -1; };
+  if (e > s) return (on(clock.dow) && clock.min >= s && clock.min < e) ? 'work' : 'off';
+  var prev = ((clock.dow + 5) % 7) + 1;
+  if (on(clock.dow) && clock.min >= s) return 'work';
+  if (on(prev) && clock.min < e) return 'work';
+  return 'off';
+}
+// When the clock's mode next changes, in ms (on a whole minute), within 8 days; null if it never does (no work
+// days). Worked out from the site's wall clock: the only moments the mode can change are each day's start and end
+// minute, so those are the only ones looked at (a 10-minute gap is found too). On the day the clocks change the
+// answer can be an hour off; the switch then ends an hour early or late, once.
+function zdzNextChangeover(hours, tz, fromMs) {
+  var start = Math.floor((fromMs || Date.now()) / 60000) * 60000;
+  if (!hours) return null;
+  var days = (Array.isArray(hours.days) ? hours.days : []).map(function (x) { return parseInt(x, 10); }).filter(function (x) { return x >= 1 && x <= 7; });
+  var s = zdzHhmm(hours.start), e = zdzHhmm(hours.end);
+  if (!days.length || s === null || e === null || s === e) return null;
+  var now = zdzSiteClock(tz, new Date(start));
+  var m0 = zdzWorkMode(hours, now);
+  var cands = [];
+  for (var k = 0; k <= 8; k++) {
+    [s, e].forEach(function (b) {
+      var delta = k * 1440 + b - now.min;
+      if (delta > 0) cands.push(delta);
+    });
+  }
+  cands.sort(function (a, b) { return a - b; });
+  for (var i = 0; i < cands.length; i++) {
+    var t = now.min + cands[i];
+    var clock = { dow: ((now.dow - 1 + Math.floor(t / 1440)) % 7) + 1, min: t % 1440 };
+    if (zdzWorkMode(hours, clock) !== m0) return start + cands[i] * 60000;
+  }
+  return null;
+}
+// "Show after-hours apps" is kept per person on this device (a shared shop tablet must not hand one person's
+// switch to the next), and only until the hours next change over: it stores when it ends, not the mode it was
+// made in, so a switch made Friday evening is gone on Monday evening even if nobody looked in between.
+function zdzFySwitchKey() { return 'zdz_fy_switch_' + String((typeof zdzData !== 'undefined' && zdzData && zdzData.userId) || 0).replace(/[^0-9]/g, ''); }
+function zdzForYouMode(now) {
+  var f = zdzForYouData();
+  if (!f) return null;
+  var at = now ? now.getTime() : Date.now();
+  var mode = zdzWorkMode(f.hours, zdzSiteClock(f.tz, new Date(at)));
+  var o = null, raw = null;
+  try { raw = localStorage.getItem(zdzFySwitchKey()); } catch (e) { raw = null; }
+  try { o = JSON.parse(raw || 'null'); } catch (e) { o = { bad: true }; }
+  // The copy in memory stands in only for a browser that would not store the switch.
+  if (!o && _zdzFyForce && _zdzFyNoStore) o = _zdzFyForce;
+  // A switch never lasts more than 8 days (a phone whose clock was wrong when it was made, a damaged value).
+  var live = function (x) { return x && (x.mode === 'work' || x.mode === 'off') && typeof x.until === 'number' && at < x.until && x.until <= at + 8 * 86400000 + 60000; };
+  if (_zdzFyForce && !live(_zdzFyForce)) _zdzFyForce = null;
+  if (live(o)) return o.mode;
+  if (o) { try { localStorage.removeItem(zdzFySwitchKey()); } catch (e) {} }
+  try { localStorage.removeItem('zdz_fy_switch'); } catch (e) {}   // the build's shared key, if any
+  return mode;
+}
+// the cell for the site's clock -- 'work|workday|morning' -- when the server sent one that
+// differs from its mode's list, else ''. Not while "Show after-hours apps" / "Show work apps" holds the row: that
+// switch shows the other mode's list as a whole.
+function zdzForYouCell(now) {
+  var f = zdzForYouData();
+  if (!f || !f.cells || typeof f.cells !== 'object' || !Array.isArray(f.bands)) return '';
+  var clock = zdzSiteClock(f.tz, now || new Date());
+  var mode = zdzWorkMode(f.hours, clock);
+  if (zdzForYouMode(now) !== mode) return '';
+  var days = (Array.isArray(f.hours.days) ? f.hours.days : []).map(function (x) { return parseInt(x, 10); });
+  var h = Math.floor(clock.min / 60), band = '';
+  f.bands.forEach(function (b) {
+    if (band || !Array.isArray(b)) return;
+    var from = parseInt(b[1], 10), to = parseInt(b[2], 10) % 24;
+    if (from < to ? (h >= from && h < to) : (h >= from || h < to)) band = String(b[0]);
+  });
+  var key = mode + '|' + (days.indexOf(clock.dow) !== -1 ? 'workday' : 'dayoff') + '|' + band;
+  return Array.isArray(f.cells[key]) ? key : '';
+}
+// The apps for now, from those this person can open, or null when the row does not apply.
+// by the hour: the cell's order first, then the mode's list fills the rest, so the row keeps its 8 apps; a
+// cell that leaves fewer than 4 the person can open is ignored (the mode's list alone, as before).
+function zdzForYouPick(apps, asMode) {
+  var f = zdzForYouData();
+  if (!f || !zdzFocusHome()) return null;
+  var mode = asMode || zdzForYouMode();
+  var size = Math.max(4, Math.min(12, parseInt(f.size, 10) || 8));
+  var byId = {};
+  apps.forEach(function (a) { byId[a.id] = a; });
+  var fill = function (ids) {
+    var out = [];
+    ids.forEach(function (id) { if (byId[id] && out.length < size && out.indexOf(byId[id]) === -1) out.push(byId[id]); });
+    return out;
+  };
+  var cell = asMode ? '' : zdzForYouCell();
+  var list = cell ? fill(f.cells[cell].concat(f[mode] || [])) : [];
+  if (!cell || fill(f.cells[cell]).length < 4) list = fill(f[mode] || []);
+  if (list.length < 4 || apps.length - list.length < 1) return null;
+  return { mode: mode, apps: list, cell: cell };
+}
+// "Show after-hours apps" / "Show work apps": until the hours next change over, then the clock decides again.
+function zdzForYouSwitch() {
+  var f = zdzForYouData();
+  if (!f) return;
+  var base = zdzWorkMode(f.hours, zdzSiteClock(f.tz));
+  var cur = zdzForYouMode();
+  var next = cur === 'work' ? 'off' : 'work';
+  var sw = null;
+  if (next !== base) {
+    var until = zdzNextChangeover(f.hours, f.tz, Date.now());
+    sw = { mode: next, until: until === null ? Date.now() + 12 * 3600000 : until };
+  }
+  _zdzFyNoStore = false;
+  try {
+    if (!sw) localStorage.removeItem(zdzFySwitchKey());
+    else localStorage.setItem(zdzFySwitchKey(), JSON.stringify(sw));
+  } catch (e) { _zdzFyNoStore = true; /* private window: this page only */ }
+  _zdzFyForce = sw;   // held in memory too, for a browser that refuses localStorage
+  zdzForYouRedraw();
+}
+window.zdzForYouSwitch = zdzForYouSwitch;
+var _zdzFyForce = null, _zdzFyNoStore = false;
+function zdzForYouRedraw() {
+  var container = document.getElementById('app-grid-container');
+  if (!container) return;
+  renderAppGrid();
+  if (window.lucide && typeof lucide.createIcons === 'function') { try { lucide.createIcons(); } catch (e) {} }
+}
+// Every minute (and when the page comes back to the front), redraw the launcher if the mode changed. Not while
+// an app is open as a page: home is behind it, and it redraws when the person comes back.
+function zdzForYouTick() {
+  var container = document.getElementById('app-grid-container');
+  if (!container || !zdzForYouData() || !zdzFocusHome()) return;
+  if (window.Bridge && Bridge._focused) return;
+  // Nor behind a full-screen app (an iframe app in the viewport).
+  var vp = document.getElementById('app-viewport');
+  if (vp && vp.classList.contains('active')) return;
+  var shown = container.getAttribute('data-zdz-fy-clock') || '';
+  var now = zdzForYouMode() || '';
+  // and when the hour band (the cell) changed, e.g. 11:00 turns the weekday morning into midday.
+  var slot = zdzForYouCell();
+  if ((now && shown !== now) || (container.getAttribute('data-zdz-fy-slot') || '') !== slot) zdzForYouRedraw();
+}
+function zdzForYouStart() {
+  if (!zdzForYouData()) return;
+  setInterval(zdzForYouTick, 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) zdzForYouTick(); });
+  document.addEventListener('zdz_app_blur', function () { setTimeout(zdzForYouTick, 0); });
+  window.addEventListener('popstate', function () { setTimeout(zdzForYouTick, 400); });
+}
+
+/* launcher names on one line, centered under the icon. A name that is wider than
+   its column is first drawn a little tighter, then a size smaller at a time, never below 14px. A name that still does
+   not fit at 14px ends in "…" rather than being cut mid-letter; its tile's title and label say the whole name.
+   The size starts from --zdz-applabel-size, and the fit runs again whenever it could have gone stale: a fit
+   measured in the phone's own font before Inter swaps in would cut long names (the one re-fit on fonts.ready may
+   already have run). So it also runs when any font face finishes loading
+   (document.fonts 'loadingdone'), and when any launcher grid changes size or is shown again. A hidden name keeps its
+   last fit until it is shown (it used to be reset and skipped). And the stylesheet alone ends a long name in "…"
+   with space between neighbours, so even a fit that never ran cannot make two names touch. */
+function zdzFitLabels(root) {
+  var scope = root || document.getElementById('app-grid-container');
+  if (!scope || !document.body.classList.contains('zdz-focus-home')) return;
+  Array.prototype.forEach.call(scope.querySelectorAll('.app-grid .app-ic .nm'), function (el) {
+    if (!el.clientWidth) return;   // not laid out (hidden): leave it as it is; it is fitted again when shown
+    el.classList.remove('nm-tight', 'nm-ellipsis');
+    el.style.removeProperty('font-size');
+    // The text's own width against the room inside the padding (scrollWidth does not count text that only runs
+    // into the right padding, so it would let two names touch).
+    var cs0 = getComputedStyle(el);
+    // (The box's exact width: clientWidth is rounded to whole pixels.)
+    var room = el.getBoundingClientRect().width - (parseFloat(cs0.paddingLeft) || 0) - (parseFloat(cs0.paddingRight) || 0);
+    var range = document.createRange();
+    var over = function () { range.selectNodeContents(el); return range.getBoundingClientRect().width > room + 0.1; };
+    if (!over()) return;
+    el.classList.add('nm-tight');
+    var size = parseFloat(getComputedStyle(el).fontSize) || 17;
+    // Whole pixels, never under 14.
+    while (over() && size > 14) {
+      size = Math.max(14, Math.ceil(size) - 1);
+      el.style.setProperty('font-size', size + 'px', 'important');
+    }
+    if (over()) el.classList.add('nm-ellipsis');
+  });
+}
+window.zdzFitLabels = zdzFitLabels;
+(function () {
+  var t = null;
+  var soon = function (ms) { clearTimeout(t); t = setTimeout(function () { zdzFitLabels(); }, ms); };
+  window.addEventListener('resize', function () { soon(150); });
+  try {
+    if (document.fonts) {
+      if (document.fonts.ready) document.fonts.ready.then(function () { soon(0); });
+      // every time a face finishes loading, not only the first time fonts.ready resolves.
+      if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', function () { soon(30); });
+    }
+  } catch (e) {}
+  // The launcher's width can change without a window resize (a scroll bar appearing as Today fills in), and a grid
+  // can be drawn while home is hidden (Settings open) and shown later at the same window width.: each grid
+  // is watched as well as the container, by its own last width, so a grid shown again or redrawn is fitted again.
+  try {
+    if (typeof ResizeObserver !== 'undefined') {
+      var lastW = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
+      var ro = new ResizeObserver(function (entries) {
+        var changed = false;
+        entries.forEach(function (en) {
+          var w = Math.round(en.contentRect.width);
+          if (!lastW) { changed = true; return; }
+          if (lastW.get(en.target) !== w) { lastW.set(en.target, w); changed = true; }
+        });
+        if (changed) soon(50);
+      });
+      var watched = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+      var watch = function (el) { if (!el || (watched && watched.has(el))) return; if (watched) watched.add(el); ro.observe(el); };
+      var hook = function () {
+        var c = document.getElementById('app-grid-container');
+        if (!c) return;
+        watch(c);
+        Array.prototype.forEach.call(c.querySelectorAll('.app-grid'), watch);
+        // A redraw replaces the grids: watch the new ones too.
+        if (typeof MutationObserver !== 'undefined') {
+          new MutationObserver(function (recs) {
+            // Let go of the grids a redraw replaced, so they can be freed.
+            recs.forEach(function (r) {
+              Array.prototype.forEach.call(r.removedNodes || [], function (n) {
+                if (!n || n.nodeType !== 1) return;
+                var gone = n.classList && n.classList.contains('app-grid') ? [n] : Array.prototype.slice.call(n.querySelectorAll('.app-grid'));
+                gone.forEach(function (g) { try { ro.unobserve(g); } catch (e) {} if (watched) watched.delete(g); if (lastW) lastW.delete(g); });
+              });
+            });
+            Array.prototype.forEach.call(c.querySelectorAll('.app-grid'), watch);
+          }).observe(c, { childList: true });
+        }
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hook); else hook();
+    }
+  } catch (e) {}
+})();
 
 // ---- SEARCH ----
 function initSearch() {
@@ -831,6 +1490,7 @@ function initSearch() {
     const apps = getVisibleApps();
     const matches = apps.filter(a =>
       a.nm.toLowerCase().includes(q) ||
+      (typeof a.snm === 'string' && a.snm.toLowerCase().includes(q)) ||   // the name the tile shows
       (a.desc && a.desc.toLowerCase().includes(q)) ||
       (a.slash && a.slash.includes(q)) ||
       (a.aliases && a.aliases.some(al => al.includes(q)))
@@ -838,7 +1498,7 @@ function initSearch() {
     if (!matches.length) { results.classList.remove('show'); return; }
     results.innerHTML = matches.map(a => `
       <button class="search-item" onclick="openApp('${a.id}');document.getElementById('app-search').value='';document.getElementById('search-results').classList.remove('show')">
-        <div class="si-icon" style="background:${a.cc}"><i data-lucide="${a.icon}" style="width:18px;height:18px"></i></div>
+        <div class="si-icon" ${zdzPlate(a)}><i data-lucide="${a.icon}" style="width:18px;height:18px"></i></div>
         <div class="si-text">
           <div class="si-name">${a.nm}</div>
           <div class="si-hint">${a.desc || ''}</div>
@@ -870,7 +1530,7 @@ function openApp(appId, options) {
   }
 }
 
-// v2.21.0: External deep-link router.
+// External deep-link router.
 // The zdz-sales-analytics Daily/Weekly Digest (r4) emails an "Open this chat →"
 // button pointing at app_url() + '#zana-session=<id>'. Clicked cold (or while the
 // installed PWA is reactivated), the shell must route to the Analytics surface
@@ -898,9 +1558,18 @@ function zdzRouteDeepLink() {
   } catch (e) { /* deep-link routing must never block boot */ }
 }
 
-// ---- KPI CLICK HANDLERS (v2.10.1 — Interactive dashboard KPIs) ----
+// ---- KPI CLICK HANDLERS ----
 function initKPIClicks() {
-  // v2.14.4.3: Also wire stat-pill cards (sales/tech roles)
+  // the owners' and admins' tiles open the tile's sheet (open it inside the tap, so Back closes it).
+  document.querySelectorAll('.kpi-card[data-zdz-kpi-tile]').forEach(card => {
+    const key = card.getAttribute('data-zdz-kpi-tile');
+    card.addEventListener('click', () => { Haptics.tap(); zdzKpiOpenSheet(key); });
+    card.addEventListener('keydown', (e) => {
+      if (e.target !== card) { return; } // Enter on the drag handle inside the card is the handle's
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zdzKpiOpenSheet(key); }
+    });
+  });
+  // the other roles' stat pills (sales/tech) keep their prompts until the per-role plan.
   document.querySelectorAll('.kpi-card[data-zdz-kpi-action], .stat-pill[data-zdz-kpi-action]').forEach(card => {
     card.addEventListener('click', () => {
       const action = card.dataset.zdzKpiAction || '';
@@ -919,7 +1588,7 @@ function initKPIClicks() {
   });
 }
 
-// ---- DASHBOARD WIDGETS (v2.0) ----
+// ---- DASHBOARD WIDGETS ----
 function renderWidgets() {
   const zone = document.getElementById('dash-widget-zone');
   if (!zone) return;
@@ -931,7 +1600,7 @@ function renderWidgets() {
     return;
   }
 
-  // v2.14.3.1: Sort by saved widget order. Widgets not in the saved
+  // Sort by saved widget order. Widgets not in the saved
   // order appear at the end in their original registration order.
   const savedOrder = zdzData.widgetOrder || [];
   if (savedOrder.length > 0) {
@@ -958,11 +1627,11 @@ function renderWidgets() {
     return `
     <div class="dash-widget-container" data-app-id="${w.id}">
       <div class="dash-widget-header">
-        <div class="dw-icon" style="background:${w.cc}"><i data-lucide="${w.icon}"></i></div>
+        <div class="dw-icon" ${zdzPlate(w)}><i data-lucide="${w.icon}"></i></div>
         <h3 class="dw-title">${w.nm}</h3>
-        <div class="dw-reorder" aria-label="Reorder widget">
-          <button class="dw-reorder-btn" data-dir="up" ${isFirst ? 'disabled' : ''} aria-label="Move up" title="Move up">${arrowUp}</button>
-          <button class="dw-reorder-btn" data-dir="down" ${isLast ? 'disabled' : ''} aria-label="Move down" title="Move down">${arrowDown}</button>
+        <div class="dw-nav" role="group" aria-label="Move through apps">
+          <button class="dw-nav-btn" data-dir="up" ${isFirst ? 'disabled' : ''} aria-label="Previous app" title="Previous app">${arrowUp}</button>
+          <button class="dw-nav-btn" data-dir="down" ${isLast ? 'disabled' : ''} aria-label="Next app" title="Next app">${arrowDown}</button>
         </div>
       </div>
       <div class="dash-widget-body">
@@ -971,12 +1640,12 @@ function renderWidgets() {
     </div>
   `}).join('');
 
-  // v2.20.3: Activate inline <script> tags inside widget HTML.
+  // Activate inline <script> tags inside widget HTML.
   // innerHTML injection silently discards scripts (browser security).
   // Re-create them as live script elements so plugin widgets can
   // include inline JS alongside their HTML. External scripts (src)
   // are also handled for completeness.
-  // v2.20.3.1: Copy ALL attributes (type, async, defer, crossorigin,
+  // Copy ALL attributes (type, async, defer, crossorigin,
   // data-*, nonce) so future plugins using module scripts or deferred
   // loading work without surprises.
   zone.querySelectorAll('.dash-widget-body script').forEach(dead => {
@@ -986,84 +1655,481 @@ function renderWidgets() {
     dead.parentNode.replaceChild(live, dead);
   });
 
+  zdzApplyHomePins();     // with the focus view, only pinned widgets show on home
   refreshIcons();
-  initWidgetReorder();
+  initWidgetNav();       // header arrows now NAVIGATE the stack
+  initWidgetVoidGuard(); // post-action gray-void safety net
+  initDashScrollAnchor(); // widgets that load late never move what you're looking at
+
+  // Find the widgets' overlays BEFORE plugin JS runs. Below 1200px each card is its own stacking context
+  // (isolation:isolate, which guards [data-sticky-header]), so a plugin's position:fixed modal would be sealed under
+  // .bnav; overlay-escape.js un-seals the one card that is showing an overlay (it never moves a node). Registering
+  // them now, before the event below, means the first one shown is already known.
+  try { if (window.ZDZOverlay) window.ZDZOverlay.scan(); } catch (e) {}
 
   // Notify widget scripts that the DOM is ready
   document.dispatchEvent(new Event('zdz_widgets_rendered'));
 }
 
-// v2.14.3.1: Widget reorder — arrow buttons move widgets up/down
-// with a smooth animation, then save the order via /zorderz/v1/user-prefs.
-function initWidgetReorder() {
-  const zone = document.getElementById('dash-widget-zone');
+// The widget-header ^/v arrows are
+// NAVIGATION: they page through the whole widget stack top→bottom and stop at
+// the ends (the field expectation — "take me up through the apps"). What these
+// arrows used to do — reorder the widget one slot — moves into a LONG-PRESS
+// edit mode, so the default tap does what people expect. Also defined here: a
+// shared sticky-aware "land on this element" scroll used by navigation, the
+// public jump-link helper (window.zdzScrollToControl), and the post-action
+// gray-void safety net.
+
+/* ── The focus view's home ───────────────────────
+   With the focus view on (the default; Settings can turn it off), tapping an app opens it as its own page
+   (bridge.js focusWidget), so home no longer stacks every app: it is the ask bar, the launcher, then Today
+   (the leads tile, the counts and any widget the person pinned). Every widget is still rendered at boot as
+   before, so its scripts start, poll and count exactly as they did; an unpinned one is PARKED: laid out at its
+   real width far above the page (so anything it measures is right) and hidden, so it takes no space, no taps
+   and no tab stops. Opening it moves it into the page; Back puts it back and parks it again. */
+function zdzFocusHome() {
+  return !!(window.Bridge && typeof Bridge.focusOn === 'function' && Bridge.focusOn());
+}
+function zdzParkWidget(container) {
+  if (!container || !container.classList) return;
+  var id = container.getAttribute('data-app-id');
+  var pinned = window.Bridge && Bridge.isPinned && Bridge.isPinned(id);
+  // Only a widget that has a tile in the launcher is parked: one with no tile (springboard:false, or no color)
+  // could never be opened again, so it stays on home as before.
+  var hasTile = getVisibleApps().some(function (a) { return a.id === id; });
+  var park = zdzFocusHome() && hasTile && !pinned && !container.classList.contains('zdz-focused');
+  container.classList.toggle('is-pinned', !!pinned);
+  container.classList.toggle('zdz-parked', park);
+  // A card whose plugin opens its own surface from it (a cancelled launch: Camera, Dot Plot) stays LIVE while
+  // parked: visible and tappable, still far above the page, so that surface can be seen.
+  container.classList.toggle('zdz-parked-live', park && container.dataset.zdzLive === '1');
+  if (park && container.dataset.zdzLive !== '1') container.setAttribute('aria-hidden', 'true');
+  else container.removeAttribute('aria-hidden');
+}
+window.zdzParkWidget = zdzParkWidget;
+// Settings → "Apps as pages". Saved for the person, then the app reloads into the other layout.
+function zdzToggleFocusView(btn) {
+  var next = !zdzFocusHome();
+  var save = function () {
+    return fetch(zdzData.apiUrl + 'user-prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
+      body: JSON.stringify({ focus_view: next }),
+      credentials: 'same-origin'
+    }).then(function (r) { if (!r.ok) throw new Error('save'); });
+  };
+  var done = function () { window.location.reload(); };
+  var fail = function () { showToast('That setting did not save. Check the signal and try again.'); };
+  if (window.ZDZ && ZDZ.ui && typeof ZDZ.ui.busy === 'function' && btn) ZDZ.ui.busy(btn, save).then(done, fail);
+  else save().then(done, fail);
+}
+window.zdzToggleFocusView = zdzToggleFocusView;
+function zdzApplyHomePins() {
+  var zone = document.getElementById('dash-widget-zone');
   if (!zone) return;
+  zone.querySelectorAll(':scope > .dash-widget-container').forEach(zdzParkWidget);
+  zdzTodayLabel();
+}
+// "Today" is shown when something is in it: the leads tile, the counts, or a pinned widget.
+function zdzTodayLabel() {
+  var label = document.getElementById('zdz-today-label');
+  if (!label) return;
+  var shows = function (el) { return !!el && el.offsetParent !== null && el.getBoundingClientRect().height > 2; };
+  var zone = document.getElementById('dash-widget-zone');
+  var pinned = zone ? zone.querySelectorAll(':scope > .dash-widget-container.is-pinned').length : 0;
+  label.hidden = !(pinned || shows(document.getElementById('leads-tile')) || shows(document.getElementById('quick-stats')));
+}
+// Bridge.togglePin() calls this after a pin changes: park or show each widget again, then Today's label.
+// (Its own name: a function declared zdzTodayRefresh would BE window.zdzTodayRefresh, and call itself.)
+window.zdzTodayRefresh = zdzApplyHomePins;
+// Home's order with the focus view: ask bar, launcher, then Today. The markup keeps its classic order (dock,
+// counts, widgets, recent, grid) so turning the focus view off changes nothing; this moves the launcher up.
+function zdzSetupFocusHome() {
+  if (!zdzFocusHome()) return;
+  document.body.classList.add('zdz-focus-home');
+  var sv = document.getElementById('sv-dash');
+  var grid = document.getElementById('app-grid-container');
+  var dock = document.getElementById('app-dock');
+  var leads = document.getElementById('leads-tile');
+  if (sv && grid && dock && dock.parentNode === sv) sv.insertBefore(grid, dock);
+  if (sv && leads && leads.parentNode === sv && !document.getElementById('zdz-today-label')) {
+    var label = document.createElement('div');
+    label.className = 'section-label zdz-today-label';
+    label.id = 'zdz-today-label';
+    label.textContent = 'Today';
+    label.hidden = true;
+    sv.insertBefore(label, leads);
+  }
+  // The leads tile and the counts fill in after their own requests; Today follows them.
+  if (typeof MutationObserver !== 'undefined') {
+    var queued = false;
+    var mo = new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; zdzTodayLabel(); });
+    });
+    ['leads-tile', 'quick-stats'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+    });
+  }
+}
 
-  zone.addEventListener('click', function (e) {
-    const btn = e.target.closest('.dw-reorder-btn');
-    if (!btn || btn.disabled) return;
-
-    const container = btn.closest('.dash-widget-container');
-    if (!container) return;
-
-    const dir = btn.dataset.dir;
-    const sibling = dir === 'up' ? container.previousElementSibling : container.nextElementSibling;
-    if (!sibling || !sibling.classList.contains('dash-widget-container')) return;
-
-    // Animate the swap
-    const containerRect = container.getBoundingClientRect();
-    const siblingRect = sibling.getBoundingClientRect();
-    const gap = parseInt(getComputedStyle(zone).gap) || 16;
-
-    if (dir === 'up') {
-      const dist = containerRect.top - siblingRect.top;
-      const distBack = siblingRect.bottom - containerRect.bottom + gap - (containerRect.top - siblingRect.top - gap);
-      container.style.transition = 'transform 0.25s ease';
-      sibling.style.transition = 'transform 0.25s ease';
-      container.style.transform = `translateY(-${dist}px)`;
-      sibling.style.transform = `translateY(${containerRect.height + gap}px)`;
-
-      setTimeout(() => {
-        container.style.transition = '';
-        container.style.transform = '';
-        sibling.style.transition = '';
-        sibling.style.transform = '';
-        zone.insertBefore(container, sibling);
-        updateReorderButtons();
-        saveWidgetOrder();
-      }, 260);
-    } else {
-      const dist = siblingRect.top - containerRect.top;
-      container.style.transition = 'transform 0.25s ease';
-      sibling.style.transition = 'transform 0.25s ease';
-      container.style.transform = `translateY(${dist}px)`;
-      sibling.style.transform = `translateY(-${containerRect.height + gap}px)`;
-
-      setTimeout(() => {
-        container.style.transition = '';
-        container.style.transform = '';
-        sibling.style.transition = '';
-        sibling.style.transform = '';
-        zone.insertBefore(sibling, container);
-        updateReorderButtons();
-        saveWidgetOrder();
-      }, 260);
+/* ── Shared sticky-aware scroll (jump links and landings) ─────────── */
+// The scroll container an element lives in (its sub-view), or the page of an app in focus.
+function zdzActiveScroller(el) {
+  return (el && el.closest && (el.closest('.dash-widget-container.zdz-focused > .dash-widget-body') || el.closest('#app-body') || el.closest('.sub-view')))
+    || document.getElementById('sv-dash')
+    || document.querySelector('.sub-view.active');
+}
+// Height of fixed chrome a target must clear: dash-top + the sticky app bar.
+// Reserves the sticky bar's REAL height even while it is still hidden
+// (position:fixed + translated, not display:none) — mirrors bridge.js so a
+// jump never lands under the bar.
+// inside an app's own page there is no dashboard chrome in the scroll (its header sits above it).
+function zdzChromeInset(scroller) {
+  if (scroller && !(scroller.classList && scroller.classList.contains('sub-view'))) return 0;
+  var rootCS = getComputedStyle(document.documentElement);
+  var topH = parseFloat(rootCS.getPropertyValue('--dash-top-h')) || 0;
+  var stickyVar = parseFloat(rootCS.getPropertyValue('--dash-sticky-h')) || 0;
+  var stickyEl = document.getElementById('dash-sticky');
+  var stickyMeasured = stickyEl ? Math.round(stickyEl.getBoundingClientRect().height) : 0;
+  return topH + Math.max(stickyVar, stickyMeasured);
+}
+// Land the element's top just below the chrome, reliably (instant + a short
+// rAF re-verify for late layout shifts). Exposed as window.zdzScrollToControl so
+// any flow that must move the user to a control uses ONE accurate jump instead
+// of "scroll and hope" — a jump that lands in the wrong place is worse than
+// none.
+function zdzScrollToElement(target, opts) {
+  opts = opts || {};
+  if (!target) return;
+  // a control in a parked app (not on home) — open that app first, then land on it in its page.
+  var parked = target.closest && target.closest('.dash-widget-container.zdz-parked');
+  if (parked && window.Bridge && !opts._opened) {
+    var pid = parked.getAttribute('data-app-id');
+    if (Bridge._launching === pid) {
+      // Called from that app's own launch handler: the page is about to open; land once it has.
+      var onFocus = function (e) {
+        if (!e.detail || e.detail.appId !== pid) return;
+        document.removeEventListener('zdz_app_focus', onFocus);
+        requestAnimationFrame(function () { zdzScrollToElement(target, Object.assign({}, opts, { _opened: true })); });
+      };
+      document.addEventListener('zdz_app_focus', onFocus);
+      setTimeout(function () { document.removeEventListener('zdz_app_focus', onFocus); }, 2000);
+      return;
     }
+    Bridge.loadApp(pid);
+    if (!parked.classList.contains('zdz-parked')) {
+      requestAnimationFrame(function () { zdzScrollToElement(target, Object.assign({}, opts, { _opened: true })); });
+    }
+    return;
+  }
+  var scroller = zdzActiveScroller(target);
+  if (!scroller) { target.scrollIntoView({ block: 'start' }); return; }
+  var gap = (opts.gap != null) ? opts.gap : 8;
+  var compute = function () {
+    var tRect = target.getBoundingClientRect();
+    var sRect = scroller.getBoundingClientRect();
+    return Math.max(0, scroller.scrollTop + (tRect.top - sRect.top) - zdzChromeInset(scroller) - gap);
+  };
+  scroller.scrollTop = compute();
+  if (typeof window.zdzDashAnchorRepick === 'function') window.zdzDashAnchorRepick();
+  var verify = function (n) {
+    var t = compute();
+    if (Math.abs(scroller.scrollTop - t) > 4) scroller.scrollTop = t;
+    if (n > 0) requestAnimationFrame(function () { verify(n - 1); });
+  };
+  requestAnimationFrame(function () { verify(2); });
+}
+window.zdzScrollToControl = function (el, opts) { zdzScrollToElement(el, opts); };
 
-    Haptics.tap();
+// Brief highlight so the eye lands on the arrived widget.
+function zdzPulseWidget(el) {
+  if (!el) return;
+  el.style.boxShadow = 'inset 0 0 0 2px #3B82F6, 0 0 12px rgba(59,130,246,.20)';
+  el.style.borderRadius = '12px';
+  setTimeout(function () { el.style.boxShadow = ''; }, 1100);
+}
+
+/* ── Widget-stack navigation + long-press reorder ───────────── */
+function initWidgetNav() {
+  var zone = document.getElementById('dash-widget-zone');
+  if (!zone) return;
+  updateWidgetArrowState();
+  if (zone.__zdzNavBound) return; // bind listeners once; survive re-renders
+  zone.__zdzNavBound = true;
+
+  // Click an arrow: NAVIGATE by default, REORDER while in edit mode.
+  zone.addEventListener('click', function (e) {
+    var btn = e.target.closest('.dw-nav-btn');
+    if (!btn || btn.disabled) return;
+    var container = btn.closest('.dash-widget-container');
+    if (!container) return;
+    var dir = btn.dataset.dir;
+
+    if (zone.classList.contains('zdz-widget-reordering')) {
+      reorderWidget(container, dir);
+      return;
+    }
+    var sibling = dir === 'up' ? container.previousElementSibling : container.nextElementSibling;
+    // step over cards that are not on home (parked) or marker-only.
+    while (sibling && (sibling.classList.contains('zdz-parked') || !sibling.classList.contains('dash-widget-container'))) {
+      sibling = dir === 'up' ? sibling.previousElementSibling : sibling.nextElementSibling;
+    }
+    if (!sibling || !sibling.classList.contains('dash-widget-container')) return;
+    zdzScrollToElement(sibling);
+    zdzPulseWidget(sibling);
+    try { Haptics.tap(); } catch (e2) {}
+  });
+
+  // Long-press a widget header (not on an arrow) → enter reorder edit mode.
+  var lpTimer = null, lpX = 0, lpY = 0;
+  zone.addEventListener('pointerdown', function (e) {
+    var header = e.target.closest('.dash-widget-header');
+    if (!header || e.target.closest('.dw-nav-btn')) return;
+    if (header.closest('.zdz-focused') || document.body.classList.contains('zdz-focus-home')) return; // no reorder of a page / on the focus home
+    lpX = e.clientX; lpY = e.clientY;
+    lpTimer = setTimeout(function () { lpTimer = null; enterWidgetReorderMode(); }, 500);
+  });
+  zone.addEventListener('pointermove', function (e) {
+    if (lpTimer) {
+      var dx = e.clientX - lpX, dy = e.clientY - lpY;
+      if (Math.sqrt(dx * dx + dy * dy) > 10) { clearTimeout(lpTimer); lpTimer = null; }
+    }
+  });
+  var clearLp = function () { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+  zone.addEventListener('pointerup', clearLp);
+  zone.addEventListener('pointercancel', clearLp);
+}
+
+// Disabled state at the ends (stop-at-ends nav) + mode-aware labels.
+function updateWidgetArrowState() {
+  var zone = document.getElementById('dash-widget-zone');
+  if (!zone) return;
+  var reordering = zone.classList.contains('zdz-widget-reordering');
+  var items = zone.querySelectorAll('.dash-widget-container');
+  items.forEach(function (item, i) {
+    var up = item.querySelector('.dw-nav-btn[data-dir="up"]');
+    var down = item.querySelector('.dw-nav-btn[data-dir="down"]');
+    if (up) {
+      up.disabled = (i === 0);
+      up.setAttribute('aria-label', reordering ? 'Move up' : 'Previous app');
+      up.setAttribute('title', reordering ? 'Move up' : 'Previous app');
+    }
+    if (down) {
+      down.disabled = (i === items.length - 1);
+      down.setAttribute('aria-label', reordering ? 'Move down' : 'Next app');
+      down.setAttribute('title', reordering ? 'Move down' : 'Next app');
+    }
   });
 }
 
-function updateReorderButtons() {
-  const zone = document.getElementById('dash-widget-zone');
-  if (!zone) return;
-  const items = zone.querySelectorAll('.dash-widget-container');
-  items.forEach((item, i) => {
-    const upBtn = item.querySelector('.dw-reorder-btn[data-dir="up"]');
-    const downBtn = item.querySelector('.dw-reorder-btn[data-dir="down"]');
-    if (upBtn) upBtn.disabled = (i === 0);
-    if (downBtn) downBtn.disabled = (i === items.length - 1);
+// Swap a widget with its neighbor (edit-mode reorder), animated, then persist.
+function reorderWidget(container, dir) {
+  var zone = document.getElementById('dash-widget-zone');
+  if (!zone || !container) return;
+  var sibling = dir === 'up' ? container.previousElementSibling : container.nextElementSibling;
+  if (!sibling || !sibling.classList.contains('dash-widget-container')) return;
+
+  var containerRect = container.getBoundingClientRect();
+  var siblingRect = sibling.getBoundingClientRect();
+  var gap = parseInt(getComputedStyle(zone).gap) || 16;
+
+  container.style.transition = 'transform 0.25s ease';
+  sibling.style.transition = 'transform 0.25s ease';
+  if (dir === 'up') {
+    var distU = containerRect.top - siblingRect.top;
+    container.style.transform = 'translateY(' + (-distU) + 'px)';
+    sibling.style.transform = 'translateY(' + (containerRect.height + gap) + 'px)';
+  } else {
+    var distD = siblingRect.top - containerRect.top;
+    container.style.transform = 'translateY(' + distD + 'px)';
+    sibling.style.transform = 'translateY(' + (-(containerRect.height + gap)) + 'px)';
+  }
+  setTimeout(function () {
+    container.style.transition = ''; container.style.transform = '';
+    sibling.style.transition = ''; sibling.style.transform = '';
+    if (dir === 'up') { zone.insertBefore(container, sibling); }
+    else { zone.insertBefore(sibling, container); }
+    // the widgets swapped places; measure the anchor again from here.
+    if (typeof window.zdzDashAnchorRepick === 'function') window.zdzDashAnchorRepick();
+    updateWidgetArrowState();
+    saveWidgetOrder();
+  }, 260);
+  try { Haptics.tap(); } catch (e) {}
+}
+
+function enterWidgetReorderMode() {
+  var zone = document.getElementById('dash-widget-zone');
+  if (!zone || zone.classList.contains('zdz-widget-reordering')) return;
+  zone.classList.add('zdz-widget-reordering');
+  try { Haptics.tap(); } catch (e) {}
+  var done = document.getElementById('zdz-widget-reorder-done');
+  if (!done) {
+    done = document.createElement('button');
+    done.id = 'zdz-widget-reorder-done';
+    done.className = 'zdz-widget-reorder-done';
+    done.type = 'button';
+    done.textContent = 'Done reordering ✓';
+    done.addEventListener('click', function (e) { e.stopPropagation(); exitWidgetReorderMode(); });
+    document.body.appendChild(done);
+  }
+  done.style.display = '';
+  updateWidgetArrowState();
+  // Defer so this same click doesn't immediately exit via the outside handler.
+  setTimeout(function () { document.addEventListener('click', outsideWidgetReorder, true); }, 0);
+}
+function outsideWidgetReorder(e) {
+  if (e.target.closest('.dash-widget-header') || e.target.closest('#zdz-widget-reorder-done')) return;
+  exitWidgetReorderMode();
+}
+function exitWidgetReorderMode() {
+  var zone = document.getElementById('dash-widget-zone');
+  if (zone) zone.classList.remove('zdz-widget-reordering');
+  var done = document.getElementById('zdz-widget-reorder-done');
+  if (done) done.style.display = 'none';
+  document.removeEventListener('click', outsideWidgetReorder, true);
+  updateWidgetArrowState();
+}
+
+/* ── Post-action "gray void" safety net ─────────────────────────────── */
+// Field report: press a blue action button → work runs → the widget re-renders
+// and the view is left in a tall blank scrolled region ("a totally gray screen
+// because it's scrolled"), NOT returned to the result. The correct fix is
+// plugins adopting NO-SUBMIT-SHIFT (patch in place). This is a SCOPED safety net
+// for widgets that still full-re-render: it acts ONLY on the widget the user
+// just acted in, ONLY on a material shrink (a full-re-render signature), and
+// ONLY when that widget's top has scrolled above the fold — then it lands the
+// viewport back on the result/top. KPI refreshes and compliant in-place patches
+// never trigger it.
+var _zdzLastAction = { widget: null, at: 0 };
+document.addEventListener('click', function (e) {
+  var body = e.target.closest && e.target.closest('.dash-widget-body');
+  if (!body) return;
+  if (!e.target.closest('button, .btn, [role="button"], input[type="submit"], input[type="button"]')) return;
+  _zdzLastAction = { widget: body.closest('.dash-widget-container'), at: Date.now() };
+}, true);
+
+function initWidgetVoidGuard() {
+  var zone = document.getElementById('dash-widget-zone');
+  if (!zone || zone.__zdzVoidGuard) return;
+  zone.__zdzVoidGuard = true;
+
+  var lastH = new WeakMap();
+  var snapshot = function () {
+    zone.querySelectorAll('.dash-widget-container').forEach(function (c) {
+      lastH.set(c, c.getBoundingClientRect().height);
+    });
+  };
+  snapshot();
+
+  var timer = null, pendingTarget = null;
+  var obs = new MutationObserver(function (muts) {
+    var container = null;
+    for (var i = 0; i < muts.length; i++) {
+      var t = muts[i].target;
+      var c = (t && t.closest) ? t.closest('.dash-widget-container') : null;
+      if (c) { container = c; break; }
+    }
+    if (!container) return;
+    pendingTarget = container;
+    clearTimeout(timer);
+    timer = setTimeout(function () { settleVoid(pendingTarget); }, 60);
   });
+  obs.observe(zone, { childList: true, subtree: true });
+
+  function settleVoid(container) {
+    if (!container) return;
+    var prevH = lastH.get(container) || 0;
+    var nowH = container.getBoundingClientRect().height;
+    snapshot();
+
+    if (_zdzLastAction.widget !== container) return;   // not the acted widget
+    if (Date.now() - _zdzLastAction.at > 4000) return; // stale
+    if (prevH - nowH < 80) return;                    // not a material shrink
+
+    var scroller = zdzActiveScroller(container);
+    if (!scroller) return;
+    var cRect = container.getBoundingClientRect();
+    var sRect = scroller.getBoundingClientRect();
+    var foldTop = sRect.top + zdzChromeInset();
+    if (cRect.top >= foldTop - 4) return;             // top still visible → leave it
+
+    var anchor = container.querySelector('[data-zdz-result]') || container;
+    zdzScrollToElement(anchor);
+    zdzPulseWidget(container);
+    _zdzLastAction.at = 0;                             // consume
+  }
+}
+
+// DASHBOARD SCROLL ANCHOR (first-load layout shift, all browsers).
+
+// Field report: on a first load, tapping an app icon lands on its
+// widget, then the widgets ABOVE it finish loading (Leads, Surveys, Jobs,
+// Knowledge, Inbox... grow by up to ~1,400px each) and push it out of view.
+// bridge.js.1's pin polled every 100ms, so each growth was PAINTED before
+// it was corrected (a visible jump down and back), and it stopped after 4s or
+// 500ms of quiet, so a widget that loaded later still shoved the view. Safari
+// (the installed app on Mac and iPad) has no native scroll anchoring at all.
+
+// This is scroll anchoring done by the theme, identically everywhere: the
+// widget at the top of the view is the ANCHOR, and whenever any widget
+// changes size the view is moved by exactly how far the anchor moved, inside
+// the ResizeObserver callback — after layout, BEFORE paint — so nothing is
+// ever drawn in the wrong place. Growth below the anchor, or inside it, moves
+// nothing (its top doesn't move). At the very top of the dashboard (scrollTop
+// 0) nothing is anchored, so the icon grid stays put. The anchor is re-chosen
+// on every scroll, so a real scroll by the person is always respected.
+// Native anchoring is switched off on #sv-dash (app.css) so Chrome doesn't
+// correct twice with a different anchor.
+function initDashScrollAnchor() {
+  var zone = document.getElementById('dash-widget-zone');
+  var scroller = document.getElementById('sv-dash');
+  if (!zone || !scroller || typeof ResizeObserver === 'undefined') return;
+
+  var st = zone.__zdzAnchor;
+  if (!st) {
+    st = zone.__zdzAnchor = { el: null, top: 0 };
+    var pick = function () {
+      st.el = null;
+      if (scroller.clientHeight < 2 || scroller.scrollTop <= 0) return;
+      var fold = scroller.getBoundingClientRect().top + zdzChromeInset();
+      var list = zone.querySelectorAll('.dash-widget-container');
+      for (var i = 0; i < list.length; i++) {
+        var r = list[i].getBoundingClientRect();
+        if (r.height < 1) continue;
+        if (r.bottom > fold) { st.el = list[i]; st.top = r.top; return; }
+      }
+    };
+    st.pick = pick;
+    scroller.addEventListener('scroll', pick, { passive: true });
+    st.ro = new ResizeObserver(function () {
+      var a = st.el;
+      if (a && a.isConnected && scroller.clientHeight > 1) {
+        var ar = a.getBoundingClientRect();
+        // an anchor that was just hidden (display:none) reads as a zero rect;
+        // "moving" by -top would jump the view. Skip it; pick() chooses a new anchor.
+        var d = ar.height >= 1 ? ar.top - st.top : 0;
+        if (Math.abs(d) >= 1) scroller.scrollTop += d;
+      }
+      pick();
+    });
+    // Anyone who moves the view on purpose (bridge.js launch, jump-links)
+    // re-picks at once, so a growth in the same frame is measured against
+    // the new position, not the old one.
+    window.zdzDashAnchorRepick = pick;
+  }
+  // (Re)observe: renderWidgets() replaces every container.
+  st.ro.disconnect();
+  zone.querySelectorAll('.dash-widget-container').forEach(function (c) { st.ro.observe(c); });
+  // the tiles ABOVE the widget zone load late too (leads tile, quick stats,
+  // the sticky bar). Watched so their growth is absorbed like a widget's; never anchors.
+  ['leads-tile', 'quick-stats', 'dash-sticky'].forEach(function (id) {
+    var e = document.getElementById(id);
+    if (e) st.ro.observe(e);
+  });
+  st.pick();
 }
 
 function saveWidgetOrder() {
@@ -1091,7 +2157,8 @@ function renderSettings() {
   if (area) {
     area.innerHTML = `
       <div class="profile-card">
-        <div class="profile-avatar">${state.user.ini}</div>
+        <div class="profile-avatar${window.ZDZ && ZDZ.ui && ZDZ.ui.person && ZDZ.ui.person(zdzData.userId) ? ' has-badge' : ''}">${
+          window.ZDZ && ZDZ.ui && ZDZ.ui.person && ZDZ.ui.person(zdzData.userId) ? ZDZ.ui.personChip(zdzData.userId, { size: 'lg' }) : state.user.ini}</div>
         <div class="profile-info">
           <h3>${state.user.name}</h3>
           <p>${state.user.label}</p>
@@ -1108,7 +2175,7 @@ function renderSettings() {
   ];
   const tgrid = document.getElementById('theme-grid');
   if (tgrid) {
-    // v2.31.0: Larger text (accessibility) — rendered with the theme grid so
+    // Larger text (accessibility) — rendered with the theme grid so
     // display prefs live together. Toggles data-zdz-textscale="lg" on <html>.
     const tscOn = document.documentElement.getAttribute('data-zdz-textscale') === 'lg';
     tgrid.innerHTML = themes.map(t => `
@@ -1120,7 +2187,15 @@ function renderSettings() {
       <button class="theme-btn ${tscOn ? 'active' : ''}" onclick="toggleTextScale();renderSettings()" aria-pressed="${tscOn}" aria-label="Larger text ${tscOn ? 'on' : 'off'}">
         <div class="tb-preview" style="display:flex;align-items:center;justify-content:center;gap:2px;font-weight:800;color:var(--sys-text);background:var(--sys-surface-raised)"><span style="font-size:12px">A</span><span style="font-size:18px">A</span></div>
         Larger text
+      </button>` + (function () {
+        // the focus view can be turned off per person, which brings back the one long page.
+        var fOn = zdzFocusHome();
+        return `
+      <button class="theme-btn ${fOn ? 'active' : ''}" id="zdz-focus-toggle" onclick="zdzToggleFocusView(this)" aria-pressed="${fOn}" aria-label="Apps open as their own page: ${fOn ? 'on' : 'off'}">
+        <div class="tb-preview" style="display:flex;align-items:center;justify-content:center;color:var(--sys-text);background:var(--sys-surface-raised)"><i data-lucide="${fOn ? 'app-window' : 'rows-3'}" style="width:20px;height:20px"></i></div>
+        Apps as pages
       </button>`;
+      })();
   }
 
   const sinfo = document.getElementById('settings-info');
@@ -1160,21 +2235,21 @@ function renderSettings() {
         </button>
       </div>` : ''}
       ${zdzData.kioskDemoActive ? '' : `<div class="settings-row mt-4">
-        <button class="btn btn-outline w-full" onclick="if(window.confirm('Log out of this account?')){window.location.href='${zdzData.logoutUrl}';}">
+        <button class="btn btn-outline w-full" data-zdz-logout onclick="zdzLogout()">
           <i data-lucide="log-out"></i> Logout
         </button>
       </div>`}
     `;
   }
 
-  // v2.20.2: Field Preferences card (after System, before App Authorizations)
+  // Field Preferences card (after System, before App Authorizations)
   renderFieldPreferences();
 
-  // v2.11.0 / v2.13.0: App Authorizations card — FreshBooks + Nutshell.
+  // / App Authorizations card — FreshBooks + Nutshell.
   renderAppAuthorizations();
 }
 
-// ---- KIOSK / DEMO MODE (v2.21.0) ------------------------------------------------
+// ---- KIOSK / DEMO MODE ------------------------------------------------
 // One-tap, PIN-protected switch into the General (shared-kiosk) account so an
 // admin can hand the device to a guest for a demo. The actual identity switch
 // is enforced SERVER-SIDE (ZDZ_Kiosk_Demo): for the duration of demo mode every
@@ -1184,73 +2259,228 @@ function renderSettings() {
 // login session is untouched and is restored on exit. These client functions
 // are just the affordance + PIN prompt; the server is the source of truth.
 
+// the PIN is typed into the app's own sheet -- masked, numeric, with a show/hide eye --
+// never a browser prompt(), which can't mask what is typed and which nothing automated may drive. Demo Mode switches
+// THIS DEVICE only.
+// Before each call the nonce is renewed (zdzFreshNonce): a stale one is WordPress's "Cookie check failed". If a
+// step fails the sheet says why in plain words, and "Nothing changed." only once the server has said so.
+
+var _ZDZ_PIN_WHY = {
+  no_kiosk_user: 'there is no shared General account to switch to. An administrator needs to create one',
+  self_target: 'the General account is set up wrong. It must be a plain shared login, not an administrator',
+  forbidden: 'only an administrator can start it',
+  no_session: "this device's sign-in can't hold it. Sign out, sign in again, and retry",
+  not_saved: "the server couldn't save it",
+  rest_cookie_invalid_nonce: "this page's sign-in check is out of date. Reload the app and try again",
+  rest_forbidden: "you're signed out. Sign in again",
+  bad_pin: 'the PIN must be 4 to 10 digits',
+  offline: 'no connection. Check your signal',
+  busy: 'the server was busy with this account. Wait a moment',
+  server: 'the server had a problem. Try again in a moment'
+};
+
+function _zdzPinField(id, label) {
+  return '<label class="zdz-pin-field" for="' + id + '"><span class="zdz-pin-label">' + label + '</span>' +
+    '<span class="zdz-pin-wrap"><input id="' + id + '" class="zdz-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" ' +
+    'autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="10" ' +
+    'data-1p-ignore="true" data-lpignore="true" data-form-type="other">' +
+    '<button type="button" class="zdz-pin-eye" data-for="' + id + '" aria-label="Show PIN" aria-pressed="false">' +
+    '<i data-lucide="eye"></i></button></span></label>';
+}
+
+// Digits only, at most 10; the eye shows or hides what is typed.
+function _zdzWirePins(root) {
+  Array.prototype.forEach.call(root.querySelectorAll('.zdz-pin-input'), function (inp) {
+    inp.addEventListener('input', function () {
+      var v = inp.value.replace(/\D/g, '').slice(0, 10);
+      if (v !== inp.value) inp.value = v;
+    });
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('.zdz-pin-eye'), function (btn) {
+    btn.addEventListener('click', function () {
+      var inp = document.getElementById(btn.getAttribute('data-for'));
+      if (!inp) return;
+      var show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+      btn.setAttribute('aria-label', show ? 'Hide PIN' : 'Show PIN');
+      btn.innerHTML = '<i data-lucide="' + (show ? 'eye-off' : 'eye') + '"></i>';
+      if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+      try { inp.focus(); } catch (e) {}
+    });
+  });
+  if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+}
+
+// POST kiosk-demo/<kind> with a fresh nonce; once more with another fresh one if WordPress still calls it stale.
+// Resolves {status, j} -- or {status: 0, j: {code: 'offline'}} when nothing came back.
+function _zdzKioskCall(kind, pin) {
+  function post() {
+    return fetch(zdzData.apiUrl + 'kiosk-demo/' + kind, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
+      body: JSON.stringify({ pin: pin })
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null;
+        try { j = JSON.parse(t); } catch (e) { /* a host's error page or a PHP error page: not an answer */ }
+        // A 5xx, a gateway page or a reply spoiled by a PHP notice may come AFTER the server
+        // switched, so such an answer is "unsure": the caller asks the server which state the device is in.
+        var unsure = !j || r.status >= 500;
+        if (!j) j = { code: r.status >= 500 || r.ok ? 'server' : 'rest_forbidden' };
+        return { status: r.status, j: j, unsure: unsure };
+      });
+    }, function () { return { status: 0, j: { code: 'offline' }, lost: true, unsure: true }; });
+  }
+  return zdzFreshNonce().then(post, function (e) {
+    // Couldn't renew: nothing was sent, so nothing changed.
+    return { status: 0, j: { code: e && e.message === 'signed_out' ? 'rest_forbidden' : 'offline' }, unsent: true };
+  }).then(function (res) {
+    if (res.j && res.j.code === 'rest_cookie_invalid_nonce') {
+      return zdzFreshNonce().then(post, function () { return res; });
+    }
+    return res;
+  });
+}
+
+// After an unclear answer the server may still be finishing the request (a gateway 504 while PHP
+// runs on), so "it did not change" is only said when two checks 4 seconds apart agree; one "it changed" is enough.
+// Resolves true (Demo Mode on), false (off), or rejects when the server can't be reached.
+function _zdzDemoNow(wantChange) {
+  return zdzFreshNonce().then(function (a) {
+    if (a.demo === wantChange) return a.demo;
+    return new Promise(function (r) { setTimeout(r, 4000); }).then(zdzFreshNonce).then(function (b) { return b.demo; });
+  });
+}
+
+function _zdzPinSheetFail(sheet, words) {
+  var btn = sheet.el.querySelector('.zdz-btn--primary');
+  if (btn) btn.textContent = 'Try again';
+  Haptics && Haptics.error && Haptics.error();
+  return Promise.reject(new Error(words));
+}
+
+/* Settings → Logout asks in the app's own sheet, not window.confirm() (a browser dialog blocks the tab and freezes
+   an automated browser). Open from inside the tap
+   so Back closes the sheet. */
+// the home tiles' last answer kept on this device (it can carry revenue) goes with the sign-out.
+function zdzKpiForget() {
+  try { Object.keys(localStorage).forEach(function (k) { if (/^zdz_kpi_v2_/.test(k)) { localStorage.removeItem(k); } }); } catch (e) { /* storage blocked */ }
+}
+function zdzLogout() {
+  Haptics && Haptics.tap && Haptics.tap();
+  var url = String((typeof zdzData !== 'undefined' && zdzData.logoutUrl) || '');
+  if (!url) return;
+  // The kit always ships with the theme; if it somehow did not load, the tap the person made still signs them out.
+  if (!window.ZDZ || !ZDZ.ui || !ZDZ.ui.sheet) { zdzKpiForget(); window.location.href = url; return; }
+  ZDZ.ui.sheet({
+    title: 'Log out of this account?',
+    body: '<p class="zdz-logout-intro">You will need to sign in again on this device.</p>',
+    actions: [
+      { label: 'Cancel' },
+      { label: 'Log out', kind: 'primary', onClick: function (sheet) {
+        // From here the sheet cannot be closed: closing it calls history.back(), which would cancel the sign-out page
+        // load halfway (the server's session gone, the app still on screen). The kit's own Back handler
+        // keeps a sheet that is not dismissible, and every other way out goes through close().
+        zdzKpiForget();
+        sheet._dismissible = false;
+        sheet.close = function () {};
+        Array.prototype.forEach.call(sheet.el.querySelectorAll('button'), function (b) { if (!b.classList.contains('zdz-btn--primary')) b.disabled = true; });
+        // A Back press cancels a page load in any browser; the person chose Log out, so go there again.
+        window.addEventListener('popstate', function () { window.location.href = url; });
+        // If Safari brings this page back from its back-forward cache after the sign-out, show the truth.
+        window.addEventListener('pageshow', function (e) { if (e.persisted) window.location.reload(); });
+        window.location.href = url;
+        return new Promise(function () {}); // stay busy until the page changes
+      } }
+    ]
+  });
+}
+
 function enterKioskDemo() {
   Haptics && Haptics.tap && Haptics.tap();
-  var pin = window.prompt(
-    'Set a PIN to enter Demo / Kiosk Mode.\n\n' +
-    'The device will behave as the shared General account. You will need ' +
-    'this PIN to exit and return to your admin session, so the person you ' +
-    'hand the device to cannot leave demo mode.\n\n' +
-    'Enter 4–10 digits:'
-  );
-  if (pin === null) return;            // cancelled
-  pin = (pin || '').replace(/\D/g, '');
-  if (pin.length < 4 || pin.length > 10) {
-    showToast('PIN must be 4–10 digits.');
-    return;
-  }
-  var confirmPin = window.prompt('Re-enter the PIN to confirm:');
-  if (confirmPin === null) return;
-  if ((confirmPin || '').replace(/\D/g, '') !== pin) {
-    showToast('PINs did not match. Try again.');
-    return;
-  }
+  if (!window.ZDZ || !ZDZ.ui || !ZDZ.ui.sheet) { showToast("Couldn't open Demo Mode. Reload the app and try again."); return; }
+  var sheet = ZDZ.ui.sheet({
+    title: 'Enter Demo Mode',
+    body: '<p class="zdz-pin-intro">This device will run as the shared General account until someone types this PIN. ' +
+      'Hand it to anyone: they can’t leave Demo Mode without the PIN. Your other devices stay signed in as you.</p>' +
+      _zdzPinField('zdz-pin-new', 'Choose a PIN (4 to 10 digits)') +
+      _zdzPinField('zdz-pin-again', 'Type the PIN again'),
+    actions: [
+      { label: 'Cancel' },
+      { label: 'Enter Demo Mode', kind: 'primary', onClick: function (s) { return _zdzEnterDemo(s); } }
+    ]
+  });
+  _zdzWirePins(sheet.el);
+  setTimeout(function () { var f = document.getElementById('zdz-pin-new'); if (f) { try { f.focus(); } catch (e) {} } }, 60);
+}
 
-  showToast('Entering Demo Mode…');
-  fetch(zdzData.apiUrl + 'kiosk-demo/enter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
-    body: JSON.stringify({ pin: pin })
-  })
-    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-    .then(function (res) {
-      if (!res.ok || !res.j || res.j.code) {
-        var msg = (res.j && (res.j.message || res.j.code)) ? (res.j.message || res.j.code) : 'Could not enter demo mode.';
-        showToast(typeof msg === 'string' ? msg : 'Could not enter demo mode.');
-        return;
-      }
-      // The next request runs as the General account; subsequent SPA calls
-      // must use the kiosk-identity nonce returned here.
-      if (res.j.nonce) { zdzData.nonce = res.j.nonce; }
-      window.location.href = (res.j.redirect || '/');
-    })
-    .catch(function () { showToast('Network error entering demo mode.'); });
+function _zdzEnterDemo(sheet) {
+  var a = (document.getElementById('zdz-pin-new') || {}).value || '';
+  var b = (document.getElementById('zdz-pin-again') || {}).value || '';
+  if (!/^\d{4,10}$/.test(a)) return Promise.reject(new Error('The PIN must be 4 to 10 digits.'));
+  if (a !== b) return Promise.reject(new Error("The two PINs don't match. Type them again."));
+  return _zdzKioskCall('enter', a).then(function (res) {
+    var j = res.j || {};
+    if (j.success && j.active) {
+      if (j.nonce) zdzData.nonce = j.nonce;
+      window.location.replace(j.redirect || '/');
+      return new Promise(function () {}); // stay busy until the page changes
+    }
+    var why = _ZDZ_PIN_WHY[j.code] || (typeof j.message === 'string' && j.message ? j.message.replace(/\.$/, '') : _ZDZ_PIN_WHY.server);
+    if (!res.unsure) return _zdzPinSheetFail(sheet, "Couldn't enter Demo Mode: " + why + '. Nothing changed.');
+    // The request went out but no clear answer came back: ask the server which state this device is in.
+    return _zdzDemoNow(true).then(function (on) {
+      if (on) { window.location.replace('/'); return new Promise(function () {}); }
+      return _zdzPinSheetFail(sheet, "Couldn't enter Demo Mode: " + why + '. Nothing changed.');
+    }, function () {
+      return _zdzPinSheetFail(sheet, "Couldn't reach the server, so it isn't known whether Demo Mode started. Reload the app when you have signal: the green bar shows if it did.");
+    });
+  });
 }
 
 function exitKioskDemo() {
   Haptics && Haptics.tap && Haptics.tap();
-  var pin = window.prompt('Enter the PIN to exit Demo Mode and return to admin:');
-  if (pin === null) return;            // cancelled — stay in demo mode
-  pin = (pin || '').replace(/\D/g, '');
-  if (pin === '') { showToast('PIN required to exit.'); return; }
+  if (!window.ZDZ || !ZDZ.ui || !ZDZ.ui.sheet) { showToast("Couldn't open the PIN sheet. Reload the app and try again."); return; }
+  var sheet = ZDZ.ui.sheet({
+    title: 'Exit Demo Mode',
+    body: '<p class="zdz-pin-intro">Type the PIN chosen when Demo Mode started on this device.</p>' +
+      _zdzPinField('zdz-pin-exit', 'PIN'),
+    actions: [
+      { label: 'Cancel' },
+      { label: 'Exit Demo Mode', kind: 'primary', onClick: function (s) { return _zdzExitDemo(s); } }
+    ]
+  });
+  _zdzWirePins(sheet.el);
+  setTimeout(function () { var f = document.getElementById('zdz-pin-exit'); if (f) { try { f.focus(); } catch (e) {} } }, 60);
+}
 
-  showToast('Verifying…');
-  fetch(zdzData.apiUrl + 'kiosk-demo/exit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': zdzData.nonce },
-    body: JSON.stringify({ pin: pin })
-  })
-    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-    .then(function (res) {
-      if (!res.ok || !res.j || res.j.code) {
-        // Wrong PIN (403) or other error — remain in demo mode.
-        showToast('Incorrect PIN.');
-        return;
-      }
-      if (res.j.nonce) { zdzData.nonce = res.j.nonce; }
-      window.location.href = (res.j.redirect || '/');
-    })
-    .catch(function () { showToast('Network error. Still in demo mode.'); });
+function _zdzExitDemo(sheet) {
+  var inp = document.getElementById('zdz-pin-exit');
+  var pin = (inp && inp.value) || '';
+  if (!/^\d{4,10}$/.test(pin)) return Promise.reject(new Error('Type the 4 to 10 digit PIN.'));
+  return _zdzKioskCall('exit', pin).then(function (res) {
+    var j = res.j || {};
+    if (j.success && j.active === false) {
+      if (j.nonce) zdzData.nonce = j.nonce;
+      window.location.replace(j.redirect || '/');
+      return new Promise(function () {});
+    }
+    if (inp) { inp.value = ''; try { inp.focus(); } catch (e) {} }
+    if ((j.code === 'bad_pin' || j.code === 'locked' || j.code === 'busy') && typeof j.message === 'string') {
+      return _zdzPinSheetFail(sheet, j.message + ' Still in Demo Mode.');
+    }
+    var why = _ZDZ_PIN_WHY[j.code] || (typeof j.message === 'string' && j.message ? j.message.replace(/\.$/, '') : _ZDZ_PIN_WHY.server);
+    if (!res.unsure) return _zdzPinSheetFail(sheet, "Couldn't exit Demo Mode: " + why + '. Still in Demo Mode.');
+    // No clear answer: the PIN may have been accepted. Never say "Still in Demo Mode" without asking the server,
+    // or someone may hand over a device that is already back on the administrator's account.
+    return _zdzDemoNow(false).then(function (on) {
+      if (!on) { window.location.replace('/'); return new Promise(function () {}); }
+      return _zdzPinSheetFail(sheet, "Couldn't exit Demo Mode: " + why + '. Still in Demo Mode.');
+    }, function () {
+      return _zdzPinSheetFail(sheet, "Couldn't reach the server, so it isn't known whether Demo Mode ended. Don't hand the device over: reload the app when you have signal, and the green bar shows if Demo Mode is still on.");
+    });
+  });
 }
 
 // Persistent indicator so it's always obvious the device is in safe demo mode.
@@ -1350,17 +2580,17 @@ function loadFieldPreferences() {
 
     var schemaFields = schemaResp.fields; // [{key, type, label, hint}, ...]
     var fp = profileResp.profile.field_preferences || {};
-    var tsecProfile = profileResp.profile.tsec_notation_profile || {};
+    var notationProfile = profileResp.profile.notation_profile || {};
 
-    // One-time migration offer: if zdz_field_preferences is empty but
-    // tsec_notation_profile has data, pre-populate the form fields.
+    // One-time offer: if zdz_field_preferences is empty but the Estimates
+    // notation profile has data, pre-populate the form fields from it.
     var isEmpty = Object.keys(fp).length === 0;
-    var hasTsec = Object.keys(tsecProfile).length > 0;
-    if (isEmpty && hasTsec) {
-      fp = migrateFromTsecProfile(tsecProfile, schemaFields);
+    var hasNotation = Object.keys(notationProfile).length > 0;
+    if (isEmpty && hasNotation) {
+      fp = fieldPrefsFromNotationProfile(notationProfile, schemaFields);
     }
 
-    renderFieldPreferenceFields(schemaFields, fp, isEmpty && hasTsec);
+    renderFieldPreferenceFields(schemaFields, fp, isEmpty && hasNotation);
   })
   .catch(function() {
     var c = document.getElementById('zdz-fp-fields');
@@ -1368,16 +2598,16 @@ function loadFieldPreferences() {
   });
 }
 
-function migrateFromTsecProfile(tsec, schemaFields) {
-  // Map tsec_notation_profile keys to the new zdz_field_preferences schema.
-  // Only migrate keys that exist in the current schema.
+function fieldPrefsFromNotationProfile(notation, schemaFields) {
+  // Map notation-profile keys onto the zdz_field_preferences schema.
+  // Only keys that exist in the current schema are carried.
   var migrated = {};
   schemaFields.forEach(function(f) {
-    if (tsec[f.key]) {
+    if (notation[f.key]) {
       if (f.type === 'string_array') {
-        migrated[f.key] = Array.isArray(tsec[f.key]) ? tsec[f.key] : [tsec[f.key]];
+        migrated[f.key] = Array.isArray(notation[f.key]) ? notation[f.key] : [notation[f.key]];
       } else {
-        migrated[f.key] = String(tsec[f.key]);
+        migrated[f.key] = String(notation[f.key]);
       }
     }
   });
@@ -1477,7 +2707,7 @@ function saveFieldPreferences() {
   });
 }
 
-// ---- APP AUTHORIZATIONS (v2.11.0 / v2.13.0) --------------------------------
+// ---- APP AUTHORIZATIONS (/) --------------------------------
 function renderAppAuthorizations() {
   const sinfo = document.getElementById('settings-info');
   if (!sinfo) return;
@@ -1525,7 +2755,7 @@ function renderAppAuthorizations() {
       ? 'Connects this account to FreshBooks so estimates and invoices can be created on your behalf.'
       : 'Waiting for an administrator to paste the FreshBooks Client ID and Client Secret in wp-admin.';
 
-    // ---- Nutshell row (company-wide — v2.13.0) ----
+    // ---- Nutshell row (company-wide —) ----
     let nsHint, nsAction;
     if (ns.connected && isAdmin) {
       nsHint = 'Company account is connected as <strong>' + escapeHtml(ns.email || '') + '</strong>. ' +
@@ -1632,7 +2862,7 @@ function escapeHtml(str) {
   });
 }
 
-// v1.6.2 (Wave D / D-01): zdzMapsUrl — the ONE shared map-URL builder for the
+// v1.6.2: zdzMapsUrl — the ONE shared map-URL builder for the
 // whole platform. Replaces the drifting per-surface copies (this theme's
 // quick-info card, the analytics chat address linkifier, the jobs dossier).
 // Exposed as window.zdzMapsUrl so the app scripts reuse it instead of forking.
@@ -1675,7 +2905,7 @@ function zdzMapsUrl(addr, opts) {
   return base + q;
 }
 
-// v2.11.0: Start the FreshBooks OAuth flow from the front-end.
+// Start the FreshBooks OAuth flow from the front-end.
 function startFreshBooksAuthorize() {
   const btn = document.getElementById('zdz-authorize-fb-btn');
   if (btn) { btn.disabled = true; btn.classList.add('is-loading'); }
@@ -1700,7 +2930,7 @@ function startFreshBooksAuthorize() {
   });
 }
 
-// v2.13.0: Nutshell authorize modal — admin-only. Sets the COMPANY credentials.
+// Nutshell authorize modal — admin-only. Sets the COMPANY credentials.
 function openNutshellModal(currentEmail) {
   closeNutshellModal(); // idempotent
 
@@ -1814,7 +3044,7 @@ function saveNutshellCredentials() {
 
 // ---- COMMAND PALETTE ----
 // ---- COMMAND PALETTE ----
-// v2.20.0: The older simple app-search version has been removed.
+// The older simple app-search version has been removed.
 // The enhanced version with the assistant routing and fuzzy match is
 // defined below (see the second initCommandPalette block).
 
@@ -1833,13 +3063,23 @@ function initAppViewport() {
 
   // Browser / phone back button closes the active app
   window.addEventListener('popstate', (e) => {
+    // a document layer (Bridge.openDoc) sits above the app — Back closes
+    // only that layer. The pop that closeDoc() itself triggers is swallowed here,
+    // so it never closes the app underneath.
+    // closes queued in one tap (a sheet and the sheet under it, or a sheet and a document) each
+    // count one skipped pop; a single yes/no flag swallowed only the first, and the second closed the app.
+    if (window.Bridge && Bridge._skipPops > 0) { Bridge._skipPops--; if (window.ZDZ && ZDZ.ui && ZDZ.ui._afterPop) ZDZ.ui._afterPop(); return; }
+    if (window.Bridge && Bridge._skipNextPop) { Bridge._skipNextPop = false; return; }
+    // a kit sheet (ZDZ.ui.sheet) is the topmost layer — Back closes it, nothing under it.
+    if (window.ZDZ && ZDZ.ui && ZDZ.ui._popLayer && ZDZ.ui._popLayer()) return;
+    if (window.Bridge && Bridge.docOpen) { Bridge.closeDoc(true); return; }
     if (window.Bridge && Bridge.currentApp) {
-      Bridge.closeApp();
+      Bridge.closeApp(true); // true = the browser already went back (closeApp spends the entry otherwise)
     }
   });
 }
 
-// ---- PULL-TO-REFRESH (v2.14.3.1) ----
+// ---- PULL-TO-REFRESH ----
 // On iOS the browser chrome disappears on scroll, locking users out of the
 // browser's refresh bar. The body has overscroll-behavior-y:none which kills
 // the browser's native PTR. This adds a pull-down gesture at the top of any
@@ -1860,6 +3100,8 @@ function initPullToRefresh() {
   const threshold = 45;
 
   viewMain.addEventListener('touchstart', function (e) {
+    // an app open as a page is inside #view-main too; its own body scrolls, never this pull.
+    if (document.body.classList.contains('zdz-focus-open')) return;
     // Skip interactive elements — long-pressing text, tapping inputs, etc.
     // Without this, text selection triggers a refresh.
     const tag = (e.target.tagName || '').toLowerCase();
@@ -1970,7 +3212,7 @@ function prefetchTopApps() {
   });
 }
 
-// ---- v2.16.0 T16: Human-readable time-ago helper for KPI freshness ----
+// ---- T16: Human-readable time-ago helper for KPI freshness ----
 function formatTimeAgo(ts) {
   if (!ts) return '';
   const diff = (Date.now() / 1000) - ts;
@@ -1980,7 +3222,7 @@ function formatTimeAgo(ts) {
   return new Date(ts * 1000).toLocaleDateString();
 }
 
-// ---- v2.14.4 A4: APP DOCK (icon grid above KPI cards) ----
+// ---- A4: APP DOCK (icon grid above KPI cards) ----
 function renderAppDock() {
   var dock = document.getElementById('app-dock');
   if (!dock) return;
@@ -1991,9 +3233,9 @@ function renderAppDock() {
   var last = allApps.length - 1;
   dock.innerHTML = allApps.map(function (a, i) {
     var pos = i === 0 ? 'first' : i === last ? 'last' : '';
-    return '<button class="dock-app" data-app-id="' + a.id + '" data-idx="' + i + '"' + (pos ? ' data-pos="' + pos + '"' : '') + ' aria-label="' + a.nm + '" title="' + a.nm + '">' +
-      '<div class="dock-icon" style="background:' + a.cc + '"><i data-lucide="' + a.icon + '"></i></div>' +
-      '<span class="dock-label' + longLabelClass(a.nm) + '">' + a.nm + '</span>' +
+    return '<button class="dock-app" data-app-id="' + a.id + '" data-idx="' + i + '"' + (pos ? ' data-pos="' + pos + '"' : '') + ' aria-label="' + escapeHtml(zdzAppSpoken(a).replace(/^Open /, '')) + '" title="' + zdzNameHtml(a.nm) + '">' +
+      '<div class="dock-icon" ' + zdzPlate(a) + '><i data-lucide="' + a.icon + '"></i></div>' +
+      '<span class="dock-label' + longLabelClass(zdzAppShort(a)) + '">' + zdzNameHtml(zdzAppShort(a)) + '</span>' +
       '<div class="dock-reorder-arrows">' +
         '<span class="dock-arr dock-arr-left" data-dir="up" role="button" aria-label="Move left"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></span>' +
         '<span class="dock-arr dock-arr-right" data-dir="down" role="button" aria-label="Move right"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>' +
@@ -2004,8 +3246,8 @@ function renderAppDock() {
   initDockReorder(dock);
 }
 
-/* ── v2.17.3: Unified Reorder System (dock + sticky bar) ──────── */
-var _tsEditMode = false;
+/* ── Unified Reorder System (dock + sticky bar) ──────── */
+var _zdzEditMode = false;
 
 function getDockOrder(container) {
   var btns = container.querySelectorAll('[data-app-id]');
@@ -2063,8 +3305,8 @@ function syncContainers(sourceContainer) {
 }
 
 function enterAppEditMode() {
-  if (_tsEditMode) return;
-  _tsEditMode = true;
+  if (_zdzEditMode) return;
+  _zdzEditMode = true;
   Haptics.success();
   var dock = document.getElementById('app-dock');
   var stickyWrap = document.getElementById('dash-sticky');
@@ -2092,13 +3334,13 @@ function enterAppEditMode() {
   }
   // Tap outside dock/sticky → exit edit mode (pointer + touch for iOS)
   setTimeout(function() {
-    document.addEventListener('pointerdown', _tsEditOutsideHandler, true);
-    document.addEventListener('touchend', _tsEditOutsideTouchHandler, true);
+    document.addEventListener('pointerdown', _zdzEditOutsideHandler, true);
+    document.addEventListener('touchend', _zdzEditOutsideTouchHandler, true);
   }, 250);
 }
 
-function _tsEditOutsideHandler(e) {
-  if (!_tsEditMode) return;
+function _zdzEditOutsideHandler(e) {
+  if (!_zdzEditMode) return;
   var dock = document.getElementById('app-dock');
   var stickyWrap = document.getElementById('dash-sticky');
   if ((dock && dock.contains(e.target)) ||
@@ -2107,8 +3349,8 @@ function _tsEditOutsideHandler(e) {
   exitAppEditMode();
 }
 
-function _tsEditOutsideTouchHandler(e) {
-  if (!_tsEditMode) return;
+function _zdzEditOutsideTouchHandler(e) {
+  if (!_zdzEditMode) return;
   // Use changedTouches for touchend
   var touch = e.changedTouches ? e.changedTouches[0] : null;
   if (!touch) return;
@@ -2123,10 +3365,10 @@ function _tsEditOutsideTouchHandler(e) {
 }
 
 function exitAppEditMode() {
-  if (!_tsEditMode) return;
-  _tsEditMode = false;
-  document.removeEventListener('pointerdown', _tsEditOutsideHandler, true);
-  document.removeEventListener('touchend', _tsEditOutsideTouchHandler, true);
+  if (!_zdzEditMode) return;
+  _zdzEditMode = false;
+  document.removeEventListener('pointerdown', _zdzEditOutsideHandler, true);
+  document.removeEventListener('touchend', _zdzEditOutsideTouchHandler, true);
   var dock = document.getElementById('app-dock');
   var stickyWrap = document.getElementById('dash-sticky');
   var strip = stickyWrap ? stickyWrap.querySelector('.sticky-app-strip') : null;
@@ -2177,7 +3419,7 @@ function initReorderHandlers(container, itemSelector, arrowSelector) {
 
   container.addEventListener('click', function(e) {
     var arr = e.target.closest(arrowSelector);
-    if (arr && _tsEditMode) {
+    if (arr && _zdzEditMode) {
       e.preventDefault(); e.stopPropagation();
       var btn = arr.closest(itemSelector);
       var idx = parseInt(btn.dataset.idx, 10);
@@ -2185,7 +3427,7 @@ function initReorderHandlers(container, itemSelector, arrowSelector) {
       syncContainers(container);
       return;
     }
-    if (_tsEditMode) { e.preventDefault(); e.stopPropagation(); return; }
+    if (_zdzEditMode) { e.preventDefault(); e.stopPropagation(); return; }
     var appBtn = e.target.closest(itemSelector);
     if (appBtn && appBtn.dataset.appId) { openApp(appBtn.dataset.appId); }
   }, true);
@@ -2195,7 +3437,7 @@ function initDockReorder(dock) {
   initReorderHandlers(dock, '.dock-app', '.dock-arr');
 }
 
-// ---- v2.16.0 T4 / v2.17.3: STICKY APP BAR ----
+// ---- T4 / STICKY APP BAR ----
 function initStickyAppBar() {
   var dock = document.getElementById('app-dock');
   var sticky = document.getElementById('dash-sticky');
@@ -2208,7 +3450,7 @@ function initStickyAppBar() {
       var h = dashTop.getBoundingClientRect().height;
       document.documentElement.style.setProperty('--dash-top-h', Math.round(h) + 'px');
     }
-    // v2.20.0 r4: Measure the sticky icon bar height so widget headers
+    // Measure the sticky icon bar height so widget headers
     // can stick below it instead of behind it. Set to 0 when hidden.
     if (sticky) {
       if (sticky.classList.contains('visible')) {
@@ -2226,6 +3468,14 @@ function initStickyAppBar() {
     resizeTimer = setTimeout(measureDashTop, 150);
   });
 
+  // with the focus view home is short and the launcher sits under the ask bar, so the strip
+  // that chased the dock down a long page has nothing to do.
+  if (document.body.classList.contains('zdz-focus-home')) {
+    sticky.classList.remove('visible');
+    document.documentElement.style.setProperty('--dash-sticky-h', '0px');
+    return;
+  }
+
   var allApps = getVisibleApps();
   if (!allApps.length) { sticky.style.display = 'none'; return; }
   var last = allApps.length - 1;
@@ -2234,9 +3484,9 @@ function initStickyAppBar() {
   strip.className = 'sticky-app-strip';
   strip.innerHTML = allApps.map(function (a, i) {
     var pos = i === 0 ? 'first' : i === last ? 'last' : '';
-    return '<button class="sticky-app-btn" data-app-id="' + a.id + '" data-idx="' + i + '"' + (pos ? ' data-pos="' + pos + '"' : '') + ' aria-label="' + a.nm + '" title="' + a.nm + '">' +
-      '<div class="sticky-app-icon" style="background:' + a.cc + '"><i data-lucide="' + a.icon + '"></i></div>' +
-      '<span class="sticky-app-label">' + a.nm + '</span>' +
+    return '<button class="sticky-app-btn" data-app-id="' + a.id + '" data-idx="' + i + '"' + (pos ? ' data-pos="' + pos + '"' : '') + ' aria-label="' + escapeHtml(zdzAppSpoken(a).replace(/^Open /, '')) + '" title="' + zdzNameHtml(a.nm) + '">' +
+      '<div class="sticky-app-icon" ' + zdzPlate(a) + '><i data-lucide="' + a.icon + '"></i></div>' +
+      '<span class="sticky-app-label">' + zdzNameHtml(zdzAppShort(a)) + '</span>' +
       '<div class="sticky-reorder-arrows">' +
         '<span class="sticky-arr sticky-arr-left" data-dir="up" role="button" aria-label="Move left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></span>' +
         '<span class="sticky-arr sticky-arr-right" data-dir="down" role="button" aria-label="Move right"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>' +
@@ -2250,12 +3500,12 @@ function initStickyAppBar() {
   // Reorder handlers for sticky bar
   initReorderHandlers(strip, '.sticky-app-btn', '.sticky-arr');
 
-  // v2.17.2: Ensure sticky starts hidden, disconnect old observer/listener
+  // Ensure sticky starts hidden, disconnect old observer/listener
   sticky.classList.remove('visible');
-  if (window._tsStickyObs) { try { window._tsStickyObs.disconnect(); } catch(e){} }
-  if (window._tsStickyScroll) {
+  if (window._zdzStickyObs) { try { window._zdzStickyObs.disconnect(); } catch(e){} }
+  if (window._zdzStickyScroll) {
     var oldRoot = document.getElementById('sv-dash') || dock.closest('.sub-view');
-    if (oldRoot) oldRoot.removeEventListener('scroll', window._tsStickyScroll);
+    if (oldRoot) oldRoot.removeEventListener('scroll', window._zdzStickyScroll);
   }
   // Remove old sentinel if it exists
   var oldSentinel = document.getElementById('dock-sentinel');
@@ -2284,9 +3534,9 @@ function initStickyAppBar() {
     }
 
     function _onDashScroll() {
-      if (_tsEditMode) return;
+      if (_zdzEditMode) return;
 
-      // v2.20.1: Re-measure dash-top height on EVERY scroll tick.
+      // Re-measure dash-top height on EVERY scroll tick.
       // The old approach measured once on init, but the height can change
       // after font loading, icon rendering, or compact mode transitions.
       // A stale --dash-top-h causes the sticky bar to misposition.
@@ -2305,7 +3555,7 @@ function initStickyAppBar() {
       var scrolledPast = rootRect.top - dockRect.top;
       var threshold = _getStickyThreshold();
 
-      // v2.20.1: Compact search bar — triggers at 40% of the sticky threshold
+      // Compact search bar — triggers at 40% of the sticky threshold
       // so the greeting is already hidden and search is small BEFORE the
       // icon strip slides in. --dash-top-h is re-measured continuously at
       // the top of this handler, so no explicit remeasurement needed here.
@@ -2322,13 +3572,27 @@ function initStickyAppBar() {
         }
       }
 
+      // the strip follows the scroll instead of popping in.
+      // Over the last ~70px before the threshold it moves in by the same amount (CSS: .zdz-strip-partial,
+      // a fade only under Reduce Motion); at the threshold the usual .visible state takes over.
+      var _ramp = Math.max(60, Math.round((sticky.offsetHeight || 56) * 1.25));
+      var _p = (scrolledPast - (threshold - _ramp)) / _ramp;
+      _p = _p < 0 ? 0 : (_p > 1 ? 1 : _p);
+      if (_p > 0 && _p < 1 && !sticky.classList.contains('visible')) {
+        sticky.style.setProperty('--strip-p', _p.toFixed(3));
+        sticky.classList.add('zdz-strip-partial');
+      } else if (sticky.classList.contains('zdz-strip-partial')) {
+        sticky.classList.remove('zdz-strip-partial');
+        sticky.style.removeProperty('--strip-p');
+      }
+
       if (scrolledPast >= threshold) {
         if (!sticky.classList.contains('visible')) {
           sticky.classList.add('visible');
-          // v2.20.1: Mark dash-top so box-shadow gap cover only activates
+          // Mark dash-top so box-shadow gap cover only activates
           // when BOTH compact AND sticky are active
           if (dashTop) dashTop.classList.add('dash-sticky-on');
-          // v2.20.0 r4: Update --dash-sticky-h when icon bar appears
+          // Update --dash-sticky-h when icon bar appears
           requestAnimationFrame(function() {
             var sh = sticky.getBoundingClientRect().height;
             document.documentElement.style.setProperty('--dash-sticky-h', Math.round(sh) + 'px');
@@ -2338,15 +3602,15 @@ function initStickyAppBar() {
         if (sticky.classList.contains('visible')) {
           sticky.classList.remove('visible');
           if (dashTop) dashTop.classList.remove('dash-sticky-on');
-          // v2.20.0 r4: Reset --dash-sticky-h when icon bar disappears
+          // Reset --dash-sticky-h when icon bar disappears
           document.documentElement.style.setProperty('--dash-sticky-h', '0px');
         }
       }
     }
-    window._tsStickyScroll = _onDashScroll;
+    window._zdzStickyScroll = _onDashScroll;
     scrollRoot.addEventListener('scroll', _onDashScroll, { passive: true });
 
-    // v2.20.0 r5: Force scrollLeft=0 on every scroll event. iOS WebKit
+    // Force scrollLeft=0 on every scroll event. iOS WebKit
     // sometimes allows a few pixels of horizontal scroll even with
     // overflow-x:hidden when inertia scrolling or rubber-banding occurs.
     // This immediately resets any horizontal displacement.
@@ -2362,7 +3626,7 @@ function initStickyAppBar() {
   }
 }
 
-// ---- v2.14.4 A8: FUZZY NAME / APP MATCHING ----
+// ---- A8: FUZZY NAME / APP MATCHING ----
 function fuzzyMatch(needle, haystack) {
   // Lowercase, strip non-alpha, and compare
   var n = needle.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2383,7 +3647,7 @@ function fuzzyMatch(needle, haystack) {
   return score;
 }
 
-// ---- v2.23.0: INLINE ASK FIELD (type directly; results drop down beneath) ----
+// ---- INLINE ASK FIELD (type directly; results drop down beneath) ----
 // Replaces the pop-up command-palette overlay. The ask field lives inline in the
 // dashboard header (#dash-ask); typing renders results into #cmd-results, shown as
 // a dropdown. Empty field → dropdown hidden (just the field). openCmdPalette /
@@ -2433,6 +3697,8 @@ function initCommandPalette() {
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') { hideResults(); input.blur(); }
     if (e.key === 'Enter') {
+      // a question with a quick answer is answered right here; Enter never opens the chat over it.
+      if (typeof zdzQaEnter === 'function' && zdzQaEnter(input.value, results)) { e.preventDefault(); return; }
       var first = results.querySelector('.cmd-item');
       if (first) first.click();
     }
@@ -2459,7 +3725,7 @@ function initCommandPalette() {
     return ANALYTICS_WORDS.some(function (w) { return lower.includes(w); });
   }
 
-  // v2.21.1 (cross-app orchestrator): detect a customer-document LOOKUP query
+  // (cross-app orchestrator): detect a customer-document LOOKUP query
   // for palette LABELING only. Mirrors the bot's two-signal test (RULE TT2):
   // a lookup needs a named person AND retrieval framing, and must NOT be an
   // aggregate/analytic question. Returns the extracted customer name (string)
@@ -2485,7 +3751,7 @@ function initCommandPalette() {
     m = q.match(new RegExp('\\b(?:pull up|pull|show me|show|find|open|look up|lookup|get)\\s+([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*){0,3})(?:\'s|s\')\\s+' + nouns, 'i'));
     if (m && m[1]) return cleanName(m[1]);
 
-    // Pattern C: "<Name>'s <noun>"  e.g. "Rivera's estimate", "Steve's jobs"
+    // Pattern C: "<Name>'s <noun>"  e.g. "Rivera's estimate", "Riley's jobs"
     m = q.match(new RegExp('^([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*){0,3})(?:\'s|s\')\\s+' + nouns + '\\b', 'i'));
     if (m && m[1]) return cleanName(m[1]);
 
@@ -2493,7 +3759,7 @@ function initCommandPalette() {
     m = q.match(new RegExp('\\b(?:pull up|show me|show|find|open|look up|get)\\s+(?:the\\s+)?([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*){0,2})\\s+' + nouns + '\\b', 'i'));
     if (m && m[1] && !/^(my|our|all|any|recent|open|last|this)$/i.test(m[1])) return cleanName(m[1]);
 
-    // Pattern E: "what's on <Name>'s <noun>"  e.g. "what's on Steve's quote?"
+    // Pattern E: "what's on <Name>'s <noun>"  e.g. "what's on Riley's quote?"
     m = q.match(new RegExp('^\\s*what(?:\'s|s| is| are)\\s+on\\s+([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*){0,3})(?:\'s|s\')\\s+' + nouns + '\\b', 'i'));
     if (m && m[1]) return cleanName(m[1]);
 
@@ -2514,11 +3780,11 @@ function initCommandPalette() {
     }
   }
 
-  // ── v2.21.4 (cross-app orchestrator): the dashboard "ask" router ──
+  // ── (cross-app orchestrator): the dashboard "ask" router ──
   // Turns the top-of-dashboard ask field into an operator entry point. It
   // CLASSIFIES a natural-language command into one of:
   //   • { kind:'shell', ... }  — an instant in-shell action (e.g. open Camera
-  //                              with a sticky pre-label). No the assistant round-trip.
+  //                              with a sticky pre-label). No round-trip to the assistant.
   //   • { kind:'route', ... }  — route to the assistant (sales-analytics) with the
   //                              prompt + an orchestrator_hint so the user sees the
   //                              intent was understood; the bot/engine does the work.
@@ -2529,8 +3795,14 @@ function initCommandPalette() {
   // classify still goes to the bot exactly as before.
   function zdzOrchestratorRoute(raw) {
     if (!raw) return null;
-    var q = String(raw).trim();
+    // one plain space for any run of spaces (a no-break space included), as the server does.
+    var q = String(raw).replace(/[\s\u00A0]+/g, ' ').trim();
     var lower = q.toLowerCase();
+
+    // ---- 0. the work itself, said or typed ("I'm on my way to the Rivera job", "file the Carter photos").
+    // Before the camera, whose wide photo words would otherwise take "file the Carter photos".
+    var act = zdzDetectAppAction(q);
+    if (act) return act;
 
     // ---- 1. CAMERA pre-label: "open the camera and label all my photos as 'before'",
     // "take a photo with the phrase 'before' added", "snap some before pics", etc.
@@ -2554,7 +3826,7 @@ function initCommandPalette() {
         return a.id === 'camera' || a.id === 'zdz-camera';
       });
       if (hasCamera) {
-        // v2.24.0: a camera-capture command ALWAYS opens the camera in-shell —
+        // a camera-capture command ALWAYS opens the camera in-shell —
         // with OR without a pre-label. Previously only the labeled form became a
         // shell action and a bare "take a picture" fell through to the assistant
         // (which tried to "take a picture" itself — wrong). Now any recognized
@@ -2572,8 +3844,8 @@ function initCommandPalette() {
           icon: 'camera',
           color: '#0EA5E9',
           run: function () {
-            // v2.24.0: confirm the launch with a haptic tap (the shutter-button
-            // haptic itself lives in the zdz-camera plugin — see handoff doc).
+            // Confirm the launch with a haptic tap (the shutter-button haptic
+            // itself lives in the Camera app).
             try { Haptics.tap(); } catch (e) {}
             // The camera app registers as 'zdz-camera' (and its launch handler only
             // claims that id); use whichever id is actually present.
@@ -2587,7 +3859,7 @@ function initCommandPalette() {
       // No camera app available → fall through to normal handling.
     }
 
-    // ---- 1a. COMMISSION for a NAMED person → inline card (v2.28.0). "commission
+    // ---- 1a. COMMISSION for a NAMED person → inline card. "commission
     // for Alex, May 2026", "Alex's commission for May", "give me Riley's
     // commission". A figure for a specific salesperson is a bounded answer, so we
     // render it INLINE under the field (headline + expandable drill-down) instead
@@ -2598,7 +3870,7 @@ function initCommandPalette() {
     var commCard = zdzDetectCommissionInline(q, lower);
     if (commCard) return commCard;
 
-    // ---- 1b. GENERIC APP LAUNCH (v2.27.0): "open the schedule", "new estimate
+    // ---- 1b. GENERIC APP LAUNCH: "open the schedule", "new estimate
     // for the Smith job", "start a sketch", "check stock for sliders", "pull up
     // commission for last month", etc. Like the Camera block, these are INSTANT
     // in-shell shell actions — openApp() jumps to the app's dashboard widget (no
@@ -2610,6 +3882,24 @@ function initCommandPalette() {
     // camera but it returns null unless an explicit launch verb + app is present.
     var launch = zdzDetectAppLaunch(q, lower);
     if (launch) return launch;
+
+    // ---- 1c. STOCK for an item: "<item> available", "how much <item> do we have".
+    // A bounded answer (how many on hand), so it renders inline. Quantities only; the server decides, and an
+    // ask that matches nothing in the stock list goes on to chat as before.
+    var stockItem = zdzAskStock(lower);
+    if (stockItem) {
+      return {
+        kind: 'inline',
+        verb: 'stock',
+        query: stockItem,
+        rawQuery: q,
+        name: 'Stock: ' + stockItem,
+        desc: 'How many are on hand — shown right here',
+        icon: 'package',
+        color: '#7C3AED',
+        options: { prompt: q, orchestrator_hint: { verb: 'stock', query: stockItem } }
+      };
+    }
 
     // ---- 2. EMAIL compose: "write/draft/send an email to Sam Carter about ..." ----
     // Checked BEFORE contact: "email <Name> about X" is a COMPOSE intent, not a
@@ -2628,7 +3918,7 @@ function initCommandPalette() {
       };
     }
 
-    // ---- 3. CONTACT lookup: "contact info for Chris Rivera", "Steve's phone number"
+    // ---- 3. CONTACT lookup: "contact info for Casey Rivera", "Riley's phone number"
     // Contextual delivery: a contact is a bounded fact, so we render it INLINE on
     // the dashboard via /zorderz/v1/orchestrate (no chat switch, no Poe round-trip).
     // If the result is rich/denied/ambiguous, the inline card offers "Open in
@@ -2775,7 +4065,7 @@ function initCommandPalette() {
       // ("s Sam Rivera" → "Sam Rivera").
       name = name.replace(/^s\s+/i, '');
       // Strip leading filler verbs/pronouns/determiners the regex may have swept in
-      // ("give me Chris Rivera" → "Chris Rivera"). Repeat until none remain.
+      // ("give me Casey Rivera" → "Casey Rivera"). Repeat until none remain.
       var fillerRe = /^(?:get|give|grab|find|pull|look|show|me|us|the|a|an|my|our|up|to|for|of|please|can|you|i|me)\b\s*/i;
       while (fillerRe.test(name)) { name = name.replace(fillerRe, ''); }
       // Drop trailing connector words the regex may have swept in.
@@ -2789,141 +4079,84 @@ function initCommandPalette() {
     }
   }
 
-  // ── v2.28.0: Commission-for-a-named-person inline detector. Mirrors the
-  // server ZDZ_Orchestrator::detect_commission (the server stays authoritative;
-  // this produces the instant row label + drives the inline fetch). Returns a
-  // kind:'inline' verb:'commission' route, or null. Requires "commission(s)"
-  // AND a person (name or "my"), so aggregates ("total commissions this month",
-  // "commission by rep") fall through to the launch/Brain-Bot paths.
+  // the item in a stock question, or ''. The rule is ZDZ_Ask_Phrases::stock() (the same
+  // steps as ZDZ_Ask_Phrases::match_stock on the server).
+  function zdzAskStock(lower) {
+    var S = (typeof zdzData !== 'undefined' && zdzData.askPhrases && zdzData.askPhrases.stock) || null;
+    if (!S || !lower) return '';   // no stock rule: not someone who may ask Stock (the shared device), or no Stock
+    try {
+      for (var i = 0; i < S.frames.length; i++) {
+        var m = lower.trim().match(new RegExp(S.frames[i], 'i'));
+        if (!m) continue;
+        var item = m[1].trim().replace(new RegExp(S.trim, 'i'), '').trim();
+        if (!item || item.length > 60 || new RegExp(S.not, 'i').test(item)) return '';
+        return item;
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  // ── Commission-for-a-named-person inline detector. Returns a kind:'inline' verb:'commission' route,
+  // or null. Requires "commission(s)" (or an earnings frame) AND a person (a name or "my"), so aggregates
+  // ("total commissions this month", "commission by rep") fall through to the launch and chat paths.
+  // The rule itself is ZDZ_Ask_Phrases::commission() (one copy, on the server).
   function zdzDetectCommissionInline(q, lower) {
     if (!lower) return null;
-    var hasComm = lower.indexOf('commission') !== -1;
-    // EARNINGS SHORTHAND (v2.28.6): on this sales dashboard, an unambiguous
-    // personal-earnings question with NO other app keyword means "commission"
-    // even when the word is absent — e.g. "how much did Jordan earn last month",
-    // "what did Sam make", "how much does Alex take home". Require a
-    // did/does/do <Name> <earn-verb> OR <Name> earned/made/took-home frame so
-    // generic "how do I earn rewards" never matches.
-    var earnFrame = /\b(?:did|does|do)\s+[A-Za-z][\w.\-]*(?:\s+[A-Za-z][\w.\-]*){0,2}?\s+(?:earn|earns|earned|make|makes|made|get|gets|got|bring in|brings in|brought in|pull|pulls|pulled|take home|takes home|took home)\b/i.test(q)
-      || /\b[A-Za-z][\w.\-]*(?:\s+[A-Za-z][\w.\-]*){0,2}?\s+(?:earned|made|brought in|pulled in|took home)\b/i.test(q);
-    if (!hasComm && !earnFrame) return null;
-    // PERSON-SPECIFIC override (v2.28.6): a possessive-name query like
-    // "Jordan's commission rate" / "what's Sam's May commission" is about ONE
-    // person, so it must NOT be swept into the company-wide rollup skip below
-    // (which would otherwise catch "commission rate(s)", "total commissions", etc.).
-    var personSpecific = /\b[A-Za-z][\w.\-]*(?:'s|’s)\s+(?:(?:this|last|next)\s+(?:month|quarter|year|week)\s+|(?:january|february|march|april|may|june|july|august|september|october|november|december|q[1-4]|mtd|ytd|\d{4})\s+)?commissions?\b/i.test(q);
-    // COMPANY-WIDE / cross-person framing → chat (a real rollup, no single person):
-    // "commission by salesperson", "did we pay everyone", "average commission",
-    // "commission report", "how do commissions work". Note: "by PRODUCT/type" is
-    // NOT in this list — for a NAMED person it's a valid drill-down (focus below).
-    if (!personSpecific && /\b(by (?:salesperson|rep|person|month)|everyone|all (?:reps|salespeople|staff)|the (?:whole )?team|company-?wide|total commissions?|did we pay|do we pay|we paid|our (?:total |average )?commission|average commission|commission report|how do commissions?|how does commission|commission rates?|commission structure|commission plan)\b/.test(lower)) return null;
-
-    // Words that are NOT a person — used to reject a bad subject capture. Includes
-    // periods, launch verbs, and common verbs/adjectives the name regex might grab
-    // ("make", "earn", "average", "did", "pay", etc.).
-    var STOP = /^(i|have|has|had|commission|commissions|this|last|next|for|of|the|a|an|report|summary|by|total|owed|due|rate|rates|check|breakdown|history|my|me|mine|our|us|we|today|tomorrow|yesterday|month|year|quarter|week|q[1-4]|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|mtd|ytd|qtd|open|launch|start|pull|show|go|goto|check|view|bring|jump|fire|new|create|add|begin|see|calculate|calc|make|makes|made|making|earn|earns|earned|earning|get|gets|got|pay|paid|paying|average|avg|much|did|do|does|done|is|are|was|were|how|what|whats)\b/i;
-    // A person name: 1–3 capitalized-ish tokens, NOT followed by "for"/period.
-    // Stop the capture before a trailing "for <period>" so "Alex for May" → "Alex".
-    var NAME = '([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*){0,2}?)';
-
-    // Leading filler/verbs/pronouns the regex may sweep into the name.
-    var LEAD = /^(?:give|show|get|grab|find|pull|look|tell|me|us|the|a|an|my|our|up|and|or|vs|versus|commission|commissions|to|for|of|on|in|into|at|toward|towards|count|counts|counted|counting|please|can|you|i|what|whats|what's|is|are|was|were|do|does|did|could|how|much|see|make|makes|made|earn|earns|earned|pay|paid|rate|basis|math|break|breakdown|down|drill|detail|details)\b\s*/i;
-    function takeName(s) {
-      if (!s) return '';
-      var n = String(s).replace(/\s+/g, ' ').trim();
-      // v2.28.7 — never let a first-person/auxiliary fragment become a name
-      // ("I", "have I", "did I"): these are self-references, handled by isSelf.
-      if (/^(?:i|have i|has i|had i|did i|do i|i have|i did)$/i.test(n)) return '';
-      // Strip leading filler repeatedly ("is Aarons" → "Aarons", "up" → "").
-      while (LEAD.test(n)) { n = n.replace(LEAD, ''); }
-      // Strip an orphaned leading "s " left when "what's"/"that's" backtracks the
-      // possessive regex onto the bare "s" (v2.28.6) — no real name is a lone "s".
-      n = n.replace(/^s\s+/i, '');
-      // Trim a trailing "for/in/this/last ..." / period fragment.
-      n = n.replace(/\s+\b(for|in|during|this|last|next|on)\b.*$/i, '').trim();
-      n = n.replace(/\s+\b(january|february|march|april|may|june|july|august|september|october|november|december|today|tomorrow|yesterday|month|year|quarter|week|mtd|ytd|q[1-4]|\d{4})\b.*$/i, '').trim();
-      // Keep at most the last 2 tokens (a name is 1–2 words: "a salesperson", "a specialist").
-      var toks = n.split(' ').filter(Boolean);
-      if (toks.length > 2) { n = toks.slice(-2).join(' '); toks = n.split(' '); }
-      // Strip a bare trailing-s possessive on the LAST token ("Aarons" → "Alex"),
-      // but leave names that legitimately end in "ss" and 1-letter initials alone.
-      var last = toks[toks.length - 1];
-      if (last && /^[A-Za-z][\w.\-]*[a-rt-z]s$/i.test(last) && last.length > 2) {
-        toks[toks.length - 1] = last.slice(0, -1);
-        n = toks.join(' ');
+    // the rule is DATA from the server (ZDZ_Ask_Phrases::commission → zdzData.askPhrases),
+    // run here by the same steps ZDZ_Ask_Phrases::match_commission runs, so the row and the server's answer
+    // can no longer drift. No phrases on the page (an older cache) → no commission row; the ask goes on below.
+    var P = (typeof zdzData !== 'undefined' && zdzData.askPhrases && zdzData.askPhrases.commission) || null;
+    if (!P) return zdzDetectCommissionInlineLocal(q, lower);   // no phrase rules served: the rule written out below
+    var reCache = {};
+    // A pattern this browser cannot compile (a plugin's row the server let through) never stops the ask bar:
+    // it matches nothing.
+    function R(src) {
+      if (reCache[src]) return reCache[src];
+      try { reCache[src] = new RegExp(src, 'i'); } catch (e) { reCache[src] = /(?!)/; }
+      return reCache[src];
+    }
+    function take(s) {
+      var t = P.take;
+      var n = String(s || '').replace(/\s+/g, ' ').trim();
+      if (!n || R(t.self_frag).test(n)) return '';
+      for (var guard = 0; guard < 20 && R(t.lead).test(n); guard++) {
+        var next = n.replace(R(t.lead), '');
+        if (next === n) break;
+        n = next;
       }
-      if (n === '' || STOP.test(n) || n.length < 2) return '';
+      n = n.replace(/^s\s+/i, '');
+      n = n.replace(R(t.trail_conn), '').trim();
+      n = n.replace(R(t.trail_period), '').trim();
+      var toks = n.split(' ').filter(Boolean);
+      if (toks.length > 2) toks = toks.slice(-2);
+      var last = toks[toks.length - 1];
+      if (last && last.length > 2 && R(t.plural_s).test(last)) toks[toks.length - 1] = last.slice(0, -1);
+      n = toks.join(' ');
+      if (n === '' || n.length < 2 || R(t.stop).test(n) || (t.last_not && R(t.last_not).test(n))) return '';
       return n;
     }
-
-    // v2.28.7 — self also matches first-person EARNINGS phrasing so
-    // "how much did I earn this month" / "what have I made" resolves to the
-    // current user instead of trying to read "I"/"have I" as a salesperson name.
-    var isSelf = /\b(my|me|mine)\b/.test(lower)
-      || /\b(?:did|do|have|has|how much (?:have|did))?\s*i\s+(?:have\s+)?(?:earn|earned|make|made|made|get|got|take home|took home|bring in|brought in|pull|pulled)\b/i.test(q)
-      || /\bmy\s+(?:total\s+)?(?:pay|earnings|take)\b/i.test(lower);
-    var subject = '';
-    var m;
-    // A period/time word that can sit BETWEEN the name and "commission"
-    // ("Alex's MAY commission", "Alex's LAST MONTH commission"). We allow it
-    // optionally in the patterns so it doesn't get captured as the name.
-    var PERIODW = '(?:(?:this|last|next)\\s+(?:month|quarter|year|week)\\s+|(?:january|february|march|april|may|june|july|august|september|october|november|december|q[1-4]|mtd|ytd|\\d{4})\\s+)?';
-    // PERSON tokens that are clearly a name (1–2), used where we need to be strict.
-    var PNAME = '([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*)?)';
-
-    // "<Name>'s [period] commission" — strongest signal; period word optional.
-    if ((m = q.match(new RegExp('\\b' + PNAME + '(?:\'s|’s)\\s+' + PERIODW + 'commissions?\\b', 'i')))) {
-      subject = takeName(m[1]);
-    }
-    // v2.28.7 — MULTI-PERSON ("Jordan and Sam commission", "Alex & Riley",
-    // "commission for Jordan and Sam"): the card shows ONE person, so we take
-    // the FIRST valid name and flag it; the row label notes others were named.
-    var multiNames = null;
-    if (!subject) {
-      var mm2 = q.match(new RegExp('\\b' + PNAME + '\\s+(?:and|&|,|or|vs|versus)\\s+' + PNAME + '(?:\\s+(?:and|&|,)\\s+' + PNAME + ')?\\s+(?:[a-z]+\\s+)?commissions?\\b', 'i'))
-             || q.match(new RegExp('\\bcommissions?\\s+(?:for|of)\\s+' + PNAME + '\\s+(?:and|&|,)\\s+' + PNAME, 'i'));
-      if (mm2) {
-        var first = takeName(mm2[1]);
-        var second = takeName(mm2[2] || '');
-        if (first) { subject = first; if (second) multiNames = [first, second].concat(mm2[3] ? [takeName(mm2[3])] : []).filter(Boolean); }
+    var has = lower.indexOf(P.word) !== -1;
+    var earn = P.earn.some(function (p) { return R(p).test(q); });
+    if (!has && !earn) return null;
+    if (!R(P.person_specific).test(q) && R(P.company_wide).test(lower)) return null;
+    var isSelf = P.self.some(function (p) { return R(p).test(q); });
+    var subject = '', multiNames = null, m;
+    for (var i = 0; i < P.subject.length && !subject; i++) {
+      var row = P.subject[i];
+      if (!(m = q.match(R(row.re)))) continue;
+      var cand = m[row.g] || '';
+      if (row.plural) cand = cand.replace(/^([A-Za-z][\w.\-]*[a-rt-z])s$/i, '$1');
+      subject = take(cand);
+      if (subject && row.multi) {
+        var others = row.multi.map(function (g) { return take(m[g] || ''); }).filter(Boolean);
+        if (others.length) multiNames = [subject].concat(others);
       }
     }
-    // "commission(s) for/of/owed to <Name>".
-    if (!subject && (m = q.match(new RegExp('\\bcommissions?\\s+(?:for|of|owed to|earned by|due to)\\s+' + NAME, 'i')))) subject = takeName(m[1]);
-    // "the rate/basis on <Name>'s commission" — "what's the rate on Alex's …".
-    if (!subject && (m = q.match(new RegExp('\\b(?:rate|basis|math|breakdown)\\s+(?:on|for|of)\\s+' + PNAME + '(?:\'s|’s)?\\s+' + PERIODW + 'commissions?', 'i')))) subject = takeName(m[1]);
-    // "did/does <Name> earn/make/get …".
-    if (!subject && (m = q.match(new RegExp('\\b(?:did|does|do)\\s+' + NAME + '\\s+(?:earn|earns|earned|make|makes|made|get|gets|got|bring in|brings in|brought in|pull|pulls|pulled|take home|takes home|took home)', 'i')))) subject = takeName(m[1]);
-    // "<Name> earned/made/took home …" (the "how much" variant where the verb follows the name).
-    if (!subject && (m = q.match(new RegExp('\\b' + NAME + '\\s+(?:earned|made|brought in|pulled in|took home)\\b', 'i')))) subject = takeName(m[1]);
-    // "… commission … for <Name>" (verb phrasing with an explicit "for").
-    if (!subject && (m = q.match(new RegExp('\\bcommissions?\\b.*?\\bfor\\s+' + NAME, 'i')))) subject = takeName(m[1]);
-    // "make up <Name>'s [period] commission" / "in <Name>'s commission" — drill-down
-    // phrasings where the name+possessive precede an intervening period word.
-    if (!subject && (m = q.match(new RegExp('\\b(?:up|in|on|of|toward|towards|count toward|count towards|counts toward|counted toward)\\s+' + PNAME + '(?:\'s|’s)?\\s+' + PERIODW + 'commissions?', 'i')))) subject = takeName(m[1]);
-    // "<Name> [period] commission" (loosest; period word optional). takeName()
-    // rejects any non-name token via the STOP list.
-    if (!subject && (m = q.match(new RegExp('\\b' + PNAME + '\\s+' + PERIODW + 'commissions?\\b', 'i')))) {
-      var cand = m[1].replace(/^([A-Za-z][\w.\-]*[a-rt-z])s$/i, '$1'); // Aarons→Alex
-      subject = takeName(cand);
-    }
-
     if (!subject && !isSelf) return null;
-
-    // Period phrase (optional) for the row label.
-    var period = '';
-    var pm = q.match(/\b((?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+\d{4})?|(?:first|second|third|fourth|1st|2nd|3rd|4th)\s+quarter(?:\s+\d{4})?|q[1-4](?:\s+\d{4})?|this (?:month|quarter|year)|last (?:month|quarter|year)|quarter to date|month to date|year to date|year-to-date|qtd|mtd|ytd|\d{4}-\d{2}|\d{4})\b/i);
-    if (pm) period = pm[1];
-
-    // SMART FOCUS (v2.28.2): the card always leads with the headline figure and
-    // keeps the detail boxes COLLAPSED — unless the request explicitly asks about
-    // a section, in which case we auto-open just that one. Only set when the user
-    // clearly wants a drill-down; a plain "Alex's commission" leaves all closed.
+    var pm = q.match(R(P.period));
+    var period = pm ? pm[1].trim() : '';
     var focus = '';
-    if (/\b(by product|by category|product (?:line|split|breakdown|mix)|which products?|what products?)\b/.test(lower)) focus = 'products';
-    else if (/\b(which jobs?|what jobs?|jobs? (?:counted|list|breakdown|make up|are in)|per job|by job|list (?:the )?jobs?|what invoices?|which invoices?)\b/.test(lower)) focus = 'jobs';
-    else if (/\b(how (?:is|was|are) .*calculated|how .*calculate|what(?:'s| is) the (?:rate|basis)|the rate on|commission rate|what rate|breakdown of (?:the )?(?:rate|math)|how much .*net|net commissionable)\b/.test(lower)) focus = 'basis';
-    else if (/\b(breakdown|break it down|detail|details|drill (?:down|in))\b/.test(lower) && /\bproduct/.test(lower)) focus = 'products';
+    for (var f = 0; f < P.focus.length; f++) { if (R(P.focus[f][1]).test(lower)) { focus = P.focus[f][0]; break; } }
 
     var who = subject || 'my';
     var label = subject ? (subject + '’s commission') : 'My commission';
@@ -2945,31 +4178,401 @@ function initCommandPalette() {
     };
   }
 
-  // ── v2.27.0: Generic app-launch intent detector for the dashboard ask field.
-  // Recognizes "<launch verb> <app>" (+ optional context) and returns a
-  // kind:'shell' action that opens the app's dashboard widget via openApp().
-  // Data-driven so adding an app is one row. Each entry:
-  //   id       — the registered app id (must match zdzData.apps), tried in order;
-  //              the first id present in getVisibleApps() wins.
-  //   match    — RegExp of app name/aliases (word-boundaried, case-insensitive).
-  //   icon,cc  — row icon + color (fallbacks; real app config overrides on launch).
-  //   verb     — short label verb ("Open", "Start", "Check").
-  //   context  — optional fn(q, lower) → {options, suffix} to capture a customer/
-  //              job name or date/period and reflect it in the row + openApp opts.
-  // We require an explicit launch verb OR the app name at the very start, so we
-  // never hijack analytic questions ("how many estimates…") — those fall through.
+  // ── The work people do, said or typed ("I'm on my way to the Rivera job", "send the estimate to Carter",
+  // "mark the Rivera project installed"), opens the app that does it. The rules are DATA from the server
+  // (ZDZ_Ask_Actions -> zdzData.askPhrases.actions); this is the client twin of ZDZ_Ask_Actions::match(), step for step:
+  // normalize what dictation adds, never treat a question as an action, then the first row whose whole phrase, or verb
+  // AND object, is in the ask (and whose `not` is not) for an app this person can open. It only opens the app.
+  function zdzAskActionNormalize(A, q) {
+    var s = String(q || '').replace(/[\u2018\u2019`]/g, "'");
+    // Accented letters to plain ones, A-Z only to lower case, other non-ASCII runs to a space, at most 300 (as the server).
+    var F = A.fold || [];
+    for (var f = 0; f < F.length; f++) { if (s.indexOf(F[f][0]) !== -1) s = s.split(F[f][0]).join(F[f][1]); }
+    s = s.replace(/[A-Z]+/g, function (c) { return c.toLowerCase(); }).replace(/[^\x00-\x7f]+/g, ' ');
+    s = s.replace(/\s+/g, ' ').trim().slice(0, 300);
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < A.normalize.length; i++) {
+        var r = A.normalize[i];
+        s = s.replace(zdzAskRe(r[0], 'g'), r[1]);
+      }
+    }
+    return s.trim();
+  }
+  var _zdzAskReCache = {};
+  function zdzAskRe(src, flags) {
+    var k = (flags || '') + '|' + src;
+    if (_zdzAskReCache[k]) return _zdzAskReCache[k];
+    try { _zdzAskReCache[k] = new RegExp(src, 'i' + (flags || '')); } catch (e) { _zdzAskReCache[k] = /(?!)/; }
+    return _zdzAskReCache[k];
+  }
+  function zdzAskActionName(A, s, person) {
+    var C = A.ctx || {};
+    // A message goes to a person: "tell Jordan the Rivera job moved" names Jordan first (as name_in on the server).
+    var P = person ? (C.name || []).slice(4).concat((C.name || []).slice(0, 4)) : (C.name || []);
+    for (var i = 0; i < P.length; i++) {
+      // Every place the pattern fits, left to right (as preg_match_all on the server).
+      var re = new RegExp(zdzAskRe(P[i]).source, 'ig'), m;
+      while ((m = re.exec(s)) !== null) {
+        if (m[0] === '') { re.lastIndex++; continue; }
+        var n = (' ' + String(m[1] || '').trim()).replace(zdzAskRe(C.trail), '').trim().replace(/'s$/, '').trim();
+        if (!n || n.length < 2 || zdzAskRe(C.stop).test(n) || zdzAskRe(C.stop).test(n.split(' ')[0]) || /\d/.test(n)) continue;
+        return n.split(' ').map(function (w) { return w ? w.charAt(0).toUpperCase() + w.slice(1) : w; }).join(' ');
+      }
+    }
+    return '';
+  }
+  function zdzAskActionNumber(A, s) {
+    var m = s.match(zdzAskRe((A.ctx || {}).number || '(?!)'));
+    return m ? (m[1] || m[2] || '') : '';
+  }
+  function zdzAskAction(q, appIds) {
+    var A = (typeof zdzData !== 'undefined' && zdzData.askPhrases && zdzData.askPhrases.actions) || null;
+    if (!A || !A.rows || !A.normalize) return null;
+    var s = zdzAskActionNormalize(A, q);
+    if (!s || s.length > 240 || zdzAskRe(A.question).test(s) || (A.analytic && zdzAskRe(A.analytic).test(s)) || (A.report && zdzAskRe(A.report).test(s) && !zdzAskRe(A.doing || '(?!)').test(s)) || /\?\s*$/.test(String(q || ''))) return null;
+    for (var i = 0; i < A.rows.length; i++) {
+      var r = A.rows[i], hit = false;
+      for (var p = 0; p < (r.phrases || []).length; p++) { if (zdzAskRe(r.phrases[p]).test(s)) { hit = true; break; } }
+      if (!hit && r.verbs && zdzAskRe(r.verbs).test(s) && zdzAskRe(r.objects).test(s)) hit = true;
+      if (!hit || (r.not && zdzAskRe(r.not).test(s))) continue;
+      var app = '';
+      for (var a = 0; a < r.apps.length; a++) { if (!appIds || appIds.indexOf(r.apps[a]) !== -1) { app = r.apps[a]; break; } }
+      if (!app) continue;
+      var name = (r.ctx === 'name' || r.ctx === 'both') ? zdzAskActionName(A, s, r.key === 'to') : '';
+      var number = (r.ctx === 'number' || r.ctx === 'both') ? zdzAskActionNumber(A, s) : '';
+      var opts = { source: 'ask', action: r.id };
+      for (var k in (r.open || {})) { if (Object.prototype.hasOwnProperty.call(r.open, k)) opts[k] = r.open[k]; }
+      if (name) opts[r.key] = name;
+      if (number) opts.estimate_number = number;
+      return { id: r.id, app: app, label: r.label, name: name, number: number, options: opts };
+    }
+    return null;
+  }
+  // The ask bar's row for it: what will open, and that nothing is done until the person does it there.
+  function zdzDetectAppAction(q) {
+    // Every app this person may open (zdzData.apps, from get_user_app_configs), not only the launcher's: an app kept off
+    // the launcher still opens, as Analytics does for the chat.
+    var visible = (zdzData.apps || []).filter(function (a) { return a && a.id; });
+    var m = zdzAskAction(q, visible.map(function (a) { return a.id; }));
+    if (!m) return null;
+    var appCfg = visible.filter(function (a) { return a.id === m.app; })[0] || {};
+    var appName = appCfg.nm || m.app;
+    var what = m.name ? ' \u2014 ' + m.name : (m.number ? ' \u2014 #' + m.number : '');
+    return {
+      kind: 'shell',
+      name: m.label + what,
+      desc: 'Opens ' + appName + '. Nothing is done until you do it there.',
+      icon: appCfg.icon || 'arrow-right',
+      color: appCfg.cc || '#64748B',
+      appId: m.app, ink: appCfg.ink,
+      action: m.id,
+      run: (function (id, o) {
+        return function () { try { Haptics.tap(); } catch (e) {} openApp(id, o); };
+      })(m.app, m.options)
+    };
+  }
+
+  // ── Generic app-launch intent detector for the dashboard ask field. Recognizes "<launch verb> <app>"
+  // (+ optional context) and returns a kind:'shell' action that opens the app's dashboard widget via openApp().
+  // An explicit launch verb, or the app word at the very start, is required, so analytic questions ("how many
+  // estimates…") fall through.: the rows are ZDZ_Ask_Phrases::launch_rows() (one copy, on the server).
+  // The rules written out, for a page served without the phrase rules (no ZDZ_Ask_Phrases on the server): the same
+  // phrasings, so the ask bar works the same either way.
+  function zdzDetectCommissionInlineLocal(q, lower) {
+      if (!lower) return null;
+      var hasComm = lower.indexOf('commission') !== -1;
+      // EARNINGS SHORTHAND: on this sales dashboard, an unambiguous
+      // personal-earnings question with NO other app keyword means "commission"
+      // even when the word is absent — e.g. "how much did Jordan earn last month",
+      // "what did Sam make", "how much does Alex take home". Require a
+      // did/does/do <Name> <earn-verb> OR <Name> earned/made/took-home frame so
+      // generic "how do I earn rewards" never matches.
+      var earnFrame = /\b(?:did|does|do)\s+[A-Za-z][\w.\-]*(?:\s+[A-Za-z][\w.\-]*){0,2}?\s+(?:earn|earns|earned|make|makes|made|get|gets|got|bring in|brings in|brought in|pull|pulls|pulled|take home|takes home|took home)\b/i.test(q)
+        || /\b[A-Za-z][\w.\-]*(?:\s+[A-Za-z][\w.\-]*){0,2}?\s+(?:earned|made|brought in|pulled in|took home)\b/i.test(q);
+      if (!hasComm && !earnFrame) return null;
+      // PERSON-SPECIFIC override: a possessive-name query like
+      // "Jordan's commission rate" / "what's Sam's May commission" is about ONE
+      // person, so it must NOT be swept into the company-wide rollup skip below
+      // (which would otherwise catch "commission rate(s)", "total commissions", etc.).
+      var personSpecific = /\b[A-Za-z][\w.\-]*(?:'s|’s)\s+(?:(?:this|last|next)\s+(?:month|quarter|year|week)\s+|(?:january|february|march|april|may|june|july|august|september|october|november|december|q[1-4]|mtd|ytd|\d{4})\s+)?commissions?\b/i.test(q);
+      // COMPANY-WIDE / cross-person framing → chat (a real rollup, no single person):
+      // "commission by salesperson", "did we pay everyone", "average commission",
+      // "commission report", "how do commissions work". Note: "by PRODUCT/type" is
+      // NOT in this list — for a NAMED person it's a valid drill-down (focus below).
+      if (!personSpecific && /\b(by (?:salesperson|rep|person|month)|everyone|all (?:reps|salespeople|staff)|the (?:whole )?team|company-?wide|total commissions?|did we pay|do we pay|we paid|our (?:total |average )?commission|average commission|commission report|how do commissions?|how does commission|commission rates?|commission structure|commission plan)\b/.test(lower)) return null;
+
+      // Words that are NOT a person — used to reject a bad subject capture. Includes
+      // periods, launch verbs, and common verbs/adjectives the name regex might grab
+      // ("make", "earn", "average", "did", "pay", etc.).
+      var STOP = /^(i|have|has|had|commission|commissions|this|last|next|for|of|the|a|an|report|summary|by|total|owed|due|rate|rates|check|breakdown|history|my|me|mine|our|us|we|today|tomorrow|yesterday|month|year|quarter|week|q[1-4]|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|mtd|ytd|qtd|open|launch|start|pull|show|go|goto|check|view|bring|jump|fire|new|create|add|begin|see|calculate|calc|make|makes|made|making|earn|earns|earned|earning|get|gets|got|pay|paid|paying|average|avg|much|did|do|does|done|is|are|was|were|how|what|whats)\b/i;
+      // A person name: 1–3 capitalized-ish tokens, NOT followed by "for"/period.
+      // Stop the capture before a trailing "for <period>" so "Alex for May" → "Alex".
+      var NAME = '([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*){0,2}?)';
+
+      // Leading filler/verbs/pronouns the regex may sweep into the name.
+      var LEAD = /^(?:give|show|get|grab|find|pull|look|tell|me|us|the|a|an|my|our|up|and|or|vs|versus|commission|commissions|to|for|of|on|in|into|at|toward|towards|count|counts|counted|counting|please|can|you|i|what|whats|what's|is|are|was|were|do|does|did|could|how|much|see|make|makes|made|earn|earns|earned|pay|paid|rate|basis|math|break|breakdown|down|drill|detail|details)\b\s*/i;
+      function takeName(s) {
+        if (!s) return '';
+        var n = String(s).replace(/\s+/g, ' ').trim();
+        // never let a first-person/auxiliary fragment become a name
+        // ("I", "have I", "did I"): these are self-references, handled by isSelf.
+        if (/^(?:i|have i|has i|had i|did i|do i|i have|i did)$/i.test(n)) return '';
+        // Strip leading filler repeatedly ("is Rileys" → "Rileys", "up" → "").
+        while (LEAD.test(n)) { n = n.replace(LEAD, ''); }
+        // Strip an orphaned leading "s " left when "what's"/"that's" backtracks the
+        // possessive regex onto the bare "s" — no real name is a lone "s".
+        n = n.replace(/^s\s+/i, '');
+        // Trim a trailing "for/in/this/last ..." / period fragment.
+        n = n.replace(/\s+\b(for|in|during|this|last|next|on)\b.*$/i, '').trim();
+        n = n.replace(/\s+\b(january|february|march|april|may|june|july|august|september|october|november|december|today|tomorrow|yesterday|month|year|quarter|week|mtd|ytd|q[1-4]|\d{4})\b.*$/i, '').trim();
+        // Keep at most the last 2 tokens (a name is 1–2 words: "a salesperson", "a specialist").
+        var toks = n.split(' ').filter(Boolean);
+        if (toks.length > 2) { n = toks.slice(-2).join(' '); toks = n.split(' '); }
+        // Strip a bare trailing-s possessive on the LAST token ("Rileys" → "Riley"),
+        // but leave names that legitimately end in "ss" and 1-letter initials alone.
+        var last = toks[toks.length - 1];
+        if (last && /^[A-Za-z][\w.\-]*[a-rt-z]s$/i.test(last) && last.length > 2) {
+          toks[toks.length - 1] = last.slice(0, -1);
+          n = toks.join(' ');
+        }
+        if (n === '' || STOP.test(n) || n.length < 2) return '';
+        return n;
+      }
+
+      // self also matches first-person EARNINGS phrasing so
+      // "how much did I earn this month" / "what have I made" resolves to the
+      // current user instead of trying to read "I"/"have I" as a salesperson name.
+      var isSelf = /\b(my|me|mine)\b/.test(lower)
+        || /\b(?:did|do|have|has|how much (?:have|did))?\s*i\s+(?:have\s+)?(?:earn|earned|make|made|made|get|got|take home|took home|bring in|brought in|pull|pulled)\b/i.test(q)
+        || /\bmy\s+(?:total\s+)?(?:pay|earnings|take)\b/i.test(lower);
+      var subject = '';
+      var m;
+      // A period/time word that can sit BETWEEN the name and "commission"
+      // ("Alex's MAY commission", "Alex's LAST MONTH commission"). We allow it
+      // optionally in the patterns so it doesn't get captured as the name.
+      var PERIODW = '(?:(?:this|last|next)\\s+(?:month|quarter|year|week)\\s+|(?:january|february|march|april|may|june|july|august|september|october|november|december|q[1-4]|mtd|ytd|\\d{4})\\s+)?';
+      // PERSON tokens that are clearly a name (1–2), used where we need to be strict.
+      var PNAME = '([A-Za-z][\\w.\\-]*(?:\\s+[A-Za-z][\\w.\\-]*)?)';
+
+      // "<Name>'s [period] commission" — strongest signal; period word optional.
+      if ((m = q.match(new RegExp('\\b' + PNAME + '(?:\'s|’s)\\s+' + PERIODW + 'commissions?\\b', 'i')))) {
+        subject = takeName(m[1]);
+      }
+      // MULTI-PERSON ("Jordan and Sam commission", "Alex & Riley",
+      // "commission for Jordan and Sam"): the card shows ONE person, so we take
+      // the FIRST valid name and flag it; the row label notes others were named.
+      var multiNames = null;
+      if (!subject) {
+        var mm2 = q.match(new RegExp('\\b' + PNAME + '\\s+(?:and|&|,|or|vs|versus)\\s+' + PNAME + '(?:\\s+(?:and|&|,)\\s+' + PNAME + ')?\\s+(?:[a-z]+\\s+)?commissions?\\b', 'i'))
+               || q.match(new RegExp('\\bcommissions?\\s+(?:for|of)\\s+' + PNAME + '\\s+(?:and|&|,)\\s+' + PNAME, 'i'));
+        if (mm2) {
+          var first = takeName(mm2[1]);
+          var second = takeName(mm2[2] || '');
+          if (first) { subject = first; if (second) multiNames = [first, second].concat(mm2[3] ? [takeName(mm2[3])] : []).filter(Boolean); }
+        }
+      }
+      // "commission(s) for/of/owed to <Name>".
+      if (!subject && (m = q.match(new RegExp('\\bcommissions?\\s+(?:for|of|owed to|earned by|due to)\\s+' + NAME, 'i')))) subject = takeName(m[1]);
+      // "the rate/basis on <Name>'s commission" — "what's the rate on Alex's …".
+      if (!subject && (m = q.match(new RegExp('\\b(?:rate|basis|math|breakdown)\\s+(?:on|for|of)\\s+' + PNAME + '(?:\'s|’s)?\\s+' + PERIODW + 'commissions?', 'i')))) subject = takeName(m[1]);
+      // "did/does <Name> earn/make/get …".
+      if (!subject && (m = q.match(new RegExp('\\b(?:did|does|do)\\s+' + NAME + '\\s+(?:earn|earns|earned|make|makes|made|get|gets|got|bring in|brings in|brought in|pull|pulls|pulled|take home|takes home|took home)', 'i')))) subject = takeName(m[1]);
+      // "<Name> earned/made/took home …" (the "how much" variant where the verb follows the name).
+      if (!subject && (m = q.match(new RegExp('\\b' + NAME + '\\s+(?:earned|made|brought in|pulled in|took home)\\b', 'i')))) subject = takeName(m[1]);
+      // "… commission … for <Name>" (verb phrasing with an explicit "for").
+      if (!subject && (m = q.match(new RegExp('\\bcommissions?\\b.*?\\bfor\\s+' + NAME, 'i')))) subject = takeName(m[1]);
+      // "make up <Name>'s [period] commission" / "in <Name>'s commission" — drill-down
+      // phrasings where the name+possessive precede an intervening period word.
+      if (!subject && (m = q.match(new RegExp('\\b(?:up|in|on|of|toward|towards|count toward|count towards|counts toward|counted toward)\\s+' + PNAME + '(?:\'s|’s)?\\s+' + PERIODW + 'commissions?', 'i')))) subject = takeName(m[1]);
+      // "<Name> [period] commission" (loosest; period word optional). takeName()
+      // rejects any non-name token via the STOP list.
+      if (!subject && (m = q.match(new RegExp('\\b' + PNAME + '\\s+' + PERIODW + 'commissions?\\b', 'i')))) {
+        var cand = m[1].replace(/^([A-Za-z][\w.\-]*[a-rt-z])s$/i, '$1'); // Rileys→Riley
+        subject = takeName(cand);
+      }
+
+      if (!subject && !isSelf) return null;
+
+      // Period phrase (optional) for the row label.
+      var period = '';
+      var pm = q.match(/\b((?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+\d{4})?|(?:first|second|third|fourth|1st|2nd|3rd|4th)\s+quarter(?:\s+\d{4})?|q[1-4](?:\s+\d{4})?|this (?:month|quarter|year)|last (?:month|quarter|year)|quarter to date|month to date|year to date|year-to-date|qtd|mtd|ytd|\d{4}-\d{2}|\d{4})\b/i);
+      if (pm) period = pm[1];
+
+      // SMART FOCUS: the card always leads with the headline figure and
+      // keeps the detail boxes COLLAPSED — unless the request explicitly asks about
+      // a section, in which case we auto-open just that one. Only set when the user
+      // clearly wants a drill-down; a plain "Alex's commission" leaves all closed.
+      var focus = '';
+      if (/\b(by product|by category|product (?:line|split|breakdown|mix)|which products?|what products?)\b/.test(lower)) focus = 'products';
+      else if (/\b(which jobs?|what jobs?|jobs? (?:counted|list|breakdown|make up|are in)|per job|by job|list (?:the )?jobs?|what invoices?|which invoices?)\b/.test(lower)) focus = 'jobs';
+      else if (/\b(how (?:is|was|are) .*calculated|how .*calculate|what(?:'s| is) the (?:rate|basis)|the rate on|commission rate|what rate|breakdown of (?:the )?(?:rate|math)|how much .*net|net commissionable)\b/.test(lower)) focus = 'basis';
+      else if (/\b(breakdown|break it down|detail|details|drill (?:down|in))\b/.test(lower) && /\bproduct/.test(lower)) focus = 'products';
+
+      var who = subject || 'my';
+      var label = subject ? (subject + '’s commission') : 'My commission';
+      if (multiNames && multiNames.length > 1) { label = subject + '’s commission (of ' + multiNames.length + ' — showing ' + subject + ')'; }
+      var focusLabel = focus === 'products' ? ' — by product' : (focus === 'jobs' ? ' — jobs' : (focus === 'basis' ? ' — how it’s calculated' : ''));
+      return {
+        kind: 'inline',
+        verb: 'commission',
+        query: who,
+        rawQuery: q,                 // server re-classifies from the exact words
+        focus: focus,                // '' | 'jobs' | 'products' | 'basis' → auto-open
+        name: label + (period ? ' — ' + period : '') + (period ? '' : focusLabel),
+        desc: focus
+          ? 'Opens straight to ' + (focus === 'products' ? 'the product split' : (focus === 'jobs' ? 'the jobs' : 'the rate basis')) + ' — shown right here'
+          : 'The figure with a tap-to-expand breakdown — shown right here',
+        icon: 'calculator',
+        color: '#10B981',
+        options: { prompt: q, orchestrator_hint: { verb: 'commission', subject: who, period: period, focus: focus } }
+      };
+    }
+
+  function zdzDetectAppLaunchLocal(q, lower) {
+      if (!lower) return null;
+
+      // A launch verb anywhere, OR the query starting with the app word.
+      var LAUNCH_VERB = /\b(open|launch|start|go to|goto|bring up|pull up|show|show me|take me to|jump to|fire up|new|create|add|begin|check|view|play)\b/;
+      // tolerate common dictation/typing slips on the launch verb
+      // ("opne", "oepn", "luanch", "strat", "shwo", "chekc") via a tight
+      // edit-distance-1 check against the single-word verbs. Analytic questions
+      // ("how many estimates") contain no near-verb word, so they still fall through.
+      var SINGLE_VERBS = ['open','launch','start','show','create','begin','check','view'];
+      // Damerau-Levenshtein (optimal string alignment), early-out beyond 1. Adjacent
+      // transposition counts as distance 1 — that's the common dictation/typing slip.
+      function dl1(a, b) {
+        if (a === b) return 0;
+        var la = a.length, lb = b.length;
+        if (Math.abs(la - lb) > 1) return 9;
+        var prev2 = [], prev = [], cur = [];
+        for (var j = 0; j <= lb; j++) prev[j] = j;
+        for (var i = 1; i <= la; i++) {
+          cur = [i];
+          for (var k = 1; k <= lb; k++) {
+            var cost = a[i-1] === b[k-1] ? 0 : 1;
+            var val = Math.min(prev[k] + 1, cur[k-1] + 1, prev[k-1] + cost);
+            if (i > 1 && k > 1 && a[i-1] === b[k-2] && a[i-2] === b[k-1]) val = Math.min(val, prev2[k-2] + 1);
+            cur[k] = val;
+          }
+          prev2 = prev; prev = cur;
+        }
+        return prev[lb];
+      }
+      function fuzzyVerb(lo) {
+        var words = lo.split(/[^a-z]+/);
+        for (var w = 0; w < words.length; w++) {
+          var wd = words[w];
+          if (wd.length < 4) continue;            // >=4 so 'how'/'many'/'new' can't false-match
+          for (var v = 0; v < SINGLE_VERBS.length; v++) {
+            var vb = SINGLE_VERBS[v];
+            if (Math.abs(wd.length - vb.length) <= 1 && wd !== vb && dl1(wd, vb) <= 1) return true;
+          }
+        }
+        return false;
+      }
+      var hasVerb = LAUNCH_VERB.test(lower) || fuzzyVerb(lower);
+
+      // Helper: capture a trailing "for <name/job>" or "<name>'s" context phrase.
+      function grabFor(s) {
+        var m = s.match(/\bfor\s+([A-Za-z][\w'’.\-]*(?:\s+[A-Za-z][\w'’.\-]*){0,3})/i);
+        if (m && m[1]) {
+          var n = m[1].replace(/\s+\b(job|estimate|quote|account|today|tomorrow|this week|please)\b.*$/i, '').trim();
+          // drop a leading article/possessive so "for the Smith job" → "Smith",
+          // "for a Johnson estimate" → "Johnson", "for my Wilson job" → "Wilson".
+          n = n.replace(/^(?:the|a|an|my|our|their|his|her)\s+/i, '').trim();
+          return n;
+        }
+        return '';
+      }
+      // Helper: capture a date / period phrase for schedule & commission.
+      function grabPeriod(s) {
+        var m = s.match(/\b(today|tomorrow|yesterday|this (?:week|month|quarter|year)|last (?:week|month|quarter|year)|next (?:week|month)|month to date|year to date|mtd|ytd|q[1-4]|january|february|march|april|may|june|july|august|september|october|november|december|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/i);
+        return m ? m[1] : '';
+      }
+
+      // requireVerb:true rows ONLY launch on an explicit launch verb (new/open/…),
+      // never on a bare "<app> for <name>" — so "estimate for Riley" / "stock for
+      // sliders" still fall through to the inline document/contact lookups below.
+      // Rows without requireVerb may also launch when the query STARTS with the app
+      // word (e.g. typing "schedule" or "commission" alone).
+      var TABLE = [
+        { ids:['scheduler'],            re:/\b(schedule|scheduler|calendar|appointments?|availability)\b/,         icon:'calendar',     cc:'#0EA5E9', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{focus:p}, suffix:' — '+p}:null;} },
+        { ids:['estimate-creator'],     re:/\b(estimate|estimates|quote|quotes|bid|bids|proposal)\b/,             icon:'file-text',    cc:'#F59E0B', verb:'New',   requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{customer:n}, suffix:' for '+n}:null;} },
+        { ids:['zdz-sketch-pad','sketch'], re:/\b(sketch|sketchpad|draw(?:ing)?|doodle|diagram)\b/,                 icon:'pencil',       cc:'#F59E0B', verb:'Start', ctx:null },
+        { ids:['stock'],                re:/\b(stock|inventory|in stock|on hand)\b/,                              icon:'package',      cc:'#3B82F6', verb:'Check', requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{query:n}, suffix:' for '+n}:null;} },
+        { ids:['commission-calculator'], re:/\b(commission|commissions|payroll|installer pay|sales ledger|my pay)\b/, icon:'calculator',  cc:'#10B981', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{period:p}, suffix:' — '+p}:null;} },
+        { ids:['leads'],       re:/\b(leads?|lead generator|prospects?)\b/,                              icon:'target',       cc:'#22C55E', verb:'Open',  requireVerb:true, ctx:null },
+        { ids:['surveys'], re:/\b(surveys?|satisfaction|csat)\b/,                                    icon:'clipboard-check', cc:'#3B82F6', verb:'Open', requireVerb:true, ctx:null },
+        { ids:['prep'],                 re:/\b(prep|cutter|cut(?:ting)? queue|fabricat|shop queue)\b/,            icon:'scissors',     cc:'#F59E0B', verb:'Open',  ctx:null },
+        { ids:['receipts'],             re:/\b(receipts?)\b/,                                                     icon:'receipt',      cc:'#0EA5E9', verb:'Open',  requireVerb:true, ctx:null },
+        { ids:['knowledge-vault'],      re:/\b(knowledge|knowledge vault|knowledge base)\b/,                      icon:'book-open',    cc:'#22C55E', verb:'Open',  ctx:null },
+        { ids:['internal-messaging'],   re:/\b(messages?|messaging|team chat|inbox)\b/,                           icon:'message-square', cc:'#3B82F6', verb:'Open', requireVerb:true, ctx:null },
+        { ids:['zdz-media','zdz-media-all'], re:/\b(media|photos? library|gallery|image library)\b/,                icon:'image',        cc:'#64748B', verb:'Open',  ctx:null },
+        { ids:['game'],                 re:/\b(game|play a game)\b/,                                              icon:'gamepad-2',    cc:'#84CC16', verb:'Open',  ctx:null }
+      ];
+
+      // aggregate/analytic COMMISSION questions ("commission by
+      // salesperson", "commission report for the team", "average commission",
+      // "how much commission did we pay") must NOT launch the widget — they're
+      // questions for the assistant. Skip the launch entirely so they fall through
+      // to chat. (A named-person commission was already handled as an inline card
+      // before the launch detector ran.)
+      var commAggregate = /\bcommissions?\b/.test(lower)
+        && /\b(by (?:salesperson|rep|person|product|type|month)|report|the (?:whole )?team|everyone|company-?wide|did we pay|do we pay|we paid|our (?:total |average )?commission|average commission|total commissions?|how do commissions?|how does commission|commission rates?|commission structure)\b/.test(lower);
+
+      for (var i = 0; i < TABLE.length; i++) {
+        var row = TABLE[i];
+        if (!row.re.test(lower)) continue;
+        // Don't launch the Commission app on an aggregate/analytic commission query.
+        if (commAggregate && row.ids.indexOf('commission-calculator') !== -1) return null;
+        // Require a launch verb, OR (for non-requireVerb rows) the query begins with
+        // the app word (e.g. "schedule" / "commission" typed alone).
+        var startsWithApp = !row.requireVerb && row.re.test(lower.slice(0, 14));
+        if (!hasVerb && !startsWithApp) continue;
+        // Resolve the first registered+visible id for this app.
+        var visible = (typeof getVisibleApps === 'function') ? getVisibleApps() : (zdzData.apps || []);
+        var appId = null;
+        for (var k = 0; k < row.ids.length; k++) {
+          if (visible.some(function (a) { return a.id === row.ids[k]; })) { appId = row.ids[k]; break; }
+        }
+        if (!appId) continue; // app not installed/visible → let it fall through
+        var appCfg = visible.filter(function (a) { return a.id === appId; })[0] || {};
+        var appName = appCfg.nm || appId;
+        var ctx = row.ctx ? row.ctx(q) : null;
+        var opts = { source: 'orchestrator' };
+        if (ctx && ctx.options) { for (var key in ctx.options) opts[key] = ctx.options[key]; }
+        return {
+          kind: 'shell',
+          name: row.verb + ' ' + appName + (ctx && ctx.suffix ? ctx.suffix : ''),
+          desc: 'Jumps to ' + appName + ' on your dashboard',
+          icon: appCfg.icon || row.icon,
+          color: appCfg.cc || row.cc,
+          run: (function (id, o) {
+            return function () { try { Haptics.tap(); } catch (e) {} openApp(id, o); };
+          })(appId, opts)
+        };
+      }
+      return null;
+    }
+
   function zdzDetectAppLaunch(q, lower) {
     if (!lower) return null;
+    // the launch table is DATA from the server (ZDZ_Ask_Phrases::launch_rows →
+    // zdzData.askPhrases.launch; plugins add rows with the filter zdz_ask_launch_rows). No table → no launch row.
+    var AP = (typeof zdzData !== 'undefined' && zdzData.askPhrases) || null;
+    if (!AP || !AP.launch) return zdzDetectAppLaunchLocal(q, lower);   // no launch rows served: the table written out below
+    var reCache = {};
+    // A pattern this browser cannot compile (a plugin's row the server let through) never stops the ask bar:
+    // it matches nothing.
+    function R(src) {
+      if (reCache[src]) return reCache[src];
+      try { reCache[src] = new RegExp(src, 'i'); } catch (e) { reCache[src] = /(?!)/; }
+      return reCache[src];
+    }
 
-    // A launch verb anywhere, OR the query starting with the app word.
-    var LAUNCH_VERB = /\b(open|launch|start|go to|goto|bring up|pull up|show|show me|take me to|jump to|fire up|new|create|add|begin|check|view|play)\b/;
-    // v2.28.7 — tolerate common dictation/typing slips on the launch verb
-    // ("opne", "oepn", "luanch", "strat", "shwo", "chekc") via a tight
-    // edit-distance-1 check against the single-word verbs. Analytic questions
-    // ("how many estimates") contain no near-verb word, so they still fall through.
-    var SINGLE_VERBS = ['open','launch','start','show','create','begin','check','view'];
-    // Damerau-Levenshtein (optimal string alignment), early-out beyond 1. Adjacent
-    // transposition counts as distance 1 — that's the common dictation/typing slip.
+    // tolerate common dictation/typing slips on the launch verb ("opne", "luanch", "chekc") via a
+    // tight Damerau-Levenshtein distance-1 check against the single-word verbs.
+    var SINGLE_VERBS = AP.fuzzyVerbs || [];
     function dl1(a, b) {
       if (a === b) return 0;
       var la = a.length, lb = b.length;
@@ -3000,66 +4603,26 @@ function initCommandPalette() {
       }
       return false;
     }
-    var hasVerb = LAUNCH_VERB.test(lower) || fuzzyVerb(lower);
-
-    // Helper: capture a trailing "for <name/job>" or "<name>'s" context phrase.
+    var hasVerb = R(AP.launchVerb).test(lower) || fuzzyVerb(lower);
+    var C = AP.ctx || {};
     function grabFor(s) {
-      var m = s.match(/\bfor\s+([A-Za-z][\w'’.\-]*(?:\s+[A-Za-z][\w'’.\-]*){0,3})/i);
-      if (m && m[1]) {
-        var n = m[1].replace(/\s+\b(job|estimate|quote|account|today|tomorrow|this week|please)\b.*$/i, '').trim();
-        // v2.28.10 — drop a leading article/possessive so "for the Smith job" → "Smith",
-        // "for a Johnson estimate" → "Johnson", "for my Wilson job" → "Wilson".
-        n = n.replace(/^(?:the|a|an|my|our|their|his|her)\s+/i, '').trim();
-        return n;
-      }
+      var m = s.match(R(C['for']));
+      if (m && m[1]) return m[1].replace(R(C.for_trim), '').trim().replace(R(C.for_lead), '').trim();
       return '';
     }
-    // Helper: capture a date / period phrase for schedule & commission.
-    function grabPeriod(s) {
-      var m = s.match(/\b(today|tomorrow|yesterday|this (?:week|month|quarter|year)|last (?:week|month|quarter|year)|next (?:week|month)|month to date|year to date|mtd|ytd|q[1-4]|january|february|march|april|may|june|july|august|september|october|november|december|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/i);
-      return m ? m[1] : '';
-    }
+    function grabPeriod(s) { var m = s.match(R(C.period)); return m ? m[1] : ''; }
 
-    // requireVerb:true rows ONLY launch on an explicit launch verb (new/open/…),
-    // never on a bare "<app> for <name>" — so "estimate for Steve" / "stock for
-    // sliders" still fall through to the inline document/contact lookups below.
-    // Rows without requireVerb may also launch when the query STARTS with the app
-    // word (e.g. typing "schedule" or "commission" alone).
-    var TABLE = [
-      { ids:['scheduler'],            re:/\b(schedule|scheduler|calendar|appointments?|availability)\b/,         icon:'calendar',     cc:'#0EA5E9', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{focus:p}, suffix:' — '+p}:null;} },
-      { ids:['estimate-creator'],     re:/\b(estimate|estimates|quote|quotes|bid|bids|proposal)\b/,             icon:'file-text',    cc:'#F59E0B', verb:'New',   requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{customer:n}, suffix:' for '+n}:null;} },
-      { ids:['zdz-sketch-pad','sketch'], re:/\b(sketch|sketchpad|draw(?:ing)?|doodle|diagram)\b/,                 icon:'pencil',       cc:'#F59E0B', verb:'Start', ctx:null },
-      { ids:['stock-checker'],        re:/\b(stock|inventory|in stock|on hand)\b/,                              icon:'package',      cc:'#3B82F6', verb:'Check', requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{query:n}, suffix:' for '+n}:null;} },
-      { ids:['commission-calculator'], re:/\b(commission|commissions|payroll|installer pay|sales ledger|my pay)\b/, icon:'calculator',  cc:'#10B981', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{period:p}, suffix:' — '+p}:null;} },
-      { ids:['lead-generator'],       re:/\b(leads?|lead generator|prospects?)\b/,                              icon:'target',       cc:'#22C55E', verb:'Open',  requireVerb:true, ctx:null },
-      { ids:['satisfaction-surveys'], re:/\b(surveys?|satisfaction|csat)\b/,                                    icon:'clipboard-check', cc:'#3B82F6', verb:'Open', requireVerb:true, ctx:null },
-      { ids:['prep'],                 re:/\b(prep|cutter|cut(?:ting)? queue|fabricat|shop queue)\b/,            icon:'scissors',     cc:'#F59E0B', verb:'Open',  ctx:null },
-      { ids:['receipts'],             re:/\b(receipts?)\b/,                                                     icon:'receipt',      cc:'#0EA5E9', verb:'Open',  requireVerb:true, ctx:null },
-      { ids:['knowledge-vault'],      re:/\b(knowledge|knowledge vault|knowledge base)\b/,                      icon:'book-open',    cc:'#22C55E', verb:'Open',  ctx:null },
-      { ids:['internal-messaging'],   re:/\b(messages?|messaging|team chat|inbox)\b/,                           icon:'message-square', cc:'#3B82F6', verb:'Open', requireVerb:true, ctx:null },
-      { ids:['zdz-media','zdz-media-all'], re:/\b(media|photos? library|gallery|image library)\b/,                icon:'image',        cc:'#64748B', verb:'Open',  ctx:null },
-      { ids:['game'],                 re:/\b(game|play a game)\b/,                                              icon:'gamepad-2',    cc:'#84CC16', verb:'Open',  ctx:null }
-    ];
+    // Aggregate/analytic commission questions never launch the widget; they go to chat.
+    var commAggregate = /\bcommissions?\b/.test(lower) && R(AP.commAggregate).test(lower);
 
-    // v2.28.1: aggregate/analytic COMMISSION questions ("commission by
-    // salesperson", "commission report for the team", "average commission",
-    // "how much commission did we pay") must NOT launch the widget — they're
-    // questions for the assistant. Skip the launch entirely so they fall through
-    // to chat. (A named-person commission was already handled as an inline card
-    // before the launch detector ran.)
-    var commAggregate = /\bcommissions?\b/.test(lower)
-      && /\b(by (?:salesperson|rep|person|product|type|month)|report|the (?:whole )?team|everyone|company-?wide|did we pay|do we pay|we paid|our (?:total |average )?commission|average commission|total commissions?|how do commissions?|how does commission|commission rates?|commission structure)\b/.test(lower);
-
-    for (var i = 0; i < TABLE.length; i++) {
-      var row = TABLE[i];
-      if (!row.re.test(lower)) continue;
-      // Don't launch the Commission app on an aggregate/analytic commission query.
+    for (var i = 0; i < AP.launch.length; i++) {
+      var row = AP.launch[i];
+      var re = R(row.re);
+      if (!re.test(lower)) continue;
       if (commAggregate && row.ids.indexOf('commission-calculator') !== -1) return null;
-      // Require a launch verb, OR (for non-requireVerb rows) the query begins with
-      // the app word (e.g. "schedule" / "commission" typed alone).
-      var startsWithApp = !row.requireVerb && row.re.test(lower.slice(0, 14));
+      // A launch verb, OR (rows that allow it) the ask starts with the app word ("schedule" typed alone).
+      var startsWithApp = !row.require_verb && re.test(lower.slice(0, 14));
       if (!hasVerb && !startsWithApp) continue;
-      // Resolve the first registered+visible id for this app.
       var visible = (typeof getVisibleApps === 'function') ? getVisibleApps() : (zdzData.apps || []);
       var appId = null;
       for (var k = 0; k < row.ids.length; k++) {
@@ -3068,15 +4631,17 @@ function initCommandPalette() {
       if (!appId) continue; // app not installed/visible → let it fall through
       var appCfg = visible.filter(function (a) { return a.id === appId; })[0] || {};
       var appName = appCfg.nm || appId;
-      var ctx = row.ctx ? row.ctx(q) : null;
+      var ctxVal = row.ctx === 'for' ? grabFor(q) : (row.ctx === 'period' ? grabPeriod(q) : '');
       var opts = { source: 'orchestrator' };
-      if (ctx && ctx.options) { for (var key in ctx.options) opts[key] = ctx.options[key]; }
+      var suffix = '';
+      if (ctxVal && row.key) { opts[row.key] = ctxVal; suffix = row.ctx === 'for' ? ' for ' + ctxVal : ' — ' + ctxVal; }
       return {
         kind: 'shell',
-        name: row.verb + ' ' + appName + (ctx && ctx.suffix ? ctx.suffix : ''),
+        name: row.verb + ' ' + appName + suffix,
         desc: 'Jumps to ' + appName + ' on your dashboard',
         icon: appCfg.icon || row.icon,
         color: appCfg.cc || row.cc,
+        appId: appId, ink: appCfg.ink, // the plate is drawn with the group's ink (white on orange was 2:1)
         run: (function (id, o) {
           return function () { try { Haptics.tap(); } catch (e) {} openApp(id, o); };
         })(appId, opts)
@@ -3086,7 +4651,7 @@ function initCommandPalette() {
   }
 
   function renderCmdResults(q) {
-    // v2.21.0: drop secondary surfaces (springboard:false) from the palette —
+    // drop secondary surfaces (springboard:false) from the palette —
     // both the empty-query quick-launch list and the fuzzy name/desc matches
     // below read from this one array.
     var allApps = (zdzData.apps || []).filter(function (a) { return !isSecondarySurface(a); });
@@ -3097,7 +4662,7 @@ function initCommandPalette() {
       var display = allApps.slice(0, 10);
       results.innerHTML = display.map(function (a) {
         return '<button class="cmd-item" onclick="closeCmdPalette();openApp(\'' + a.id + '\')">' +
-          '<div class="ci-icon" style="background:' + a.cc + '"><i data-lucide="' + a.icon + '"></i></div>' +
+          '<div class="ci-icon" ' + zdzPlate(a) + '><i data-lucide="' + a.icon + '"></i></div>' +
           '<div class="ci-text"><div class="ci-name">' + a.nm + '</div><div class="ci-desc">' + (a.desc || '') + '</div></div>' +
           '<span class="ci-shortcut">' + (a.slash || '') + '</span></button>';
       }).join('');
@@ -3107,9 +4672,9 @@ function initCommandPalette() {
 
     var html = '';
 
-    // ── v2.20.0: ALWAYS show "Ask the assistant" as the primary action ──
-    // v2.20.0 r4: Guard against Analytics (sales-analytics) being inactive.
-    // v2.26.3: Check the REGISTERED apps (zdzData.apps), not getVisibleApps().
+    // ── ALWAYS show "Ask the assistant" as the primary action ──
+    // Guard against Analytics (sales-analytics) being inactive.
+    // Check the REGISTERED apps (zdzData.apps), not getVisibleApps().
     // Analytics is a secondary surface (springboard:false) so it no longer shows
     // as a top-bar icon — but it IS still registered/active and must remain
     // reachable from search as "Ask the assistant". Keying on getVisibleApps() would
@@ -3117,7 +4682,7 @@ function initCommandPalette() {
     var hasAssistant = (zdzData.apps || []).some(function(a) {
       return a && (a.id === 'sales-analytics' || a.id === 'zdz-sales-analytics');
     });
-    // v2.21.4 (cross-app orchestrator): consult the deterministic router first.
+    // (cross-app orchestrator): consult the deterministic router first.
     // A 'shell' action (e.g. open Camera w/ a pre-label) becomes its OWN primary
     // row and runs instantly. A 'route' relabels the assistant row and carries an
     // orchestrator_hint. Anything else falls through to the plain "Ask the assistant".
@@ -3126,20 +4691,22 @@ function initCommandPalette() {
     if (route && route.kind === 'inline') {
       // Inline-answer row: clicking (or Enter) fetches the result and renders a
       // compact card IN the palette, instead of opening the full chat.
-      window.__tsPendingInline = route;
+      window.__zdzPendingInline = route;
       html += '<button class="cmd-item cmd-item-analytics" onclick="zdzRunInline()">' +
-        '<div class="ci-icon" style="background:' + route.color + '"><i data-lucide="' + route.icon + '"></i></div>' +
+        '<div class="ci-icon" ' + zdzPlate({ id: route.appId || '', cc: route.color, ink: route.ink }) + '><i data-lucide="' + route.icon + '"></i></div>' +
         '<div class="ci-text"><div class="ci-name">' + escapeHtml(route.name) + '</div><div class="ci-desc">' + escapeHtml(route.desc) + '</div></div>' +
-        '<span class="ci-shortcut" style="font-size:11px;color:' + route.color + '">⏎</span></button>' +
+        '<span class="ci-shortcut" style="font-size:11px;color:var(--sys-text-sec)">⏎</span></button>' +
         '<div id="zdz-inline-answer"></div>';
     } else if (route && route.kind === 'shell') {
       // Stash the action so the inline onclick can call it without serializing.
-      window.__tsPendingShellAction = route.run;
-      html += '<button class="cmd-item cmd-item-analytics" onclick="closeCmdPalette();(window.__tsPendingShellAction&&window.__tsPendingShellAction())">' +
-        '<div class="ci-icon" style="background:' + route.color + '"><i data-lucide="' + route.icon + '"></i></div>' +
+      window.__zdzPendingShellAction = route.run;
+      html += '<button class="cmd-item cmd-item-analytics" onclick="closeCmdPalette();(window.__zdzPendingShellAction&&window.__zdzPendingShellAction())">' +
+        '<div class="ci-icon" ' + zdzPlate({ id: route.appId || '', cc: route.color, ink: route.ink }) + '><i data-lucide="' + route.icon + '"></i></div>' +
         '<div class="ci-text"><div class="ci-name">' + escapeHtml(route.name) + '</div><div class="ci-desc">' + escapeHtml(route.desc) + '</div></div>' +
-        '<span class="ci-shortcut" style="font-size:11px;color:' + route.color + '">⏎</span></button>';
-    } else if (hasAssistant) {
+        '<span class="ci-shortcut" style="font-size:11px;color:var(--sys-text-sec)">⏎</span></button>';
+    }
+    // An action row only opens an app, so the chat row stays under it.
+    if (hasAssistant && !(route && (route.kind === 'inline' || (route.kind === 'shell' && !route.action)))) {
       var truncated = q.trim().length > 50 ? q.trim().substring(0, 50) + '…' : q.trim();
 
       // Default the assistant row.
@@ -3157,8 +4724,11 @@ function initCommandPalette() {
       }
 
       // Stash options so the inline onclick passes the hint through to the app.
-      window.__tsPendingAskOptions = biOptions;
-      html += '<button class="cmd-item cmd-item-analytics" onclick="closeCmdPalette();openApp(\'sales-analytics\',window.__tsPendingAskOptions||{})">' +
+      window.__zdzPendingAskOptions = biOptions;
+      // Where a quick answer appears (above the chat row), for a question the ledger can answer.
+      // not under an action row, so Enter opens the app at once (a report never gets an action row: ANALYTIC).
+      if (!(route && route.action)) html += '<div id="zdz-quick-answer" aria-live="polite"></div>';
+      html += '<button class="cmd-item cmd-item-analytics" onclick="closeCmdPalette();openApp(\'sales-analytics\',window.__zdzPendingAskOptions||{})">' +
         '<div class="ci-icon" style="background:#6366F1"><i data-lucide="' + biIcon + '"></i></div>' +
         '<div class="ci-text"><div class="ci-name">' + escapeHtml(biName) + '</div><div class="ci-desc">' + escapeHtml(biDesc) + '</div></div>' +
         '<span class="ci-shortcut" style="font-size:11px;color:#6366F1">⏎</span></button>';
@@ -3167,6 +4737,7 @@ function initCommandPalette() {
     // ── 1. App name matches (fuzzy) ──
     var appMatches = allApps.map(function (a) {
       var nameScore = fuzzyMatch(query, a.nm);
+      if (typeof a.snm === 'string' && a.snm) nameScore = Math.max(nameScore, fuzzyMatch(query, a.snm));
       var descScore = a.desc ? fuzzyMatch(query, a.desc) * 0.5 : 0;
       var aliasScore = 0;
       if (a.aliases) {
@@ -3181,27 +4752,29 @@ function initCommandPalette() {
     if (appMatches.length) {
       html += appMatches.map(function (m) {
         return '<button class="cmd-item" onclick="closeCmdPalette();openApp(\'' + m.app.id + '\')">' +
-          '<div class="ci-icon" style="background:' + m.app.cc + '"><i data-lucide="' + m.app.icon + '"></i></div>' +
+          '<div class="ci-icon" ' + zdzPlate(m.app) + '><i data-lucide="' + m.app.icon + '"></i></div>' +
           '<div class="ci-text"><div class="ci-name">' + m.app.nm + '</div><div class="ci-desc">' + (m.app.desc || '') + '</div></div></button>';
       }).join('');
     }
 
     // ── 2. App matches follow (already rendered above) ──
-    // The the assistant row is always first, app matches follow.
+    // The assistant row is always first, app matches follow.
 
     results.innerHTML = html;
     refreshIcons();
+    // look ahead for a quick answer once typing pauses (or show the one already fetched).
+    if (typeof zdzQaUpdate === 'function') { zdzQaUpdate(q); }
   }
 }
 
-// ---- v2.22.0: INLINE ORCHESTRATOR ANSWER (dashboard "ask" field) ----
+// ---- INLINE ORCHESTRATOR ANSWER (dashboard "ask" field) ----
 // The SERVER is the authority. We send the raw query to /zorderz/v1/orchestrate, which
 // classifies it (deterministic, Poe-free) and — for the read verbs — returns the
 // resolved data in the same call. This makes phrasing robustness a server concern,
 // not a JS-regex guess: even if the palette row label guessed wrong, the action
 // reflects what the server actually found. 'chat' (or any miss) hands off to the
 // full assistant. Contact/lookup render as compact cards with an "Open in chat →".
-// v2.28.8 — INSTANT SKELETON. The client detector already knows the verb,
+// INSTANT SKELETON. The client detector already knows the verb,
 // subject and period before the server replies, so we paint a real card frame
 // immediately (subject + period + a shimmering figure placeholder) instead of a
 // blank "Looking that up…". On a cache hit the server returns in ~50ms and the
@@ -3214,7 +4787,7 @@ function zdzInlineSkeleton(route) {
     var subj = hint.subject && hint.subject !== 'my' ? hint.subject : 'Your';
     var who  = (subj === 'Your') ? 'Your commission' : (subj + '\u2019s commission');
     var per  = hint.period ? (' \u00b7 ' + esc(hint.period)) : '';
-    return '<div class="zdz-inline-card zdz-cc-card zdz-skeleton">' +
+    return '<div class="zdz-inline-card zdz-cc-card zdz-inline-skel" aria-busy="true">' +
       '<div class="zdz-cc-head">' +
         '<span class="zdz-cc-amount zdz-shimmer">$\u2009\u2009\u2009\u2009</span>' +
         '<span class="zdz-cc-who">' + esc(who) + per + '</span>' +
@@ -3224,14 +4797,14 @@ function zdzInlineSkeleton(route) {
   }
   if (verb === 'contact') {
     var nm = (route && route.query) ? esc(route.query) : 'Contact';
-    return '<div class="zdz-inline-card zdz-contact-card zdz-skeleton">' +
+    return '<div class="zdz-inline-card zdz-contact-card zdz-inline-skel" aria-busy="true">' +
       '<div class="zdz-ct-name">' + nm + '</div>' +
       '<div class="zdz-ct-row zdz-shimmer-line"></div>' +
       '<div class="zdz-ct-row zdz-shimmer-line"></div>' +
     '</div>';
   }
-  if (verb === 'lookup') {
-    return '<div class="zdz-inline-card zdz-skeleton">' +
+  if (verb === 'lookup' || verb === 'stock') {
+    return '<div class="zdz-inline-card zdz-inline-skel" aria-busy="true">' +
       '<div class="zdz-ct-row zdz-shimmer-line"></div>' +
       '<div class="zdz-ct-row zdz-shimmer-line"></div>' +
       '<div class="zdz-ct-row zdz-shimmer-line"></div>' +
@@ -3241,7 +4814,7 @@ function zdzInlineSkeleton(route) {
 }
 
 function zdzRunInline() {
-  var route = window.__tsPendingInline;
+  var route = window.__zdzPendingInline;
   if (!route) return;
   var mount = document.getElementById('zdz-inline-answer');
   if (!mount) return;
@@ -3259,16 +4832,22 @@ function zdzRunInline() {
         zdzInlineHandoff(route);
         return;
       }
-      // v2.28.11: stash any secondary-intent hint on the route so every renderer
+      // stash any secondary-intent hint on the route so every renderer
       // can surface the "+ also: …" chip uniformly (contact gets res.result, not
       // the outer res, so it would otherwise miss res.secondary).
       if (route && typeof route === 'object') route.secondary = res.secondary || null;
+      // where "Open in …" goes, and with what, as the server resolved it.
+      if (route && typeof route === 'object') { route.app = res.app || ''; route.launch = res.launch_options || null; }
       if (res.verb === 'contact') {
         renderInlineContact(mount, res.result || {}, route);
       } else if (res.verb === 'lookup') {
         renderInlineDocs(mount, res, route);
       } else if (res.verb === 'commission') {
         renderInlineCommission(mount, res, route);
+      } else if (res.verb === 'stock') {
+        renderInlineStock(mount, res, route);
+      } else if (res.verb === 'answer') {
+        zdzQaRender(mount, res, q); // a quick answer from stored data
       } else {
         mount.innerHTML = '';
         zdzInlineHandoff(route);
@@ -3281,13 +4860,139 @@ function zdzRunInline() {
     });
 }
 
+// ---- QUICK ANSWERS under the ask bar ----
+// A question asked in the home ask bar that the stored data can answer quickly gets its answer right underneath.
+// While the person types a question that sounds like one (sales, jobs, estimates, owed, customers, leads, sizes), the
+// bar asks /zorderz/v1/orchestrate?mode=answer once typing pauses. The Analytics app answers it by code from its ledger
+// or says it is not one of its own; an answer is drawn above the chat row with "⚡ Instant · from our records" and
+// "Explore more →". Enter on a question with an answer keeps the answer; on one without, the
+// chat opens as before. Answers are remembered two minutes per wording (never across people: the page is one person's).
+// Also the words of the questions ask.quick answers from Team Roles and Hours ("who installs …?", "is anyone trained
+// on …", "my hours"). A business adds its own trade's words on the server (zdzData.askHint, built from a word list).
+var ZDZ_QA_HINT = /\b(sales?|sold|sell|selling|revenue|billed|invoic\w*|jobs?|estimates?|quotes?|owed|owes?|outstanding|receivables?|customers?|clients?|leads?|sizes?|dimensions?|average|ticket|accepted|towns?|bought|spent|who|can|trained|install(?:s|ed|er|ers|ing)?|hours?)\b/i;
+// A business's own words that also sound like a question for the ledger (its trade's items), served as one pattern.
+var ZDZ_QA_HINT_MORE = (function () {
+  try {
+    var src = typeof zdzData !== 'undefined' && zdzData.askHint;
+    return src ? new RegExp(String(src), 'i') : null;
+  } catch (e) { return null; }
+})();
+var ZDZ_QA_TTL = 120000;
+function zdzQaState() {
+  if (!window.__zdzQA) { window.__zdzQA = { cache: {}, order: [], timer: 0, inflight: null, shownFor: '' }; }
+  return window.__zdzQA;
+}
+function zdzQaKey(q) { return String(q == null ? '' : q).replace(/[\s\u00A0]+/g, ' ').trim().toLowerCase(); }
+function zdzQaEligible(q) { var k = zdzQaKey(q); return k.length >= 8 && k.length <= 400 && (ZDZ_QA_HINT.test(k) || !!(ZDZ_QA_HINT_MORE && ZDZ_QA_HINT_MORE.test(k))); }
+function zdzQaCached(k) {
+  var hit = zdzQaState().cache[k];
+  return (hit && (Date.now() - hit.t) < ZDZ_QA_TTL) ? hit : null;
+}
+function zdzQaFetch(q) {
+  var S = zdzQaState(), k = zdzQaKey(q);
+  var hit = zdzQaCached(k);
+  if (hit) { return Promise.resolve(hit); }
+  if (S.inflight && S.inflight.k === k) { return S.inflight.p; }
+  if (typeof zdzData === 'undefined' || !zdzData.apiUrl) { return Promise.resolve({ miss: true, t: Date.now() }); }
+  var p = fetch(zdzData.apiUrl + 'orchestrate?mode=answer&query=' + encodeURIComponent(String(q).trim()), { headers: { 'X-WP-Nonce': zdzData.nonce } })
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      var ok = res && res.route === 'inline' && res.verb === 'answer' && res.result && res.result.html;
+      var entry = ok ? { res: res, t: Date.now() } : { miss: true, t: Date.now() };
+      S.cache[k] = entry; S.order.push(k);
+      while (S.order.length > 40) { delete S.cache[S.order.shift()]; }
+      return entry;
+    })
+    .catch(function () { return { miss: true, error: true, t: Date.now() }; })
+    .then(function (entry) { if (S.inflight && S.inflight.k === k) { S.inflight = null; } return entry; });
+  S.inflight = { k: k, p: p };
+  return p;
+}
+function zdzQaCurrent() { var i = document.getElementById('cmd-input'); return i ? i.value : ''; }
+function zdzQaUpdate(q) {
+  var S = zdzQaState(), k = zdzQaKey(q);
+  clearTimeout(S.timer);
+  if (!document.getElementById('zdz-quick-answer') || !zdzQaEligible(q)) { return; }
+  var hit = zdzQaCached(k);
+  if (hit) { if (!hit.miss) { zdzQaRender(document.getElementById('zdz-quick-answer'), hit.res, q); } return; }
+  S.timer = setTimeout(function () {
+    zdzQaFetch(q).then(function (entry) {
+      var mount = document.getElementById('zdz-quick-answer');
+      if (!mount || zdzQaKey(zdzQaCurrent()) !== k || !entry || entry.miss) { return; }
+      zdzQaRender(mount, entry.res, q);
+    });
+  }, 380);
+}
+// Enter: true when the quick answer handles it (shown, or fetched now); false lets the bar do what it always did.
+function zdzQaEnter(q, results) {
+  var mount = document.getElementById('zdz-quick-answer');
+  if (!mount || !zdzQaEligible(q)) { return false; }
+  var S = zdzQaState(), k = zdzQaKey(q);
+  clearTimeout(S.timer);
+  var hit = zdzQaCached(k);
+  if (hit && hit.miss) { return false; }
+  if (hit) { zdzQaRender(mount, hit.res, q); zdzQaNudge(mount); if (typeof zdzTrack === 'function') zdzTrack('command_palette', 'quick_answer'); return true; }   // the kind only
+  if (S.entering === k) { return true; } // Enter again while it is looking: one look, one chat at most
+  S.entering = k;
+  mount.innerHTML = '<div class="zdz-inline-card zdz-qa-card zdz-inline-skel" aria-busy="true"><div class="zdz-qa-badge">\u26A1 Looking in our records\u2026</div>' +
+    '<div class="zdz-ct-row zdz-shimmer-line"></div><div class="zdz-ct-row zdz-shimmer-line"></div></div>';
+  var done = false;
+  var toChat = function () {
+    if (done) { return; } done = true;
+    if (S.entering === k) { S.entering = ''; }
+    mount.innerHTML = '';
+    var row = results && results.querySelector('.cmd-item');
+    if (row && zdzQaKey(zdzQaCurrent()) === k) { row.click(); }
+  };
+  var giveUp = setTimeout(toChat, 2500); // never leave the person waiting on a look-ahead
+  zdzQaFetch(q).then(function (entry) {
+    if (done) { return; }
+    clearTimeout(giveUp);
+    if (entry && !entry.miss) {
+      done = true;
+      if (S.entering === k) { S.entering = ''; }
+      // drawn only while the field still asks this question
+      var m = document.getElementById('zdz-quick-answer');
+      if (m && zdzQaKey(zdzQaCurrent()) === k) { zdzQaRender(m, entry.res, q); if (typeof zdzTrack === 'function') zdzTrack('command_palette', 'quick_answer'); }
+      else if (m && /Looking in our records/.test(m.innerHTML)) { m.innerHTML = ''; } // round 2: only its own placeholder, never a newer answer
+      return;
+    }
+    toChat();
+  });
+  return true;
+}
+function zdzQaNudge(mount) {
+  var card = mount && mount.querySelector('.zdz-qa-card');
+  if (!card) { return; }
+  card.classList.remove('zdz-qa-nudge'); void card.offsetWidth; card.classList.add('zdz-qa-nudge');
+}
+// The server's HTML is built by the Analytics app from its own markdown, every character of content escaped there
+// (ZANA_Quick_Answers::html: p, strong, em, ul/li, table/tr/th/td only).
+function zdzQaRender(mount, res, q) {
+  var r = (res && res.result) || {};
+  if (!mount || !r.html) { return; }
+  zdzQaState().shownFor = zdzQaKey(q);
+  mount.innerHTML =
+    '<div class="zdz-inline-card zdz-qa-card" role="region" aria-label="Instant answer">' +
+      '<div class="zdz-qa-badge"><span aria-hidden="true">\u26A1</span> Instant \u00b7 from our records</div>' +
+      '<div class="zdz-qa-body">' + r.html + '</div>' +
+      // the card is the answer in two lines; "Explore more" opens Analytics with the full answer
+      '<button type="button" class="zdz-inline-chat" onclick="zdzQaOpenChat()">Explore more \u2192</button>' +
+    '</div>';
+}
+function zdzQaOpenChat() {
+  var q = String(zdzQaCurrent() || '').trim();
+  closeCmdPalette();
+  openApp('sales-analytics', { prompt: q });
+}
+
 // Open the full Analytics chat with the original prompt (the handoff path).
 function zdzInlineHandoff(route) {
   closeCmdPalette();
   openApp('sales-analytics', (route && route.options) || {});
 }
 
-// v2.28.11: run the SECONDARY intent of a compound ask in place. classify()
+// run the SECONDARY intent of a compound ask in place. classify()
 // resolves only the first intent; when it also reports a `secondary` hint
 // ("Devin's phone and Jordan's commission" → primary commission + secondary
 // contact), the card shows a "+ also: …" chip that re-runs the inline answer for
@@ -3300,7 +5005,7 @@ function zdzRunInlineSecondary(secQuery) {
     var input = document.getElementById('cmd-input');
     if (input) input.value = secQuery;
   } catch (e) {}
-  window.__tsPendingInline = { query: secQuery, rawQuery: secQuery, options: { prompt: secQuery } };
+  window.__zdzPendingInline = { query: secQuery, rawQuery: secQuery, options: { prompt: secQuery } };
   zdzRunInline();
 }
 
@@ -3329,7 +5034,7 @@ function renderInlineDocs(mount, res, route) {
     mount.innerHTML =
       '<div class="zdz-inline-card">' +
         '<div class="zdz-inline-msg">' + esc(msg) + '</div>' +
-        '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__tsPendingInline)">Open in chat →</button>' +
+        '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Open in chat →</button>' +
       '</div>';
     return;
   }
@@ -3344,10 +5049,10 @@ function renderInlineDocs(mount, res, route) {
     return '<div class="zdz-inline-row"><span class="zdz-inline-ic">📄</span>' + esc(label) + (meta ? ' — ' + esc(meta) : '') + '</div>';
   }).join('');
 
-  // v2.28.11: CLOSEST-MATCH BANNER — the document card resolves the customer
+  // CLOSEST-MATCH BANNER — the document card resolves the customer
   // through ZEST_ZANA_Bridge, which (like the contact bridge) can accept a match
   // on a shared last name when the asked first name matched nobody (live:
-  // "estimates for Sam Rivera" returned Chris Rivera's docs). When the bridge
+  // "estimates for Sam Rivera" returned Casey Rivera's docs). When the bridge
   // flags closest_match, say so instead of presenting the wrong customer's
   // documents as exact.
   var askedBanner = '';
@@ -3358,7 +5063,7 @@ function renderInlineDocs(mount, res, route) {
         esc(name) + '. Open in chat to search more.' +
       '</div>';
   }
-  // v2.28.11: "+ also: …" chip for a compound ask's second intent (route carries it).
+  // "+ also: …" chip for a compound ask's second intent (route carries it).
   var moreChip = zdzSecondaryChip(route && route.secondary);
 
   mount.innerHTML =
@@ -3366,12 +5071,40 @@ function renderInlineDocs(mount, res, route) {
       '<div class="zdz-inline-name">' + esc(name) + ' — open documents</div>' +
       askedBanner +
       rows +
-      '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__tsPendingInline)">Open in chat →</button>' +
+      '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Open in chat →</button>' +
       moreChip +
     '</div>';
 }
 
-// v2.28.0: Render a commission result inline — headline figure up front, with
+// A stock answer inline: each matching item and how many are on hand. Quantities only. "Open in Stock" only for
+// someone who has the Stock app.
+function renderInlineStock(mount, res, route) {
+  var esc = (typeof escapeHtml === 'function') ? escapeHtml : function (s) { return String(s == null ? '' : s); };
+  var r = res.result || {};
+  if (r.denied || !r.items || !r.items.length) {
+    mount.innerHTML = '<div class="zdz-inline-card"><div class="zdz-inline-msg">' + esc(r.message || 'Nothing in the stock list matches.') + '</div></div>';
+    return;
+  }
+  var words = { out: 'out', critical: 'very low', low: 'low', good: '' };
+  var rows = r.items.map(function (it) {
+    var st = words[it.status] || '';
+    return '<div class="zdz-inline-row"><span class="zdz-inline-ic">📦</span>' + esc(it.name) + ' — <strong>' +
+      esc(String(it.on_hand)) + '</strong> ' + esc(it.unit || '') + (st ? ' · ' + esc(st) : '') + '</div>';
+  }).join('');
+  var more = r.more ? '<div class="zdz-inline-note">and ' + esc(String(r.more)) + ' more</div>' : '';
+  var hasApp = (typeof getVisibleApps === 'function') && getVisibleApps().some(function (a) { return a.id === 'stock'; });
+  var open = hasApp ? '<button class="zdz-inline-chip" onclick="zdzStockOpenWidget()">Open in Stock ↗</button>' : '';
+  mount.innerHTML = '<div class="zdz-inline-card"><div class="zdz-inline-name">On hand: ' + esc((route && route.query) || r.query || '') + '</div>' +
+    rows + more + open + '</div>';
+}
+function zdzStockOpenWidget() {
+  var route = window.__zdzPendingInline || {};
+  var q = (route.launch && route.launch.query) || route.query || '';
+  closeCmdPalette();
+  openApp('stock', { source: 'orchestrator', query: q });
+}
+
+// Render a commission result inline — headline figure up front, with
 // collapsible drill-down (jobs counted, rate basis, by-product split). The full
 // detail is CONTAINED but collapsed for a fast, scannable answer. Denied/kiosk
 // and clarify states show the bridge's friendly message + a chat handoff.
@@ -3381,11 +5114,11 @@ function renderInlineCommission(mount, res, route) {
   function money(n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
   // Non-figure states (denied on kiosk, error, no-match) → message + handoff.
-  // v2.28.11: ALSO treat "no amount produced" as a non-figure state. The bridge
+  // ALSO treat "no amount produced" as a non-figure state. The bridge
   // returns success:true WITHOUT an `amount` key when the named person isn't a
   // salesperson with a commission profile (it sets `message` instead) — see
   // ZCC_ZANA_Bridge::commission_calc_for_zana. Previously this fell through to the
-  // card and money(undefined) rendered a misleading "$0.00 · Zachary", reading as
+  // card and money(undefined) rendered a misleading "$0.00 · Quinn", reading as
   // "earned $0" rather than "not a known rep". A real rep with genuinely zero
   // commission DOES carry amount:0, so this only catches the not-found case.
   var hasAmount = (r.amount !== null && r.amount !== undefined);
@@ -3394,7 +5127,7 @@ function renderInlineCommission(mount, res, route) {
     mount.innerHTML =
       '<div class="zdz-inline-card">' +
         '<div class="zdz-inline-msg">' + esc(msg) + '</div>' +
-        '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__tsPendingInline)">Ask in chat →</button>' +
+        '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Ask in chat →</button>' +
       '</div>';
     return;
   }
@@ -3441,12 +5174,12 @@ function renderInlineCommission(mount, res, route) {
       '</div>' +
       (r.basis ? '<div class="zdz-cc-basis">' + esc(r.basis) + '</div>' : '') +
       sections +
-      // v2.28.8 — show data recency when this came from the 10-min cache so the
+      // show data recency when this came from the 10-min cache so the
       // figure is trusted; a live (just-computed) figure shows nothing.
       (r.cached && r.cached_at ? '<div class="zdz-cc-fresh"><span class="zdz-cc-dot">\u25CF</span> Updated ' + esc(r.cached_at) + '</div>' : '') +
       '<div class="zdz-cc-actions">' +
         '<button class="zdz-inline-chip" onclick="zdzCommissionOpenWidget()">Open in Commission ↗</button>' +
-        '<button class="zdz-inline-chip" onclick="zdzInlineHandoff(window.__tsPendingInline)">Ask in chat ↗</button>' +
+        '<button class="zdz-inline-chip" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Ask in chat ↗</button>' +
         zdzSecondaryChip(res.secondary) +
       '</div>' +
     '</div>';
@@ -3459,7 +5192,7 @@ function renderInlineCommission(mount, res, route) {
     });
   });
 
-  // v2.28.2: SMART AUTO-EXPAND. The card defaults to all-collapsed (just the
+  // SMART AUTO-EXPAND. The card defaults to all-collapsed (just the
   // headline), but if the request explicitly asked about a section, open ONLY
   // that one. focus comes from the client route (route.focus) or, if the server
   // forwarded it, res.focus / the orchestrator hint.
@@ -3489,11 +5222,14 @@ function zdzCcSection(key, title, count, bodyHtml) {
 // Open the full Commission widget from the inline card (carries the prompt so
 // the widget/orchestrator hint can pre-focus the salesperson + period).
 function zdzCommissionOpenWidget() {
-  var route = window.__tsPendingInline || {};
+  var route = window.__zdzPendingInline || {};
   var opts = { source: 'orchestrator' };
   var hint = (route.options && route.options.orchestrator_hint) || {};
   if (hint.subject) opts.salesperson = hint.subject;
   if (hint.period) opts.period = hint.period;
+  // the person and the dates the server resolved, so Commission opens on this figure.
+  var L = route.launch || null;
+  if (L && L.user_id) { opts.user_id = L.user_id; opts.date_start = L.date_start || ''; opts.date_end = L.date_end || ''; }
   closeCmdPalette();
   openApp('commission-calculator', opts);
 }
@@ -3513,7 +5249,7 @@ function renderInlineContact(mount, res, route) {
     mount.innerHTML =
       '<div class="zdz-inline-card">' +
         '<div class="zdz-inline-msg">' + esc(msg) + '</div>' + sub +
-        '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__tsPendingInline)">Open in chat →</button>' +
+        '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Open in chat →</button>' +
       '</div>';
     return;
   }
@@ -3528,7 +5264,7 @@ function renderInlineContact(mount, res, route) {
   if (c.email) {
     rows += '<a class="zdz-inline-row" href="mailto:' + esc(c.email) + '"><span class="zdz-inline-ic">✉️</span>' + esc(c.email) + '</a>';
   }
-  // v1.6.2 (D-01): the address / city-fallback row becomes a device-appropriate
+  // v1.6.2: the address / city-fallback row becomes a device-appropriate
   // map link (matching the phone tel: and email mailto: rows above) — but ONLY
   // when non-empty; an empty/whitespace value stays a static <div> with no dead
   // link. Href built by the shared zdzMapsUrl() (hardcoded https + encodeURIComponent),
@@ -3544,36 +5280,72 @@ function renderInlineContact(mount, res, route) {
   var header = esc(c.name || 'Contact');
   if (c.company && c.company !== c.name) header += ' <span class="zdz-inline-co">· ' + esc(c.company) + '</span>';
 
-  // v2.28.11: CLOSEST-MATCH BANNER — when the bridge resolved a different person
+  // CLOSEST-MATCH BANNER — when the bridge resolved a different person
   // than was asked (fuzzy surname / dropped first name), say so up front instead
   // of presenting the wrong contact as exact (live: "who is Sam Rivera" →
-  // Chris Rivera). The card still shows the match (it's useful), but labeled.
+  // Casey Rivera). The card still shows the match (it's useful), but labeled.
   var askedBanner = '';
   if (res.closest_match && res.asked) {
     askedBanner =
       '<div class="zdz-inline-note" style="color:var(--sys-warn,#b45309);">' +
         'No exact match for "' + esc(res.asked) + '" — showing the closest contact, ' +
-        esc(c.name || 'this customer') + '. Open in chat to search more.' +
+        esc(c.name || 'this customer') + '. Ask chat to search more.' +
       '</div>';
   }
 
   // A note from the bridge (e.g. "no email on file") and the chat handoff.
   var note = res.message ? '<div class="zdz-inline-note">' + esc(res.message) + '</div>' : '';
 
-  // v2.28.11: "+ also: …" chip for a compound ask's second intent (route carries it).
+  // "+ also: …" chip for a compound ask's second intent (route carries it).
   var moreChip = zdzSecondaryChip(route && route.secondary);
+
+  // the card's actions are Call, Message and Directions; chat is a quiet text link at the
+  // end.
+  var acts = zdzContactActions(c);
+  var first = String(c.name || '').trim().split(/\s+/)[0] || 'them';
 
   mount.innerHTML =
     '<div class="zdz-inline-card">' +
       '<div class="zdz-inline-name">' + header + '</div>' +
       askedBanner +
       rows + note +
-      '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__tsPendingInline)">Open in chat →</button>' +
+      acts +
+      '<button class="zdz-inline-chat zdz-inline-chat--link" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Ask chat about ' + esc(first) + '</button>' +
       moreChip +
     '</div>';
 }
 
-// ---- v2.14.4 D1: ADD-TO-HOME-SCREEN BANNER ----
+// Call / Message / Directions buttons for a contact card. A button appears only when the
+// card has what it needs (a phone number for Call and Message, an address or town for Directions).
+function zdzDirectionsUrl(addr) {
+  var q = encodeURIComponent(String(addr == null ? '' : addr).trim());
+  if (!q) return '';
+  var ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+  return /iPhone|iPad|iPod|Macintosh|Mac OS X/i.test(ua)
+    ? 'https://maps.apple.com/?daddr=' + q
+    : 'https://www.google.com/maps/dir/?api=1&destination=' + q;
+}
+function zdzContactActions(c) {
+  c = c || {};
+  var esc = (typeof escapeHtml === 'function') ? escapeHtml : function (s) { return String(s == null ? '' : s); };
+  var ico = {
+    call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
+    msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    dir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>'
+  };
+  var out = '';
+  var tel = c.phone ? String(c.phone).replace(/[^0-9+]/g, '') : '';
+  if (tel) {
+    out += '<a class="zdz-inline-act" href="tel:' + esc(tel) + '">' + ico.call + 'Call</a>';
+    out += '<a class="zdz-inline-act" href="sms:' + esc(tel) + '">' + ico.msg + 'Message</a>';
+  }
+  var place = c.address || c.city || '';
+  var dir = place ? zdzDirectionsUrl(place) : '';
+  if (dir) out += '<a class="zdz-inline-act" href="' + esc(dir) + '" target="_blank" rel="noopener">' + ico.dir + 'Directions</a>';
+  return out ? '<div class="zdz-inline-actions">' + out + '</div>' : '';
+}
+
+// ---- D1: ADD-TO-HOME-SCREEN BANNER ----
 function initInstallBanner() {
   // Skip if already running as installed web app
   // Note: iOS 26 defaults all home screen shortcuts to standalone mode,
@@ -3583,7 +5355,7 @@ function initInstallBanner() {
                      window.navigator.standalone === true;
   if (isStandalone) return;
 
-  // v2.18.0: Time-limited dismissal (7 days) instead of permanent
+  // Time-limited dismissal (7 days) instead of permanent
   try {
     var dismissed = localStorage.getItem('zdz_install_dismissed');
     if (dismissed) {
@@ -3603,7 +5375,7 @@ function initInstallBanner() {
   var dismissBtn = document.getElementById('zdz-install-dismiss');
   var textEl = banner.querySelector('.zdz-install-text');
 
-  // v2.17.1: Detect platform and browser for specific install instructions
+  // Detect platform and browser for specific install instructions
   var ua = navigator.userAgent || '';
   var isIOS = /iphone|ipad|ipod/i.test(ua);
   var isSafari = /safari/i.test(ua) && !/chrome|crios|fxios|edgios/i.test(ua);
@@ -3613,7 +5385,7 @@ function initInstallBanner() {
   var isMac = /macintosh/i.test(ua);
   var isAndroid = /android/i.test(ua);
 
-  // v2.18.0: Improved copy — emphasize the benefit, not the action
+  // Improved copy — emphasize the benefit, not the action
   if (isIOS && isSafari) {
     if (textEl) textEl.textContent = 'Get faster loading & full-screen mode';
     if (howBtn) howBtn.textContent = 'Add to Home Screen';
@@ -3634,11 +5406,11 @@ function initInstallBanner() {
   if (howBtn) {
     howBtn.addEventListener('click', function () {
       // If we have a deferred prompt (Chrome/Edge), use it for one-click install
-      if (window._tsDeferredPrompt) {
-        window._tsDeferredPrompt.prompt();
-        window._tsDeferredPrompt.userChoice.then(function () {
+      if (window._zdzDeferredPrompt) {
+        window._zdzDeferredPrompt.prompt();
+        window._zdzDeferredPrompt.userChoice.then(function () {
           banner.style.display = 'none';
-          window._tsDeferredPrompt = null;
+          window._zdzDeferredPrompt = null;
         });
         return;
       }
@@ -3649,7 +5421,7 @@ function initInstallBanner() {
           guide.style.display = 'flex';
           banner.style.display = 'none';
 
-          // v2.18.0: Add bounce animation to the guide arrow
+          // Add bounce animation to the guide arrow
           var arrow = document.getElementById('zdz-ios-guide-arrow');
           if (arrow) arrow.classList.add('zdz-arrow-bounce');
 
@@ -3667,7 +5439,7 @@ function initInstallBanner() {
         }
         return;
       }
-      // v2.18.0: Non-Safari iOS — show dedicated guide overlay with Copy Link
+      // Non-Safari iOS — show dedicated guide overlay with Copy Link
       if (isIOS) {
         var nsGuide = document.getElementById('zdz-nonsafari-guide');
         if (nsGuide) {
@@ -3723,7 +5495,7 @@ function initInstallBanner() {
   if (dismissBtn) {
     dismissBtn.addEventListener('click', function () {
       banner.style.display = 'none';
-      // v2.18.0: Store timestamp instead of boolean (7-day cooldown)
+      // Store timestamp instead of boolean (7-day cooldown)
       try { localStorage.setItem('zdz_install_dismissed', String(Date.now())); } catch(e) {}
     });
   }
@@ -3731,7 +5503,7 @@ function initInstallBanner() {
   // Listen for the native install prompt (Chrome/Edge/Android) — enables one-click
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault();
-    window._tsDeferredPrompt = e;
+    window._zdzDeferredPrompt = e;
     if (howBtn) {
       howBtn.textContent = 'Install';
     }
@@ -3745,13 +5517,13 @@ function initInstallBanner() {
   // Hide banner if app gets installed
   window.addEventListener('appinstalled', function () {
     banner.style.display = 'none';
-    window._tsDeferredPrompt = null;
+    window._zdzDeferredPrompt = null;
     try { localStorage.setItem('zdz_install_dismissed', String(Date.now())); } catch(e) {}
     showToast('✓ Zorderz installed');
   });
 }
 
-// ---- PLUGIN CONTRACT (v2.14.3) ----
+// ---- PLUGIN CONTRACT ----
 // Explicitly expose functions that plugins call via window.*.
 // These are already top-level in this script, but explicit assignment
 // documents the contract and guards against future module refactoring.
@@ -3760,13 +5532,13 @@ window.refreshIcons  = refreshIcons;
 window.openApp       = openApp;
 window.showToast     = showToast;
 window.applyTheme    = applyTheme;
-window.zdzRunInline    = zdzRunInline;     // v2.21.5: inline orchestrator answer
+window.zdzRunInline    = zdzRunInline;     // inline orchestrator answer
 window.zdzInlineHandoff = zdzInlineHandoff;
-window.zdzMapsUrl       = zdzMapsUrl;       // v1.6.2 (D-01): shared map-URL helper, reused by chat + jobs surfaces
+window.zdzMapsUrl       = zdzMapsUrl;       // v1.6.2: shared map-URL helper, reused by chat + jobs surfaces
 
 // ---- INIT ----
 
-/* v2.15.0: Boot recovery timer — if zdz-ready hasn't fired after 5 seconds,
+/* Boot recovery timer — if zdz-ready hasn't fired after 5 seconds,
  * the skeleton hides and a retry option appears. This catches JS errors,
  * script load failures, and edge cases where the SPA never renders. */
 (function () {
@@ -3788,7 +5560,7 @@ window.zdzMapsUrl       = zdzMapsUrl;       // v1.6.2 (D-01): shared map-URL hel
     }
   }, 5000);
   // Clear the timer once boot succeeds
-  window.__tsClearRecovery = function () { clearTimeout(recoveryTimer); };
+  window.__zdzClearRecovery = function () { clearTimeout(recoveryTimer); };
 })();
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3805,16 +5577,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   applyTheme(state.theme);
+  zdzSetupFocusHome();      // ask bar, launcher, Today
   renderGreeting();
-  renderBuildStamp();      // v2.24.2: show the running theme build (stale-shell check)
-  renderLeadsTile();       // v2.21.3: "N new leads" tile from the unified feed
-  renderKioskDemoBanner();  // v2.21.0: show persistent demo-mode indicator if active
-  renderAppDock();       // v2.14.4 A4
-  initStickyAppBar();    // v2.16.0 T4
+  renderBuildStamp();      // show the running theme build (stale-shell check)
+  renderLeadsTile();       // "N new leads" tile from the unified feed
+  renderKioskDemoBanner();  // show persistent demo-mode indicator if active
+  renderAppDock();
+  initStickyAppBar();
   renderQuickStats();
   fetchKPIMetrics();
   renderRecentApps();
   renderAppGrid();
+  zdzForYouStart();         // at work / after hours follows the clock
   renderWidgets();
   renderSettings();
   prefetchTopApps();
@@ -3824,12 +5598,12 @@ document.addEventListener('DOMContentLoaded', () => {
   initAppViewport();
   initLongPressSunlight();
   initPullToRefresh();
-  initInstallBanner();   // v2.14.4 D1
+  initInstallBanner();
 
   window.addEventListener('online', () => { showToast('Back online ✓'); renderSettings(); });
   window.addEventListener('offline', () => { showToast('You are offline'); renderSettings(); });
 
-  // v2.15.0: Connection quality indicator — surfaces "Low signal" badge
+  // Connection quality indicator — surfaces "Low signal" badge
   // when Network Information API reports a slow effective type so field
   // techs understand why things are slower (cellular at job sites).
   try {
@@ -3844,34 +5618,39 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.theme === 'system') updateNavLogo();
   });
 
-  // v2.14.4 A5: Update logo when crossing the sidebar breakpoint (tablet rotation)
+  // Update logo when crossing the sidebar breakpoint (tablet rotation)
   window.matchMedia('(min-width: 820px)').addEventListener('change', () => {
     updateNavLogo();
   });
 
   document.body.classList.add('zdz-ready');
-  if (window.__tsClearRecovery) window.__tsClearRecovery();
+  if (window.__zdzClearRecovery) window.__zdzClearRecovery();
   refreshIcons();
 
-  // v2.21.0: route an external #zana-session=<id> deep link (Analytics digest "Open this
+  // route an external #zana-session=<id> deep link (Analytics digest "Open this
   // chat →") now that the shell + Bridge are ready, and again whenever the hash
   // changes (an installed PWA is reactivated rather than cold-booted on link tap).
   zdzRouteDeepLink();
   window.addEventListener('hashchange', zdzRouteDeepLink);
 
-  // v2.17.1: Track dashboard load and start session heartbeat
+  // Track the dashboard load and keep the heartbeat while the page is in front (zdzData.track.beat, the server's one
+  // rhythm); time open per app, searches without their words, and a batch the last visit could not deliver, once.
   zdzTrack('dashboard_load', 'SPA shell ready');
+  var zdzBeatS = (zdzData.track && parseInt(zdzData.track.beat, 10)) || 240;
   setInterval(function () {
     if (document.visibilityState === 'visible') {
       zdzTrack('heartbeat', state.currentView);
     }
-  }, 15 * 60 * 1000); // Every 15 minutes while tab is visible
+  }, Math.max(60, zdzBeatS) * 1000);
+  zdzUsageWatchApps();
+  zdzUsageWatchSearch();
+  setTimeout(zdzTrackResend, 3000);
 
   } catch (bootErr) {
-    // v2.15.0: If boot crashes, ensure the user can still see something
+    // If boot crashes, ensure the user can still see something
     console.error('[Zorderz] Boot failed:', bootErr);
     document.body.classList.add('zdz-ready');
-    if (window.__tsClearRecovery) window.__tsClearRecovery();
+    if (window.__zdzClearRecovery) window.__zdzClearRecovery();
     var dash = document.getElementById('sv-dash');
     if (dash && !dash.querySelector('.zdz-boot-error')) {
       var errDiv = document.createElement('div');
@@ -3886,7 +5665,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // ============================================================================
-// v2.11.0: OAuth return handler — shows a toast and jumps to Settings when
+// OAuth return handler — shows a toast and jumps to Settings when
 // FreshBooks sends the user back with ?zdz_authorized=freshbooks in the URL.
 // ============================================================================
 (function () {
@@ -3921,7 +5700,7 @@ document.addEventListener('DOMContentLoaded', () => {
 })();
 
 
-// ── PHASE 4 · H4 (v2.30.0): iOS 26 platform hardening ──────────────────
+// ── iOS 26 platform hardening ──────────────────────────────────────────
 // 1. Ask for durable storage once per boot: without persist(), iOS can evict
 //    IndexedDB/CacheStorage for an installed PWA under pressure (camera-queue
 //    photos live there). Silent no-op elsewhere.
@@ -3950,4 +5729,46 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   } catch (e) { /* no-op */ }
+})();
+
+// viewport check. Open the app with ?zdz_viewport=1 to see the real layout width, the
+// zoom iOS applied, the orientation and which layout matched (sidebar or bottom bar). It measures why the
+// phone turned on its side showed the portrait layout stretched before any
+// landscape layout change is made. Read-only; nothing is stored or sent. Tap the read-out to close it.
+(function zdzViewportProbe() {
+  try {
+    if (!/[?&]zdz_viewport=1\b/.test(window.location.search || '')) return;
+    var box = null;
+    function q(m) { try { return window.matchMedia(m).matches ? 'yes' : 'no'; } catch (e) { return '?'; } }
+    function draw() {
+      if (!document.body) return;
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'zdz-vp-probe';
+        box.setAttribute('role', 'status');
+        box.addEventListener('click', function () { box.remove(); box = null; });
+        document.body.appendChild(box);
+      }
+      var vv = window.visualViewport || {};
+      function sa(side) {
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;visibility:hidden;padding-' + side + ':env(safe-area-inset-' + side + ',0px)';
+        document.body.appendChild(d);
+        var v = getComputedStyle(d)['padding' + side.charAt(0).toUpperCase() + side.slice(1)];
+        d.remove();
+        return v;
+      }
+      box.textContent =
+        'innerWidth ' + window.innerWidth + ' × innerHeight ' + window.innerHeight + '\n' +
+        'screen ' + screen.width + ' × ' + screen.height + '  dpr ' + (window.devicePixelRatio || 1) + '\n' +
+        'visualViewport ' + Math.round(vv.width || 0) + ' × ' + Math.round(vv.height || 0) + '  scale ' + (vv.scale || 1) + '\n' +
+        'orientation ' + ((screen.orientation && screen.orientation.type) || (window.orientation + '°')) + '\n' +
+        'sidebar (min-width 820px): ' + q('(min-width: 820px)') + '   standalone: ' + q('(display-mode: standalone)') + '\n' +
+        'safe-area L/R/B ' + sa('left') + ' / ' + sa('right') + ' / ' + sa('bottom') + '\n' +
+        'Tap to close. Turn the phone and the numbers update.';
+    }
+    window.addEventListener('resize', draw);
+    window.addEventListener('orientationchange', function () { setTimeout(draw, 300); });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', draw); else draw();
+  } catch (e) { /* a diagnostic must never break the app */ }
 })();

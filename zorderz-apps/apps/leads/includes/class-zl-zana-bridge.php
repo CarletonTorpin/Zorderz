@@ -3,76 +3,68 @@
  * ZL ↔ Orchestrator Bridge — Zorderz Leads as a cross-app capability provider.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * WHAT THIS IS (and why it conforms to the contract, not invents its own thing)
+ * WHAT THIS IS
  * ─────────────────────────────────────────────────────────────────────────────
- * This is ZL's seat at the cross-app orchestrator table, written to
- * `ORCHESTRATOR-INTEROP-CONTRACT-v1.md` (2026-06-03). The operator bot ("Brain
- * Bot", the Analytics analytics app) plans a request, and when a request resolves to
- * "show me <person>'s leads / pipeline status", it invokes a ZL **read verb**
- * here, server-side. We return a structured array; the Analytics engine strips its
+ * This is the Leads app's seat at the cross-app orchestrator. The assistant (the
+ * Analytics chat engine) plans a request, and when a request resolves to "show me
+ * <person>'s leads / pipeline status", it invokes a Leads **read verb** here,
+ * server-side. We return a structured array; the Analytics engine strips its
  * marker and renders a card/list in its widget.
  *
- * It is the L1 ("Reachable — read") brick for ZL and is shaped as a future
- * `zdz_register_capabilities` callback (CONTRACT §2.3 / §6) so it slots into the
- * Stage-1 registry **unchanged**: structured return, tier-aware, self-contained.
- *
- * Reference implementation we mirror: Estimate Creator's `ZEST_ZANA_Bridge`
- * (CONTRACT §2.1) — confidence-gated entity resolution, structured return,
- * tier/kiosk redaction enforced *in the bridge* (never trusting the model), and
- * no fabrication on empty.
+ * The verbs are registered on `zdz_register_capabilities` (see app.php): structured
+ * return, tier-aware, self-contained. They follow the same shape as the Estimates
+ * bridge (`ZEST_ZANA_Bridge`): confidence-gated entity resolution, structured
+ * return, tier/kiosk redaction enforced *in the bridge* (never trusting the
+ * model), and no fabrication on empty.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE TWO SHARED SEAMS, AS THEY APPLY TO ZL (CONTRACT §1 + §2)
+ * THE TWO SHARED SEAMS
  * ─────────────────────────────────────────────────────────────────────────────
- *  • DATA SEAM. The lead/pipeline data the bot wants is, for ZL, *already
+ *  • DATA SEAM. The lead/pipeline data the assistant wants is *already
  *    materialized in our own `wp_zl_leads` table* (name, city, territory,
- *    purchase summary, Nutshell ids, nutshell_status, contact_status, score).
- *    That is the fastest, richest, most truthful source for "what's the status
- *    of Steve's lead" — it is the rep's own generated pipeline, not a guess. So
- *    the primary lookup reads our table. When we need a *live* CRM read we don't
- *    already hold (a fresh Nutshell pipeline stage / timeline), we go through the
- *    theme's shared **`ZDZ_Core_Nutshell`** client — never a new private pager —
- *    which is the L3 "shared-data citizen" rule applied to the *new* code path.
- *    (We deliberately do NOT rip out ZL's existing `ZL_Nutshell` generator
- *    client; the contract's §1.4 migration discipline is "behind existing
- *    signatures, never a big-bang rewrite." That migration is a separate to-do
- *    tracked in the ZL conformance doc; it does not block this read bridge.)
+ *    purchase summary, CRM ids, nutshell_status, contact_status, score). That
+ *    is the fastest, richest, most truthful source for "what's the status of
+ *    Riley's lead" — it is the rep's own generated pipeline, not a guess. So the
+ *    primary lookup reads our table. When we need a *live* CRM read we don't
+ *    already hold (a fresh pipeline stage / timeline), we go through the theme's
+ *    shared **`ZDZ_Core_Nutshell`** client — never a new private pager. The
+ *    app's own `ZL_Nutshell` generator client stays behind its existing
+ *    signatures; moving it onto the shared client is a separate change.
  *
- *  • CAPABILITY SEAM. We expose static verbs the orchestrator calls. Today that
- *    is via the bridge pattern (CONTRACT §2.1); when the capability registry
- *    lands (Stage 1) these same methods become registered callbacks (see the
- *    `zdz_register_capabilities` block at the bottom of `ts-sales-leads.php`).
+ *  • CAPABILITY SEAM. We expose static verbs the orchestrator calls, registered
+ *    as capability callbacks.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * SECURITY NON-NEGOTIABLES (CONTRACT §3) — ENFORCED HERE, IN CODE
+ * SECURITY NON-NEGOTIABLES — ENFORCED HERE, IN CODE
  * ─────────────────────────────────────────────────────────────────────────────
  *  1. TIER AT THE BOUNDARY. The orchestrator passes the caller's tier/kiosk; we
  *     enforce redaction here, before returning. We never rely on the model to
  *     redact. We resolve the tier ourselves from the WordPress user via the
  *     theme's `ZDZ_Data_Permissions` so a spoofed payload can't widen access.
  *  2. KIOSK = MOST-RESTRICTIVE-WINS. Leads carry contact info — the exact
- *     poaching risk the shared shop device guards against. So:
+ *     poaching risk the shared device guards against. So:
  *       - read verbs run in a **bounded kiosk variant**: name + city + pipeline
  *         stage + work-type only; NO phone, email, full address, or dollar
- *         figures. (Per the ZL conformance doc, "when in doubt forbid on
- *         kiosk"; we implement the bounded form because identify-the-job is
- *         useful and the contact shield is what actually matters.)
+ *         figures. ("When in doubt, forbid on kiosk"; the bounded form is kept
+ *         because identify-the-job is useful and the contact shield is what
+ *         actually matters.)
  *       - side-effecting verbs (create_lead) are **forbidden on kiosk**, full
  *         stop, and additionally declared side_effect=true so the orchestrator
  *         requires preview-and-confirm off-kiosk.
  *  3. PROVENANCE. We surface dollar figures only off-kiosk, and only the
  *     `purchase_summary`/`purchase_history` *already stored* against the lead
- *     (which itself came from FreshBooks at generation time). We never compute a
- *     fresh aggregate here, so there is no new un-provenanced number; any figure
- *     the bot then *states* still flows through Analytics's provenance backbone.
+ *     (which itself came from the billing system at generation time). We never
+ *     compute a fresh aggregate here, so there is no new un-provenanced number;
+ *     any figure the assistant then *states* still flows through the provenance
+ *     backbone.
  *  4. NO FABRICATION ON EMPTY. A zero-result lookup says so (with the sanctioned
  *     auto-widen note); it never invents a lead. Below the name-confidence floor
  *     we return needs_clarify instead of guessing the wrong person.
- *  5. URL INTEGRITY. We carry the real Nutshell lead id through so a deep link
- *     is built from the id, never reconstructed from a display string.
+ *  5. URL INTEGRITY. We carry the real CRM lead id through so a deep link is
+ *     built from the id, never reconstructed from a display string.
  *
  * Every public method returns a structured array and NEVER throws to the caller
- * and NEVER returns null (CONTRACT §2.1.1).
+ * and NEVER returns null.
  *
  * @package Zorderz\Leads
  * @since   2.3.0
@@ -84,7 +76,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZL_ZANA_Bridge {
 
-	/** Source tag for the audit trail (CONTRACT §2.1.1: every return carries `source`). */
+	/** Source tag for the audit trail (every return carries `source`). */
 	const SOURCE = 'leads';
 
 	/**
@@ -133,7 +125,7 @@ class ZL_ZANA_Bridge {
 	 *   - enrich           : bool      optional; if true, attempt a live Nutshell
 	 *                                  stage/timeline read via the shared core client
 	 *
-	 * Return (structured, CONTRACT §2.1.1 + the ZL conformance doc's shape):
+	 * Return (structured):
 	 *   {
 	 *     success        : bool,
 	 *     error          : string,        // '' on success
@@ -167,7 +159,7 @@ class ZL_ZANA_Bridge {
 			//    but the table already holds the full retained history, so a true
 			//    empty is a true empty. Distinguish "no such person" from "no
 			//    leads for a known person" (the conformance doc's resolution-vs-
-			//    empty distinction, mirrored from the orchestrator design §5/§12).
+			//    empty distinction, mirrored from the orchestrator's own reading).
 			if ( empty( $matches ) ) {
 				return array_merge( self::base( $ctx ), array(
 					'success'  => true,
@@ -365,7 +357,7 @@ class ZL_ZANA_Bridge {
 	/* ═══════════════════════════════════════════════════════════════════════
 	 * VERB 3 — create_lead_from_zana()  (SIDE-EFFECT, OPTIONAL, gated)
 	 * Declared but intentionally a guarded stub: side-effects must run through
-	 * preview-and-confirm and are kiosk-forbidden (CONTRACT §2.4 + §3.2). We ship
+	 * preview-and-confirm and are kiosk-forbidden. We ship
 	 * it refusing rather than half-implemented so the registry can declare the
 	 * verb's shape now; flesh out the write when the confirm UX is wired.
 	 * ═══════════════════════════════════════════════════════════════════════ */
@@ -420,7 +412,7 @@ class ZL_ZANA_Bridge {
 		$ctx = self::resolve_context( $payload );
 		$out = self::base( $ctx );
 
-		// INV-10: never on the shared kiosk.
+		// Never on the shared kiosk (a shared device is never a person).
 		if ( ! empty( $ctx['is_kiosk'] ) ) {
 			return array_merge( $out, array(
 				'error'   => 'forbidden_on_kiosk',
@@ -606,18 +598,23 @@ class ZL_ZANA_Bridge {
 	/**
 	 * Authoritatively resolve the acting user's tier/kiosk state. We accept the
 	 * orchestrator's hints but DO NOT trust them for redaction — we re-derive
-	 * from WordPress so a forged payload can't widen access (CONTRACT §3.1).
+	 * from WordPress so a forged payload can't widen access.
 	 *
-	 * Kiosk is defined by the theme as the `ts_general` role (the all-deny shared
-	 * shop account). We read it through `ZDZ_Data_Permissions` when present, and
-	 * fall back to a direct role check + the payload hint if the theme isn't
-	 * loaded (e.g. unit context) — defaulting to the *most restrictive* reading.
+	 * Kiosk is the platform's shared device (ZDZ_User_Roles::is_shared_device(): the
+	 * shared-device capability, whichever role carries it, or the shared-device role),
+	 * or a device in Demo Mode. Without the theme's class (e.g. unit context) the
+	 * role slug and the payload hint decide, defaulting to the *most restrictive*
+	 * reading.
 	 *
 	 * @param array $payload
 	 * @return array { user_id:int, is_kiosk:bool, can_view_contact:bool, can_view_pricing:bool }
 	 */
 	private static function resolve_context( array $payload ): array {
-		$user_id = isset( $payload['user_id'] ) ? (int) $payload['user_id'] : get_current_user_id();
+		// the signed-in person wins over the payload, as in Commission's bridge. Before
+		// this a payload naming another user borrowed their rights (and lifted the shared device's limits). Only with
+		// no session at all (chat's background run) is the caller's id used.
+		$session_uid = (int) get_current_user_id();
+		$user_id     = $session_uid > 0 ? $session_uid : (int) ( $payload['user_id'] ?? 0 );
 
 		$is_kiosk_hint = ! empty( $payload['is_kiosk'] )
 			|| ( isset( $payload['tier'] ) && strtolower( (string) $payload['tier'] ) === 'kiosk' );
@@ -625,9 +622,15 @@ class ZL_ZANA_Bridge {
 		$is_kiosk = $is_kiosk_hint; // start from the hint…
 		$user     = $user_id ? get_userdata( $user_id ) : null;
 
-		// …then let the authoritative WordPress role decide (can only TIGHTEN here:
-		// if the user *is* ts_general we force kiosk on regardless of the hint).
+		// …then let the platform decide (can only TIGHTEN here: the shared device, by
+		// its trait or its role, or a device in Demo Mode, is kiosk whatever the hint says).
 		if ( $user && in_array( 'zdz_general', (array) $user->roles, true ) ) {
+			$is_kiosk = true;
+		}
+		if ( $user_id > 0 && class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $user_id ) ) {
+			$is_kiosk = true;
+		}
+		if ( $session_uid > 0 && class_exists( 'ZDZ_Kiosk_Demo' ) && method_exists( 'ZDZ_Kiosk_Demo', 'is_active' ) && ZDZ_Kiosk_Demo::is_active() ) {
 			$is_kiosk = true;
 		}
 
@@ -656,7 +659,7 @@ class ZL_ZANA_Bridge {
 	 * Match leads by a free-text name against the local table, returning rows
 	 * sorted by a 0–1 confidence score (exact full-name > exact last > prefix >
 	 * token), most recent first as the tie-breaker. This is the "fuzzy/wildcard
-	 * match + confidence gating" the orchestrator design §12 calls for, done over
+	 * match + confidence gating" the orchestrator calls for, done over
 	 * the data we own.
 	 *
 	 * @param string $query
@@ -763,7 +766,7 @@ class ZL_ZANA_Bridge {
 
 	/**
 	 * Shape one DB lead row into the wire view, applying tier/kiosk redaction
-	 * deterministically (CONTRACT §3.2 / §4: "data carries the redaction; the
+	 * deterministically ("data carries the redaction; the
 	 * renderer just honors it"). On kiosk we hard-strip contact + money. Off
 	 * kiosk we additionally honor ZL's own view_contact_info / view_pricing.
 	 *
@@ -785,7 +788,7 @@ class ZL_ZANA_Bridge {
 			'territory'       => (string) $row['territory'],
 			'contact_status'  => (string) $row['contact_status'],
 			'nutshell_status' => (string) ( $row['nutshell_status'] ?? '' ),
-			// Real id for a correct deep link — never reconstructed (CONTRACT §3.5).
+			// Real id for a correct deep link — never reconstructed.
 			'nutshell_lead_id'=> (string) ( $row['nutshell_lead_id'] ?? '' ),
 			'kiosk'           => $ctx['is_kiosk'],
 		);
@@ -923,7 +926,7 @@ class ZL_ZANA_Bridge {
 		return preg_replace( '/\s+/', ' ', $s );
 	}
 
-	/** The common envelope fields for every return (CONTRACT §2.1.1). */
+	/** The common envelope fields for every return. */
 	private static function base( array $ctx ): array {
 		return array(
 			'success'       => false,

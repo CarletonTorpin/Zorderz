@@ -102,7 +102,7 @@ class ZPREP_Settings {
 	 * The QUEUE TAG + SUBTYPE — the configurable replacement for the baked-in
 	 * single hardcoded product line. A queue tag is a reference token that marks a
 	 * job as prep work; a queue subtype binds the queue to an Item-Engine
-	 * subtype so the product-line gate reads the item's own subtype (RC-03),
+	 * subtype so the product-line gate reads the item's own subtype,
 	 * not a substring in a routing code. BOTH ship EMPTY.
 	 * ────────────────────────────────────────────────────────────────── */
 
@@ -250,7 +250,7 @@ class ZPREP_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * FABRICATION WORKSPACE profile (MU-07). An operations concept — table
+	 * FABRICATION WORKSPACE profile. An operations concept — table
 	 * sizes, margins, sheet-length caps — deliberately NOT a material property.
 	 * Core mechanism defaults, tenant-overridable.
 	 * ────────────────────────────────────────────────────────────────── */

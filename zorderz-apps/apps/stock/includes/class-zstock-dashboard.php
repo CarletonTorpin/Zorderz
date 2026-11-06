@@ -51,18 +51,38 @@ class ZSTOCK_Dashboard {
 			'zstock_set_policy'        => 'ajax_set_policy',
 			'zstock_get_low_stock'     => 'ajax_get_low_stock',
 			'zstock_get_forecast'      => 'ajax_get_forecast',
+			'zstock_get_incoming'      => 'ajax_get_incoming',
+			'zstock_new_order'         => 'ajax_new_order',
+			'zstock_receive_order'     => 'ajax_receive_order',
+			'zstock_close_rest'        => 'ajax_close_rest',
+			'zstock_close_nothing'     => 'ajax_close_nothing',
+			'zstock_count_item'        => 'ajax_count_item',
+			'zstock_look_in_email'     => 'ajax_look_in_email',
+			'zstock_get_suppliers'     => 'ajax_get_suppliers',
+			'zstock_save_suppliers'    => 'ajax_save_suppliers',
 		);
 		foreach ( $actions as $hook => $method ) {
 			add_action( 'wp_ajax_' . $hook, array( __CLASS__, $method ) );
 		}
 	}
 
-	/** Shared preamble for every endpoint: verify nonce + real app-access. */
-	private static function guard() {
+	/**
+	 * Shared preamble for every endpoint: verify nonce + real app-access. A write ($write) is also refused on the
+	 * shared device, whatever its app grants: a device is never the person who received or counted something.
+	 */
+	private static function guard( bool $write = false ) {
 		check_ajax_referer( ZSTOCK_NONCE, 'nonce' );
 		if ( ! self::user_can_access() ) {
 			wp_send_json_error( array( 'message' => __( 'Unauthorized', 'zorderz' ) ) );
 		}
+		if ( $write && ZSTOCK_Orders::is_kiosk( (int) get_current_user_id() ) ) {
+			wp_send_json_error( array( 'message' => __( 'Stock cannot be changed from the shared device.', 'zorderz' ) ) );
+		}
+	}
+
+	/** Only an admin edits the supplier list (it decides whose mail reaches Stock). */
+	public static function can_manage_suppliers(): bool {
+		return current_user_can( 'manage_options' );
 	}
 
 	/* ================================================================
@@ -157,7 +177,7 @@ class ZSTOCK_Dashboard {
 	}
 
 	public static function ajax_manual_adjust() {
-		self::guard();
+		self::guard( true );
 		$item_id = sanitize_text_field( wp_unslash( $_POST['item_id'] ?? '' ) );
 		$type    = sanitize_text_field( wp_unslash( $_POST['adjustment_type'] ?? $_POST['type'] ?? 'MANUAL_ADJUST' ) );
 		$notes   = sanitize_text_field( wp_unslash( $_POST['notes'] ?? '' ) );
@@ -173,12 +193,16 @@ class ZSTOCK_Dashboard {
 			wp_send_json_error( array( 'message' => __( 'Invalid adjustment type.', 'zorderz' ) ) );
 		}
 
-		// CYCLE_COUNT sends the NEW actual count; convert to a delta.
+		// A count is the number on the shelf: ZSTOCK_Orders::count_item writes the difference (zero is a real
+		// count) and marks the item counted, under the item's lock.
 		if ( 'CYCLE_COUNT' === $type || isset( $_POST['new_quantity'] ) ) {
 			$new_count = (float) ( $_POST['new_quantity'] ?? $_POST['quantity'] ?? 0 );
-			$current   = self::current_stock( $item_id );
-			$qty       = $new_count - $current;
-			$notes     = 'Cycle count: actual=' . $new_count . ', previous=' . $current . ( $notes ? '. ' . $notes : '' );
+			$r         = ZSTOCK_Orders::count_item( $item_id, $new_count, (int) get_current_user_id(), $notes );
+			if ( empty( $r['ok'] ) ) {
+				wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? __( 'The count could not be saved.', 'zorderz' ) ) ) );
+			}
+			self::audit( 'stock_counted', $item_id . ': ' . $new_count );
+			wp_send_json_success( array( 'ledger_id' => $r['ledger_id'], 'item_id' => $item_id, 'new_stock' => $r['new_stock'], 'adjustment' => $r['delta'] ) );
 		} else {
 			$qty = (float) ( $_POST['quantity'] ?? 0 );
 			if ( in_array( $type, array( 'WASTE', 'DAMAGE' ), true ) && $qty > 0 ) {
@@ -199,7 +223,7 @@ class ZSTOCK_Dashboard {
 	}
 
 	public static function ajax_set_policy() {
-		self::guard();
+		self::guard( true );
 		$item_id = sanitize_text_field( wp_unslash( $_POST['item_id'] ?? '' ) );
 		if ( '' === $item_id ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid item id.', 'zorderz' ) ) );
@@ -212,7 +236,7 @@ class ZSTOCK_Dashboard {
 	}
 
 	public static function ajax_upload_invoice() {
-		self::guard();
+		self::guard( true );
 		if ( empty( $_FILES['invoice_file'] ) && empty( $_FILES['invoice'] ) ) {
 			wp_send_json_error( array( 'message' => __( 'No invoice file uploaded.', 'zorderz' ) ) );
 		}
@@ -258,12 +282,13 @@ class ZSTOCK_Dashboard {
 				'subtotal'       => (float) $parsed['subtotal'],
 				'tax'            => (float) $parsed['tax'],
 				'total_amount'   => (float) $parsed['total'],
-				'status'         => 'draft',
+				'status'         => 'incoming', // waits under Incoming until a person taps Received
+				'source'         => 'upload',
 				'file_url'       => esc_url_raw( $file_url ),
 				'created_by'     => get_current_user_id(),
 				'created_at'     => current_time( 'mysql' ),
 			),
-			array( '%s', '%s', '%s', '%f', '%f', '%f', '%s', '%s', '%d', '%s' )
+			array( '%s', '%s', '%s', '%f', '%f', '%f', '%s', '%s', '%s', '%d', '%s' )
 		);
 		$order_id = (int) $wpdb->insert_id;
 		if ( ! $order_id ) {
@@ -312,81 +337,200 @@ class ZSTOCK_Dashboard {
 		);
 	}
 
+	/**
+	 * "Approve" an uploaded order: a person's Received tap for every matched line at the quantity still to come.
+	 * The same one write path as Received (one receipt, claimed in a transaction). Reject posts reject=1 here.
+	 */
 	public static function ajax_approve_order() {
-		self::guard();
-		// The widget posts reject=1 to the same action for reject.
+		self::guard( true );
 		if ( ! empty( $_POST['reject'] ) ) {
 			self::reject_order();
 			return;
 		}
 		$order_id = absint( $_POST['order_id'] ?? 0 );
-		if ( ! $order_id ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid order id.', 'zorderz' ) ) );
-		}
-		global $wpdb;
-		$orders = ZSTOCK_DB::orders_table();
-		$order  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$orders}` WHERE id = %d", $order_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$order    = ZSTOCK_Orders::get( $order_id );
 		if ( ! $order ) {
 			wp_send_json_error( array( 'message' => __( 'Order not found.', 'zorderz' ) ) );
 		}
-		if ( 'draft' !== $order['status'] ) {
-			wp_send_json_error( array( 'message' => __( 'Order is not a draft.', 'zorderz' ) ) );
-		}
-		$items_tbl = ZSTOCK_DB::order_items_table();
-		$lines     = $wpdb->get_results(
-			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifier from constant.
-				"SELECT * FROM `{$items_tbl}` WHERE order_id = %d AND matched = 1 AND item_id <> ''",
-				$order_id
-			),
-			ARRAY_A
-		);
-		$committed = 0;
-		foreach ( (array) $lines as $line ) {
-			$qty = (float) $line['quantity'];
-			if ( $qty <= 0 ) {
-				continue;
-			}
-			if ( ZSTOCK_Engine::add_ledger_entry( (string) $line['item_id'], $qty, 'SUPPLIER_ORDER', 'order', (string) $order_id, 'Order #' . $order_id . ' / ' . $order['invoice_number'], 'Supplier: ' . $order['supplier_name'] ) ) {
-				$committed++;
+		$picks = array();
+		foreach ( ZSTOCK_Orders::public_order( $order )['lines'] as $l ) {
+			if ( '' !== $l['item_id'] && $l['remaining'] > 0 ) {
+				$picks[ $l['id'] ] = array( 'item_id' => $l['item_id'], 'qty' => $l['remaining'] );
 			}
 		}
-		$wpdb->update(
-			$orders,
-			array( 'status' => 'approved', 'approved_by' => get_current_user_id(), 'approved_at' => current_time( 'mysql' ) ),
-			array( 'id' => $order_id )
-		);
-		self::audit( 'order_approved', 'Order #' . $order_id . ' (' . $committed . ' committed)' );
-		wp_send_json_success( array( 'order_id' => $order_id, 'items_committed' => $committed ) );
+		$r = ZSTOCK_Orders::receive( $order_id, $picks, (int) get_current_user_id(), false, (int) $order['receipts'] );
+		if ( empty( $r['ok'] ) ) {
+			wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? __( 'Approve failed.', 'zorderz' ) ) ) );
+		}
+		self::audit( 'order_received', 'Order #' . $order_id . ' (' . (int) $r['lines'] . ' lines)' );
+		wp_send_json_success( array( 'order_id' => $order_id, 'items_committed' => (int) $r['lines'] ) );
 	}
 
 	public static function ajax_reject_order() {
-		self::guard();
+		self::guard( true );
 		self::reject_order();
 	}
 
+	/** Not ours / not coming: an order nothing has come for closes without touching stock. */
 	private static function reject_order() {
 		$order_id = absint( $_POST['order_id'] ?? 0 );
 		$reason   = sanitize_text_field( wp_unslash( $_POST['reason'] ?? '' ) );
 		if ( ! $order_id ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid order id.', 'zorderz' ) ) );
 		}
-		global $wpdb;
-		$orders = ZSTOCK_DB::orders_table();
-		$order  = $wpdb->get_row( $wpdb->prepare( "SELECT status FROM `{$orders}` WHERE id = %d", $order_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		if ( ! $order ) {
-			wp_send_json_error( array( 'message' => __( 'Order not found.', 'zorderz' ) ) );
+		$r = ZSTOCK_Orders::reject( $order_id, '' !== $reason ? $reason : 'Not ours', (int) get_current_user_id() );
+		if ( empty( $r['ok'] ) ) {
+			wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? '' ), 'already' => ! empty( $r['already'] ) ) );
 		}
-		if ( 'draft' !== $order['status'] ) {
-			wp_send_json_error( array( 'message' => __( 'Only draft orders can be rejected.', 'zorderz' ) ) );
-		}
-		$wpdb->update(
-			$orders,
-			array( 'status' => 'rejected', 'reject_reason' => $reason, 'approved_by' => get_current_user_id(), 'approved_at' => current_time( 'mysql' ) ),
-			array( 'id' => $order_id )
-		);
 		self::audit( 'order_rejected', 'Order #' . $order_id . ( $reason ? ': ' . $reason : '' ) );
 		wp_send_json_success( array( 'order_id' => $order_id ) );
+	}
+
+	/* ── Incoming ─────────────────────────────────────────────────────── */
+
+	public static function ajax_get_incoming() {
+		self::guard();
+		$with_email = ! ZSTOCK_Orders::is_kiosk( (int) get_current_user_id() );
+		$items      = array();
+		foreach ( ZSTOCK_Engine::items() as $it ) {
+			$items[] = array( 'id' => $it['id'], 'name' => $it['name'], 'unit' => $it['unit'] );
+		}
+		wp_send_json_success(
+			array(
+				'orders'    => ZSTOCK_Orders::incoming( 20, $with_email ),
+				'items'     => $items,
+				'suppliers' => array_column( ZSTOCK_Suppliers::all(), 'name' ),
+				'email'     => function_exists( 'has_filter' ) && (bool) has_filter( 'zib_supplier_scan' ),
+				'admin'     => self::can_manage_suppliers(),
+			)
+		);
+	}
+
+	/** New order by hand: lines = JSON [ { description, qty, unit?, item_id? } ]; form_key makes a retry one order. */
+	public static function ajax_new_order() {
+		self::guard( true );
+		$lines = json_decode( (string) wp_unslash( $_POST['lines'] ?? '[]' ), true ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce checked in self::guard( true ) above; every decoded line is validated and sanitized in ZSTOCK_Orders::create_incoming().
+		$r     = ZSTOCK_Orders::create_incoming(
+			array(
+				'supplier' => sanitize_text_field( wp_unslash( $_POST['supplier'] ?? '' ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+				'ref'      => sanitize_text_field( wp_unslash( $_POST['ref'] ?? '' ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+				'date'     => sanitize_text_field( wp_unslash( $_POST['date'] ?? '' ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+				'notes'    => sanitize_text_field( wp_unslash( $_POST['notes'] ?? '' ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+				'source'   => 'manual',
+				'form_key' => sanitize_key( wp_unslash( $_POST['form_key'] ?? '' ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+				'lines'    => is_array( $lines ) ? $lines : array(),
+			),
+			(int) get_current_user_id()
+		);
+		if ( empty( $r['ok'] ) ) {
+			wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? '' ), 'duplicate' => ! empty( $r['duplicate'] ), 'order_id' => (int) ( $r['order_id'] ?? 0 ) ) );
+		}
+		self::audit( 'order_created', 'Order #' . (int) $r['order_id'] . ' by hand' );
+		wp_send_json_success( array( 'order_id' => (int) $r['order_id'] ) );
+	}
+
+	/**
+	 * Received: picks = JSON { line_id: { item_id, qty } }; extra = JSON [ { item_id, qty } ]; more = 1 keeps the order
+	 * open as Part came; seen = how many receipts the person's screen showed.
+	 */
+	public static function ajax_receive_order() {
+		self::guard( true );
+		$order_id = absint( $_POST['order_id'] ?? 0 );
+		$picks    = json_decode( (string) wp_unslash( $_POST['picks'] ?? '{}' ), true ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce checked in self::guard( true ) above; line ids are cast and each pick is checked against the order and the stock list in ZSTOCK_Orders::receive().
+		$extra    = json_decode( (string) wp_unslash( $_POST['extra'] ?? '[]' ), true ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce checked in self::guard( true ) above; each extra item is checked against the stock list and its quantity bounded in ZSTOCK_Orders::receive().
+		$seen     = isset( $_POST['seen'] ) && '' !== $_POST['seen'] ? (int) $_POST['seen'] : null; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+		$r        = ZSTOCK_Orders::receive( $order_id, is_array( $picks ) ? $picks : array(), (int) get_current_user_id(), ! empty( $_POST['more'] ), $seen, is_array( $extra ) ? $extra : array() ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+		if ( empty( $r['ok'] ) ) {
+			wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? '' ), 'already' => ! empty( $r['already'] ) ) );
+		}
+		self::audit( 'order_received', 'Order #' . $order_id . ' (' . (int) $r['lines'] . ' lines, ' . $r['status'] . ')' );
+		wp_send_json_success( $r );
+	}
+
+	/** Part came, nothing more is coming: close it. */
+	public static function ajax_close_rest() {
+		self::guard( true );
+		$order_id = absint( $_POST['order_id'] ?? 0 );
+		$seen     = isset( $_POST['seen'] ) && '' !== $_POST['seen'] ? (int) $_POST['seen'] : null; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+		$r        = ZSTOCK_Orders::close_rest( $order_id, (int) get_current_user_id(), $seen );
+		if ( empty( $r['ok'] ) ) {
+			wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? '' ), 'already' => ! empty( $r['already'] ) ) );
+		}
+		self::audit( 'order_closed', 'Order #' . $order_id . ': nothing more coming' );
+		wp_send_json_success( $r );
+	}
+
+	/** It came, but nothing in it goes into stock. */
+	public static function ajax_close_nothing() {
+		self::guard( true );
+		$order_id = absint( $_POST['order_id'] ?? 0 );
+		$r        = ZSTOCK_Orders::close_nothing( $order_id, (int) get_current_user_id() );
+		if ( empty( $r['ok'] ) ) {
+			wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? '' ), 'already' => ! empty( $r['already'] ) ) );
+		}
+		self::audit( 'order_closed', 'Order #' . $order_id . ': came, nothing for stock' );
+		wp_send_json_success( $r );
+	}
+
+	/** A count: the number on the shelf (0 is a count). */
+	public static function ajax_count_item() {
+		self::guard( true );
+		$item_id = sanitize_text_field( wp_unslash( $_POST['item_id'] ?? '' ) );
+		$count   = isset( $_POST['count'] ) ? floatval( $_POST['count'] ) : -1.0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+		$r       = ZSTOCK_Orders::count_item( $item_id, $count, (int) get_current_user_id(), sanitize_text_field( wp_unslash( $_POST['notes'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and the shared-device refusal checked in self::guard( true ) above.
+		if ( empty( $r['ok'] ) ) {
+			wp_send_json_error( array( 'message' => (string) ( $r['message'] ?? '' ) ) );
+		}
+		self::audit( 'stock_counted', $item_id . ': ' . $r['new_stock'] );
+		wp_send_json_success( $r );
+	}
+
+	/** "Look in my email": the person's OWN mailbox, last 30 days, through the Email app's owner-scoped scan. */
+	public static function ajax_look_in_email() {
+		self::guard( true );
+		$uid = (int) get_current_user_id();
+		$res = apply_filters( 'zib_supplier_scan', null, $uid, 30 );
+		if ( null === $res ) {
+			wp_send_json_error( array( 'message' => __( 'Email is not available here.', 'zorderz' ) ) );
+		}
+		if ( empty( $res['ok'] ) ) {
+			$why = array(
+				'no-suppliers'           => __( 'No suppliers are listed yet. An admin adds them under Stock → Suppliers.', 'zorderz' ),
+				'no-mailbox'             => __( 'Connect your mailbox in Email first.', 'zorderz' ),
+				'mode-excludes-external' => __( 'Your Email keeps only mail between colleagues, so supplier mail is not there. Change it in Email.', 'zorderz' ),
+			);
+			$reason = (string) ( $res['reason'] ?? '' );
+			wp_send_json_error( array( 'message' => $why[ $reason ] ?? __( 'Your email could not be read just now.', 'zorderz' ) ) );
+		}
+		self::audit( 'supplier_scan', 'created=' . (int) $res['created'] . ', already=' . (int) $res['already'] );
+		wp_send_json_success( array_intersect_key( (array) $res, array_flip( array( 'scanned', 'created', 'already', 'skipped', 'why' ) ) ) );
+	}
+
+	/* ── Suppliers (admin) ────────────────────────────────────────────── */
+
+	public static function ajax_get_suppliers() {
+		self::guard();
+		if ( ! self::can_manage_suppliers() ) {
+			wp_send_json_error( array( 'message' => __( 'Only an admin edits the supplier list.', 'zorderz' ) ) );
+		}
+		wp_send_json_success( array( 'suppliers' => ZSTOCK_Suppliers::all() ) );
+	}
+
+	/** rows = JSON [ { name, match } ]. Own domains, whole free-mail domains and public suffixes are refused. Audited. */
+	public static function ajax_save_suppliers() {
+		self::guard( true );
+		if ( ! self::can_manage_suppliers() ) {
+			wp_send_json_error( array( 'message' => __( 'Only an admin edits the supplier list.', 'zorderz' ) ) );
+		}
+		$rows = json_decode( (string) wp_unslash( $_POST['rows'] ?? '[]' ), true ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce and admin capability checked above; the decoded rows are cleaned in ZSTOCK_Suppliers::clean() before saving.
+		list( $saved, $added, $removed ) = ZSTOCK_Suppliers::save( is_array( $rows ) ? $rows : array() );
+		foreach ( $added as $m ) {
+			self::audit( 'supplier_added', $m );
+		}
+		foreach ( $removed as $m ) {
+			self::audit( 'supplier_removed', $m );
+		}
+		wp_send_json_success( array( 'suppliers' => $saved, 'refused' => max( 0, count( is_array( $rows ) ? $rows : array() ) - count( $saved ) ) ) );
 	}
 
 	public static function ajax_get_orders() {
@@ -419,7 +563,7 @@ class ZSTOCK_Dashboard {
 	}
 
 	public static function ajax_sync_consumption() {
-		self::guard();
+		self::guard( true );
 		$res = ZSTOCK_Engine::run_consumption_sweep();
 		self::audit( 'consumption_sync', $res['invoices_processed'] . ' invoices, ' . $res['items_consumed'] . ' deductions' );
 		$res['synced_count'] = $res['items_consumed'];

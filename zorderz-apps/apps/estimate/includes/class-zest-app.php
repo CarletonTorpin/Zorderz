@@ -51,9 +51,11 @@ class ZEST_App implements \Zorderz\Widget_App_Interface {
 
 		wp_enqueue_style( 'zest-widget', ZEST_URL . 'assets/css/widget.css', array(), zest_asset_ver( 'assets/css/widget.css' ) );
 		wp_enqueue_script( 'zest-widget', ZEST_URL . 'assets/js/widget.js', array(), zest_asset_ver( 'assets/js/widget.js' ), true );
+		wp_enqueue_script( 'zest-dashboard', ZEST_URL . 'assets/js/dashboard.js', array( 'zest-widget' ), zest_asset_ver( 'assets/js/dashboard.js' ), true );
 		wp_localize_script( 'zest-widget', 'zestWidget', array(
 			'ajaxurl'     => admin_url( 'admin-ajax.php' ),
 			'restBase'    => esc_url_raw( rest_url( defined( 'ZDZ_REST_NS' ) ? ZDZ_REST_NS : 'zorderz/v1' ) ),
+			'restNonce'   => wp_create_nonce( 'wp_rest' ),
 			'nonce'       => wp_create_nonce( ZEST_NONCE ),
 			'version'     => ZEST_VERSION,
 			'isAdminTier' => (bool) $is_admin_tier,
@@ -71,6 +73,10 @@ class ZEST_App implements \Zorderz\Widget_App_Interface {
 				<button class="zest-w-tab" data-tab="leads" role="tab"><?php esc_html_e( 'Leads', 'zorderz' ); ?></button>
 				<?php endif; ?>
 				<button class="zest-w-tab" data-tab="history" role="tab"><?php esc_html_e( 'History', 'zorderz' ); ?></button>
+				<button class="zest-w-tab" data-tab="docs" role="tab"><?php esc_html_e( 'Documents', 'zorderz' ); ?></button>
+				<?php if ( $is_admin_tier ) : ?>
+				<button class="zest-w-tab" data-tab="tools" role="tab"><?php esc_html_e( 'Tools', 'zorderz' ); ?></button>
+				<?php endif; ?>
 			</div>
 
 			<div class="zest-w-panel is-active" data-panel="open">
@@ -106,6 +112,11 @@ class ZEST_App implements \Zorderz\Widget_App_Interface {
 					<div class="zest-empty zest-loading"><?php esc_html_e( 'Loading', 'zorderz' ); ?>&hellip;</div>
 				</div>
 			</div>
+
+			<div class="zest-w-panel" data-panel="docs" aria-live="polite"></div>
+			<?php if ( $is_admin_tier ) : ?>
+			<div class="zest-w-panel" data-panel="tools" aria-live="polite"></div>
+			<?php endif; ?>
 		</div>
 		<?php
 		return (string) ob_get_clean();

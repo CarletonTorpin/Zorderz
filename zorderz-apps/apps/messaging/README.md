@@ -4,7 +4,7 @@ Internal team messaging for the Zorderz Field OS ecosystem.
 
 A WordPress plugin that provides real-time-ish channels and 1:1 direct messages between Zorderz operators, admins, sales, manufacturing, and tech roles. Renders as an inline dashboard widget inside the Zorderz theme; a full-page view is available at `?zim_page=1`.
 
-**Version:** 1.0.18
+**Version:** 1.9.0
 **Slug:** `zdz-internal-messaging`
 **Namespace:** `ZIM_`
 
@@ -28,9 +28,9 @@ A WordPress plugin that provides real-time-ish channels and 1:1 direct messages 
 
 1. Drop `zdz-internal-messaging/` into `wp-content/plugins/`.
 2. Activate. On activation:
-	- Creates 7 tables (prefix `wp_zim_*`).
-	- Seeds 5 default channels: `#announcements`, `#sales`, `#ops`, `#mfg`, `#techs`.
-	- Auto-joins every existing `zdz_access_app` user to `#announcements` and to the channel matching their primary role.
+	- Creates 8 tables (prefix `wp_zim_*`).
+	- Seeds one channel, `#announcements` (administrators post; everyone with Messages reads, the shared device included, read-only), and auto-joins everyone with Messages to it.
+	- Any other channel is the business's: an administrator creates it, or the business's Identity Pack lists it under `org.yml` → `messaging.channels` (each with its roles, or `everyone: true`); listed channels auto-join the people holding those roles. A listed channel whose roles are all unknown is dropped, never opened to everyone.
 	- Schedules 3 cron jobs:
 		- `zim_dispatch_notifications`: every minute (quiet-hours release)
 		- `zim_purge_attachments`: daily (orphans + soft-deleted attachments ≥30 days old)
@@ -65,13 +65,13 @@ Almost nothing to configure. Sensible defaults out of the box:
 | Edit window                  | 5 minutes     | `ZIM_EDIT_WINDOW_SECONDS`               |
 | Attachment size cap          | 5 MB          | `ZIM_MAX_UPLOAD_BYTES`                  |
 | Allowed MIME types           | jpeg/png/webp/heic/pdf | `ZIM_ALLOWED_MIMES` (JSON)      |
-| Quiet hours (per-user)       | 21:00 to 07:00 | user meta `zim_quiet_hours_{start,end}` |
+| Quiet hours                  | the person's own, else the business's (Zorderz → Settings → Quiet hours), else 21:00 to 07:00 | user meta `zim_quiet_hours_`; option `zdz_quiet_hours` (`ZDZ_Quiet_Hours`) |
 | Poll interval                | 3000 ms       | hardcoded (JS + server)                  |
 | Messages per poll            | 50            | hardcoded                                |
 | VAPID key rotation           | 90 days       | `ZIM_PUSH_ROTATION_DAYS`                |
 | Email digest per-convo cooldown | 30 minutes | `ZIM_EMAIL_DIGEST_COOLDOWN_SECONDS`     |
 
-Users change their own quiet hours from the widget's ⚙︎ menu.
+Users change their own quiet hours from the widget's ⚙︎ menu or Settings → Notifications.
 
 ---
 
@@ -97,7 +97,7 @@ In order, with the line these live at in the prompt spec:
 | 3  | Mention reconcile only notifies ADDED (edit doesn't re-notify)     | `ZIM_Mentions::reconcile()` diffs and returns `added`/`removed`; only `added` triggers push |
 | 4  | Soft-delete preserves mention rows                                 | delete blanks body + stamps `deleted_at`; mention rows untouched |
 | 5  | Customer-facing hide at PHP render time, not 403                   | `ZIM_Widget::should_render()` + all AJAX gates return 404 |
-| 6  | Push subscription invalidation on logout                           | `clear_auth_cookie` action → deletes all push subs for the user |
+| 6  | Push subscription invalidation on logout                           | `clear_auth_cookie` action → deletes this device's subscriptions (the signing-out session's rows) |
 | 7  | Quiet hours DEFER not DROP                                         | `ZIM_Notifications::compute_release_at()` computes the next out-of-quiet moment |
 | 8  | Indexes declared at CREATE TABLE                                   | all in `db/migrate-1.0.0.php` |
 | 9  | Uploads through `wp_handle_upload`                                 | `ZIM_Attachments::handle_upload()` with explicit `'mimes'` |
@@ -120,7 +120,7 @@ In order, with the line these live at in the prompt spec:
 - Output uses `esc_html`/`esc_attr`/`esc_url` at the boundary; client-side, `DOMPurify` sanitizes the marked.js HTML before insertion.
 - Upload path uses `wp_handle_upload` + explicit MIME whitelist + size check.
 - Push payloads are E2E encrypted per RFC 8291 (aes128gcm + ECDH). VAPID ES256 signatures are raw-R||S (not DER) per RFC 8292.
-- **Vimeo chapter embed (v1.1.4).** A first-party training-video embed is never passed through the sanitizers. `ZIM_Messages::extract_video_embeds()` runs *before* `wp_kses_post()` in `post()`/`edit()`, recognizes **only** a trusted-origin `player.vimeo.com` player (origin checked on a parsed URL; id validated numeric), and distills it to a plain-text `[zdz-video]<hex>[/zdz-video]` token that survives kses untouched. Client `wireVideoEmbeds()` rebuilds the player with the iframe origin **hard-fixed** to `player.vimeo.com` and inserts chapter labels via `textContent`. A forged token can never point the iframe off Vimeo. The trusted-origin list is a Core default (Vimeo) exposed via the `zim_video_embed_hosts` filter. This is the **consumer** of the project's `text-to-vid` skill (the **producer** that emits the numeric-id + `#t=` chapter embed); keep the token's `id + chapter-seconds` shape in sync with that skill so the two don't drift.
+- **Vimeo chapter embed (v1.1.4).** A first-party training-video embed is never passed through the sanitizers. `ZIM_Messages::extract_video_embeds()` runs *before* `wp_kses_post()` in `post()`/`edit()`, recognizes **only** a trusted-origin `player.vimeo.com` player (origin checked on a parsed URL; id validated numeric), and distills it to a plain-text `[zdz-video]<hex>[/zdz-video]` token that survives kses untouched. Client `wireVideoEmbeds()` rebuilds the player with the iframe origin **hard-fixed** to `player.vimeo.com` and inserts chapter labels via `textContent`. A forged token can never point the iframe off Vimeo. The trusted-origin list is a Core default (Vimeo) exposed via the `zim_video_embed_hosts` filter. Whatever produces the chapter embed must keep the token's `id + chapter-seconds` shape.
 
 ---
 
@@ -138,7 +138,7 @@ Deliberately deferred to keep the MEP small and reviewable:
 - **Cross-conversation search**: per-conversation search only
 - **Scheduled send**
 - **Polls / forms inside messages**
-- **Rich URL unfurls**: only FreshBooks `#NNNNN` refs get rich previews
+- **Rich URL unfurls**: only estimate and invoice `#NNNNN` refs (and vault documents) get rich previews
 - **Web Push UI for Safari < 16.4**: those users fall back to email digests
 - **Real-time typing / presence**: polling does not expose presence
 - **Message export**: admins can export audit log; full message export is v1.1
@@ -147,11 +147,29 @@ Deliberately deferred to keep the MEP small and reviewable:
 
 ## Changelog
 
+### 1.9.0
+
+- **Notices held to quiet hours.** `apply_filters( 'zim_queue_notice', null, $user_id, { title, body, url, tag } )` (`ZIM_Notices`) queues another app's notice (the theme's alert router uses it) as one push, released after the person's quiet hours; several released together become one "N new notices" push. Same-site links only; never the shared device, a read-only role, someone without Messages, or an account in Privacy View.
+- **Quiet hours** come from `ZDZ_Quiet_Hours`: the person's own window, else the business's, else Core's 21:00–07:00. The same time twice turns them off.
+- **Push belongs to a device.** Signing out removes only that device's subscription (`session_hash`). The read verb `messaging.push_setup` answers Settings → Notifications (key, worker, actions, this person's subscriptions, quiet hours); `zim_push_test` sends a test (five an hour). The widget's bell runs the theme's shared routine (`ZDZPush`).
+- **Estimates and invoices in a message.** A `#NNNNN` opens the document, read only, drawn by the theme's paper, for its own salesperson, an administrator, or someone the sender shared that one document with (`ZIM_Doc_Shares`, table `wp_zim_doc_grants`; the composer's "Share #N with … (this document only)"). A share ends when the message is deleted, the number is edited out, the sender withdraws it, the person leaves the conversation, or after 30 days. "invoice #N" means the invoice; any other `#N` the estimate. Needs the Estimates app's document reader (`zdz_fb_document_for_viewer`); without it nothing is shared. Cards never link out to the billing system.
+- **Edit in place**, in a box that keeps the message's lines; send errors are said under the composer.
+- **Shared media in a direct message** (`ZIM_Media_Cards`): the Media app's share posts a gallery card; the photos open in a self-contained viewer, for the people in that conversation only.
+- **Vault documents** are recognised as cards from links and addresses, and open inside the app.
+- **Links in a message** open in a new browsing context; the messenger frame is never navigated away.
+- **Privacy View** (`ZIM_Privacy_View`): an account in Privacy View messages only the administrator chosen for it, sees only that thread, posts text only with a label, and is never notified.
+- **`zim_dm_send`**: Messages' own seam for a direct message sent from another app (the chat; the Jobs, Territories and Security Monitor notices), with "From your chat" shown to the sender alone; the compact one-thread view (`?zim_compact=1`) the chat docks under its answer. No other app writes into `ZIM_DMs` / `ZIM_Messages` directly.
+- **`messaging.unread_counts`**: this person's unread messages as the badge counts them; counts only.
+- **Usage**: four actions counted in the Usage view through `ZDZ_Usage::record`.
+- **Look**: the theme's type roles and the chat's bubble.
+- **Channels**: Core seeds `#announcements` only; the business's channels come from an administrator or its Identity Pack.
+- **Replies by e-mail** read the knowledge vault mailbox (`ZKV_Mailbox`) again.
+
 ### 1.0.24, 2026-05
 
-General Account Hardening: messaging lockdown for the shared workshop kiosk.
+Shared-device hardening: messaging lockdown for the shared account.
 
-Part of the platform-wide "General Account Hardening" effort. The shop iPad is logged into a single shared account (`general@…`, role `zdz_general`) that everyone touches, so it must carry the fewest privileges. On the messaging side that means one thing: **it can read `#announcements`, and it can send nothing (no channel posts, no DMs, no edits, deletes, uploads, channel creation, or conversation creation).** This release implements that as a role-derived, read-only access mode.
+Part of the platform-wide "General Account Hardening" effort. A shared device (a tablet several people use) is logged into a single shared account (role `zdz_general`) that everyone touches, so it must carry the fewest privileges. On the messaging side that means one thing: **it can read `#announcements`, and it can send nothing (no channel posts, no DMs, no edits, deletes, uploads, channel creation, or conversation creation).** This release implements that as a role-derived, read-only access mode.
 
 - **Added**: read-only role support. New helpers in the bootstrap: `zim_read_only_roles()` (filterable; defaults to `['zdz_general']`), `zim_user_is_read_only()`, and `zim_user_can_write()`. A single source of truth on the messaging side; future read-only roles need no code change, just the filter.
 - **Changed**: `zim_user_has_access()` now admits read-only roles. The hardening role is defined with only `read` caps and deliberately does **not** carry `zdz_access_app`, yet it must still *read* announcements. Admitting it at the access gate (while every write path is independently blocked) is what makes "read the announcements, send nothing" possible without granting the broad app capability. It also lets `seed_defaults()` auto-join the kiosk to `#announcements`, and only `#announcements`, since the kiosk matches no other channel's role whitelist.
@@ -160,9 +178,9 @@ Part of the platform-wide "General Account Hardening" effort. The shop iPad is l
   - **Conversation creation**: `ZIM_DMs::get_or_create_conversation()` refuses a read-only initiator. No DMs, no self-DM "notes."
   - **AJAX**: a new `gate_write()` guards `zim_post`, `zim_edit`, `zim_delete`, `zim_bulk_delete`, `zim_upload`, and `zim_dm_open`; `gate_admin()` (channel-create, member-add) also refuses read-only roles.
   - **REST**: the `zim/v1/post` route (the cross-plugin "post to #channel" surface the assistant uses) returns a clean `403 zim_read_only` for read-only users.
-- **Security note**: this closes the messaging-side write back-door behind the Session 406 autonomous-posting incident. For the most-shared account the send capability is *removed*, not merely discouraged at the prompt layer: the structural fix the platform learned it needed.
+- **Security note**: for the most-shared account the send capability is *removed*, not merely discouraged at the prompt layer.
 - **Changed (UI)**: for the kiosk, the message composer is **not rendered into the DOM at all** (removed, not disabled). A muted read-only notice ("Read-only on this shared device…") shows in its place once a conversation is opened. The "New DM" affordance is hidden. `zimData.isReadOnly` drives client behavior: `sendMessage()`, `openNewDm()`, and the Analytics-embed DM-route/auto-send are all short-circuited. (These are courtesy UX; the server blocks are the guarantee.)
-- **Changed**: `zdz_general` added to the app-registration role lists so the Messages tile is visible on the workshop iPad.
+- **Changed**: `zdz_general` added to the app-registration role lists so the Messages tile is visible on the shared device.
 - **No DB migration**: read-only behavior is entirely role-derived; existing `#announcements` auto-join already provides the kiosk's read access.
 
 > **Scope note**: the other halves of the kiosk hardening (greeting alias, dashboard KPI suppression, ephemeral chat, EXIF media provenance, the assistant kiosk prompt block, and the server-side Messaging-marker strip in the analytics response pipeline) live in the theme and `zdz-sales-analytics`. This release covers only the Internal Messaging plugin's part: read-only announcements with zero send capability.
