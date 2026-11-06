@@ -37,7 +37,7 @@ Most business software wants to *be* your invoicing, your CRM, your calendar. Zo
 
 ## How it's built: two artifacts, plus an optional hub
 
-A release is two files. The theme carries a copy of the apps, so a **first install is a single upload**: activate the theme and it installs and activates the apps for you. The two files still exist separately, and their order still matters when you install or update them by hand:
+A release is two files, plus the optional Charts hub and a checksums file. The theme carries a copy of the apps, so a **first install is a single upload**: activate the theme and it installs and activates the apps for you. That happens only once, so **an update takes both zips**: upload the theme, then the apps. Their order matters when you install or update them by hand:
 
 | Artifact | Zip | What it is |
 |---|---|---|

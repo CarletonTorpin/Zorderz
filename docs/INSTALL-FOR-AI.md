@@ -82,10 +82,10 @@ VER="$(curl -fsSL https://api.github.com/repos/CarletonTorpin/Zorderz/releases/l
 echo "$VER"     # e.g. 1.7.1, whatever the current release is
 ```
 
-**Action:** Download both assets from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed there.
+**Action:** Download the theme and apps zips from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed below. The release also carries `zorderz-hub-${VER}.zip`, the optional Charts hub, which runs on a separate computer the business controls (see `hub/README.md`); skip it on a normal install, the Charts app works in local mode without it. A checksums file is attached too: `shasum -a 256 -c zorderz-${VER}-checksums.txt` checks the downloads.
 
 - `zorderz-theme-${VER}.zip`: the theme (platform kernel + Core services). **On the default one-upload path this is the only file you need**, because the theme carries the apps bundle inside it.
-- `zorderz-apps-${VER}.zip`: the apps bundle (30 apps) on its own. You need this only for the two-artifact fallback (step 6) or to update the apps independently.
+- `zorderz-apps-${VER}.zip`: the apps bundle (30 apps) on its own. You need this for the two-artifact fallback (step 6) and for **every update of an existing site** (see "Idempotency and failure handling").
 
 **Verify** each zip you have is intact with the expected top-level folder:
 
@@ -312,6 +312,8 @@ curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/item-engine/cata
 
 ## 9. Connect providers and the Ai gateway (required after an import)
 
+**Installing on a test site?** The staging guard holds e-mail, billing and CRM writes, Ai calls and hub calls on a copy of a live site, or where WordPress reports a `staging` or `development` environment type. A fresh site of its own records itself as the live site on the first admin visit, so on a test site that is not a copy, add `define( 'ZDZ_STAGING_GUARD', 'on' );` to `wp-config.php` **before** entering any credential. The admin bar shows "STAGING GUARD ON" when it is active.
+
 **Where credentials are entered:** wp-admin -> **Zorderz -> Credentials** (`admin.php?page=zdz-core-credentials`). This is the one credential store: one key per service, sealed at rest, never printed back into the page; apps read their keys from it. **After a bundle import this step is mandatory**, because the bundle carried no secrets, so every integration starts blank exactly as on a fresh install.
 
 - **Ai:** enter the provider key on **Credentials** (the Poe gateway key, or an Anthropic key with its zero-retention workspace id). Then open **Zorderz -> Ai usage -> Setup** and set, for each role, the model to use, its prices and a monthly budget. **Nothing is sent to any Ai provider until models, prices and a budget are set**; the Ai usage page says what is missing. Model names are never hardwired.
@@ -343,6 +345,7 @@ The install is **done** when all of the following hold:
 - [ ] `GET zorderz/v1/item-engine/catalog` returns 200 with `types: ["product","service"]`.
 - [ ] Data supplied: either a bundle was imported (step 8A) with matching "Restored:" counts, or an identity was configured (step 8B), if the operator provided one.
 - [ ] Providers reconnected (step 9), if the operator supplied credentials, especially after an import.
+- [ ] Tools -> **Zorderz Integration Health** -> **Run All Checks** reports every check passed (a fresh install passes them all; a billing check passes while billing is not connected).
 
 When every box is checked, stop. The site is a working Zorderz install.
 
@@ -350,15 +353,17 @@ When every box is checked, stop. The site is a working Zorderz install.
 
 ## Idempotency and failure handling
 
-**Re-running is safe.** Updating in place:
+**Re-running is safe.** Updating in place takes **both** zips, every time:
 
 ```bash
 wp theme install /path/to/zorderz-theme-${VER}.zip --force
-wp plugin install /path/to/zorderz-apps-${VER}.zip --force   # only if you manage the apps separately
+wp plugin install /path/to/zorderz-apps-${VER}.zip --force
 wp rewrite flush --hard
 ```
 
-Uploading a newer bundle over an existing one does not fire WordPress's activation hook, so the code re-runs each app's first-run work on the next load when its stored version differs; no manual migration step is needed. The apps auto-installer records that it has acted, so a theme update does not re-copy or re-activate the apps, and it will not fight an operator who deactivated them.
+Browser path: Appearance -> Themes -> Add -> Upload the theme zip -> **Replace active with uploaded**, then Plugins -> Add Plugin -> Upload the apps zip -> **Replace current with uploaded**.
+
+Uploading a newer bundle over an existing one does not fire WordPress's activation hook, so the code re-runs each app's first-run work on the next load when its stored version differs; no manual migration step is needed. The apps auto-installer runs only on a site's first install and records that it has acted: a theme update does **not** update the apps (upload the apps zip as well), and it will not fight an operator who deactivated them. Both versions must match afterwards (step 10).
 
 **Symptom -> cause -> fix:**
 
@@ -388,4 +393,4 @@ Do not disable TLS verification, do not unset the proxy, and do not retry an org
 
 - **Never invent business data.** No names, catalog items, prices, people, territories or rules unless the operator supplied them (or they arrived in a bundle). The platform ships empty on purpose.
 - **Never put a specific company, person, customer or brand into code, comments, prompts or a committed file.** Business-specific values belong in the Business Profile, an Identity Pack, or a Company Data bundle, which are configuration and data, not code.
-- **Never paste a credential into an app, and never try to smuggle secrets into a bundle.** Credentials live only in Connections, and a bundle deliberately excludes them; reconnect on the new install instead.
+- **Never paste a credential into an app, and never try to smuggle secrets into a bundle.** Secrets live only on Zorderz -> Credentials (connections and Identity Packs hold references, never values), and a bundle deliberately excludes them; reconnect on the new install instead.
