@@ -43,23 +43,25 @@ class ZDZ_Core_Settings {
 		return [ 'poe_api_key', 'fb_client_secret', 'fb_access_token', 'fb_refresh_token', 'ns_api_key', 'review_bridge_key' ];
 	}
 
-	public function register_settings() {
-		$fields = [
-			'poe_api_key', 'fb_client_id', 'fb_client_secret', 'fb_access_token',
-			'fb_refresh_token', 'fb_account_id', 'ns_email', 'ns_api_key', 'ai_model',
-			'review_bridge_url', 'review_bridge_key', // v2.14.5: Review Bridge
-		];
+	/**
+	 * The options this form saves. The Ai gateway, CRM and billing credentials are not among them: they live on
+	 * Zorderz → Credentials (ZDZ_Core_Credentials), which writes every app's copy in the format that app reads. They
+	 * must not be REGISTERED here either: options.php writes every registered option of the group, so a registered
+	 * credential missing from the form would be saved as empty. Reads are unchanged (get_credential()).
+	 */
+	public static function form_fields(): array {
+		return [ 'ai_model', 'review_bridge_url', 'review_bridge_key' ];
+	}
 
+	public function register_settings() {
 		$secret_fields = self::secret_fields();
-		foreach ( $fields as $field ) {
+		foreach ( self::form_fields() as $field ) {
 			$optname = self::OPTION_PREFIX . $field;
 			if ( in_array( $field, $secret_fields, true ) ) {
 				register_setting( 'zdz_core_settings_group', $optname, [
 					'type'              => 'string',
 					'sanitize_callback' => function ( $value ) use ( $optname ) {
-						$value = is_string( $value ) ? trim( $value ) : '';
-						// Blank submit = keep the existing secret (the field renders empty by design).
-						return ( '' === $value ) ? (string) get_option( $optname ) : sanitize_text_field( $value );
+						return self::sanitize_secret_submit( $value, (string) get_option( $optname ) );
 					},
 				] );
 			} else {
@@ -70,19 +72,16 @@ class ZDZ_Core_Settings {
 			}
 		}
 
-		// v2.10.1: Admin-editable review counts (integer fields)
+		// The Google review count is typed in until the site reads Google itself; saving it also keeps the date it
+		// was typed (or confirmed), which the home tile shows. The website's count is not typed: the home tile asks
+		// the website through the Review Bridge.
 		register_setting( 'zdz_core_settings_group', self::OPTION_PREFIX . 'google_reviews_count', [
 			'type'              => 'integer',
-			'sanitize_callback' => 'absint',
-			'default'           => 0,
-		] );
-		register_setting( 'zdz_core_settings_group', self::OPTION_PREFIX . 'website_reviews_count', [
-			'type'              => 'integer',
-			'sanitize_callback' => 'absint',
+			'sanitize_callback' => [ __CLASS__, 'sanitize_google_reviews_count' ],
 			'default'           => 0,
 		] );
 
-		// v2.20.0 r4: Company-level settings for cross-plugin use
+		// Company-level settings for cross-plugin use
 		register_setting( 'zdz_core_settings_group', 'zdz_company_phone', [
 			'type'              => 'string',
 			'sanitize_callback' => 'sanitize_text_field',
@@ -107,43 +106,31 @@ class ZDZ_Core_Settings {
 				settings_fields( 'zdz_core_settings_group' );
 				do_settings_sections( 'zdz_core_settings_group' );
 				
-				$fields = [
-					'poe_api_key' => 'Poe API Key',
-					'fb_client_id' => 'FreshBooks Client ID',
-					'fb_client_secret' => 'FreshBooks Client Secret',
-					'fb_access_token' => 'FreshBooks Access Token',
-					'fb_refresh_token' => 'FreshBooks Refresh Token',
-					'fb_account_id' => 'FreshBooks Account ID',
-					'ns_email' => 'Nutshell Email',
-					'ns_api_key' => 'Nutshell API Key',
-					'review_bridge_url' => 'Review Bridge URL',
-					'review_bridge_key' => 'Review Bridge API Key',
-				];
+				$cred_url = class_exists( 'ZDZ_Core_Credentials' ) ? ZDZ_Core_Credentials::page_url() : admin_url( 'admin.php?page=zdz-core-credentials' );
 				?>
+				<p><?php esc_html_e( 'The Ai gateway, CRM and billing keys are kept on one screen, which gives every app its copy:', 'zorderz' ); ?>
+					<a class="button" href="<?php echo esc_url( $cred_url ); ?>"><?php esc_html_e( 'Zorderz → Credentials', 'zorderz' ); ?></a></p>
 				<table class="form-table">
 					<?php
-					$secret_fields = self::secret_fields();
-					foreach ( $fields as $key => $label ) :
-						$optname   = self::OPTION_PREFIX . $key;
-						$is_secret = in_array( $key, $secret_fields, true );
-						$current   = (string) get_option( $optname );
-						?>
-						<tr>
-							<th scope="row"><label for="<?php echo esc_attr( $optname ); ?>"><?php echo esc_html( $label ); ?></label></th>
-							<td>
-								<?php if ( $is_secret ) : ?>
-									<input type="password" id="<?php echo esc_attr( $optname ); ?>" name="<?php echo esc_attr( $optname ); ?>" value="" autocomplete="off" class="regular-text" placeholder="<?php echo '' !== $current ? esc_attr__( 'Enter a new value to replace', 'zorderz' ) : esc_attr__( 'Not set', 'zorderz' ); ?>" />
-									<?php if ( '' !== $current ) : ?>
-										<span class="description" style="margin-left:6px"><?php esc_html_e( 'Currently set (hidden). Leave blank to keep it.', 'zorderz' ); ?></span>
-									<?php endif; ?>
-								<?php else : ?>
-									<input type="text" id="<?php echo esc_attr( $optname ); ?>" name="<?php echo esc_attr( $optname ); ?>" value="<?php echo esc_attr( $current ); ?>" class="regular-text" />
-								<?php endif; ?>
-							</td>
-						</tr>
-					<?php endforeach; ?>
+					$rb_url_opt = self::OPTION_PREFIX . 'review_bridge_url';
+					$rb_key_opt = self::OPTION_PREFIX . 'review_bridge_key';
+					$rb_key_set = '' !== (string) get_option( $rb_key_opt );
+					?>
 					<tr>
-						<th scope="row"><label for="<?php echo esc_attr( self::OPTION_PREFIX . 'ai_model' ); ?>"><?php esc_html_e( 'AI Model', 'zorderz' ); ?></label></th>
+						<th scope="row"><label for="<?php echo esc_attr( $rb_url_opt ); ?>"><?php esc_html_e( 'Review Bridge URL', 'zorderz' ); ?></label></th>
+						<td><input type="text" id="<?php echo esc_attr( $rb_url_opt ); ?>" name="<?php echo esc_attr( $rb_url_opt ); ?>" value="<?php echo esc_attr( (string) get_option( $rb_url_opt ) ); ?>" class="regular-text" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="<?php echo esc_attr( $rb_key_opt ); ?>"><?php esc_html_e( 'Review Bridge API Key', 'zorderz' ); ?></label></th>
+						<td>
+							<input type="password" id="<?php echo esc_attr( $rb_key_opt ); ?>" name="<?php echo esc_attr( $rb_key_opt ); ?>" value="" autocomplete="new-password" class="regular-text" placeholder="<?php echo $rb_key_set ? esc_attr__( 'Enter a new value to replace', 'zorderz' ) : esc_attr__( 'Not set', 'zorderz' ); ?>" />
+							<?php if ( $rb_key_set ) : ?>
+								<span class="description" style="margin-left:6px"><?php esc_html_e( 'Currently set (hidden). Leave blank to keep it.', 'zorderz' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="<?php echo esc_attr( self::OPTION_PREFIX . 'ai_model' ); ?>"><?php esc_html_e( 'Ai model', 'zorderz' ); ?></label></th>
 						<td>
 														<?php
 							// The AI-model roster is a vendor/tenant fact: Core names no model. The
@@ -184,7 +171,7 @@ class ZDZ_Core_Settings {
 					</tr>
 				</table>
 
-				<!-- v2.20.0 r4: Company Contact Settings -->
+				<!-- Company Contact Settings -->
 				<h2><?php esc_html_e( 'Company Contact Info', 'zorderz' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'Used by the Lead Generator, email templates, and customer-facing communications across all plugins.', 'zorderz' ); ?></p>
 				<table class="form-table">
@@ -204,48 +191,113 @@ class ZDZ_Core_Settings {
 					</tr>
 				</table>
 
-				<h2><?php esc_html_e( 'Dashboard Review Counts', 'zorderz' ); ?></h2>
-				<p class="description"><?php esc_html_e( 'Manually enter the current number of reviews on each platform. These counts are displayed on the KPI dashboard.', 'zorderz' ); ?></p>
+				<h2><?php esc_html_e( 'Google reviews (home screen)', 'zorderz' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Until the site is connected to the Google Business Profile, this number is typed in. The home screen shows it with the date it was typed. The website\'s own review count is read from the website through the Review Bridge.', 'zorderz' ); ?></p>
 				<table class="form-table">
 					<tr>
 						<th scope="row"><label for="<?php echo esc_attr( self::OPTION_PREFIX . 'google_reviews_count' ); ?>"><?php esc_html_e( 'Google Reviews Count', 'zorderz' ); ?></label></th>
 						<td>
 							<input type="number" id="<?php echo esc_attr( self::OPTION_PREFIX . 'google_reviews_count' ); ?>" name="<?php echo esc_attr( self::OPTION_PREFIX . 'google_reviews_count' ); ?>" value="<?php echo esc_attr( get_option( self::OPTION_PREFIX . 'google_reviews_count', 0 ) ); ?>" class="small-text" min="0" step="1" />
-							<p class="description"><?php esc_html_e( 'Total number of Google Reviews for Zorderz.', 'zorderz' ); ?></p>
+							<?php $zdz_g_at = self::get_google_reviews_entered_at(); ?>
+							<p class="description"><?php
+								echo esc_html( $zdz_g_at > 0
+									/* translators: %s: a date */
+									? sprintf( __( 'Entered %s.', 'zorderz' ), wp_date( 'j M Y', $zdz_g_at ) )
+									: __( 'No date kept yet: the next save keeps one.', 'zorderz' ) );
+							?></p>
+							<p class="description"><?php esc_html_e( 'Once the site is connected to Google Business Profile (Zorderz → Credentials), the home screen shows Google\'s own total instead. This number is shown until then, while Google has not approved access, and on a copy of the site.', 'zorderz' ); ?></p>
+							<label><input type="checkbox" name="<?php echo esc_attr( self::OPTION_PREFIX . 'google_reviews_confirm' ); ?>" value="1" /> <?php esc_html_e( 'I checked Google today and the number is still right', 'zorderz' ); ?></label>
 						</td>
 					</tr>
-					<tr>
-						<th scope="row"><label for="<?php echo esc_attr( self::OPTION_PREFIX . 'website_reviews_count' ); ?>"><?php esc_html_e( 'Website Reviews Count (Ovation)', 'zorderz' ); ?></label></th>
-						<td>
-							<input type="number" id="<?php echo esc_attr( self::OPTION_PREFIX . 'website_reviews_count' ); ?>" name="<?php echo esc_attr( self::OPTION_PREFIX . 'website_reviews_count' ); ?>" value="<?php echo esc_attr( get_option( self::OPTION_PREFIX . 'website_reviews_count', 0 ) ); ?>" class="small-text" min="0" step="1" />
-							<p class="description"><?php esc_html_e( 'Total number of reviews on the Thrive Ovation review page.', 'zorderz' ); ?></p>
-						</td>
-					</tr>
+					<?php
+					/**
+					 * Core services add their own rows to this page (each registers its option in
+					 * zdz_core_settings_group). Fires inside the settings table.
+					 */
+					do_action( 'zdz_core_settings_rows' );
+					?>
 				</table>
 				<?php submit_button(); ?>
 			</form>
+			<?php
+			/** Core services add their own forms after the settings form (a form cannot sit inside another). */
+			do_action( 'zdz_core_settings_after' );
+			?>
 		</div>
 		<?php
 	}
 
-	public static function get_credential( string $key ): string {
-		$val = get_option( self::OPTION_PREFIX . $key, '' );
-		if ( ! empty( $val ) ) {
-			return $val;
+	/**
+	 * Secrets are kept encrypted at rest (the fixed-IV format ZDZ_Core_Crypto reads). WordPress may run a
+	 * setting's sanitize callback twice on the first save, so a value that is already sealed is kept as it is
+	 * rather than sealed again.
+	 */
+	public static function seal_secret( string $plain ): string {
+		if ( '' === $plain || ! class_exists( 'ZDZ_Core_Crypto' ) ) {
+			return $plain;
 		}
+		if ( ZDZ_Core_Crypto::FIXED === ZDZ_Core_Crypto::decode( $plain )[0] ) {
+			return $plain;
+		}
+		return ZDZ_Core_Crypto::encode( $plain, ZDZ_Core_Crypto::FIXED );
+	}
 
-		$fallback_prefixes = [ 'tscc_', 'tsa_', 'tsl_', 'zdz_surveys_', 'tsec_' ];
-		foreach ( $fallback_prefixes as $prefix ) {
-			$val = get_option( $prefix . $key, '' );
-			if ( ! empty( $val ) ) {
-				return $val;
+	/**
+	 * A credential as the service expects it: decrypted when it was stored encrypted (by exact round trip),
+	 * returned as stored when it is plain. A value that cannot be read under this site's key returns ''.
+	 */
+	public static function get_credential( string $key ): string {
+		$val = (string) get_option( self::OPTION_PREFIX . $key, '' );
+		if ( '' === $val ) {
+			// Upgrade shim: on an install carried across by ZDZ_Rename_Migration, a credential may still sit only
+			// under an app's pre-rename option name (copied, not moved, until cleanup). Read it there rather than
+			// report the service as unconfigured. A fresh install has none of these and reads the Core option only.
+			$fallback_prefixes = [ 'tscc_', 'tsa_', 'tsl_', 'zdz_surveys_', 'tsec_' ];
+			foreach ( $fallback_prefixes as $prefix ) {
+				$val = (string) get_option( $prefix . $key, '' );
+				if ( '' !== $val ) {
+					break;
+				}
 			}
 		}
-
-		return '';
+		if ( '' === $val ) {
+			return '';
+		}
+		return class_exists( 'ZDZ_Core_Crypto' ) ? ZDZ_Core_Crypto::plain( $val ) : $val;
 	}
 
 	public static function get_google_reviews_count(): int { return (int) get_option( self::OPTION_PREFIX . 'google_reviews_count', 0 ); }
+
+	/** When the Google count was last typed or confirmed (unix); 0 when no date was kept. */
+	public static function get_google_reviews_entered_at(): int { return (int) get_option( self::OPTION_PREFIX . 'google_reviews_entered_at', 0 ); }
+
+	/**
+	 * The Google count's sanitize step. Keeps the date it was typed: when the number changes, or when the person ticks
+	 * "I checked Google today" (options.php has checked the form's nonce before this runs). Saving the page for another
+	 * field with the same number leaves the date alone, so the date means "looked at Google", not "saved".
+	 */
+	public static function sanitize_google_reviews_count( $value ): int {
+		$new     = absint( $value );
+		$old     = (int) get_option( self::OPTION_PREFIX . 'google_reviews_count', 0 );
+		$confirm = ! empty( $_POST[ self::OPTION_PREFIX . 'google_reviews_confirm' ] ); // phpcs:ignore WordPress.Security.NonceVerification -- options.php verified it
+		if ( $new !== $old || $confirm ) {
+			update_option( self::OPTION_PREFIX . 'google_reviews_entered_at', time(), false );
+		}
+		return $new;
+	}
+
+	/**
+	 * A secret field's submitted value: blank keeps what is stored (the field renders empty by design, so a normal Save
+	 * never wipes a key nobody retyped and the secret is never echoed to the browser); anything else is sealed at rest.
+	 * PURE apart from seal_secret().
+	 */
+	public static function sanitize_secret_submit( $value, string $stored ): string {
+		$value = is_string( $value ) ? trim( $value ) : '';
+		if ( '' === $value ) {
+			return $stored;
+		}
+		return self::seal_secret( sanitize_text_field( $value ) );
+	}
 	public static function get_website_reviews_count(): int { return (int) get_option( self::OPTION_PREFIX . 'website_reviews_count', 0 ); }
 
 	public static function get_poe_api_key(): string { return self::get_credential( 'poe_api_key' ); }
@@ -260,7 +312,7 @@ class ZDZ_Core_Settings {
 	/**
 	 * The configured AI model/bot name. Single source both the Poe gateway
 	 * (ZDZ_Core_Poe) and the Model Registry (ZDZ_Model_Registry::base_model) read.
-	 * Reads the credential cascade (honours a pre-rename tsa_ai_model on upgrade).
+	 * Reads the credential cascade (see get_credential() for the upgrade shim).
 	 * Returns '' when nothing is configured - Core names NO model; the Model
 	 * Registry / gateway then resolve the neutral base handle from config
 	 * (the zdz_model_base_default filter), so a fresh install is never handed a
@@ -270,16 +322,17 @@ class ZDZ_Core_Settings {
 		return self::get_credential( 'ai_model' );
 	}
 
-	// v2.14.5: Review Bridge credentials (bridge URL is not in the credential
+	// Review Bridge credentials (bridge URL is not in the credential
 	// cascade — it's only stored under the zdz_core_ prefix).
 	public static function get_review_bridge_url(): string {
 		return get_option( self::OPTION_PREFIX . 'review_bridge_url', '' );
 	}
 	public static function get_review_bridge_key(): string {
-		return get_option( self::OPTION_PREFIX . 'review_bridge_key', '' );
+		// Sealed at rest like every secret field: read through get_credential(), which opens it.
+		return self::get_credential( 'review_bridge_key' );
 	}
 
-	// v2.20.0 r4: Company-level settings getters
+	// Company-level settings getters
 	public static function get_company_phone(): string {
 		return get_option( 'zdz_company_phone', '' );
 	}
@@ -319,13 +372,17 @@ class ZDZ_Core_Settings {
 	}
 
 	/**
-	 * Get the user's salesperson code (for lead generator matching).
+	 * The person's salesperson code: the profile's "Salesperson Code" (the lead generator's match key), else their
+	 * party code (ZDZ_Salesperson_Code reads both, and the keys an upgraded install kept them under before).
 	 */
 	public static function get_salesperson_code( int $user_id ): string {
-		return (string) get_user_meta( $user_id, 'tsl_salesperson_code', true );
+		if ( class_exists( 'ZDZ_Salesperson_Code' ) ) {
+			return ZDZ_Salesperson_Code::get( $user_id );
+		}
+		return trim( (string) get_user_meta( $user_id, 'zl_salesperson_code', true ) );
 	}
 
-	// ── v2.20.2: Field Preferences — per-salesperson notation, walkthrough, and estimation habits ──
+	// ── Field Preferences — per-salesperson notation, walkthrough, and estimation habits ──
 
 	/**
 	 * Single source of truth for the field preferences schema.
@@ -450,7 +507,8 @@ class ZDZ_Core_Settings {
 			if ( ! get_option( self::OPTION_PREFIX . $field ) ) {
 				$val = self::get_credential( $field );
 				if ( ! empty( $val ) ) {
-					update_option( self::OPTION_PREFIX . $field, $val );
+					// A secret is kept sealed at rest, like every save through this class.
+					update_option( self::OPTION_PREFIX . $field, in_array( $field, self::secret_fields(), true ) ? self::seal_secret( $val ) : $val );
 				}
 			}
 		}

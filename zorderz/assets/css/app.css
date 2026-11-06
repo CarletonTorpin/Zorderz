@@ -11,7 +11,7 @@ body{background:var(--sys-bg);color:var(--sys-text);font-size:var(--ref-font-bas
   min-height:100vh;min-height:100dvh;
   -webkit-tap-highlight-color:transparent;user-select:none;
   touch-action:pan-y pinch-zoom;
-  /* v2.20.0 r5: Changed from 100vw to 100%. On mobile browsers, 100vw
+  /* Changed from 100vw to 100%. On mobile browsers, 100vw
      includes the scrollbar gutter width, making the body wider than the
      visible viewport. This causes the entire layout to shift right — the
      left edge gets proper padding but the right column clips past the
@@ -19,7 +19,7 @@ body{background:var(--sys-bg);color:var(--sys-text);font-size:var(--ref-font-bas
   max-width:100%;
   position:relative}
 
-/* v2.20.0 r5: Hard constraint on html to prevent ANY horizontal overflow.
+/* Hard constraint on html to prevent ANY horizontal overflow.
    The body's overflow:clip should handle this, but iOS Safari PWA sometimes
    ignores it when the html element itself is wider. Belt and suspenders. */
 html {
@@ -27,7 +27,7 @@ html {
   width:100%;
   max-width:100%;
 }
-/* v2.15.0: visibility:hidden moved to inline skeleton CSS in header.php.
+/* visibility:hidden moved to inline skeleton CSS in header.php.
    Body is visible from the start; the skeleton overlay covers content
    until zdz-ready fires. The old 3s CSS fallback is replaced by the
    skeleton's own failsafe animation. */
@@ -41,14 +41,26 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{box-shadow:var(-
 a{color:var(--sys-brand);text-decoration:none;touch-action:manipulation}
 h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
-/* v2.14.3: Utility classes consumed by app.js settings templates */
+/* Utility classes consumed by app.js settings templates */
 .mt-4{margin-top:var(--ref-space-4)!important}
 .w-full{width:100%!important}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;
   animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+/* Reduce Motion means FADE, not freeze (a platform rule). The rule above stops
+   every animation after one cycle, which left every loader in every app still, so people with Reduce Motion
+   on could not tell that anything was working. Loaders get a gentle opacity "breathe" instead: no movement,
+   no rotation, no shimmer sweep. Matched by class name, because each app still ships its own spinner. */
+@keyframes zdz-breathe{0%,100%{opacity:1}50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){
+  [class*="spinner"],[class*="-spin"],.is-spinning,.app-loading-spinner,.zdz-btn-busy::after,
+  .zdz-inline-skel .zdz-shimmer,.zdz-inline-skel .zdz-shimmer-line,.shimmer,.zdz-shimmer{
+    animation-name:zdz-breathe!important;animation-duration:1.4s!important;
+    animation-iteration-count:infinite!important;animation-timing-function:ease-in-out!important}
+  .zdz-inline-skel .zdz-shimmer::after,.zdz-inline-skel .zdz-shimmer-line::after{animation:none!important;display:none}
+}
 
 /* ---- CSS fallback if JS fails ---- */
-/* v2.15.0: If JS never boots (no zdz-ready), the skeleton auto-hides after 4s
+/* If JS never boots (no zdz-ready), the skeleton auto-hides after 4s
    and content becomes visible via the inline <style> failsafe in header.php.
    The old visibility:hidden + 3s unhide animation is removed — the skeleton
    approach gives users immediate visual feedback instead of a blank screen. */
@@ -56,8 +68,8 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 /* ================================================================
    DESIGN-TOKEN ALIAS SUB-TIER (Tier-2b) — additive, presentational only
    ----------------------------------------------------------------
-   Some ported apps still reference pre-rename / Material-style --sys-*
-   token names this theme no longer DEFINES (canonical names live in
+   Some apps still reference older or Material-style --sys-*
+   token names this theme does not DEFINE (canonical names live in
    style.css TIER-2). Left undefined, each such reference falls back to
    whatever hardcoded literal the app supplied — a value frozen in one
    mode that never follows the theme into dark / system / sunlight ("the
@@ -70,7 +82,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 
    EXCLUDED ON PURPOSE — aliasing these would STRIP intended branding or
    is unnecessary:
-     • --sys-accent            (accent / Product — a brand colour)
+     • --sys-accent            (accent — a brand colour)
      • --sys-surface-2, --sys-surface-3  (the raised-amber vs neutral
        conflict — no single neutral target is correct)
      • --sys-tint-border       (already a canonical token in style.css)
@@ -123,7 +135,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
    ================================================================ */
 .view{display:none;width:100%;min-height:100vh;min-height:100dvh}
 .view.active{display:flex;flex-direction:column;
-  /* v2.10.0 fix: Explicit height creates a "definite main size" so flex:1
+  /* Explicit height creates a "definite main size" so flex:1
      children (sub-views) resolve their height correctly. Without this,
      iOS Safari treats the available space as infinite (WebKit Bug #137730)
      and overflow-y:auto on sub-views never triggers a scrollbar.
@@ -134,13 +146,13 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   overscroll-behavior:contain;
   transition:transform .35s cubic-bezier(.32,.72,0,1),opacity .35s ease}
 .sub-view{display:none;flex:1;overflow-y:auto;overflow-x:clip;
-  /* v2.21.0: contain overscroll so iOS rubber-banding does not reveal the
+  /* contain overscroll so iOS rubber-banding does not reveal the
      darker page void behind the surface (the "ugly black section" on scroll). */
   overscroll-behavior:contain;
   padding:var(--ref-space-4);padding-top:calc(env(safe-area-inset-top,0px) + var(--ref-space-3));
   max-width:100%;width:100%}
 .sub-view.active{display:block}
-/* v2.14.0: Enforce the visibility contract with !important so that plugin CSS
+/* Enforce the visibility contract with !important so that plugin CSS
    using ID selectors (e.g. #sv-team { display:flex } in nav-inject.css) cannot
    accidentally override the base .sub-view { display:none }. Without this,
    ID-specificity (1,0,0) beats the class rule (0,1,0) and the non-active sub-view
@@ -150,7 +162,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
    match. */
 .sub-view:not(.active){display:none !important}
 
-/* v2.14.3.1: Pull-to-refresh indicator — inserted at the top of the active
+/* Pull-to-refresh indicator — inserted at the top of the active
    sub-view by initPullToRefresh() in app.js. Consistent with the Analytics/Messaging
    plugin-level PTR pattern but at the theme shell level. */
 .zdz-pull-indicator {
@@ -206,7 +218,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .btn-icon:hover{background:var(--sys-brand-light)}
 
 /* ================================================================
-   v2.21.0: NO-SUBMIT-SHIFT HOOKS
+   NO-SUBMIT-SHIFT HOOKS
    Shared affordances for the "stay on the button, show inline status,
    never reflow" submit pattern. Plugins opt in (Surveys, Leads,
    Commissions, Estimates) so every widget behaves identically.
@@ -225,10 +237,12 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   border:2px solid currentColor;border-top-color:transparent;border-radius:50%;
   /* currentColor is transparent above, so paint the spinner from the busy
      button's intended ink: brand-text for filled buttons, text otherwise. */
-  color:var(--sys-text-brand);
+  color:var(--zdz-busy-ink, var(--sys-text-brand));
   animation:appSpin .7s linear infinite;visibility:visible}
-.btn-outline.zdz-btn-busy::after,.zdz-btn-busy.zdz-btn-busy-ink-text::after{color:var(--sys-text)}
-/* v2.20.3-patched-9: defer to plugin-supplied busy contents.
+/* --zdz-busy-ink is the button's own text color, read by ZDZ.ui.busy() before the label is hidden, so the
+   mark shows on a light button as well as a dark one. */
+.btn-outline.zdz-btn-busy::after,.zdz-btn-busy.zdz-btn-busy-ink-text::after{color:var(--zdz-busy-ink, var(--sys-text))}
+/* defer to plugin-supplied busy contents.
    The hook above is for a PLAIN button — the theme hides the label and paints
    its own ::after spinner. But some plugins (e.g. Surveys) ALSO inject their
    own spinner + "Running…/Syncing…" label INTO the button and then add
@@ -277,17 +291,17 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
    ================================================================ */
 .greeting-row{padding:var(--ref-space-2) 0 var(--ref-space-1);
   display:flex;align-items:center;justify-content:space-between;
-  /* v2.21.0: reserve the refresh button's full height so the row cannot
+  /* reserve the refresh button's full height so the row cannot
      vertically collapse into the search trigger below it. */
   min-height:40px}
 .greeting-row h2{font-size:var(--ref-font-xl);font-weight:var(--sys-font-wt-b);
   letter-spacing:-.02em;color:var(--sys-text);margin:0;line-height:1.2}
-/* v2.14.4 A1: Visible refresh button */
+/* Visible refresh button */
 .zdz-refresh-btn{width:40px;height:40px;min-height:40px;border-radius:var(--ref-radius-md,12px);
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
   color:var(--sys-text-sec);background:var(--sys-surface);
   border:1px solid var(--sys-border);
-  /* v2.21.0: keep the refresh button's tap region self-contained so it can
+  /* keep the refresh button's tap region self-contained so it can
      never share/overlap a hit-rect with the search trigger on large phones.
      position:relative + z-index keeps it above the adjacent search button;
      touch-action prevents gesture bleed during the compact-bar transition. */
@@ -297,7 +311,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   background:var(--sys-brand-light)}
 .zdz-refresh-btn:active{transform:scale(.9)}
 [data-theme="sunlight"] .zdz-refresh-btn{border:2px solid #000;color:#000}
-/* v2.16.0 T2: Inner wrapper for greeting + refresh alignment */
+/* Inner wrapper for greeting + refresh alignment */
 .greeting-row-inner{display:flex;align-items:center;justify-content:space-between;width:100%}
 
 /* ================================================================
@@ -306,12 +320,12 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .dash-search-trigger{display:flex;align-items:center;gap:var(--ref-space-2);
   width:100%;padding:var(--ref-space-3) var(--ref-space-4);
   background:var(--sys-surface);border:1.5px solid var(--sys-border);
-  /* v2.21.0: rounded rectangle (was --ref-radius-full pill — the only oval in
+  /* rounded rectangle (was --ref-radius-full pill — the only oval in
      the UI). Matches the dock tiles / cards so the search bar is visually
      consistent in both its full and compact states. */
   border-radius:var(--ref-radius-lg);min-height:48px;
   color:var(--sys-text-ter);font-size:var(--ref-font-base);
-  /* v2.21.0: explicit top gap guarantees vertical separation from the
+  /* explicit top gap guarantees vertical separation from the
      greeting/refresh row above; touch-action keeps the tap region clean. */
   margin-top:var(--ref-space-2);margin-bottom:var(--ref-space-3);
   touch-action:manipulation;
@@ -323,13 +337,13 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .dash-search-trigger span{flex:1;text-align:left}
 
 /* ================================================================
-   v2.14.4.3 A4: APP DOCK — 2-column big-touch grid
+ APP DOCK — 2-column big-touch grid
    Full-column rounded squares, large icons + labels, portrait-first.
    ================================================================ */
-/* v2.14.5: bigger tiles — more padding, min-height, and label text for
+/* bigger tiles — more padding, min-height, and label text for
    mobile readability. Icons unchanged per design spec. */
 .app-dock{
-  /* v2.20.1: minmax(0, 1fr) instead of bare 1fr — Safari WebKit can
+  /* minmax(0, 1fr) instead of bare 1fr — Safari WebKit can
      resolve 1fr to fractional px that exceeds the container when combined
      with gap on high-DPI devices. minmax(0, 1fr) constrains the minimum
      and prevents sub-pixel overflow on the right column. */
@@ -364,7 +378,9 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 /* Desktop hover — subtle lift + glow */
 @media(hover:hover){
   .dock-app:hover{box-shadow:var(--sys-shadow-md);
-    border-color:var(--sys-brand);transform:translateY(-2px)}
+    border-color:var(--sys-brand);transform:translateY(-2px);
+    background:var(--sys-surface-subtle)} /* the same darkening a tap gives */
+  .dock-app:hover .dock-icon{filter:brightness(.9)}
 }
 /* Press / tap — darken + scale down, visible feedback */
 .dock-app:active{
@@ -382,11 +398,11 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   font-size:var(--ref-font-lg);font-weight:var(--sys-font-wt-sb);
   color:var(--sys-text);text-align:center;line-height:1.25;
   max-width:100%;word-wrap:break-word;
-  /* v2.21.0: reserve a fixed two-line band so a 1- vs 2-line label (e.g.
+  /* reserve a fixed two-line band so a 1- vs 2-line label (e.g.
      "Commissions" wrapping) can never change tile height — eliminates the
      per-tile cumulative layout shift. Labels longer than two lines clamp
      with an ellipsis rather than growing the tile.
-     v2.24.3: the band is now sized off a FIXED unit (--dock-label-lh, derived
+     the band is now sized off a FIXED unit (--dock-label-lh, derived
      from the full-size font) instead of `2em` of the element's own font-size,
      so a smaller .is-long label reserves the SAME pixel band. Content is
      TOP-anchored (-webkit-box-pack:start) so a 1-line label aligns with line 1
@@ -399,21 +415,20 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   overflow:hidden}
 /* Description hidden by default — too cluttered on phone */
 .dock-desc{display:none}
-/* v2.21.0: long-label fit. the owner asked that only the long dock names
-   ("Commissions", "Knowledge") be slightly smaller so they sit on ONE line —
-   not a global type change. app.js tags labels over a length threshold with
-   .is-long; these rules shrink ONLY those.
-   v2.24.3 alignment fix: shrink the FONT ONLY. The previous rule also forced
-   the label to one line AND collapsed its reserved height to `1.25em`, so a
-   long label's text block was half as tall as its neighbors' and, inside the
-   center-justified tile, dropped to a lower vertical position — the "labels
-   don't line up" report (Knowledge/Analytics/Commission/Messages rendered
-   smaller AND lower than Sketch/Game/Receipt). With the band height no longer
+/* Long-label fit: only the long dock names ("Commissions", "Knowledge") are
+   slightly smaller so they sit on ONE line — not a global type change. app.js
+   tags labels over a length threshold with .is-long; these rules shrink ONLY
+   those.
+   Alignment: shrink the FONT ONLY. Forcing
+   the label to one line AND collapsing its reserved height to `1.25em` made a
+   long label's text block half as tall as its neighbors' and, inside the
+   center-justified tile, dropped it to a lower vertical position (long names
+   rendered smaller AND lower than short ones). With the band height no longer
    overridden, the long label keeps the same top-anchored two-line band as
    every other tile, so the whole row shares one baseline. The smaller font
    still comfortably fits on one line within that band. */
-/* v2.24.5: UNIFORM LABEL SIZE. Field review: "we need a uniform pt size for the
-   text under the apps." The .is-long shrink is removed so EVERY app label
+/* UNIFORM LABEL SIZE: one point size for the text under the apps. The
+   .is-long shrink is removed so EVERY app label
    renders at the same size. Long names (Estimates, Commission, Knowledge,
    Analytics, Messages) now wrap to two lines inside the reserved two-line band
    (already top-anchored, so the row stays baseline-aligned) instead of being
@@ -443,11 +458,11 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 }
 [data-theme="sunlight"] .dock-app{border:2.5px solid #000;box-shadow:none}
 [data-theme="sunlight"] .dock-icon{border:2px solid #000}
-/* v2.16.0 T11: Light mode dock-app surface contrast */
+/* Light mode dock-app surface contrast */
 :root[data-theme="light"] .dock-app{background:var(--ref-gray-0);border-color:var(--ref-gray-200)}
 
 /* ================================================================
-   v2.14.4 C2: NOTIFICATION BADGES (on nav items)
+ NOTIFICATION BADGES (on nav items)
    Non-red, subtle brand-accent badge. Plugins inject badge elements;
    this provides the styling contract.
    ================================================================ */
@@ -462,7 +477,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 [data-theme="sunlight"] .ni-badge{background:#000;color:#fff;border:1.5px solid #fff}
 
 /* ================================================================
-   v2.14.4 D1: ADD-TO-HOMESCREEN INSTALL BANNER
+ ADD-TO-HOMESCREEN INSTALL BANNER
    ================================================================ */
 .zdz-install-banner{position:fixed;bottom:calc(49px + env(safe-area-inset-bottom,0px) + 8px);
   left:16px;right:16px;z-index:140;
@@ -489,7 +504,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 [data-theme="sunlight"] .zdz-install-banner{border:2px solid #000}
 [data-theme="sunlight"] .zdz-install-how-btn{background:#000}
 
-/* v2.17.2: iOS Add-to-Home-Screen visual guide overlay */
+/* iOS Add-to-Home-Screen visual guide overlay */
 .zdz-ios-guide{
   display:none;position:fixed;inset:0;z-index:200;
   align-items:flex-start;justify-content:center;
@@ -549,7 +564,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 }
 
 /* ================================================================
-   QUICK STATS ROW — v2.14.4.3: larger touch-friendly stat cards
+   QUICK STATS ROW — larger touch-friendly stat cards
    ================================================================ */
 .quick-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ref-space-3);padding:var(--ref-space-3) 0}
 .stat-pill{display:flex;align-items:center;gap:var(--ref-space-3);
@@ -577,7 +592,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .search-wrap{position:relative;margin-bottom:var(--ref-space-3)}
 .search-bar{display:flex;align-items:center;gap:var(--ref-space-2);
   background:var(--sys-surface);border:1.5px solid var(--sys-border);
-  /* v2.21.0: match .dash-search-trigger — rounded rectangle, not pill. */
+  /* match .dash-search-trigger — rounded rectangle, not pill. */
   border-radius:var(--ref-radius-lg);padding:0 var(--ref-space-4);
   min-height:52px;transition:border-color var(--ref-dur-fast) var(--ref-ease),
   box-shadow var(--ref-dur-fast) var(--ref-ease)}
@@ -643,7 +658,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   transition:all var(--ref-dur-fast) var(--ref-ease)}
 @media(hover:hover){
   .app-ic:hover{transform:translateY(-2px)}
-  .app-ic:hover .ic{box-shadow:var(--sys-shadow-md)}
+  .app-ic:hover .ic{box-shadow:var(--sys-shadow-md);filter:brightness(.9)} /* hover darkens like a tap */
 }
 .app-ic:active{transform:scale(.90);transition-duration:50ms}
 .app-ic:active .ic{box-shadow:none;filter:brightness(.85)}
@@ -655,7 +670,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .app-ic .nm{font-size:var(--ref-font-sm);font-weight:var(--sys-font-wt-md);
   text-align:center;color:var(--sys-text-sec);line-height:1.2;
   max-width:96px;
-  /* v2.24.5: uniform size, no truncation. Was white-space:nowrap + ellipsis +
+  /* uniform size, no truncation. Was white-space:nowrap + ellipsis +
      a single-line band, which (with the .is-long shrink removed) would clip a
      long name like "Commission" at full size. Now the label wraps to a fixed
      TWO-line band (sized off the full font), top-anchored, clamped at 2 lines —
@@ -700,16 +715,23 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .action-card .ac-name{font-size:var(--ref-font-md);font-weight:var(--sys-font-wt-sb)}
 .action-card .ac-desc{font-size:var(--ref-font-sm);color:var(--sys-text-sec);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+/* the large cards fit the screen. A grid track of plain 1fr is never narrower than its card's widest line,
+   and a description kept on one line made each card 780-820px wide on a 390px phone: the second column (and every
+   app in it) sat off-screen, and the names, centred in the too-wide card, were off-screen too. Tracks may now shrink
+   (minmax(0,1fr)), a card may shrink (min-width:0), its words start at the left, and a phone shows one card a row. */
+.app-grid-hero{grid-template-columns:minmax(0,1fr)}
+@media (min-width:600px){.app-grid-hero{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.action-card{min-width:0;width:100%;text-align:left}
 
 /* ---- View Fade Animation ---- */
 @keyframes viewFadeIn{from{opacity:0}to{opacity:1}}
 .sub-view.active{animation:viewFadeIn var(--ref-dur-norm) var(--ref-ease)}
 
 /* ================================================================
-   KPI METRIC GRID (v2.8.0 — Owner / Admin / Mfg views)
+   KPI METRIC GRID (Owner / Admin / Mfg views)
    ================================================================ */
 .kpi-grid{
-  /* v2.21.0: minmax(0,1fr) (was bare 1fr) — same Safari/high-DPI sub-pixel
+  /* minmax(0,1fr) (was bare 1fr) — same Safari/high-DPI sub-pixel
      fix the app dock uses. Bare 1fr + gap can resolve to fractional px that
      exceeds the container, clipping the right column. */
   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
@@ -765,7 +787,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 [data-theme="sunlight"] .dash-search-trigger{border:2px solid #000}
 [data-theme="sunlight"] .bnav{border-top:2px solid #000}
 
-/* v2.14.4 A6: Bigger bottom nav on tablet (before sidebar breakpoint) */
+/* Bigger bottom nav on tablet (before sidebar breakpoint) */
 @media(min-width:600px) and (max-width:819px){
   .bnav{height:56px}
   .ni{min-height:52px}
@@ -839,7 +861,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   padding-bottom:env(safe-area-inset-bottom,0);
   display:flex;align-items:center;justify-content:center;min-height:49px;
   transition:transform .35s cubic-bezier(.32,.72,0,1)}
-/* v2.16.0 T9: Dark mode solid fallback for nav bar */
+/* Dark mode solid fallback for nav bar */
 [data-theme="dark"] .bnav{background-color:var(--ref-gray-800)}
 @media(prefers-color-scheme:dark){
   [data-theme="system"] .bnav{background-color:var(--ref-gray-800)}
@@ -866,7 +888,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .bnav-logo img{max-width:100px;max-height:36px;width:auto;height:auto;object-fit:contain}
 .bnav-logo-text{font-size:var(--ref-font-lg);font-weight:var(--sys-font-wt-b);
   color:var(--sys-brand);letter-spacing:-.02em}
-/* v2.21.0: logo contrast safety net.
+/* logo contrast safety net.
    The correct fix is uploading a dark-inked light-mode logo to zdz_logo_light
    (see DATA-THEME-CONTRACT). But if that asset is missing/misconfigured, the
    dark-mode (light-inked) wordmark renders on a near-white bar and becomes
@@ -883,7 +905,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .bnav-logo.settings-active::after{content:'';position:absolute;bottom:2px;
   width:24px;height:3px;background:var(--sys-brand);border-radius:var(--ref-radius-full)}
 
-/* FAB (Floating Action Button) — REMOVED v2.6.3 */
+/* FAB (Floating Action Button) — REMOVED */
 
 /* ================================================================
    SETTINGS
@@ -975,7 +997,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   font-size:var(--ref-font-sm)}
 
 /* ================================================================
-   BUG REPORT — Moved to bug-reporter.css (v2.7.0)
+   BUG REPORT — Moved to bug-reporter.css
    ================================================================ */
 
 /* ================================================================
@@ -988,7 +1010,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 [data-theme="sunlight"] .toast{border:2px solid #000}
 
 /* ================================================================
-   DARK MODE CONTRAST (v2.14.4 A7)
+   DARK MODE CONTRAST (A7)
    Increased border visibility and card elevation for dark/system.
    ================================================================ */
 [data-theme="dark"] .kpi-card,
@@ -1012,7 +1034,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 
 
 /* ================================================================
-   DASHBOARD WIDGETS (v2.0)
+   DASHBOARD WIDGETS
    ================================================================ */
 .dash-widget-zone{
   display:flex;flex-direction:column;gap:var(--ref-space-4);
@@ -1036,40 +1058,63 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .dash-widget-header .dw-title{
   font-size:var(--ref-font-md);font-weight:var(--sys-font-wt-sb);margin:0;
 }
-/* v2.14.3.1: Widget reorder controls — up/down arrows in the header */
-.dw-reorder{
+/* widget-header ^/v arrows are NAVIGATION (page
+   through the widget stack, stop at ends). Reorder moves to a long-press edit
+   mode below. Class renamed .dw-reorder → .dw-nav; styling is unchanged so the
+   arrows look identical. Min tap target is enforced by the T4 mobile block. */
+.dw-nav{
   margin-left:auto;display:flex;gap:2px;flex-shrink:0;
 }
-.dw-reorder-btn{
+.dw-nav-btn{
   width:32px;height:28px;border:1px solid var(--sys-border, #e2e8f0);border-radius:var(--ref-radius-sm, 6px);
   background:var(--sys-surface, #fff);color:var(--sys-text, #1e293b);cursor:pointer;
   display:flex;align-items:center;justify-content:center;transition:all 0.15s ease;
   padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
 }
-.dw-reorder-btn:active:not(:disabled){background:var(--sys-brand, #2C5F8A);color:#fff;transform:scale(0.92);}
-.dw-reorder-btn:disabled{opacity:0.25;cursor:not-allowed;}
-.dw-reorder-btn svg{pointer-events:none;}
-/* v2.20.3-patched-8: dark-mode reorder chevron contrast. The currentColor SVG
-   arrows were nearly invisible on the dark widget surface when inking from
+.dw-nav-btn:active:not(:disabled){background:var(--sys-brand, #2C5F8A);color:#fff;transform:scale(0.92);}
+.dw-nav-btn:disabled{opacity:0.25;cursor:not-allowed;}
+.dw-nav-btn svg{pointer-events:none;}
+/* patched-8: dark-mode chevron contrast. The currentColor SVG arrows
+   were nearly invisible on the dark widget surface when inking from
    --sys-text-sec. Pin the glyph to full --sys-text and give the tap target a
    faint surface lift + stronger border so it reads on the shop floor. Light
    and sunlight are unchanged. */
-[data-theme="dark"] .dw-reorder-btn{
+[data-theme="dark"] .dw-nav-btn{
   color:var(--sys-text, #f1f5f9);
   background:rgba(255,255,255,.06);
   border-color:var(--ref-gray-600);
 }
 @media(prefers-color-scheme:dark){
-  [data-theme="system"] .dw-reorder-btn{
+  [data-theme="system"] .dw-nav-btn{
     color:var(--sys-text, #f1f5f9);
     background:rgba(255,255,255,.06);
     border-color:var(--ref-gray-600);
   }
 }
+/* long-press reorder edit mode. Entered by long-pressing a
+   widget header; the arrows then MOVE the widget and a "Done reordering" chip
+   is shown. Ring makes the mode unmistakable so the arrows don't read as
+   broken navigation. */
+.zdz-widget-reordering .dash-widget-header{
+  box-shadow:inset 0 0 0 2px var(--sys-brand, #2C5F8A);
+  cursor:grab;
+}
+.zdz-widget-reordering .dw-nav-btn{
+  background:var(--sys-brand, #2C5F8A);color:#fff;border-color:var(--sys-brand, #2C5F8A);
+}
+.zdz-widget-reorder-done{
+  position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 76px);
+  transform:translateX(-50%);z-index:60;
+  padding:10px 18px;min-height:44px;border:none;border-radius:var(--ref-radius-full, 999px);
+  background:var(--sys-brand, #2C5F8A);color:#fff;font-weight:var(--sys-font-wt-sb, 600);
+  font-size:15px;box-shadow:var(--sys-shadow-md, 0 6px 20px rgba(0,0,0,.25));cursor:pointer;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+[data-theme="sunlight"] .zdz-widget-reorder-done{border:2px solid #000}
 .dash-widget-body{padding:var(--ref-space-4)}
 
 /* ================================================================
-   v2.21.0: GAME CONTAINER BUDGET (wide screens / landscape)
+   GAME CONTAINER BUDGET (wide screens / landscape)
    The game shown during AI waits is "tiny in the middle" on desktop/
    wide-tablet. The THEME owns the container height; the zdz-game PLUGIN
    scales its canvas (letterbox, no resolution change) to fill it.
@@ -1083,8 +1128,8 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 @media (orientation: landscape) and (min-width: 740px){ :root{ --zdz-game-max-h: 78vh; } }
 
 /* ────────────────────────────────────────────────────────────────
-   v2.24.8 — THE ACTUAL BLACK-SLIVER ROOT CAUSE (finally).
-   v2.24.7 was structurally right (min-height on the container, body
+   THE ACTUAL BLACK-SLIVER ROOT CAUSE (finally).
+   The earlier fix was structurally right (min-height on the container, body
    flex:1 1 auto + max-height) but STILL produced the sliver, because
    the budget variable resolved to 0px at the point of use.
 
@@ -1097,7 +1142,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
        container min-height:0  →  collapses
        body     max-height:0   →  clips the 324px game wrap to ~44px
    = the black sliver. (Verified live: computed --zdz-game-max-h on
-   :root read 0px; the v2.24.7 rule was present in the CSSOM but futile.)
+   :root read 0px; the rule was present in the CSSOM but futile.)
 
    FIX: stop depending on the bare-:root variable the plugin owns and
    resets. Re-declare the budget on the game CONTAINER selector, whose
@@ -1114,11 +1159,11 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
   .dash-widget-container[data-app-id="game"]{ --zdz-game-max-h: 78vh; }
 }
 
-/* v2.24.6 / v2.24.7 / v2.24.8: the registered Game app id is "game" (NOT
+/* / / the registered Game app id is "game" (NOT
    "zdz-game"). The container gets a min-height so it grows (max-height alone
    only caps, never stretches); the body is flex:1 1 auto with a matching
    min-height so it FILLS the grown container instead of collapsing to the
-   game's intrinsic 44px. With v2.24.8's container-scoped budget above, the
+   game's intrinsic 44px. With the container-scoped budget above, the
    var() references here now resolve to the real budget instead of the
    plugin's 0px — so the container grows, the body fills, and the canvas
    paints at full height. No more black sliver. */
@@ -1155,7 +1200,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 /* ================================================================
    FULL-SCREEN APP VIEWPORT
    ================================================================ */
-/* v2.16.0 T5: Instant jump on mobile (no slide animation) */
+/* Instant jump on mobile (no slide animation) */
 .app-viewport{position:fixed;inset:0;z-index:200;background:var(--sys-bg);
   display:flex;flex-direction:column;
   transform:translateY(100%);
@@ -1165,7 +1210,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .app-viewport.active{transform:translateY(0);pointer-events:auto}
 
 /* ---- App Header (compact) ---- */
-/* v2.14.5: position:relative + z-index creates a stacking context so scrolled
+/* position:relative + z-index creates a stacking context so scrolled
    content in .app-body never composites above the header. box-shadow masks
    any sub-pixel edge bleed at the header/body boundary. */
 .app-header{display:flex;align-items:center;gap:var(--ref-space-2);
@@ -1186,7 +1231,7 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .app-header-actions{display:flex;align-items:center;gap:var(--ref-space-1)}
 
 /* ---- App Body ---- */
-/* v2.21.0: surface background (not the darker --sys-bg page void) so short
+/* surface background (not the darker --sys-bg page void) so short
    ajax_html content doesn't flash a black band, and contain overscroll so
    rubber-banding past the content reveals the surface, not the void. */
 .app-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
@@ -1203,13 +1248,21 @@ h1,h2,h3,h4,h5,h6{font-weight:var(--sys-font-wt-sb);line-height:1.25}
 .app-error{padding:var(--ref-space-6);text-align:center;color:var(--sys-text-sec);
   font-size:var(--ref-font-sm)}
 
+/* ----: document layer (Bridge.openDoc) — above the app viewport ---- */
+.app-viewport.zdz-doc-layer{z-index:210}
+.zdz-doc-download{font-size:var(--ref-font-sm);font-weight:var(--sys-font-wt-sb);color:var(--sys-brand);
+  padding:8px 10px;border-radius:var(--ref-radius-md);text-decoration:none;white-space:nowrap}
+.zdz-doc-download:hover{background:var(--sys-brand-light)}
+.zdz-doc-download[hidden]{display:none}
+body.zdz-doc-active{overflow:hidden}
+
 /* ---- Chrome transitions when app is active ---- */
 body.app-active .bnav{transform:translateY(100%);pointer-events:none}
 body.app-active #view-main{pointer-events:none}
 
 /* ---- Sunlight overrides for viewport ---- */
 [data-theme="sunlight"] .app-header{border-bottom:2px solid #000}
-/* v2.14.5: stronger shadow in dark themes for header edge masking */
+/* stronger shadow in dark themes for header edge masking */
 [data-theme="dark"] .app-header{box-shadow:0 2px 8px -2px rgba(0,0,0,.35)}
 @media(prefers-color-scheme:dark){
   [data-theme="system"] .app-header{box-shadow:0 2px 8px -2px rgba(0,0,0,.35)}
@@ -1225,7 +1278,7 @@ body.app-active #view-main{pointer-events:none}
     bottom: 0;
     left: 0;
     right: auto;            /* ← UNSET mobile right:0 */
-    width: 88px;            /* v2.14.4 A6: wider sidebar for bigger touch targets */
+    width: 88px;            /* wider sidebar for bigger touch targets */
     height: 100%;           /* ← Explicit full height (not auto) */
     height: 100dvh;         /* ← Modern override for dynamic viewport */
     flex-direction: column;
@@ -1241,14 +1294,14 @@ body.app-active #view-main{pointer-events:none}
   .ni {
     flex: none;
     width: 100%;
-    min-height: 76px;       /* v2.14.4 A6: taller touch targets */
+    min-height: 76px;       /* taller touch targets */
   }
   .ni svg {
-    width: 32px;            /* v2.16.0 T14: larger sidebar icons */
+    width: 32px;            /* larger sidebar icons */
     height: 32px;
   }
   .ni .ni-label {
-    font-size: 16px;        /* v2.16.0 T14: larger sidebar label text */
+    font-size: 16px;        /* larger sidebar label text */
   }
   /* Logo in sidebar: sits between Dashboard and Chat */
   .bnav-logo {
@@ -1260,7 +1313,7 @@ body.app-active #view-main{pointer-events:none}
     max-width: 64px;
     max-height: 32px;
   }
-  /* v2.14.4 A5: Vertical logo gets more height in the sidebar */
+  /* Vertical logo gets more height in the sidebar */
   .bnav-logo img.logo-vertical {
     max-width: 56px;
     max-height: 64px;
@@ -1277,10 +1330,10 @@ body.app-active #view-main{pointer-events:none}
 
   #view-main {
     padding-bottom: 0;
-    padding-left: 88px;     /* v2.14.4 A6: match wider sidebar */
+    padding-left: 88px;     /* match wider sidebar */
   }
 
-  /* v2.16.0 T5: Fast 0.1s transition on desktop */
+  /* Fast 0.1s transition on desktop */
   .app-viewport {
     transform: scale(0.96);
     opacity: 0;
@@ -1306,7 +1359,7 @@ body.app-active #view-main{pointer-events:none}
   }
 }
 
-/* v2.13.0: App Authorizations + Nutshell modal (company-wide) */
+/* App Authorizations + Nutshell modal (company-wide) */
 .zdz-app-auth-card { margin-bottom: var(--ref-space-4, 16px); }
 .zdz-app-auth-card .zdz-auth-hint {
   font-size: var(--ref-font-xs, 13px);
@@ -1327,7 +1380,7 @@ body.app-active #view-main{pointer-events:none}
   margin-left: var(--ref-space-1, 4px);
 }
 
-/* v2.20.2: Field Preferences card */
+/* Field Preferences card */
 .zdz-field-prefs-card { margin-bottom: var(--ref-space-4, 16px); }
 .zdz-fp-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -1479,7 +1532,7 @@ body.app-active #view-main{pointer-events:none}
 }
 .zdz-ns-footer .btn.is-loading { opacity: .7; cursor: wait; }
 
-/* === LAYOUT v2.12.5 — sidebar preserved on desktop, sticky headers === */
+/* === LAYOUT sidebar preserved on desktop, sticky headers === */
 
 /* 1. SINGLE-COLUMN DASHBOARD — widget zone and grid container stack vertically.
       The .app-grid itself keeps its responsive grid columns (repeat(3-6,1fr))
@@ -1501,7 +1554,7 @@ body.app-active #view-main{pointer-events:none}
   margin-inline: 0 !important;
 }
 
-/* Wrap rows — no horizontal scrolling anywhere (v2.14.1) */
+/* Wrap rows — no horizontal scrolling anywhere */
 .recent-row,
 .app-chips-row,
 .greeting-row {
@@ -1525,7 +1578,7 @@ body.app-active #view-main{pointer-events:none}
   flex-direction: column;
   min-height: 0;
   overflow: clip;
-  max-width: 100%; /* v2.20.0 r5: was 100vw which includes scrollbar gutter */
+  max-width: 100%; /* was 100vw which includes scrollbar gutter */
 }
 .sub-view {
   flex: 1 1 auto;
@@ -1536,14 +1589,14 @@ body.app-active #view-main{pointer-events:none}
   overscroll-behavior-y: none;
   max-width: 100%;
 }
-/* v2.14.4.3: Hard clip — prevent ANY horizontal shift */
+/* Hard clip — prevent ANY horizontal shift */
 #view-main, #sv-dash, .app-viewport {
   max-width: 100%;
-  overflow-x: hidden; /* r5: changed from clip to hidden — iOS WebKit converts
+  overflow-x: hidden; /* changed from clip to hidden — iOS WebKit converts
                          clip to auto when paired with overflow-y:auto */
   overscroll-behavior-x: none;
 }
-/* v2.20.0 r5: The right-side layout shift is caused by the sub-view's
+/* The right-side layout shift is caused by the sub-view's
    scroll container being wider than the viewport. Force explicit width
    and symmetric padding. */
 #sv-dash.sub-view {
@@ -1557,7 +1610,7 @@ body.app-active #view-main{pointer-events:none}
   max-width: 100%;
   box-sizing: border-box;
 }
-/* v2.21.0: when a widget is launched from the dock, bridge.js scrolls it to the
+/* when a widget is launched from the dock, bridge.js scrolls it to the
    top of #sv-dash via scrollIntoView({block:'start'}). scroll-margin-top reserves
    space above the target equal to the sticky dash chrome (top bar + sticky icon
    strip) plus a small gap, so the launched widget's header lands just below the
@@ -1567,7 +1620,7 @@ body.app-active #view-main{pointer-events:none}
 }
 .app-body { min-height: 0; }
 
-/* 3. STICKY WIDGET HEADERS — handled in the consolidated v2.14.1 block below.
+/* 3. STICKY WIDGET HEADERS — handled in the consolidated block below.
       Container setup (overflow, isolation) remains here. */
 @media (max-width: 1199.98px) {
   .dash-widget-container {
@@ -1608,10 +1661,10 @@ body.app-active #view-main{pointer-events:none}
     background: color-mix(in srgb, var(--sys-surface) 92%, transparent);
     border-top: 1px solid var(--sys-border, rgba(0,0,0,.08));
     border-right: none !important;
-    /* v2.14.4.3: Ensure bottom nav never clips off-screen */
+    /* Ensure bottom nav never clips off-screen */
     overflow: visible;
   }
-  /* v2.14.4.3: Padding ONLY on .sub-view (not #view-main or .view.active)
+  /* Padding ONLY on .sub-view (not #view-main or .view.active)
      to avoid stacking padding that pushes content past viewport edge */
   #view-main,
   .view.active {
@@ -1651,7 +1704,7 @@ body.app-active #view-main{pointer-events:none}
   .sub-view { max-width: 1400px; }
 }
 
-/* 6b. Full-width opt-out (v2.14.0) — chat-style sub-views need to fill the
+/* 6b. Full-width opt-out — chat-style sub-views need to fill the
    viewport on desktop. iMessage/Slack on macOS are full-width by design;
    the messaging plugin's Team tab and any future chat-shaped plugin should
    match that expectation. Plugins opt in by adding `.zdz-fullwidth` to
@@ -1684,8 +1737,8 @@ body.app-active #view-main{pointer-events:none}
 
 /* 7. App viewport cleanup */
 .app-viewport:not(.active) { visibility: hidden; pointer-events: none; }
-/* === END LAYOUT v2.12.5 === */
-/* === STICKY HEADER AESTHETIC FIX v2.14.1 === */
+/* === END LAYOUT === */
+/* === STICKY HEADER AESTHETIC FIX === */
 /* Sticky widget headers need:
    1. Explicit opaque background (not inherit — that resolves to transparent
       when the parent chain has no solid bg, causing content peek-through)
@@ -1695,7 +1748,7 @@ body.app-active #view-main{pointer-events:none}
    overflow:clip on containers clips at the border-radius without creating a
    scrolling context, so sticky children still work. */
 
-/* v2.17.1: --dash-top-h is set by JS after measuring .dash-top height.
+/* --dash-top-h is set by JS after measuring .dash-top height.
    Widget headers use it to stick right below the greeting/search bar,
    eliminating the 20-80px transparent gap where content was peeking through. */
 :root { --dash-top-h: 0px; --dash-sticky-h: 0px; }
@@ -1716,13 +1769,13 @@ body.app-active #view-main{pointer-events:none}
   .widget-card > .widget-header,
   .widget-card > header,
   .widget-card > h3:first-child,
-  /* v2.14.5: cover plugin headers rendered inside app-body scroll context */
+  /* cover plugin headers rendered inside app-body scroll context */
   .app-body .widget-header,
   .app-body .card-header,
   .app-body > div > header:first-child,
   .app-body [data-sticky-header] {
     position: sticky !important;
-    /* v2.20.0 r4: Widget headers stick below BOTH the greeting bar AND the
+    /* Widget headers stick below BOTH the greeting bar AND the
        sticky icon bar. Previously they stuck at --dash-top-h only, which
        is the same position as the icon bar — so headers slid behind it.
        Adding --dash-sticky-h pushes widget headers below the icon bar. */
@@ -1748,33 +1801,33 @@ body.app-active #view-main{pointer-events:none}
 /* === END STICKY HEADER AESTHETIC FIX === */
 
 /* ================================================================
-   v2.16.0 T15: DASH-TOP — sticky greeting + search
+   DASH-TOP — sticky greeting + search
    ================================================================ */
 .dash-top{
   position:sticky;top:0;z-index:30;
   background:var(--sys-bg);
-  /* v2.17.1: Extend into safe area so content never peeks above the greeting */
+  /* Extend into safe area so content never peeks above the greeting */
   padding-top:calc(env(safe-area-inset-top, 0px) + var(--ref-space-3));
   padding-bottom:var(--ref-space-2);
-  /* v2.21.0: shadow removed at rest — over a near-white light-mode bg the
+  /* shadow removed at rest — over a near-white light-mode bg the
      hairline read as a horizontal "cut off" seam (dark/sun never showed it
      because they force a matched background below). A subtle separation is
      reapplied only in the compact/scrolled state (.dash-compact), when the
      bar is genuinely floating over scrolled content. */
 }
-/* v2.17.1: The dashboard sub-view must have NO padding-top — the sticky
+/* The dashboard sub-view must have NO padding-top — the sticky
    dash-top covers the full top area (including safe-area on notched phones).
    Without this, the sub-view's padding creates a gap above the stuck header
    where content scrolls through and is visible as a "bar". */
 #sv-dash.sub-view{ padding-top:0 }
-/* v2.17.1: Greeting — shrink text to fit instead of truncating with "..." */
+/* Greeting — shrink text to fit instead of truncating with "..." */
 .greeting-row h2,.greeting-row-inner h2{
   white-space:nowrap;overflow:hidden;
   max-width:calc(100% - 56px);
   /* Scale from 18px (cramped) to full xl size, fitting the viewport */
   font-size:clamp(18px, 5.5vw, var(--ref-font-xl));
 }
-/* v2.17.1: pseudo-element covers any sub-pixel gap at the bottom edge
+/* pseudo-element covers any sub-pixel gap at the bottom edge
    so scrolling content never peeks through below the sticky bar */
 .dash-top::after{
   content:'';display:block;position:absolute;
@@ -1789,24 +1842,24 @@ body.app-active #view-main{pointer-events:none}
 }
 [data-theme="sunlight"] .dash-top{background:#FFFFFF;box-shadow:0 4px 6px -4px rgba(0,0,0,.15)}
 [data-theme="sunlight"] .dash-top::after{background:#FFFFFF}
-/* v2.21.0: explicit light-mode parity. Light previously fell through to
+/* explicit light-mode parity. Light previously fell through to
    --sys-bg with no matched cover, which (with the old hairline shadow) showed
    a seam under the greeting/search zone. Match .dash-top and its ::after
    cover to the page background so the sticky header blends seamlessly, the
    same way dark/system/sunlight already do. */
 :root[data-theme="light"] .dash-top{background:var(--sys-bg)}
 :root[data-theme="light"] .dash-top::after{background:var(--sys-bg)}
-/* v2.21.0: reintroduce a subtle separation ONLY when scrolled/compact, so the
+/* reintroduce a subtle separation ONLY when scrolled/compact, so the
    floating bar reads as elevated over content without showing a seam at rest. */
 .dash-top.dash-compact{box-shadow:0 4px 6px -4px rgba(0,0,0,.12)}
 
 /* ================================================================
-   v2.16.0 T4: DASH-STICKY — compact app bar (visible on scroll)
-   v2.17.1: top uses --dash-top-h so it sits below dash-top, not behind it
+ DASH-STICKY — compact app bar (visible on scroll)
+   top uses --dash-top-h so it sits below dash-top, not behind it
    ================================================================ */
 .dash-sticky{
   position:fixed;left:0;right:0;
-  /* v2.20.1: Removed env(safe-area-inset-top) — it was double-counted.
+  /* Removed env(safe-area-inset-top) — it was double-counted.
      --dash-top-h is measured from getBoundingClientRect().height on .dash-top,
      which ALREADY includes the safe-area padding. Adding safe-area again
      pushed the bar below the search bar by ~47px on notched iPhones in PWA. */
@@ -1835,7 +1888,7 @@ body.app-active #view-main{pointer-events:none}
   -webkit-mask-image:linear-gradient(to right, #000 82%, transparent 100%);
 }
 .sticky-app-strip::-webkit-scrollbar{display:none}
-/* v2.17.2: Desktop — center the strip when there's extra space */
+/* Desktop — center the strip when there's extra space */
 @media(min-width:900px){
   .sticky-app-strip{justify-content:center;padding:0 var(--ref-space-5);}
 }
@@ -1847,14 +1900,14 @@ body.app-active #view-main{pointer-events:none}
   -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
 }
 .sticky-app-btn:active{transform:scale(.88)}
-/* v2.17.2: Sticky bar icons — large enough to be tappable */
+/* Sticky bar icons — large enough to be tappable */
 .sticky-app-icon{
   width:52px;height:52px;border-radius:var(--ref-radius-lg);
   display:flex;align-items:center;justify-content:center;color:#fff;
   box-shadow:0 1px 4px rgba(0,0,0,.12);
 }
 .sticky-app-icon svg{width:24px;height:24px;stroke-width:1.75}
-/* v2.17.2: Compact labels */
+/* Compact labels */
 .sticky-app-label{
   font-size:10px;font-weight:600;color:var(--sys-text-sec);
   text-align:center;line-height:1.1;max-width:62px;
@@ -1868,7 +1921,7 @@ body.app-active #view-main{pointer-events:none}
 [data-theme="sunlight"] .sticky-app-icon{border:2px solid #000;box-shadow:none}
 
 /* ================================================================
-   v2.16.0 T10: SUNLIGHT MODE — additional overrides
+ SUNLIGHT MODE — additional overrides
    ================================================================ */
 [data-theme="sunlight"] .dock-icon{box-shadow:none}
 [data-theme="sunlight"] .kpi-value{color:#000}
@@ -1878,7 +1931,7 @@ body.app-active #view-main{pointer-events:none}
 [data-theme="sunlight"] .btn-brand:active{background:#000}
 
 /* ================================================================
-   v2.16.0 T5: WIDGET HIGHLIGHT — pulse animation for deep-link
+ WIDGET HIGHLIGHT — pulse animation for deep-link
    ================================================================ */
 @keyframes widgetHighlight{
   0%{box-shadow:0 0 0 0 rgba(44,95,138,.4)}
@@ -1887,7 +1940,7 @@ body.app-active #view-main{pointer-events:none}
 }
 .widget-highlight{animation:widgetHighlight .8s ease 2}
 
-/* ── v2.17.3: Dock & Sticky Bar Edit Mode (unified reorder) ── */
+/* ── Dock & Sticky Bar Edit Mode (unified reorder) ── */
 @keyframes dock-shake {
   0%,100% { transform:rotate(0deg); }
   25% { transform:rotate(-1.5deg); }
@@ -1972,7 +2025,7 @@ body.app-active #view-main{pointer-events:none}
 [data-theme="sunlight"] .dock-edit-done { background:#000; }
 
 /* ================================================================
-   v2.20.0 — THEME IMPROVEMENT BATCH
+   THEME IMPROVEMENT BATCH
    ================================================================ */
 
 /* ── Light mode contrast improvements ─────────────────────────── */
@@ -2007,7 +2060,7 @@ body {
   -webkit-text-size-adjust:100%;
 }
 #view-main, .sub-view {
-  max-width:100%; /* v2.20.0 r5: was 100vw */
+  max-width:100%; /* was 100vw */
   overflow-x:clip;
 }
 #app-grid-container {
@@ -2055,7 +2108,7 @@ body {
 }
 
 /* ── Widget overflow & layout containment ─────────────────────── */
-/* v2.20.1: Removed max-height:65vh and overflow-y:auto that caused
+/* Removed max-height:65vh and overflow-y:auto that caused
    "double scrolling" — widgets now expand to natural height and the
    page scrolls as one continuous document. No nested scroll traps.
    
@@ -2077,9 +2130,8 @@ body {
   max-width:100%;
   box-sizing:border-box;
 }
-/* Widget stat grids (Leads "2 BATCHES / 11 LEADS" row) — ensure
-   the grid wraps instead of overflowing on narrow screens */
-.dash-widget-body .tsl-stats,
+/* Widget stat rows (a "2 BATCHES / 11 LEADS" style row) — ensure
+   the row wraps instead of overflowing on narrow screens */
 .dash-widget-body [class*="stats-row"],
 .dash-widget-body [class*="stat-grid"] {
   flex-wrap:wrap;
@@ -2100,14 +2152,14 @@ body {
 }
 /* The app dock should reserve its space to prevent CLS when it
    scrolls out of view and the sticky bar replaces it.
-   v2.20.1: Removed contain:layout — it created an independent
+   Removed contain:layout — it created an independent
    formatting context that could miscalculate grid column widths
    on high-DPI iOS devices with sub-pixel rounding. */
 #app-dock {
   min-height:68px; /* prevent collapse before icons load */
 }
 
-/* ── v2.20.1: Dash-sticky desktop sidebar offset ────────────── */
+/* ── Dash-sticky desktop sidebar offset ────────────── */
 /* On ≥820px the left sidebar is 88px wide. The dash-sticky is
    position:fixed so it must offset left to avoid covering the nav. */
 @media (min-width: 820px) {
@@ -2116,7 +2168,7 @@ body {
   }
 }
 
-/* ── v2.20.1: Mobile top spacing reduction ──────────────────── */
+/* ── Mobile top spacing reduction ──────────────────── */
 /* Tighten the gap between the search bar and mini-app icons on
    portrait phones. Every pixel counts for usable widget space. */
 @media (max-width: 819.98px) {
@@ -2132,7 +2184,7 @@ body {
   }
 }
 
-/* ── v2.20.1: Search bar compact-on-scroll ──────────────────── */
+/* ── Search bar compact-on-scroll ──────────────────── */
 /* When user scrolls down, the dash-top shrinks dramatically to
    reclaim screen real estate. JS adds .dash-compact class at ~40%
    of the sticky threshold, and .dash-sticky-on when the icon strip
@@ -2150,7 +2202,7 @@ body {
   padding-top: calc(env(safe-area-inset-top, 0px) + 2px);
   padding-bottom: 0;
 }
-/* v2.20.1: Solid box-shadow extends below dash-top, covering scrolling
+/* Solid box-shadow extends below dash-top, covering scrolling
    content in the gap between search bar and sticky icon strip. ONLY
    active when both compact AND sticky bar are visible (.dash-sticky-on
    added by JS when the icon strip appears). Without this gate, the
@@ -2180,7 +2232,7 @@ body {
   display: none;
 }
 
-/* ── Kiosk / Demo Mode (v2.21.0) ─────────────────────────────────────────
+/* ── Kiosk / Demo Mode ─────────────────────────────────────────
    A persistent, unobtrusive top banner shown only while the device is in
    demo mode (running as the shared General account). It signals the safe
    state and offers the PIN-gated exit. Pinned to the top respecting the
@@ -2209,8 +2261,22 @@ body:has(#zdz-kiosk-banner) #view-main{padding-top:calc(env(safe-area-inset-top,
    as the deliberate way out rather than a generic outline button. */
 .zdz-kiosk-exit-btn{border-color:#0d9488 !important;color:#0d9488 !important}
 
+/* the Demo Mode PIN sheet (ZDZ.ui.sheet). Masked, numeric, an eye to show it; 18px+ so iOS never zooms. */
+.zdz-pin-intro{margin:0 0 var(--ref-space-4,16px);color:var(--sys-text-sec);line-height:1.45}
+.zdz-pin-field{display:block;margin:0 0 var(--ref-space-4,16px)}
+.zdz-pin-label{display:block;margin:0 0 var(--ref-space-2,8px);font-weight:var(--sys-font-wt-sb);color:var(--sys-text)}
+.zdz-pin-wrap{position:relative;display:flex;align-items:center}
+.zdz-pin-input{width:100%;min-height:48px;box-sizing:border-box;padding:10px 52px 10px 14px;font-size:22px;letter-spacing:.25em;
+  font-variant-numeric:tabular-nums;color:var(--sys-text);background:var(--sys-surface);
+  border:1px solid var(--sys-border-strong);border-radius:var(--zdz-kit-radius,12px)}
+.zdz-pin-input:focus{outline:none;border-color:var(--sys-brand);box-shadow:var(--sys-focus)}
+.zdz-pin-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:44px;height:44px;display:flex;align-items:center;
+  justify-content:center;background:transparent;border:0;border-radius:var(--zdz-kit-radius,12px);color:var(--sys-text-sec);cursor:pointer}
+.zdz-pin-eye:hover{background:var(--sys-surface-subtle)}
+.zdz-pin-eye svg,.zdz-pin-eye i{width:22px;height:22px}
+
 /* ================================================================
- *  v2.21.3: LEADS ACTION TILE
+ *  LEADS ACTION TILE
  *  "You have N leads to contact" — surfaced at the top of the
  *  dashboard for a salesperson from the unified action-items feed.
  *  Visual language matches .dash-search-trigger / dock tiles: a
@@ -2258,7 +2324,7 @@ body:has(#zdz-kiosk-banner) #view-main{padding-top:calc(env(safe-area-inset-top,
   .leads-tile-btn{transition:none}
   .leads-tile-btn:active{transform:none}}
 
-/* v2.21.5: Inline orchestrator answer card (dashboard "ask" field) */
+/* Inline orchestrator answer card (dashboard "ask" field) */
 #zdz-inline-answer{margin:var(--ref-space-2,8px) 0 var(--ref-space-1,4px)}
 .zdz-inline-card{background:var(--sys-surface,#fff);border:1px solid var(--sys-border,#E2E8F0);
   border-left:3px solid var(--sys-brand,#6366F1);border-radius:var(--ref-radius-md,10px);
@@ -2280,7 +2346,32 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
   cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .zdz-inline-chat:hover{color:#fff;background:var(--sys-brand,#6366F1)}
 
-/* v2.28.0: Inline COMMISSION card — headline figure + collapsible drill-down. */
+/* QUICK ANSWER card: a figure from the business's records, under the ask bar (the Analytics app's ask.quick). The body is the
+   answer's own HTML (p, strong, em, ul, table), sized for the dropdown; tables never scroll sideways. */
+#zdz-quick-answer:empty{display:none}
+#zdz-quick-answer{margin:var(--ref-space-1,4px) 0 var(--ref-space-2,8px)}
+.zdz-qa-card{border-left-color:var(--sys-accent,#F59E0B)}
+.zdz-qa-badge{display:inline-flex;align-items:center;gap:4px;margin-bottom:6px;padding:2px 8px;border-radius:999px;
+  font-size:var(--ref-font-xs,12px);font-weight:600;letter-spacing:.01em;color:var(--sys-text-sec,#64748B);
+  background:color-mix(in srgb,var(--sys-accent,#F59E0B) 14%,transparent)}
+.zdz-qa-body{line-height:1.45;word-break:break-word}
+.zdz-qa-body p{margin:0 0 8px}
+.zdz-qa-body p:last-child{margin-bottom:0}
+/* the figure line (the second paragraph) reads a size up: the title says what, the figure is the answer */
+.zdz-qa-body p:nth-child(2){font-size:var(--ref-font-lg,19px);line-height:1.35}
+.zdz-qa-body ul{margin:0 0 8px;padding-left:18px}
+.zdz-qa-body li{margin:2px 0}
+.zdz-qa-body em{color:var(--sys-text-ter,#94A3B8);font-size:var(--ref-font-xs,13px);font-style:normal}
+.zdz-qa-body table{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:var(--ref-font-xs,13px);table-layout:fixed}
+.zdz-qa-body th,.zdz-qa-body td{padding:4px 6px;border-bottom:1px solid var(--sys-border,#E2E8F0);text-align:left;overflow-wrap:anywhere}
+.zdz-qa-body th{font-weight:600;color:var(--sys-text-sec,#64748B)}
+.zdz-qa-body .num{text-align:right;font-variant-numeric:tabular-nums}
+.zdz-qa-nudge{animation:zdzQaNudge .5s ease}
+@keyframes zdzQaNudge{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--sys-accent,#F59E0B) 45%,transparent)}100%{box-shadow:0 0 0 8px transparent}}
+@media (prefers-reduced-motion:reduce){.zdz-qa-nudge{animation:none}}
+.dash-ask .cmd-results:has(.zdz-qa-card){max-height:min(78vh,680px)}
+
+/* Inline COMMISSION card — headline figure + collapsible drill-down. */
 .zdz-cc-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .zdz-cc-amount{font-size:var(--ref-font-2xl,26px);font-weight:var(--sys-font-wt-sb,600);color:var(--sys-text,#0F172A)}
 .zdz-cc-who{font-size:var(--ref-font-sm,14px);color:var(--sys-text-sec,#64748B)}
@@ -2309,37 +2400,44 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 [data-theme="dark"] .zdz-cc-amount,[data-theme="dark"] .zdz-cc-row-r,[data-theme="dark"] .zdz-cc-sec-head{color:var(--sys-text,#E2E8F0)}
 [data-theme="dark"] .zdz-inline-chip{color:var(--sys-text-sec,#94A3B8);border-color:var(--sys-border,#334155)}
 
-/* v2.28.8: INSTANT SKELETON + freshness. The card frame paints immediately with
+/* INSTANT SKELETON + freshness. The card frame paints immediately with
    a shimmering placeholder for the figure; a cache hit fills it in ~50ms. */
 .zdz-shimmer,.zdz-shimmer-line{position:relative;overflow:hidden;background:var(--sys-border,#E2E8F0);
   border-radius:6px;color:transparent!important}
 .zdz-cc-amount.zdz-shimmer{display:inline-block;min-width:96px;height:24px}
 .zdz-shimmer-line{display:block;height:12px;margin:6px 0;width:70%}
 .zdz-contact-card .zdz-shimmer-line:nth-of-type(2){width:55%}
-.zdz-skeleton .zdz-shimmer::after,.zdz-skeleton .zdz-shimmer-line::after{content:'';position:absolute;inset:0;
+/* the inline placeholder's class is .zdz-inline-skel. It used to be .zdz-skeleton, which is
+   also the boot screen, and header.php's `body.zdz-ready .zdz-skeleton{display:none}` hid every inline placeholder
+   once the app had loaded, so a tapped answer showed nothing until the server replied. */
+.zdz-inline-skel .zdz-shimmer::after,.zdz-inline-skel .zdz-shimmer-line::after{content:'';position:absolute;inset:0;
   transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
   animation:zdzShimmer 1.1s ease-in-out infinite}
 @keyframes zdzShimmer{100%{transform:translateX(100%)}}
 @media (prefers-reduced-motion: reduce){.zdz-skeleton .zdz-shimmer::after,.zdz-skeleton .zdz-shimmer-line::after{animation:none}}
 [data-theme="dark"] .zdz-shimmer,[data-theme="dark"] .zdz-shimmer-line{background:var(--sys-border,#334155)}
-[data-theme="dark"] .zdz-skeleton .zdz-shimmer::after,[data-theme="dark"] .zdz-skeleton .zdz-shimmer-line::after{
+[data-theme="dark"] .zdz-inline-skel .zdz-shimmer::after,[data-theme="dark"] .zdz-inline-skel .zdz-shimmer-line::after{
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.10),transparent)}
+@media(prefers-color-scheme:dark){
+  [data-theme="system"] .zdz-shimmer,[data-theme="system"] .zdz-shimmer-line{background:var(--sys-border,#334155)}
+  [data-theme="system"] .zdz-inline-skel .zdz-shimmer::after,[data-theme="system"] .zdz-inline-skel .zdz-shimmer-line::after{
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.10),transparent)}
+}
 .zdz-cc-fresh{font-size:var(--ref-font-xs,11px);color:var(--sys-text-ter,#94A3B8);margin-top:6px}
 .zdz-cc-fresh .zdz-cc-dot{color:#10B981}
 
 
 /* ============================================================
-   v2.23.0: INLINE ASK FIELD + RESULTS DROPDOWN
+   INLINE ASK FIELD + RESULTS DROPDOWN
    Replaces the pop-up command-palette overlay. The field sits inline in
    #dash-top; #cmd-results drops down beneath it (absolute, so it overlays the
    dashboard tiles instead of pushing them down). Reuses .cmd-item/.ci-* styles.
    ============================================================ */
 .dash-ask {
   position:relative;
-  /* v2.24.0: explicit separation from the greeting/refresh row above. the owner
-     reported the refresh button visually "touching" the search bar on mobile —
-     the greeting row's small bottom padding (--ref-space-1) wasn't enough of a
-     gap. A dedicated top margin guarantees clear air between the two without
+  /* Explicit separation from the greeting/refresh row above: on mobile the
+     refresh button could visually "touch" the search bar, because the greeting
+     row's small bottom padding (--ref-space-1) isn't enough of a gap. A dedicated top margin guarantees clear air between the two without
      needing more height elsewhere. */
   margin-top:var(--ref-space-3);
 }
@@ -2372,10 +2470,16 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
   -webkit-overflow-scrolling:touch;
 }
 .dash-ask .cmd-results.show { display:block; }
+/* results are never covered by the app strip. .dash-top is sticky at z-index 30 with a
+   transform, which makes it a stacking context, so the dropdown's own z-index 200 can never rise above 30;
+   the fixed app strip (.dash-sticky, 35) painted over it. While the field has
+   focus or results are open, the whole top bar goes above the strip; the strip also steps aside. */
+.dash-top:focus-within,.dash-top:has(.cmd-results.show){z-index:40}
+body:has(.dash-ask .cmd-results.show) .dash-sticky{opacity:0!important;pointer-events:none!important}
 
 /* ════════════════════════════════════════════════════════════════
-   v2.24.0 — MOBILE DASHBOARD DENSITY + UNIFICATION PASS
-   Field-feedback wave (the owner, mobile, June 2026). Goals, in order:
+   MOBILE DASHBOARD DENSITY + UNIFICATION
+   Goals, in order:
      1. Reclaim vertical space — the greeting + app dock ate ~25% of the
         screen; target ~15% while keeping every tap target >= 44px.
      2. Unify dashboard widget tiles so different apps (surveys vs.
@@ -2384,7 +2488,7 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
      4. Theme-aware text + overflow guards for embedded app widgets
         (commission calculator dark text / off-screen controls; knowledge
         base horizontal width). These are belt-and-suspenders theme-side
-        overrides; the deeper fixes live in the plugins (see handoff docs).
+        overrides; the deeper fixes live in the apps themselves.
    Everything here is additive and scoped — no existing rule is removed,
    so older behavior is preserved and this block is easy to audit/revert.
    ════════════════════════════════════════════════════════════════ */
@@ -2405,12 +2509,10 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 2. APP DOCK ----------------------------------------------------
-   v2.24.4 SIZE RESTORE (the owner, June 2026): the v2.24.0 density pass
-   shrank the dock icons (72→56 / 84→64) and tiles (130/150→96/118) with
-   UNSCOPED !important rules, so the shrink applied at EVERY width —
-   including tablet/desktop, where it made the icons and tiles look too
-   small ("the overall app icon size got smaller which I don't want").
-   These rules now RESTORE the original larger footprint at all widths.
+   SIZE: a density pass that shrank the dock icons (72→56 / 84→64) and
+   tiles (130/150→96/118) with UNSCOPED !important rules would apply at
+   EVERY width, including tablet/desktop, where the icons and tiles look
+   too small. These rules keep the larger footprint at all widths.
    They are kept (rather than deleted) as explicit, auditable overrides
    that re-assert the base values over any other !important still around.
    The greeting trim (section 1) stays — only the dock size is restored. */
@@ -2424,18 +2526,16 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
   gap:var(--ref-space-3) !important;
 }
 .dock-icon{
-  /* v2.24.5: larger icon plate (Field review: "the app icon size should be larger
-     too"). 72→80 on phone, svg 34→38. The ≥600 block below takes it to 96. */
+  /* Larger icon plate: 80 on phone, svg 38. The ≥600 block below takes it to 96. */
   width:80px !important;height:80px !important;
 }
 .dock-icon svg{width:38px !important;height:38px !important}
 .dock-label{
   /* Keep the fixed 2-line band (prevents per-tile layout shift). Font size
-     is governed by the base .dock-label / .is-long rules (v2.24.3, uniform as
-     of v2.24.5), not forced here, so all labels stay the same size + aligned. */
+     is governed by the base .dock-label / .is-long rules (uniform), not forced here, so all labels stay the same size + aligned. */
   line-height:1.25 !important;
 }
-/* Tablet+ — larger icon plate + tile height. v2.24.5: icon 84→96, svg 40→44,
+/* Tablet+ — larger icon plate + tile height. icon 84→96, svg 40→44,
    tile 150→158 so the bigger plate keeps comfortable breathing room. */
 @media(min-width:600px){
   .dock-app{min-height:158px !important;padding:var(--ref-space-6) var(--ref-space-5) !important}
@@ -2444,9 +2544,8 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 3. UNIFIED DASHBOARD WIDGET SHELL ----------------------------
-   Field review: "surveys and estimates are totally different in the way
-   they're displaying… we want unification, so they all have the same
-   bottom part where they sit." Each plugin renders its own body, but the
+   Different apps' dashboard widgets should look like one family, with the
+   same bottom part where they sit. Each app renders its own body, but the
    OUTER shell (.dash-widget-container) is the theme's. Pin a consistent
    max-height and a uniform footer rhythm so every app's dashboard widget
    sits in an identically-sized card. The estimate widget was the tallest;
@@ -2455,11 +2554,10 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
    rather than each card free-sizing. */
 .dash-widget-zone{ gap:var(--ref-space-3) !important; }
 .dash-widget-container{
-  /* v2.24.6 — let content-heavy widgets grow toward the full viewport.
-     Field review: "the widgets aren't occupying the full viewport, which is what
-     they should when possible (e.g. Game)." The earlier flat cap (380px on a
-     typical window) clamped EVERY widget to a short slab — the Game's content
-     is ~678px but was squeezed into 380px. The cap is now content-driven:
+  /* Let content-heavy widgets grow toward the full viewport when possible
+     (e.g. Game). A flat cap (380px on a typical window) would clamp EVERY
+     widget to a short slab — the Game's content is ~678px. The cap is
+     content-driven:
        • max-height is a GENEROUS viewport-relative ceiling (88vh, never below
          560px) — so a tall widget (Game, Camera) expands to nearly the whole
          screen, while a short widget (a one-line status) stays short because
@@ -2489,9 +2587,8 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 3b. SURVEY BATCH TEXT: bigger, no truncated names -------------
-   Field review: "the surveys retractables text is just crazy small… make
-   that text bigger and don't truncate the names — too much info crammed
-   into the batch info." Floor the font size and allow wrapping inside
+   Survey batch text must be readable and names must not be truncated when
+   a lot of batch info is shown. Floor the font size and allow wrapping inside
    the Surveys widget so batch labels/customer names show in full. Scoped
    to the surveys widget so nothing else changes. Selectors are broad on
    purpose (the plugin's exact classes vary by version); they only raise a
@@ -2510,9 +2607,9 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 4. LIGHT-MODE CONTRAST BUMP ----------------------------------
-   Field review: "the light mode could use a tiny bit more contrast between
-   the background — a slightly brighter/cooler page bg so white cards
-   pop." Light bg was --ref-gray-100 (#F1F5F9), surfaces are pure white.
+   Light mode needs a little more contrast between the background and the
+   cards: a slightly brighter/cooler page bg so white cards pop. The light
+   bg token is --ref-gray-100 (#F1F5F9), surfaces are pure white.
    Nudge the page bg one cooler step so the white surfaces separate more
    clearly, and firm up the card border. Only the LIGHT theme is touched;
    dark/sunlight/system are untouched. */
@@ -2529,10 +2626,10 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 
 /* ---- 4b. EMBEDDED-WIDGET CONTRAST + OVERFLOW GUARDS ----------------
    Belt-and-suspenders for plugin-rendered widgets (commission calculator,
-   knowledge base, media) that paint their own surfaces. the owner reported,
-   in dark mode, "very dark text on dark areas" in Commissions and "elements
-   running off the screen." The real fix is in each plugin (handoff docs),
-   but these theme overrides prevent the worst cases regardless:
+   knowledge base, media) that paint their own surfaces: in dark mode such a
+   widget can show very dark text on dark areas, or elements running off the
+   screen. The real fix is in each app, but these theme overrides prevent the
+   worst cases regardless:
      • force readable text color from the theme token on un-themed children
      • never let a widget's inner content exceed the card width. */
 .app-body, .dash-widget-body{ max-width:100%; }
@@ -2557,7 +2654,6 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 5. KNOWLEDGE BASE: use the horizontal width ------------------
-   Field review: "knowledge base is not using its horizontal width very well."
    When the Knowledge app renders in the full-screen viewport, let its body
    and any inner iframe/content span the full available width (the SPA's
    global max-width opt-out). Padding stays modest so reading lines aren't
@@ -2576,15 +2672,14 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ────────────────────────────────────────────────────────────────
-   v2.24.1 — KPI CARD UNIFORMITY + extra top-zone trim (screenshot pass)
-   the owner's phone screenshots showed the dashboard METRIC cards
-   (.kpi-card inside .kpi-grid: "WEBSITE REVIEWS", "FreshBooks $15.7K",
-   "153 CONTACTED", "200 NEW LEADS", "6 LEADS→JOBS") rendering at
-   different heights / as different-sized squares, not lined up. Those
-   are .kpi-card — a DIFFERENT element from the .dash-widget-container
-   widgets normalized in v2.24.0 — so they needed their own pass. Also,
-   the top zone (greeting + search + horizontal app dock) was still
-   visibly >15%, so trim it a bit more.
+   KPI CARD UNIFORMITY + extra top-zone trim
+   The dashboard METRIC cards (.kpi-card inside .kpi-grid, e.g. a reviews
+   count, a billing total, a leads count) can render at different heights
+   / as different-sized squares, not lined up. They are .kpi-card — a
+   DIFFERENT element from the .dash-widget-container widgets normalized
+   above — so they need their own rules. Also, the top zone (greeting +
+   search + horizontal app dock) should stay under ~15% of the screen, so
+   it is trimmed a bit more.
    ──────────────────────────────────────────────────────────────── */
 
 /* ---- KPI metric cards: ONE uniform size across the whole grid ----
@@ -2643,7 +2738,7 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
   padding-bottom:var(--ref-space-1) !important;
 }
 .dash-ask-field{ min-height:44px !important; padding:10px 14px !important; }
-/* v2.24.4: the v2.24.1 top-zone trim re-trimmed .app-dock padding here, but
+/* the top-zone trim re-trimmed .app-dock padding here, but
    that selector also matches the main vertical springboard dock — so it was
    re-shrinking the dock we just restored in section 2. Padding is now left to
    the section-2 restore (space-3/space-4) so the dock keeps its larger,
@@ -2656,7 +2751,7 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 /* ---- Scrolled state: the compact sticky app strip (.dash-sticky) ----
    When the user scrolls, the greeting+search (.dash-top) stays pinned AND
    the .dash-sticky app strip slides in below it — stacked, that doubled
-   header is what pushed past 15% in the screenshots. Trim the sticky
+   header can push past 15% of the screen. Trim the sticky
    strip's icon plate + padding so the scrolled header is shorter. Icons
    stay tappable (44px). */
 .dash-sticky{ padding:2px 0 !important; }
@@ -2664,7 +2759,7 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 .sticky-app-icon svg{ width:22px !important; height:22px !important; }
 .sticky-app-label{ font-size:9px !important; }
 
-/* ---- v2.24.2: subtle dashboard build stamp ----
+/* ---- subtle dashboard build stamp ----
    Tiny, muted, centered. Just enough to read which build is loaded; never
    draws attention. Sits at the very bottom of the dashboard scroll. */
 .zdz-build-stamp{
@@ -2676,16 +2771,16 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
   letter-spacing:.02em;
   -webkit-user-select:none;user-select:none;
 }
-/* === END v2.24.1 KPI UNIFORMITY + TOP-ZONE TRIM === */
-/* === END v2.24.0 MOBILE DASHBOARD DENSITY + UNIFICATION PASS === */
+/* === END KPI UNIFORMITY + TOP-ZONE TRIM === */
+/* === END MOBILE DASHBOARD DENSITY + UNIFICATION PASS === */
 
 /* ════════════════════════════════════════════════════════════════
-   v2.25.0 — DESKTOP DASHBOARD CORRECTNESS PASS (the owner, field review)
+   DESKTOP DASHBOARD CORRECTNESS
    Authoritative, source-LAST overrides. Everything here is intentionally
    the final word in the cascade so it wins over earlier theme rules AND
    over any later-loading plugin stylesheet at equal specificity.
 
-   Goals (verbatim from the request):
+   Goals:
      1. Normalize the icon-name type size — ONE size for every app label,
         sized so the LONGEST name (Commission / Knowledge) fits on a single
         line; every shorter name renders at that same size.
@@ -2716,7 +2811,7 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
    word never overflows. Labels are single-line (no wrap, no 2-line band)
    so they can never reflow to a different height or position. */
 :root{
-  /* v2.25.1 (the owner): ONE flat size at EVERY width — a single standard,
+  /* ONE flat size at EVERY width — a single standard,
      no per-breakpoint graduation. 18px is the chosen standard. On the very
      narrowest phones (3-col grid, ~360px) "Commission" can be a hair wider
      than the tile at 18px; the label's text-overflow:ellipsis handles that
@@ -2758,9 +2853,8 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 3. NO INTERNAL WIDGET SCROLL — WIDGETS GROW, PAGE SCROLLS ----
-   Field review: "the widget should be expandable as needed by the user… it
-   should NOT scroll within its own widget… widgets don't internally
-   scroll within themselves." The v2.24.6 unified shell capped every
+   A widget expands as needed and never scrolls within itself. The unified
+   shell above caps every
    container at max-height:max(560px,88vh) and made the body
    overflow-y:auto — i.e. it TRAPPED a scrollbar inside each widget. That
    is exactly what we're removing.
@@ -2775,8 +2869,8 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
      • the single scroll owner remains #sv-dash.sub-view (the page), so
        the whole dashboard scrolls as one document.
 
-   This block is source-LAST and uses the SAME selectors as the v2.24.6
-   block, so it overrides it without needing to delete the older rules. */
+   This block is source-LAST and uses the SAME selectors as the unified
+   shell block, so it overrides it without needing to delete those rules. */
 .dash-widget-container{
   max-height:none !important;   /* was max(560px,88vh) — no cap, grow freely */
 }
@@ -2799,15 +2893,15 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 4. SURVEYS "BATCH HISTORY" BANNER — STOP IT HOVERING ----------
-   Field review: the Batch History banner "clips through and hovers over
-   anything… if I scroll, it just hovers." Root cause: the surveys plugin
+   The Batch History banner must not clip through and hover over other
+   content while the page scrolls. Cause: the surveys app
    pinned .zdz-sw-section-header with position:sticky. That was correct when
    the widget body scrolled internally — the header stayed put while you
    scrolled inside the widget. But section 3 above removed internal widget
    scroll, so the ONLY scrolling ancestor left is the page (#sv-dash); the
    sticky therefore bound to the page and, once you scrolled past the
    Surveys widget, floated at the top of the viewport over whatever widget
-   was beneath it — the "it just hovers" report.
+   was beneath it.
 
    CSS fact: position:sticky needs a SCROLLABLE ancestor; it cannot be
    "contained" to a non-scrolling box (overflow:clip is non-scrollable and
@@ -2831,19 +2925,19 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 
 /* ---- 5. COMMISSION + SCHEDULER DARK-THEME TEXT --------------------
-   Field review: "the commissions app is still not showing the dark color
-   theme text correctly… very dark text on dark areas," and "same for the
-   scheduler." The earlier rule (v2.24.0 §4b) only pinned a handful of
-   tags and only matched [data-app-id*="commission"]. Broaden it: in
+   The commission and scheduler widgets showed very dark text on dark
+   areas. The narrower rule above (section 4b of the mobile pass) only
+   pinned a handful of tags and only matched [data-app-id*="commission"].
+   Broaden it: in
    dark/system mode, force EVERY text-bearing element inside the
    commission OR scheduler widget to the readable theme token, and pin
    their input/control surfaces to the raised surface token so the form
    fields (the FROM/TO dates, dropdowns) aren't dark-on-dark either.
    Light & sunlight are untouched. */
-[data-theme="dark"] .dash-widget-container[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag),
-[data-theme="dark"] .dash-widget-container[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag),
-[data-theme="dark"] #app-body[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag),
-[data-theme="dark"] #app-body[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag){
+[data-theme="dark"] .dash-widget-container[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag),
+[data-theme="dark"] .dash-widget-container[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag),
+[data-theme="dark"] #app-body[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag),
+[data-theme="dark"] #app-body[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag){
   color:var(--sys-text) !important;
 }
 /* Inputs / selects / the date + dropdown controls — readable fill + text */
@@ -2857,10 +2951,10 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
 }
 /* Same for system mode following an OS dark preference. */
 @media(prefers-color-scheme:dark){
-  [data-theme="system"] .dash-widget-container[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag),
-  [data-theme="system"] .dash-widget-container[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag),
-  [data-theme="system"] #app-body[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag),
-  [data-theme="system"] #app-body[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.tscc-status-badge):not(.tscc-tag-nc):not(.tscc-ip-tag){
+  [data-theme="system"] .dash-widget-container[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag),
+  [data-theme="system"] .dash-widget-container[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag),
+  [data-theme="system"] #app-body[data-app-id*="commission"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag),
+  [data-theme="system"] #app-body[data-app-id*="schedul"] :where(p,span,td,th,li,label,div,a,small,strong,em,h1,h2,h3,h4,h5,h6,option):not(.zdz-pair):not(.zcc-status-badge):not(.zcc-tag-nc):not(.zcc-ip-tag){
     color:var(--sys-text) !important;
   }
   [data-theme="system"] .dash-widget-container[data-app-id*="commission"] :where(input,select,textarea),
@@ -2872,4 +2966,428 @@ a.zdz-inline-row{color:var(--sys-brand,#6366F1)}
     border-color:var(--sys-border) !important;
   }
 }
-/* === END v2.25.0 DESKTOP DASHBOARD CORRECTNESS PASS === */
+/* === END DESKTOP DASHBOARD CORRECTNESS PASS === */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Widget Interaction Standard + Mobile UX Standard: chips wrap, labelled status chips (one palette), mobile UX.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Pipeline stepper + status-chip standard (the house pattern) ─────────────
+   Plugins SHOULD render pipelines as .zdz-stepper > .zdz-status-chip.is-*, which
+   WRAP by construction (never an inner horizontal scroll) and use ONE palette. */
+.zdz-stepper{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;}
+.zdz-status-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 9px;border-radius:var(--ref-radius-full,999px);
+  font-size:13px;font-weight:var(--sys-font-wt-sb,600);line-height:1.3;
+  white-space:nowrap;border:1px solid transparent;
+}
+.zdz-status-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.zdz-status-chip.is-plain::before{display:none;}
+/* One documented palette — meaning defined ONCE, used everywhere:
+   done=green · active/attention=amber · todo/idle=gray · review=blue ·
+   alert/error=red · special=purple. */
+.zdz-status-chip.is-done   {color:#059669;background:color-mix(in srgb,#10B981 14%,transparent);border-color:color-mix(in srgb,#10B981 30%,transparent);}
+.zdz-status-chip.is-active {color:#B45309;background:color-mix(in srgb,#F59E0B 16%,transparent);border-color:color-mix(in srgb,#F59E0B 34%,transparent);}
+.zdz-status-chip.is-todo   {color:var(--sys-text-ter,#64748B);background:var(--sys-bg-alt,#F1F5F9);border-color:var(--sys-border,#E2E8F0);}
+.zdz-status-chip.is-review {color:#2563EB;background:color-mix(in srgb,#3B82F6 14%,transparent);border-color:color-mix(in srgb,#3B82F6 30%,transparent);}
+.zdz-status-chip.is-alert  {color:#DC2626;background:color-mix(in srgb,#EF4444 14%,transparent);border-color:color-mix(in srgb,#EF4444 30%,transparent);}
+.zdz-status-chip.is-special{color:#9333EA;background:color-mix(in srgb,#A855F7 14%,transparent);border-color:color-mix(in srgb,#A855F7 30%,transparent);}
+/* Dark-mode brighten (a dark rule needs a system-dark parity block). */
+[data-theme="dark"] .zdz-status-chip.is-done   {color:#34D399;}
+[data-theme="dark"] .zdz-status-chip.is-active {color:#FBBF24;}
+[data-theme="dark"] .zdz-status-chip.is-todo   {color:var(--sys-text-sec,#94A3B8);}
+[data-theme="dark"] .zdz-status-chip.is-review {color:#93C5FD;}
+[data-theme="dark"] .zdz-status-chip.is-alert  {color:#FCA5A5;}
+[data-theme="dark"] .zdz-status-chip.is-special{color:#E9D5FF;}
+@media(prefers-color-scheme:dark){
+  [data-theme="system"] .zdz-status-chip.is-done   {color:#34D399;}
+  [data-theme="system"] .zdz-status-chip.is-active {color:#FBBF24;}
+  [data-theme="system"] .zdz-status-chip.is-todo   {color:var(--sys-text-sec,#94A3B8);}
+  [data-theme="system"] .zdz-status-chip.is-review {color:#93C5FD;}
+  [data-theme="system"] .zdz-status-chip.is-alert  {color:#FCA5A5;}
+  [data-theme="system"] .zdz-status-chip.is-special{color:#E9D5FF;}
+}
+/* Sunlight: maximal contrast — solid white fill, black ink + border. */
+[data-theme="sunlight"] .zdz-status-chip{color:#000;background:#fff;border-color:#000;}
+[data-theme="sunlight"] .zdz-status-chip::before{background:#000;}
+
+/* ── Defensive wrap for the CURRENT surveys pipeline strip ──────────────────
+   The reference widget's stepper (.zdz-sw-pip-steps) is a non-wrapping flex row
+   that CLIPS on a phone (field report: "it goes left-right, can't fit Follow-Up
+   / Emailed / Reviewed"). Until the surveys plugin adopts .zdz-stepper
+   the theme makes it wrap: connectors drop on phones (they
+   cannot survive a wrap) and each step becomes a self-contained labeled chip.
+   Large font is preserved. */
+.dash-widget-body .zdz-sw-pip-steps{flex-wrap:wrap;row-gap:6px;}
+@media (max-width:600px){
+  .dash-widget-body .zdz-sw-pip-steps{gap:6px;}
+  .dash-widget-body .zdz-sw-pip-connector{display:none;}
+  .dash-widget-body .zdz-sw-pip-step{
+    padding:3px 9px;border-radius:var(--ref-radius-full,999px);
+    background:var(--sys-bg-alt,#F1F5F9);border:1px solid var(--sys-border,#E2E8F0);
+  }
+}
+
+/* ── T4 — Mobile UX Standard v1 (non-breaking) ─────────────────────────────
+   (1) Tap targets: interactive controls in app surfaces are >=44px on phones
+  . Applied as a MINIMUM only, so a
+   good layout is never shrunk. The small header nav arrows are intentionally
+   exempt (secondary controls with tap slop from header padding). */
+@media (max-width:820px){
+  .dash-widget-body :where(button,.btn,a.btn,[role="button"],input[type="submit"],input[type="button"],select),
+  #app-body :where(button,.btn,a.btn,[role="button"],input[type="submit"],input[type="button"],select){
+    min-height:44px;
+  }
+}
+/* (2) Label hierarchy: a shared utility to demote long secondary labels so they
+   stop dominating a row on a phone; plus a defensive touch for the surveys
+   "SCREENED FOR" context value. */
+.zdz-label-secondary{
+  font-size:12px;font-weight:var(--sys-font-wt-med,500);
+  color:var(--sys-text-ter,#64748B);letter-spacing:0;text-transform:none;
+}
+@media (max-width:600px){
+  .dash-widget-body .zdz-sw-pip-context-val{white-space:normal;overflow:visible;text-overflow:clip;}
+}
+/* (3) Scroll affordance: where a horizontal scroll region is genuinely
+   unavoidable, opt in with .zdz-hscroll for a discoverable right-edge fade.
+   Pipelines WRAP instead — this is for wide tables/timelines only. */
+.zdz-hscroll{position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
+.zdz-hscroll::after{
+  content:"";position:absolute;top:0;right:0;bottom:0;width:22px;pointer-events:none;
+  background:linear-gradient(to right,transparent,var(--sys-surface,#fff));
+}
+[data-theme="dark"] .zdz-hscroll::after{background:linear-gradient(to right,transparent,var(--sys-surface,#0f172a));}
+@media(prefers-color-scheme:dark){
+  [data-theme="system"] .zdz-hscroll::after{background:linear-gradient(to right,transparent,var(--sys-surface,#0f172a));}
+}
+/* === END WIDGET STANDARDS === */
+
+/* a KPI tile serving cached data while its source is failing must
+   LOOK different, not just read differently. Amber rather than red: the number
+   is still probably right, it is just old. Red would say "wrong". */
+.kpi-card.kpi-stale, .stat-pill.kpi-stale { position: relative; }
+.kpi-card.kpi-stale .kpi-value, .stat-pill.kpi-stale .kpi-value { opacity: 0.72; }
+.kpi-card.kpi-stale .kpi-sub, .stat-pill.kpi-stale .kpi-sub {
+  font-weight: 600; /* the age itself carries the amber, as a tint pair (.kpi-age.is-old), in all four modes */
+}
+.kpi-card.kpi-stale::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  border: 1px solid rgba(180, 83, 9, 0.45); pointer-events: none;
+}
+
+/* the theme anchors #sv-dash itself (app.js initDashScrollAnchor),
+   the same way on Chrome, Safari and iPad. Native anchoring off here so Chrome
+   doesn't make a second correction against an anchor of its own choosing. */
+#sv-dash{ overflow-anchor:none; }
+
+/* "Ask chat about this" on every widget (assets/js/ask-chat.js).
+   The header button matches the ^/v nav buttons; the panel sits under the
+   header, in flow (no inner scroll: WIDGET-OVERFLOW-CONTRACT-v1). */
+.dw-ask-btn{
+  width:32px;height:28px;margin:0 6px 0 auto;border:1px solid var(--sys-border, #e2e8f0);border-radius:var(--ref-radius-sm, 6px);
+  background:var(--sys-surface, #fff);color:var(--sys-text, #1e293b);cursor:pointer;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+.dw-ask-btn[aria-expanded="true"]{background:var(--sys-brand, #2C5F8A);border-color:var(--sys-brand, #2C5F8A);color:#fff;}
+.dw-ask-btn svg{pointer-events:none;}
+[data-theme="dark"] .dw-ask-btn:not([aria-expanded="true"]){color:var(--sys-text, #f1f5f9);background:rgba(255,255,255,.06);border-color:var(--ref-gray-600);}
+@media(prefers-color-scheme:dark){
+  [data-theme="system"] .dw-ask-btn:not([aria-expanded="true"]){color:var(--sys-text, #f1f5f9);background:rgba(255,255,255,.06);border-color:var(--ref-gray-600);}
+}
+.zdz-ask{padding:10px 16px 4px;border-bottom:1px solid var(--sys-border, #e2e8f0);}
+.zdz-ask[hidden]{display:none !important;}
+.zdz-ask-row{display:flex;gap:8px;}
+.zdz-ask-input{flex:1 1 auto;min-width:0;min-height:44px;padding:0 12px;border:1px solid var(--sys-border, #e2e8f0);
+  border-radius:var(--ref-radius-sm, 8px);background:var(--sys-surface-raised, var(--sys-surface, #fff));color:var(--sys-text, #1e293b);font-size:16px;}
+.zdz-ask-send{min-height:44px;padding:0 16px;border:0;border-radius:var(--ref-radius-sm, 8px);background:var(--sys-brand, #2C5F8A);
+  color:#fff;font-weight:600;cursor:pointer;}
+.zdz-ask-preview{margin:8px 0 6px;font-size:13px;color:var(--sys-text-sec, #64748b);}
+.zdz-ask-preview summary{cursor:pointer;min-height:32px;display:flex;align-items:center;}
+.zdz-ask-hidden{margin:4px 0 6px;}
+.zdz-ask-text{margin:0;white-space:pre-wrap;word-break:break-word;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--sys-text, #1e293b);background:var(--sys-surface-subtle, #f8fafc);border-radius:6px;padding:8px 10px;}
+.dw-ask-btn + .dw-nav{margin-left:0;}
+
+/* ════════════════════════════════════════════════════════════════
+ USABILITY: THE APP SHOWS IT HEARD YOU
+   ════════════════════════════════════════════════════════════════ */
+/* Sidebar: the logo never sits on the bottom edge on a desktop. It keeps
+   about 2.5% of the screen height plus the safe-area inset. The sidebar and everything beside it also
+   respect the left inset, so a phone on its side never puts the Dynamic Island over the sidebar. */
+@media (min-width: 820px) {
+  .bnav{padding-bottom:calc(2.5dvh + env(safe-area-inset-bottom, 0px));
+    padding-left:env(safe-area-inset-left, 0px);width:calc(88px + env(safe-area-inset-left, 0px))}
+  .bnav .bnav-logo{height:auto;margin-bottom:0}
+  #view-main{padding-left:calc(88px + env(safe-area-inset-left, 0px));padding-right:env(safe-area-inset-right, 0px)}
+  .dash-sticky{left:calc(88px + env(safe-area-inset-left, 0px))}
+}
+
+/* The compact app strip follows the scroll instead of popping in. app.js sets --strip-p from 0 to 1
+   over the last ~70px before the second row of tiles leaves; while it is between 0 and 1 the strip moves in
+   by that much (a fade only, with Reduce Motion). At 1 the usual .visible state takes over. */
+.dash-sticky.zdz-strip-partial{transition:none!important;
+  transform:translateY(calc((var(--strip-p, 0) - 1) * 110%));opacity:var(--strip-p, 0);pointer-events:none}
+@media(prefers-reduced-motion:reduce){ .dash-sticky.zdz-strip-partial{transform:none} }
+
+/* Contact card: Call, Message and Directions as buttons; chat becomes a quiet text link. */
+.zdz-inline-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:var(--ref-space-3,12px)}
+.zdz-inline-act{flex:1 1 0;min-width:88px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;
+  gap:6px;padding:8px 6px;border-radius:var(--ref-radius-sm,8px);border:1px solid var(--sys-border,#CBD5E1);
+  background:var(--sys-surface,#fff);color:var(--sys-text,#0F172A);font-size:var(--ref-font-sm,14px);font-weight:600;
+  text-decoration:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.zdz-inline-act:hover{border-color:var(--sys-brand,#2C5F8A);color:var(--sys-brand,#2C5F8A)}
+.zdz-inline-act:active{background:var(--sys-surface-subtle,#F1F5F9)}
+.zdz-inline-act svg{width:18px;height:18px;flex:none}
+.zdz-inline-chat.zdz-inline-chat--link{display:inline-block;margin-top:var(--ref-space-2,8px);min-height:32px;padding:6px 0;
+  border:0;background:transparent;font-weight:500;color:var(--sys-text-sec,#64748B);text-decoration:underline;
+  text-underline-offset:3px}
+.zdz-inline-chat.zdz-inline-chat--link:hover{background:transparent;color:var(--sys-brand,#2C5F8A)}
+
+/* Viewport check (?zdz_viewport=1): a small read-out of the real layout width, zoom and matched layout, so a
+   phone on its side can be measured in one tap before the landscape layout is changed. */
+#zdz-vp-probe{position:fixed;z-index:2147483000;left:calc(env(safe-area-inset-left,0px) + 8px);
+  bottom:calc(env(safe-area-inset-bottom,0px) + 8px);max-width:calc(100vw - 16px);padding:8px 10px;border-radius:8px;
+  background:rgba(15,23,42,.92);color:#fff;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap;pointer-events:auto}
+
+/* the profile card shows the person's own badge (shape = privilege) when the kit knows them. */
+.profile-avatar.has-badge{background:none;width:auto;height:auto;border-radius:0}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE FOCUS VIEW (FOCUS-VIEW-CONTRACT-v1.md)
+   Less scrolling, more like pages: tapping an app opens it as its own page (bridge.js focusWidget): its
+   card is fixed over the screen where it stands. Home is the ask bar, the launcher and Today. Everything below
+   is keyed on body.zdz-focus-home / .zdz-focus-open / .zdz-focused, so with the view off the page is as before.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* An open page no longer traps position:fixed. A transform (even translateY(0) or scale(1)) and will-change:
+   transform make the viewport the containing block of every fixed element inside it; the Media library has
+   worked around that since by mounting its sheets on <body>. The full-screen apps (Media's gallery and
+   the like) stop being a trap: the slide/scale is still there while a page opens; at rest there is none. */
+.app-viewport.active{transform:none;will-change:auto}
+
+/* The page an app opens in: its own card, fixed over the whole screen where it stands (bridge.js focusWidget).
+   Nothing is moved, so frames, scroll positions and half-typed text inside survive opening and closing it.
+   Its header is the page header (Back, the app's plate and name, Ask chat, Pin); its body is the one scroll. */
+body.zdz-focus-open #dash-widget-zone > .dash-widget-container.zdz-focused{position:fixed!important;inset:0;z-index:205;
+  width:auto!important;max-width:none!important;height:auto;min-height:0;max-height:none!important;margin:0!important;
+  border:0;border-radius:0;box-shadow:none;isolation:auto;overflow:hidden;display:flex;flex-direction:column;
+  background:var(--sys-surface);visibility:visible;pointer-events:auto;--dash-top-h:0px;--dash-sticky-h:0px}
+.dash-widget-container.zdz-focused > .dash-widget-header{flex:0 0 auto;position:relative;top:auto;z-index:10;min-height:56px;
+  padding-top:calc(env(safe-area-inset-top,0px) + var(--ref-space-2));padding-left:var(--ref-space-2);
+  background:var(--sys-surface);box-shadow:0 2px 6px -2px rgba(0,0,0,.1)}
+.dash-widget-container.zdz-focused > .dash-widget-header .dw-nav{display:none}
+body.zdz-focus-open #dash-widget-zone > .dash-widget-container.zdz-focused > .dash-widget-body,
+body.zdz-focus-open #dash-widget-zone > .dash-widget-container.zdz-focused > div:last-child{flex:1 1 auto;min-height:0;max-height:none!important;
+  /* !important: the "one page scroll" block clips every widget body with !important; in a page the body
+     IS the page's scroll. */
+  overflow-x:hidden!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding-bottom:calc(var(--ref-space-4) + env(safe-area-inset-bottom,0px))}
+/* Game: the page is its budget (the card's 480/720/78vh floors were for the stacked dashboard). */
+body.zdz-focus-open #dash-widget-zone > .dash-widget-container.zdz-focused[data-app-id="game"]{--zdz-game-max-h:var(--zdz-focus-h, 80vh);min-height:0}
+body.zdz-focus-open #dash-widget-zone > .dash-widget-container.zdz-focused[data-app-id="game"] > .dash-widget-body{min-height:0;max-height:none}
+[data-theme="sunlight"] .dash-widget-container.zdz-focused{border:0}
+[data-theme="sunlight"] .dash-widget-container.zdz-focused > .dash-widget-header{border-bottom:2px solid #000}
+/* While a page is open the bottom bar (sidebar on a desktop) steps aside, as for any full-screen app. */
+body.zdz-focus-open .bnav{transform:translateY(100%);pointer-events:none}
+@media(min-width:820px){ body.zdz-focus-open .bnav{transform:translateX(-100%)} }
+
+/* The demo/kiosk banner sits over the top of the screen; a page starts under it. */
+body:has(#zdz-kiosk-banner).zdz-focus-open #dash-widget-zone > .dash-widget-container.zdz-focused{top:calc(env(safe-area-inset-top,0px) + 44px)}
+body:has(#zdz-kiosk-banner) .dash-widget-container.zdz-focused > .dash-widget-header{padding-top:var(--ref-space-2)}
+
+/* Back and Pin to Home live in the card's header and show only while it is a page. */
+.dw-page-back,.dw-pin{display:none}
+.zdz-focused .dw-page-back{display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;
+  margin-right:-4px;border-radius:var(--ref-radius-md);color:var(--sys-brand);background:transparent;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.zdz-focused .dw-page-back:hover{background:var(--sys-brand-light)}
+/* The <1200px sticky-header rule (".dash-widget-container > div > *:first-child") would make Back sticky, padded
+   and shadowed. */
+.dash-widget-container.zdz-focused > .dash-widget-header > .dw-page-back{position:static!important;top:auto!important;
+  padding:0!important;box-shadow:none!important;border-radius:var(--ref-radius-md)!important;background:transparent!important;z-index:auto!important}
+.zdz-focused .dw-pin{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;margin-left:auto;flex:none;
+  border-radius:var(--ref-radius-md);color:var(--sys-text-sec);font-size:var(--ref-font-sm);font-weight:var(--sys-font-wt-sb);
+  background:transparent;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.zdz-focused .dw-pin[aria-pressed="true"]{color:var(--sys-brand)}
+.zdz-focused .dw-pin:hover{background:var(--sys-brand-light)}
+.zdz-focused .dash-widget-header .dw-ask-btn{margin-left:auto}
+.zdz-focused .dash-widget-header .dw-ask-btn ~ .dw-pin{margin-left:0}
+
+/* Home. The dock and the strip that chased it are replaced by the launcher under the ask bar; Recently used
+   sat under every widget and has nothing left to save time on. */
+body.zdz-focus-home #app-dock,
+body.zdz-focus-home #dash-sticky,
+body.zdz-focus-home #recent-section{display:none!important}
+body.zdz-focus-home #app-grid-container{margin-top:var(--ref-space-2)}
+.zdz-today-label{margin-top:var(--ref-space-2)}
+.zdz-today-label[hidden]{display:none}
+
+/* A widget that is not pinned is PARKED: laid out at its real width far above the page (so anything it
+   measures at start-up is right, and a check like Messages' "is my widget on screen?" says no), hidden, out of
+   the tab order, taking no space. Its scripts run exactly as before. */
+body.zdz-focus-home #dash-widget-zone{position:relative}
+body.zdz-focus-home #dash-widget-zone > .dash-widget-container.zdz-parked{position:absolute!important;top:-200000px;
+  left:0;right:0;visibility:hidden;pointer-events:none}
+/* A card whose plugin opened its own surface from it (Camera, Dot Plot) stays visible while parked, so a fixed
+   overlay it shows can be seen and tapped; its in-page content is still far above the page. */
+body.zdz-focus-home #dash-widget-zone > .dash-widget-container.zdz-parked.zdz-parked-live{visibility:visible;pointer-events:auto}
+/* Only pinned cards are on home, so the up/down arrows that walked the long stack have nothing to walk. */
+body.zdz-focus-home #dash-widget-zone > .dash-widget-container .dw-nav{display:none}
+
+/* The launcher on a phone: five to a row, so each group is one row and every app is on the first screen
+   (from home to any app is one tap with no scrolling). Labels are 13px here only, which departs from the 18px
+   standard on purpose: at 18px five names do not fit a phone's width, and four to a row does not fit
+   one screen. Tablets and desktops keep 18px. Larger text (Settings) brings 16px and four to a row back. */
+@media (max-width:819.98px){
+  body.zdz-focus-home .app-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--ref-space-2) 2px}
+  body.zdz-focus-home .app-ic{padding:4px 0;gap:6px}
+  body.zdz-focus-home .app-ic .ic{width:56px;height:56px;border-radius:var(--ref-radius-md)}
+  body.zdz-focus-home .app-ic .ic svg{width:26px;height:26px}
+  body.zdz-focus-home .app-grid .app-ic .nm,
+  body.zdz-focus-home .app-grid .app-ic .nm.is-long{font-size:var(--zdz-applabel-size)!important;min-height:calc(var(--zdz-applabel-size) * 1.2)!important;letter-spacing:-.01em}
+  body.zdz-focus-home .cat-section{margin-bottom:var(--ref-space-3)}
+  body.zdz-focus-home .cat-label{margin-bottom:4px;font-size:12px}
+  /* Larger text (Settings) wins over fitting every app on one screen: four to a row, bigger labels. */
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-ic .ic{width:64px;height:64px}
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-grid .app-ic .nm,
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-grid .app-ic .nm.is-long{font-size:var(--zdz-applabel-size)!important;min-height:calc(var(--zdz-applabel-size) * 1.2)!important}
+}
+
+/* The launcher on a tablet or a desktop: the groups sit side by side (two or three to a row, five apps across
+   each), so every app is on the first screen at the 18px label standard. */
+@media (min-width:820px){
+  body.zdz-focus-home #app-grid-container{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));
+    gap:var(--ref-space-2) var(--ref-space-6);align-items:start}
+  body.zdz-focus-home #app-grid-container > .app-grid-hero{grid-column:1 / -1}
+  body.zdz-focus-home .app-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--ref-space-2)}
+  body.zdz-focus-home .cat-section{margin-bottom:0}
+}
+
+/* ── Kit follow-ups ──────────────────────────────────────
+   Surveys' step chips are never ovals on a phone (the status-chip rule draws them with --ref-radius-full). */
+@media (max-width:600px){
+  .dash-widget-body .zdz-sw-pip-step{border-radius:var(--ref-radius-sm,8px)}
+}
+
+/* ── Layout details ─────────────────────────
+   The launcher on a desktop: at 18px some names were cut ("Estimat…", "Commi…") in a 1200px window, two groups to a
+   row. Here the names are 16px and use the whole column. Phones keep 13px (Larger text 16px). */
+@media (min-width:820px){
+  body.zdz-focus-home .app-ic{padding-left:0;padding-right:0}
+  body.zdz-focus-home .app-grid .app-ic .nm,
+  body.zdz-focus-home .app-grid .app-ic .nm.is-long{font-size:var(--zdz-applabel-size)!important;min-height:calc(var(--zdz-applabel-size) * 1.2)!important}
+}
+/* Game scales itself from the window's height; in a short window its page scrolled 8px. A slimmer top and bottom
+   margin keeps the whole game on the page. */
+body.zdz-focus-open #dash-widget-zone > .dash-widget-container.zdz-focused[data-app-id="game"] > .dash-widget-body{padding-top:8px!important;
+  padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))!important}
+
+
+/* ── Your apps, and 18px names on a phone ─────────────────────────────────────────
+   App names centered under the icon on one line, never two stacked lines. A phone shows four to a row (five 18px names do not fit), each name centered on
+   the full width of its column, on one line. zdzFitLabels() draws a name that is still too wide a little tighter,
+   then a size smaller, never below 14px; nothing wraps or is cut. */
+body.zdz-focus-home .app-grid .app-ic .nm,
+body.zdz-focus-home .app-grid .app-ic .nm.is-long{width:100%;max-width:none;text-align:center;text-overflow:ellipsis!important;
+  box-sizing:border-box;padding:0;margin:0 auto}
+body.zdz-focus-home .app-grid .app-ic .nm.nm-tight{letter-spacing:-.035em!important}
+body.zdz-focus-home .app-grid .app-ic .nm.nm-ellipsis{text-overflow:ellipsis!important}
+@media (max-width:819.98px){
+  body.zdz-focus-home .app-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--ref-space-3) 6px}
+  body.zdz-focus-home .app-ic{padding:2px 0;gap:6px;min-width:0}
+  body.zdz-focus-home .app-ic .ic{width:60px;height:60px;border-radius:var(--ref-radius-md)}
+  body.zdz-focus-home .app-ic .ic svg{width:28px;height:28px}
+  body.zdz-focus-home .app-grid .app-ic .nm,
+  body.zdz-focus-home .app-grid .app-ic .nm.is-long{font-size:var(--zdz-applabel-size)!important;line-height:1.2!important;
+    min-height:calc(var(--zdz-applabel-size) * 1.2)!important;letter-spacing:0}
+  body.zdz-focus-home .cat-label{font-size:13px}
+  /* Larger text (Settings): three to a row, 20px names and bigger icons. */
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--ref-space-3) 6px}
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-ic .ic{width:68px;height:68px}
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-grid .app-ic .nm,
+  html[data-zdz-textscale="lg"] body.zdz-focus-home .app-grid .app-ic .nm.is-long{font-size:var(--zdz-applabel-size)!important;line-height:1.2!important;
+    min-height:calc(var(--zdz-applabel-size) * 1.2)!important;letter-spacing:0}
+}
+/* "At work" / "After hours": a label like the groups', with the switch at its right. On a tablet or a desktop it
+   and "More apps" run the full width, eight across. (Two names are kept apart by the columns' 6px gap on a phone,
+   and a name too long ends in "…".) */
+body.zdz-focus-home .zdz-fy-label{display:flex;align-items:center;justify-content:space-between;gap:var(--ref-space-2)}
+body.zdz-focus-home .zdz-fy-title{font-weight:var(--sys-font-wt-b,700);color:var(--sys-text)}
+body.zdz-focus-home .zdz-fy-switch{background:none;border:0;padding:6px 0 6px 8px;min-height:44px;margin:-6px 0;cursor:pointer;
+  color:var(--sys-text-sec);font:inherit;font-size:13px;text-transform:none;letter-spacing:0;text-decoration:underline;
+  text-underline-offset:2px}
+@media (min-width:820px){
+  body.zdz-focus-home #app-grid-container > .zdz-fy-section,
+  body.zdz-focus-home #app-grid-container > .zdz-fy-more{grid-column:1 / -1}
+  /* As many columns as fit at 120px each: eight across a 1200px window, five on an iPad held upright, so a name
+     is not squeezed below the 14px floor. */
+  body.zdz-focus-home .zdz-fy-grid,
+  body.zdz-focus-home .zdz-fy-more .app-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+}
+
+
+/* ── Launcher names that fit, one step smaller ───────────────────────────────────
+   A fit measured in the phone's own font before Inter swaps in (app.js zdzFitLabels) could cut a long name at its
+   box, or let two names touch, so:
+   1. One size, the --zdz-applabel-size token, one step under the classic page's on the focus home: phone 18 → 17px,
+      Larger text 20 → 19px, desktop 16 → 15px (Larger text 16px). clamp() starts a narrow phone smaller (15 / 17px at
+      320px). Every focus-home launcher rule above now reads the token instead of a fixed
+      size. The token is set on body.zdz-focus-home, so the classic page keeps its 18px.
+   2. Never touch, whatever the fit did: text-overflow:ellipsis (was clip), and the space between two names is the
+      columns' 6px gap, and two names' ink is never closer than 6px.
+   Body text and the --ref-font-* scale are unchanged: Chat and Messages read those tokens. */
+body.zdz-focus-home{--zdz-applabel-size:clamp(15px, 4.36vw, 17px);--zdz-type-label:var(--zdz-applabel-size)}
+html[data-zdz-textscale="lg"] body.zdz-focus-home{--zdz-applabel-size:clamp(17px, 4.873vw, 19px);--zdz-type-label:var(--zdz-applabel-size)}
+/* Safari before 13.4 has no clamp(): a whole size instead, so a name never inherits something smaller. */
+@supports not (width:clamp(1px, 1vw, 2px)){
+  body.zdz-focus-home{--zdz-applabel-size:17px;--zdz-type-label:17px}
+  html[data-zdz-textscale="lg"] body.zdz-focus-home{--zdz-applabel-size:19px;--zdz-type-label:19px}
+}
+@media (min-width:820px){
+  body.zdz-focus-home{--zdz-applabel-size:15px;--zdz-type-label:15px}
+  html[data-zdz-textscale="lg"] body.zdz-focus-home{--zdz-applabel-size:16px;--zdz-type-label:16px}
+}
+/* The classic page (Settings → "Apps as pages" off) keeps its one 18px size for its grid and dock. */
+/* 3. Room for a badge (the "needs you" count, the bell's): a badge sits 6px past its
+   plate's corner, and with the 6px gap the right column's badge overhangs the launcher by up to 3px at 320px. The
+   launcher no longer cuts it off; #sv-dash still clips the page's sides, so nothing can scroll sideways. */
+body.zdz-focus-home #app-grid-container{overflow:visible}
+/* The Logout sheet's line (the PIN sheet's .zdz-pin-intro, without the PIN). */
+.zdz-logout-intro{margin:0;color:var(--sys-text-sec);font-size:var(--zdz-type-body, var(--ref-font-base))}
+
+/* the home tiles say what they count and how old the number is.
+   Under the value: the detail ("31 invoices"), then the age on its own line ("as of 10:31"; on one line a phone cut
+   the age off). An age older than its interval (or a tile that couldn't refresh) wears
+   the warning tint PAIR (--sys-tint-warning-bg with its own -fg, defined for light, dark, sunlight and
+   system-dark), never a lone amber text color. "Not counted yet" sits in the value slot, smaller. */
+.kpi-when{font-size:var(--ref-font-xs);color:var(--sys-text-ter);margin-top:1px;line-height:1.35;max-width:100%}
+/* the age is never cut off: on the narrowest phones (320px) "as of 6:30 AM" wraps rather than ending in "…" */
+.kpi-when .kpi-age{display:inline-block;max-width:100%;overflow-wrap:anywhere}
+.kpi-when:empty{display:none}
+[data-theme="sunlight"] .kpi-when{color:#000}
+.kpi-age.is-old{
+  background:var(--sys-tint-warning-bg);color:var(--sys-tint-warning-fg);
+  border-radius:4px;padding:0 4px;font-weight:600;
+}
+.kpi-value.kpi-value-word{font-size:var(--ref-font-md) !important;line-height:1.2;color:var(--sys-text-sec, inherit)}
+.kpi-card.kpi-held .kpi-icon{opacity:.6}
+.kpi-card[hidden]{display:none !important}
+.kpi-card[data-zdz-kpi-tile]:focus-visible{outline:2px solid var(--sys-brand);outline-offset:2px}
+/* the tile's sheet */
+.kpi-sheet{display:flex;flex-direction:column;gap:6px}
+.kpi-sheet-value{font-size:var(--ref-font-2xl);font-weight:700;line-height:1.1;color:var(--sys-text)}
+.kpi-sheet-value.kpi-value-word{font-size:var(--ref-font-lg)}
+.kpi-sheet-detail{color:var(--sys-text-sec);font-size:var(--ref-font-sm)}
+.kpi-sheet-state{margin:4px 0 0;font-size:var(--ref-font-sm);color:var(--sys-text-sec)}
+.kpi-sheet-state.is-old{background:var(--sys-tint-warning-bg);color:var(--sys-tint-warning-fg);border-radius:6px;padding:6px 8px}
+.kpi-sheet-h{margin:10px 0 0;font-size:var(--ref-font-xs);font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--sys-text-ter)}
+.kpi-sheet-p{margin:2px 0 0;font-size:var(--ref-font-sm);line-height:1.45;color:var(--sys-text)}
+/* sunlight's warning pair is plain black on white by design, so an old age is also boxed and bold there */
+[data-theme="sunlight"] .kpi-age.is-old,[data-theme="sunlight"] .kpi-sheet-state.is-old{outline:2px solid #000;outline-offset:-1px;font-weight:800}
+/* .x: a tile's split in its sheet (Billed / Collected / Still owed / Invoices) */
+.kpi-sheet-parts{display:grid;grid-template-columns:1fr auto;gap:4px 16px;margin:8px 0 0;padding:8px 0 0;border-top:1px solid var(--sys-border)}
+.kpi-sheet-parts dt{margin:0;font-size:var(--ref-font-sm);color:var(--sys-text-sec)}
+.kpi-sheet-parts dd{margin:0;font-size:var(--ref-font-sm);font-weight:600;color:var(--sys-text);text-align:right;font-variant-numeric:tabular-nums}

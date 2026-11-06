@@ -1,255 +1,36 @@
 <?php
 /**
  * Plugin Name: Zorderz Media
- * Description: Organization media library for Zorderz Field OS. Browse public photos & sketches across the org, plus your own uploads — grouped by date, filterable by type/source, with transcribable notes and per-photo visibility control. Add photos directly via bulk upload. Reads from / writes to ZDZ_User_Media.
- * Version: 2.7.0
+ * Description: Organization media library for Zorderz Field OS. Browse public photos & sketches across the org, plus your own uploads — grouped by date, filterable by type/source, with transcribable notes, keyword tags, per-photo visibility, rotate, share to a teammate and drawings on a photo. Add photos directly via bulk upload. Reads from / writes to ZDZ_User_Media.
+ * Version: 2.14.0
  * Author: Zorderz
  * Requires PHP: 8.0
  *
- * == Changelog ==
- * 2.7.0  (asset cache-bust — version-only)
- *   - No functional delta found for 2.4.1 → 2.7.0 in the S8 analysis (S8-09):
- *     these releases have no dedicated Bible section. The §47 architecture wave
- *     (2.3.3 → 2.4.1: the full-bleed viewer + the cross-app open-a-gallery entry
- *     point, window.TSMedia.mountFullscreen / fullscreenAppId 'zdz-media-all')
- *     is already present in this baseline. Per the DEVICE-DIFF / DON'T-INVENT
- *     rule, the constant is advanced to the current-on-disk target with no
- *     fabricated feature; the bump busts the JS/CSS asset cache. No behaviour
- *     change; no DB change. The Core geo/EXIF services this app reads
- *     (ZDZ_User_Media / ZDZ_Media_Exif / ZDZ_Media_Geocoder) are theme-owned and
- *     untouched here.
- * 2.3.3  (Widget usability: browse more in place + tab-label fit — the owner)
- *   - LOAD MORE IN THE WIDGET. The dashboard Media widget used to show only the
- *     6 most-recent items, forcing "See All" to see anything older. It now loads
- *     a fuller first page (12) and shows a "Load more" button that appends the
- *     next page IN PLACE — the card grows downward (no nested scroll, so it still
- *     honours the theme's WIDGET-OVERFLOW-CONTRACT). The widget is now genuinely
- *     browsable on its own; "See All" remains for the roomy grouped gallery.
- *     Reuses the existing offset/has_more paging (client-only change).
- *   - TAB LABELS NO LONGER TRUNCATE. The widget scope tabs were forced into equal
- *     thirds (flex:1), which clipped "Organization" to "Organizatio…" whenever
- *     another tab was active. Tabs are now sized to their labels and centered;
- *     if all three ever exceed the width they scroll horizontally (no clipping).
- *   - CSS + JS only (media.css, media.js) + version banners; no PHP logic, no
- *     permission/data path touched. Verified: CSS parses (rules > 0), JS clean.
+ * Behaviour, in short:
+ *   - Scopes: My photos, Public, and (admins) All, grouped by date and filterable by type and source.
+ *   - Notes and keyword tags on each photo; visibility private / team / public; delete (granular and bulk,
+ *     double-confirmed); bulk upload; rotate one photo 90° at a time, in place (owner or admin).
+ *   - Share a photo to a teammate as a direct message; move a photo to someone else when the theme allows it.
+ *   - The uploader's initials on each photo tile.
+ *   - Draw on a photo: the theme kit's ZDZ.ui.marks layer over any viewer's image, stored apart from the photo by
+ *     the platform's media-marks service (ZDZ_Media_Marks); without that service the drawing tools stay hidden.
+ *   - Another app (Jobs, Estimates) can open the shared viewer on its own list of photos (ZMLMedia.openItems);
+ *     an estimate's photos count as photos and can carry drawings like any photo.
+ *   - A count of this person's own photos for the home screen (ZML_My_Counts).
  *
- * 2.3.2  (CRITICAL: Media CSS wasn't loading at all — the owner)
- *   - The media.css banner comment contained the two-character sequence that
- *     CLOSES a CSS comment (the token pair "--sys-*" immediately followed by
- *     "/--ref-*"), which ended the opening comment early. The browser then tried
- *     to parse the rest of the banner prose as CSS, hit an error, and DISCARDED
- *     THE WHOLE STYLESHEET — 0 rules applied. That's why the Media widget showed
- *     plain unstyled text ("My Photos Organization All", "+ Add See All", "All
- *     Photos Sketches") with no pills, no segmented control, and no hover/click
- *     affordances on desktop or mobile. Diagnosed live: the file served fine
- *     (HTTP 200, correct bytes) but the browser parsed it to 0 rules.
- *   - Fix: reworded the comment so the comment-closing sequence never appears in
- *     comment text. No style rule changed — this simply makes the v2.3.1 layout
- *     (and every rule before it) actually load. Verified by parsing the file
- *     through the real browser engine: 218 rules now parse (was 0).
- *   - NOTE: this offending sequence predates the recent work, so the Media
- *     widget's controls were likely unstyled before too; this is the real fix.
- *
- * 2.3.1  (Mobile bar layout fix for the 3-tab scope set — the owner)
- *   - CSS-ONLY, no behavior change. Adding the admin "All" scope in v2.3.0 gave
- *     the Media bar THREE scope tabs (My Photos / Organization / All), but the
- *     bar's layout was built for two: on mobile the segmented control wrapped
- *     into an ugly vertical dark stack and the "Add" button sat off-center,
- *     crammed against "See All".
- *   - WIDGET bar is now TWO clean rows: the segmented control on its own
- *     full-width row (equal-width tabs that never wrap — they scroll
- *     horizontally if ever too many, mirroring zdz-estimate-creator's
- *     .tsec-w-tabs pattern), and Add + See All right-aligned on a second row.
- *   - FULL-SCREEN bar reserves a top row for the pinned Select (left) / Add
- *     (right) corner buttons, so the centered scope segment sits BELOW them and
- *     can never overlap them at any width (the old CSS squeezed the segment
- *     between the corners, so a 3-tab set tucked under the buttons).
- *   - Consistent ~40–44px tap targets; dark / system / sunlight parity kept.
- *     Verified by rendering both surfaces at phone + tablet widths in all
- *     themes. Only assets/css/media.css changed (+ version banners for cache
- *     bust); no PHP/JS logic, no permission or data path touched.
- *
- * 2.3.0  (Admin "All" scope — browse every photo, incl. private — the owner)
- *   - WHY. Photos default to privacy='private'. Private already means "the
- *     uploader AND any admin can OPEN the file" (the theme serve() gate,
- *     v2.33.0: "private → owner + admins"), so an admin handed a link — e.g. a
- *     Nutshell photo deep-link — can already view it. What was missing was
- *     DISCOVERY: private photos never appear in a browsable gallery. "Mine"
- *     shows only your own; "Organization" shows only fully-public photos. So an
- *     admin could open a private photo but had no way to find one.
- *   - NEW ADMIN-ONLY "ALL" SCOPE. The gallery gains a third scope tab, "All",
- *     shown ONLY to admins (WP administrator / zdz_owner / zdz_admin — the same
- *     zml_current_user_is_admin() definition that already authorizes
- *     delete-any-photo). It lists EVERY photo org-wide regardless of owner or
- *     privacy, backed by the new theme getter ZDZ_User_Media::get_all_media()
- *     (theme ≥ 2.37.0), so an admin can browse and reach any uploader's photos.
- *   - SERVER-ENFORCED. The zml_list endpoint authorizes scope=all on the
- *     server via zml_current_user_is_admin() and DOWNGRADES a non-admin (or a
- *     crafted/stale request) to the public view; the hidden tab is never the
- *     gate. On a pre-2.37.0 theme the scope fails safe to 'public'. This does
- *     NOT widen file access — serve() already lets admins open private media;
- *     it only makes those rows discoverable. Nothing changes for non-admins,
- *     and the shared-kiosk all-deny posture is untouched.
- *   - The default upload privacy is UNCHANGED (still 'private'): a new photo is
- *     still owner-visible in the lists and admin-openable/discoverable — exactly
- *     "viewable to the uploader and any admin by default." No schema change; no
- *     migration. Companion theme: zdz-theme-2 v2.37.0 (get_all_media()).
- *
- * 2.2.0  (Delete photos — granular + bulk, double-confirmed — the owner)
- *   - DELETE. Owners can delete their OWN photos; admins (WP administrator /
- *     zdz_owner / zdz_admin — the platform's standard admin definition) can
- *     delete ANY photo. New server endpoint zml_delete (nonce-checked, auth +
- *     nopriv-deny like the others) authorizes EVERY id individually
- *     (owner-or-admin), then removes the ZDZ_User_Media row AND its underlying
- *     WP attachment file via ZDZ_User_Media::delete(). Per-id results
- *     ({deleted, failed[{id,reason}]}) are returned so a partial failure never
- *     reads as success.
- *   - GRANULAR OR BULK. The full-screen gallery gains a "Select" mode: tap
- *     photos to check them (only photos you're allowed to delete are
- *     selectable — others dim), with a bottom action bar (live count, Delete,
- *     Cancel). The lightbox gains a per-photo "Delete photo" button
- *     (owners/admins only) on both surfaces. Both paths share one guarded flow.
- *   - DOUBLE CONFIRMATION (product decision). EVERY delete — single or bulk —
- *     asks twice: first a summary sheet ("Delete N photos?"), then an explicit
- *     second sheet ("Permanently delete — this can't be undone") whose
- *     destructive button is visually distinct. Implemented as an in-app
- *     top-level sheet (never window.confirm(), which is unreliable in the
- *     PWA/desktop webviews this app lives in) and reparented to <body> like
- *     the lightbox so transformed ancestors can't trap it.
- *   - The grid updates in place after deletion (no full reload), the lightbox
- *     steps to the next photo or closes, and the OTHER surface (widget ⇄
- *     fullscreen) is refreshed so the two never disagree. A new per-item
- *     can_delete flag (computed server-side) drives every affordance; the
- *     server re-checks authorization on every delete regardless.
- *
- * 2.1.0  (Bulk photo upload — add photos directly to the Media app — the owner)
- *   - ADD PHOTOS. The Media app can now INGEST photos, not just browse them. An
- *     "Add Photos" button on the full-screen gallery bar and a compact "Add" on
- *     the dashboard widget open a bulk-upload sheet: pick MANY photos at once,
- *     optionally type ONE note for the whole batch, and upload. New server
- *     endpoint zml_upload (nonce-checked, auth + nopriv-deny like the others)
- *     stores ONE photo per request into ZDZ_User_Media; the client fans the
- *     selection out into concurrent per-file POSTs (limited concurrency) with a
- *     shared batch id — mirroring zdz-camera's resilient one-file-per-request
- *     path. Saved to the uploader's own library at privacy=private (flip to
- *     Everyone per-photo afterward). On completion the gallery switches to "My
- *     Photos" and refreshes so the new photos appear.
- *   - METADATA PRESERVED (parity with zdz-camera). The ORIGINAL file is stored as
- *     the attachment via media_handle_upload(), so ZDZ_User_Media::save() reads
- *     EXIF (capture time + GPS + the full raw block) server-side from the
- *     untouched original — JPEG/TIFF provenance survives end-to-end. For HEIC/
- *     HEIF (PHP can't parse it) the client reads EXIF IN-BROWSER via the vendored
- *     exifr and sends captured_at / gps_* / geo_source / time_source alongside
- *     the file; save() prefers those. No re-encode, no EXIF/GPS strip. Unlike the
- *     live camera, a file with no EXIF date falls back to the file's lastModified
- *     (time_source='file_mtime'), never "now", and the device's current GPS is
- *     never substituted for an existing photo.
- *   - BATCH NOTE, VISIBLE + TAGGED (forward-looking). The one batch note is
- *     written to every photo's `description` (the same owner-editable field the
- *     camera uses and the lightbox already shows/edits — so it's visible and
- *     per-photo editable for the user's reference) AND mirrored into
- *     meta_json.batch = { id, note, seq, count, uploaded_at } on every photo of
- *     the batch (our metadata tagging). The batch envelope is deliberately
- *     open-ended so a future "job"/"customer" association is an ADDITIVE field
- *     here (e.g. batch.job_id) with no schema or contract change. No job model is
- *     assumed yet.
- *   - exifr 7.1.3 vendored under assets/js/vendor (no runtime CDN), enqueued as a
- *     dependency of media.js. No theme change required.
- *
- * 2.0.3  (Lightbox full-size = real zoom — the owner follow-up)
- *   - REAL ZOOM, NOT A BINARY TOGGLE. v2.0.2 made "full size" a single fixed
- *     jump to natural resolution with no navigation — usable, but crude (you
- *     landed mid-image with only "fit to screen"). It is now a proper
- *     image zoom INSIDE the lightbox: pinch (touch + trackpad), double-tap /
- *     double-click to toggle 2× at the tapped point, and drag to pan. Driven by
- *     a CSS transform (translate + scale) on the image; the stage clips. Still a
- *     <button>, so it never navigates the window (the v2.0.1 dead-end on tab-less
- *     desktop/PWA webviews stays fixed). Prev/next arrows show at fit and hide
- *     once zoomed in (per request); "Back"/Esc/backdrop exit from any zoom level
- *     (close action unchanged — invariant I3); prev/next + re-open reset to fit.
- *     JS: Lightbox.{applyTransform,clampPan,zoomTo,buttonZoom,resetZoom,
- *     syncZoomUI,bindZoomGestures} (replaces v2.0.2 setZoom/toggleZoom). CSS:
- *     transform-based .zml-lb-img + .zml-zoomed. No data/permission/EXIF/
- *     registration path touched; no theme change required.
- *
- * 2.0.2  (Lightbox "View full size" no longer strands the user — the owner)
- *   - SAFE FULL-SIZE. The lightbox's top-right control was an
- *     <a href="{file_url}" target="_blank"> "Open full size". In a tab-less
- *     standalone / desktop webview, target="_blank" has nowhere to open, so it
- *     navigated the CURRENT window to the bare image file — a dead-end page with
- *     only the OS window's back arrow and no in-app "Back". It is now a <button>
- *     "View full size" that toggles full-resolution zoom INSIDE the lightbox
- *     (the image renders at natural size; the stage pans/scrolls). A button
- *     cannot navigate the window, so the dead-end is impossible. "Back" / Esc /
- *     backdrop / hardware-back still exit the viewer from either zoom state
- *     (close action unchanged — invariant I3); prev/next and re-open reset to
- *     fit-to-screen. JS: Lightbox.setZoom/toggleZoom + per-photo reset in
- *     render() + teardown reset. CSS: .zml-lb.zml-zoomed stage/image/arrows.
- *     No data, permission, EXIF, or registration path touched.
- *
- * 2.0.1  (Mobile field-review follow-ups — doc 08)
- *   - SINGLE DOCK TILE. The full-screen gallery ('zdz-media-all') no longer
- *     registers as its own second "Media" dock tile (the duplicate). It now sets
- *     'springboard' => false (theme v2.21.0 flag), so it is excluded from the
- *     springboard grid, dock, recents, and command palette while remaining fully
- *     loadable — it stays server-registered and in zdz_allowed_apps so /load-app
- *     authorizes it and the viewport header reads correctly. The Media app is now
- *     ONE tile (the 'zdz-media' dashboard widget); the gallery still opens from
- *     the widget's "See All". Seeding is unchanged (both ids remain allowed so
- *     "See All" works for non-admins).
- *   - CENTERED IN THE WIDGET TOO. The scope segmented control + type chips are
- *     now centered on the dashboard-widget surface (v2.0.0 only centered them on
- *     the full-screen surface). "See All" stays pinned at the right edge via a
- *     3-column grid that keeps the segment truly centered and never clipped.
- *   - OBVIOUS BACK. The lightbox's top-left control is now an explicit "‹ Back"
- *     affordance (chevron + label) instead of a bare ✕, so the full-screen viewer
- *     never reads as a dead-end page. Same close behavior (history-back / Esc /
- *     backdrop / hardware back all still work); only the affordance changed.
- *   - "LOCATED" IS NOW TAPPABLE. In the viewer, a geotagged photo's "📍 Located"
- *     is an interactive control: tapping it fetches the theme's
- *     GET /zorderz/v1/media/{id}/exif (once, cached per id) and reveals the resolved
- *     place name, coordinates, a provenance chip (Photo GPS vs Device location),
- *     and a user-tap "Open in Maps" link. Privacy model preserved — the map link
- *     only contacts a provider when the user taps it; geocoding still resolves
- *     once, server-side. Falls back to coordinates + map link if the endpoint is
- *     unavailable, so "Located" is never a dead tap.
- *
- * 2.0.0  (Mobile-review rebuild — "Both" architecture)
- *   - DUAL SURFACE. The library now lives in two coordinated places:
- *       • A DASHBOARD WIDGET (bridge_type inline_widget) — a compact, iOS-Photos
- *         style "recent media" card on the home dashboard. This is the primary
- *         at-a-glance surface, with a "See All" affordance.
- *       • A FULL-SCREEN gallery (bridge_type ajax_html) — the roomy "see
- *         everything" view with infinite scroll, reached from "See All" or the
- *         app dock.
- *   - SHARED CONTROLLER. A single front-end controller (assets/js/media.js) is
- *     enqueued GLOBALLY on the SPA front page and exposes window.TSMedia with
- *     mountWidget() / mountFullscreen(). Because it is a real enqueued asset
- *     (not injected via innerHTML) it runs reliably on BOTH surfaces today —
- *     in particular the full-screen ajax_html surface does NOT depend on the
- *     theme reviving inline <script> in #app-body (Bridge v3.2 gap). When the
- *     theme ships that revival, nothing here needs to change.
- *   - LIGHTBOX FIXED. The viewer is rendered into a dedicated top-level layer,
- *     never trapped by the transformed .app-viewport ancestor; inputs are ≥16px
- *     so iOS no longer auto-zooms the note field; close + hardware back are
- *     always reachable; saving uses the no-shift busy pattern (button keeps its
- *     box, inline status, no reflow, can't be double-fired).
- *   - VISIBILITY TOGGLE. Owners can flip a photo between "Visible to Everyone"
- *     (privacy=public) and "Visible only to You" (privacy=private) right in the
- *     viewer. Server-enforced owner-only (zml_save_visibility → 403 otherwise).
- *   - Centered the scope segmented control + filter chips.
- *   - Tokens corrected to the theme's real palette (brand #2C5F8A, not #6366F1).
- *
- * 1.0.0
- *   - Initial release. Full-screen gallery app (bridge_type ajax_html).
+ * @package Zorderz
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'ZML_VERSION', '2.7.0' );
+define( 'ZML_VERSION', '2.14.0' );
 define( 'ZML_FILE', __FILE__ );
 define( 'ZML_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZML_URL', plugin_dir_url( __FILE__ ) );
+
+// media.my_counts: a home tile's "Photos this week" (counts only).
+require_once ZML_DIR . 'inc/class-zml-my-counts.php';
+add_filter( 'zdz_register_capabilities', array( 'ZML_My_Counts', 'register' ) );
 define( 'ZML_NONCE', 'zml_nonce_v1' );
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -378,10 +159,17 @@ add_action( 'wp_enqueue_scripts', function () {
 	// vendored locally so the Media app has no cross-plugin load dependency.
 	wp_enqueue_script( 'zml-exifr', ZML_URL . 'assets/js/vendor/exifr.umd.js', [], '7.1.3', true );
 
+	// the app runs on the theme's kit of parts (ZDZ.ui), so load
+	// after it. Only when the theme registers it: an older theme would otherwise drop media.js
+	// altogether (a missing dependency), and then nothing could say what is wrong.
+	$zml_deps = [ 'zdz-app-js', 'zml-exifr' ];  // window.Bridge / zdzData + exifr available
+	if ( wp_script_is( 'zdz-kit-js', 'registered' ) || wp_script_is( 'zdz-kit-js', 'enqueued' ) ) {
+		$zml_deps[] = 'zdz-kit-js';
+	}
 	wp_enqueue_script(
 		'zml-js',
 		ZML_URL . 'assets/js/media.js',
-		[ 'zdz-app-js', 'zml-exifr' ],  // window.Bridge / zdzData + exifr available
+		$zml_deps,
 		ZML_VERSION,
 		true                       // in footer, after the SPA core
 	);
@@ -391,7 +179,7 @@ add_action( 'wp_enqueue_scripts', function () {
 		'nonce'   => wp_create_nonce( ZML_NONCE ),
 		'version' => ZML_VERSION,
 		'user_id' => get_current_user_id(),
-		// v2.3.0: is the viewer an admin (WP administrator / zdz_owner / zdz_admin)?
+		// is the viewer an admin (WP administrator / zdz_owner / zdz_admin)?
 		// Drives whether the admin-only "All" scope tab is shown. The server
 		// re-checks on every zml_list request regardless — this flag is only a
 		// UI convenience, never the authorization.
@@ -413,10 +201,7 @@ add_action( 'wp_enqueue_scripts', function () {
  * ──────────────────────────────────────────────────────────────────────────*/
 
 add_action( 'init', function () {
-	// media.js posts zml_* actions. 1.10.2 fixes the logged-in hooks, which were still
-	// registered under the pre-rename tsml_* names (only the nopriv denials had been renamed),
-	// so every list, upload, note, visibility and delete call answered admin-ajax's "0". The
-	// legacy names stay registered as aliases for one release, for pages cached by an older build.
+	// media.js posts zml_* actions; each logged-in action has a signed-out denial.
 	add_action( 'wp_ajax_zml_list', 'zml_ajax_list' );
 	add_action( 'wp_ajax_nopriv_zml_list', 'zml_deny_nopriv' );
 	add_action( 'wp_ajax_zml_save_note', 'zml_ajax_save_note' );
@@ -427,7 +212,21 @@ add_action( 'init', function () {
 	add_action( 'wp_ajax_nopriv_zml_upload', 'zml_deny_nopriv' );
 	add_action( 'wp_ajax_zml_delete', 'zml_ajax_delete' );
 	add_action( 'wp_ajax_nopriv_zml_delete', 'zml_deny_nopriv' );
-	// Legacy aliases (pre-rename names), kept for one release.
+	add_action( 'wp_ajax_zml_rotate', 'zml_ajax_rotate' );   // rotate a photo 90° in place
+	add_action( 'wp_ajax_nopriv_zml_rotate', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_update_tags', 'zml_ajax_update_tags' );   // keyword tagging
+	add_action( 'wp_ajax_nopriv_zml_update_tags', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_share', 'zml_ajax_share' );   // share to a teammate via DM
+	add_action( 'wp_ajax_nopriv_zml_share', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_unshare', 'zml_ajax_unshare' );   // stop sharing
+	add_action( 'wp_ajax_nopriv_zml_unshare', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_recipients', 'zml_ajax_recipients' );   // teammate picker
+	add_action( 'wp_ajax_nopriv_zml_recipients', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_set_owner', 'zml_ajax_set_owner' );   // an administrator moves a photo to its owner
+	add_action( 'wp_ajax_nopriv_zml_set_owner', 'zml_deny_nopriv' );
+	add_action( 'wp_ajax_zml_owner_people', 'zml_ajax_owner_people' );   // who it can be moved to (administrators)
+	add_action( 'wp_ajax_nopriv_zml_owner_people', 'zml_deny_nopriv' );
+	// Legacy aliases (pre-rename names), kept for pages cached by an older build.
 	add_action( 'wp_ajax_tsml_list', 'zml_ajax_list' );
 	add_action( 'wp_ajax_nopriv_tsml_list', 'zml_deny_nopriv' );
 	add_action( 'wp_ajax_tsml_save_note', 'zml_ajax_save_note' );
@@ -470,6 +269,15 @@ function zml_current_user_is_admin(): bool {
  */
 function zml_shape_item( array $m, int $viewer_id ): array {
 	$is_owner = ( (int) ( $m['user_id'] ?? 0 ) === $viewer_id );
+	$vmeta    = zml_extract_video_meta( $m );   // v2.8.0
+	// who uploaded it (kept by the theme when an administrator moves a photo; the owner otherwise).
+	$owner    = (int) ( $m['user_id'] ?? 0 );
+	$uploader = $owner;
+	if ( class_exists( 'ZDZ_User_Media' ) && method_exists( 'ZDZ_User_Media', 'provenance' ) ) {
+		$prov     = ZDZ_User_Media::provenance( $m );
+		$uploader = (int) ( $prov['uploaded_by'] ?? $owner ) ?: $owner;
+	}
+	$can_move = zml_can_move_owner( $viewer_id );
 	return [
 		'id'            => (int) $m['id'],
 		'title'         => (string) ( $m['title'] ?? '' ),
@@ -477,6 +285,9 @@ function zml_shape_item( array $m, int $viewer_id ): array {
 		'media_type'    => (string) ( $m['media_type'] ?? 'photo' ),
 		'source_app'    => (string) ( $m['source_app'] ?? '' ),
 		'thumbnail_url' => (string) ( $m['thumbnail_url'] ?: $m['file_url'] ),
+		// the 768-pixel thumb for high-density screens
+		//.
+		'thumbnail_2x_url' => (string) ( $m['thumbnail_2x_url'] ?? '' ),
 		'file_url'      => (string) $m['file_url'],
 		'privacy'       => (string) ( $m['privacy'] ?? 'private' ),
 		'created_at'    => (string) ( $m['created_at'] ?? '' ),
@@ -484,10 +295,216 @@ function zml_shape_item( array $m, int $viewer_id ): array {
 		'gps_lat'       => isset( $m['gps_lat'] ) && $m['gps_lat'] !== null ? (float) $m['gps_lat'] : null,
 		'gps_lng'       => isset( $m['gps_lng'] ) && $m['gps_lng'] !== null ? (float) $m['gps_lng'] : null,
 		'is_owner'      => $is_owner,
-		// v2.2.0: owners may delete their own photos; admins may delete any.
+		// who uploaded it, as INITIALS only (never a user id, name or
+		// email), for the badge in the tile's corner. '' for the shared kiosk or anyone without initials.
+		// the person who UPLOADED it, even after an administrator moved it to someone else.
+		'uploader_initials' => zml_uploader_initials( $uploader ),
+		// when it now belongs to someone other than who uploaded it, their initials ("Belongs to").
+		'owner_initials'    => $uploader !== $owner ? zml_uploader_initials( $owner ) : '',
+		// an administrator may move it to its rightful owner (the theme re-checks); the owner's id only for them.
+		'can_move'          => $can_move,
+		'owner_id'          => $can_move ? $owner : 0,
+		// owners may delete their own photos; admins may delete any.
 		// Drives the delete affordances; the server re-checks on every delete.
 		'can_delete'    => $is_owner || zml_current_user_is_admin(),
+		// keyword tags (stored in meta_json.tags). can_tag mirrors
+		// can_delete — the owner OR any admin may add/remove tags (the whole
+		// point is letting an admin tag a photo a field user forgot to tag).
+		'tags'          => zml_extract_tags( $m ),
+		'can_tag'       => $is_owner || zml_current_user_is_admin(),
+		// may this viewer SHARE this item to a teammate? Owner or admin,
+		// and never from a shared-kiosk account. The server re-authorizes
+		// on share (ZDZ_Media_Share::create checks ownership per item).
+		'can_share'     => ( $is_owner || zml_current_user_is_admin() ) && ! ( class_exists( 'ZDZ_Media_Share' ) && ZDZ_Media_Share::is_kiosk( $viewer_id ) ),
+		// may this viewer ROTATE this item 90° in place? Owner or admin,
+		// PHOTOS only (a video can't be rotated in place). Server re-authorizes.
+		'can_rotate'    => ( $is_owner || zml_current_user_is_admin() ) && ( (string) ( $m['media_type'] ?? 'photo' ) !== 'video' ),
+		// whether this viewer may draw on it (the theme decides and re-checks on save).
+		// anyone who sees it, never the shared device; each person draws their own drawing.
+		// How many drawings and notes THIS viewer sees on it (theme counts them; never the lines - the viewer
+		// loads those when the photo opens), for the outline on its tile.
+		'marks_n'       => (int) ( $m['marks_n'] ?? 0 ),
+		'notes_n'       => (int) ( $m['notes_n'] ?? 0 ),
+		'can_mark'      => class_exists( 'ZDZ_User_Media' ) && method_exists( 'ZDZ_User_Media', 'viewer_may_mark' )
+			&& class_exists( 'ZDZ_Media_Marks' ) && method_exists( 'ZDZ_Media_Marks', 'counts_for' ) && ZDZ_User_Media::viewer_may_mark( $viewer_id, $m ),
+		// video fields (from meta_json) — drive the grid badge + player +
+		// back-to-back reel playback. Zero/empty for photos and sketches.
+		'is_video'      => ( (string) ( $m['media_type'] ?? 'photo' ) === 'video' ),
+		'duration_ms'   => (int) $vmeta['duration_ms'],
+		'reel_id'       => (string) $vmeta['reel_id'],
+		'seq'           => (int) $vmeta['seq'],
 	];
+}
+
+/**
+ * the uploader's initials for the badge on each photo.
+ *
+ * A small coloured badge in the lower-right corner of each photo says who uploaded it. Read the way the
+ * theme reads them: ZDZ_Person_Color, else the `zdz_user_initials` user meta. Only the initials leave the server (the browser maps
+ * them to the person's shape and tone through zdzData.people, which the theme already sends); the shared
+ * kiosk gets none, so its photos carry no badge. Memoized per request (a page has up to 40 photos).
+ */
+function zml_uploader_initials( int $uid ): string {
+	static $memo = [];
+	if ( $uid <= 0 ) return '';
+	if ( isset( $memo[ $uid ] ) ) return $memo[ $uid ];
+	$ini = '';
+	if ( class_exists( 'ZDZ_Person_Color' ) && method_exists( 'ZDZ_Person_Color', 'for_user' ) ) {
+		$p   = ZDZ_Person_Color::for_user( $uid );
+		$ini = ( 'kiosk' === ( $p['shape'] ?? '' ) ) ? '' : (string) ( $p['initials'] ?? '' );
+	} elseif ( ! ( class_exists( 'ZDZ_Media_Share' ) && ZDZ_Media_Share::is_kiosk( $uid ) ) ) {
+		$ini = (string) get_user_meta( $uid, 'zdz_user_initials', true );
+	}
+	$ini = trim( sanitize_text_field( $ini ) );
+	if ( function_exists( 'mb_substr' ) ) { $ini = mb_substr( $ini, 0, 4 ); } else { $ini = substr( $ini, 0, 4 ); }
+	return $memo[ $uid ] = $ini;
+}
+
+/** v2.8.0 — Pull video fields (duration/reel/seq) off a row's meta_json. */
+function zml_extract_video_meta( array $m ): array {
+	$out = [ 'duration_ms' => 0, 'reel_id' => '', 'seq' => 0 ];
+	$mj = $m['meta_json'] ?? '';
+	if ( is_string( $mj ) && $mj !== '' ) {
+		$meta = json_decode( $mj, true );
+		if ( is_array( $meta ) ) {
+			if ( isset( $meta['duration_ms'] ) ) { $out['duration_ms'] = (int) $meta['duration_ms']; }
+			if ( isset( $meta['reel_id'] ) )     { $out['reel_id']     = (string) $meta['reel_id']; }
+			if ( isset( $meta['seq'] ) )         { $out['seq']         = (int) $meta['seq']; }
+		}
+	}
+	return $out;
+}
+
+/**
+ * Read the keyword tags off a raw media row's meta_json.tags.
+ */
+function zml_extract_tags( array $m ): array {
+	$mj = $m['meta_json'] ?? '';
+	if ( is_string( $mj ) && $mj !== '' ) {
+		$meta = json_decode( $mj, true );
+		if ( is_array( $meta ) && ! empty( $meta['tags'] ) && is_array( $meta['tags'] ) ) {
+			$out = [];
+			foreach ( $meta['tags'] as $t ) {
+				$t = trim( (string) $t );
+				if ( $t !== '' ) { $out[] = $t; }
+			}
+			return array_values( array_slice( $out, 0, 40 ) );
+		}
+	}
+	return [];
+}
+
+/**
+ * Normalize a posted tag list (JSON array, or comma/newline string)
+ * into a clean, capped, de-duped string[].
+ */
+function zml_tag_list_from_post( $raw ): array {
+	$raw  = wp_unslash( $raw );
+	$list = [];
+	if ( is_array( $raw ) ) {
+		$list = $raw;
+	} elseif ( is_string( $raw ) && $raw !== '' ) {
+		$maybe = json_decode( $raw, true );
+		$list  = is_array( $maybe ) ? $maybe : preg_split( '/[,\n]+/', $raw );
+	}
+	$out = [];
+	foreach ( (array) $list as $t ) {
+		$t = trim( sanitize_text_field( (string) $t ) );
+		if ( $t !== '' && mb_strlen( $t ) <= 60 ) { $out[] = $t; }
+	}
+	return array_slice( array_values( array_unique( $out ) ), 0, 20 );
+}
+
+/**
+ * Add/remove keyword tags on a media item.
+ * OWNER-OR-ADMIN (mirrors delete): the whole point is letting an admin tag a
+ * photo a field user uploaded and forgot to tag. Provenance (who/when/why) is
+ * recorded by ZDZ_User_Media::apply_tags() into meta_json + the admin audit log.
+ */
+function zml_ajax_update_tags() {
+	check_ajax_referer( ZML_NONCE, 'nonce' );
+	if ( ! is_user_logged_in() ) {
+		wp_send_json_error( 'Not logged in.' );
+	}
+	if ( ! class_exists( 'ZDZ_User_Media' ) || ! method_exists( 'ZDZ_User_Media', 'apply_tags' ) ) {
+		wp_send_json_error( 'Tagging isn’t available yet — please update the Zorderz theme.' );
+	}
+
+	$add    = zml_tag_list_from_post( $_POST['add'] ?? '' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- zml_tag_list_from_post() unslashes and runs sanitize_text_field() on every tag
+	$remove = zml_tag_list_from_post( $_POST['remove'] ?? '' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- zml_tag_list_from_post() unslashes and runs sanitize_text_field() on every tag
+	$reason = isset( $_POST['reason'] ) ? sanitize_text_field( wp_unslash( $_POST['reason'] ) ) : '';
+	if ( empty( $add ) && empty( $remove ) ) {
+		wp_send_json_error( 'Nothing to change.' );
+	}
+
+	$uid      = get_current_user_id();
+	$is_admin = zml_current_user_is_admin();
+
+	// BATCH mode: media_ids[] tags many photos at once (bulk-tag from the
+	// selection toolbar). Per-item owner-or-admin, mirroring bulk delete; partial
+	// failures are reported, never silently dropped.
+	$ids_raw = isset( $_POST['media_ids'] ) ? sanitize_text_field( wp_unslash( $_POST['media_ids'] ) ) : '';
+	if ( $ids_raw !== '' && $ids_raw !== '[]' ) {
+		$ids = json_decode( $ids_raw, true );
+		if ( ! is_array( $ids ) ) {
+			wp_send_json_error( 'Invalid selection.' );
+		}
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+		if ( empty( $ids ) ) {
+			wp_send_json_error( 'No photos selected.' );
+		}
+		if ( count( $ids ) > 100 ) {
+			wp_send_json_error( 'Too many photos in one request (max 100).' );
+		}
+
+		$tagged = [];
+		$failed = [];
+		foreach ( $ids as $mid ) {
+			$row = ZDZ_User_Media::get_by_id( $mid );
+			if ( ! $row ) {
+				$failed[] = [ 'id' => $mid, 'reason' => 'not found' ];
+				continue;
+			}
+			if ( (int) ( $row['user_id'] ?? 0 ) !== $uid && ! $is_admin ) {
+				$failed[] = [ 'id' => $mid, 'reason' => 'not yours' ];
+				continue;
+			}
+			$r = ZDZ_User_Media::apply_tags( $mid, $add, $remove, $uid, $reason );
+			if ( null === $r ) {
+				$failed[] = [ 'id' => $mid, 'reason' => 'save failed' ];
+				continue;
+			}
+			$tagged[] = [ 'id' => $mid, 'tags' => $r['tags'] ];
+		}
+		wp_send_json_success( [ 'tagged' => $tagged, 'failed' => $failed, 'count' => count( $tagged ) ] );
+	}
+
+	// Single-item mode.
+	$id = (int) ( $_POST['media_id'] ?? 0 );
+	if ( $id <= 0 ) {
+		wp_send_json_error( 'Invalid item.' );
+	}
+
+	$row = ZDZ_User_Media::get_by_id( $id );
+	if ( ! $row ) {
+		wp_send_json_error( 'Not found.' );
+	}
+	// Owner OR admin — server-enforced (the client's can_tag flag is only a hint).
+	if ( (int) ( $row['user_id'] ?? 0 ) !== $uid && ! $is_admin ) {
+		wp_send_json_error( 'You don’t have permission to tag this photo.', 403 );
+	}
+
+	$res = ZDZ_User_Media::apply_tags( $id, $add, $remove, $uid, $reason );
+	if ( null === $res ) {
+		wp_send_json_error( 'Could not save tags. Please try again.' );
+	}
+
+	wp_send_json_success( [
+		'media_id' => $id,
+		'tags'     => $res['tags'],
+		'added'    => $res['added'],
+		'removed'  => $res['removed'],
+	] );
 }
 
 /**
@@ -501,7 +518,7 @@ function zml_shape_item( array $m, int $viewer_id ): array {
  *                  layer already lets admins OPEN, but which never appear in the
  *                  'public'/'mine' lists). A non-admin asking for scope=all is
  *                  silently downgraded to 'public' — the server NEVER trusts the
- *                  client to have hidden the tab (v2.3.0).
+ *                  client to have hidden the tab.
  * Optional media_type filter. Paginated via offset (page size 40).
  *
  * limit accepts an override (used by the dashboard widget to request a small
@@ -533,9 +550,15 @@ function zml_ajax_list() {
 
 	if ( $scope === 'mine' ) {
 		$rows = ZDZ_User_Media::get_user_media( $viewer, $filters );
+	} elseif ( $scope === 'shared' ) {
+		// "Shared With Me": items another teammate granted to this viewer.
+		// Read-only here; the grants + gating live in the theme (ZDZ_Media_Share).
+		$rows = method_exists( 'ZDZ_User_Media', 'get_shared_with_me' )
+			? ZDZ_User_Media::get_shared_with_me( $viewer, $filters )
+			: [];
 	} elseif ( $scope === 'all' ) {
 		// Admin browse-all: every row regardless of owner/privacy. Requires the
-		// theme getter (theme ≥ 2.37.0); on an older theme, fail safe by falling
+		// theme getter; on an older theme, fail safe by falling
 		// back to the public view rather than exposing nothing or erroring.
 		if ( method_exists( 'ZDZ_User_Media', 'get_all_media' ) ) {
 			$rows = ZDZ_User_Media::get_all_media( $filters );
@@ -555,7 +578,20 @@ function zml_ajax_list() {
 		) );
 	}
 
-	$items = array_map( function ( $r ) use ( $viewer ) { return zml_shape_item( $r, $viewer ); }, $rows );
+	$items = array_map( function ( $r ) use ( $viewer, $scope ) {
+		$it = zml_shape_item( $r, $viewer );
+		if ( $scope === 'shared' ) {
+			// A recipient is not the owner: view-only (no delete, tag, or re-share).
+			$it['is_shared']      = true;
+			$it['shared_by_name'] = (string) ( $r['shared_by_name'] ?? '' );
+			$it['shared_at']      = (string) ( $r['shared_at'] ?? '' );
+			$it['share_group']    = (string) ( $r['share_group'] ?? '' );
+			$it['can_delete']     = false;
+			$it['can_tag']        = false;
+			$it['can_share']      = false;
+		}
+		return $it;
+	}, $rows );
 
 	wp_send_json_success( [
 		'items'    => $items,
@@ -709,7 +745,7 @@ function zml_ajax_upload() {
 	// Store the ORIGINAL as the full-size attachment (EXIF-preserving — see docblock).
 	$att_id = media_handle_upload( 'photo', 0, [], [ 'test_form' => false ] );
 	if ( is_wp_error( $att_id ) ) {
-		error_log( 'TSML upload: ' . $att_id->get_error_message() );
+		error_log( 'ZML upload: ' . $att_id->get_error_message() );
 		wp_send_json_error( 'Upload failed. Please try again.' );
 	}
 
@@ -759,9 +795,9 @@ function zml_ajax_upload() {
 
 	// Privacy: intentionally NOT set, so ZDZ_User_Media::save() applies its
 	// 'private' default. 'private' already means "the UPLOADER and any ADMIN can
-	// view it" (theme serve() gate, v2.33.0: private → owner + admin-tier), so a
+	// view it" (the theme serve() gate: private → owner + admin-tier), so a
 	// bulk-uploaded photo defaults to owner-visible-in-lists + admin-viewable;
-	// admins DISCOVER it via the new admin-only "All" scope (v2.3.0). The user
+	// admins DISCOVER it via the new admin-only "All" scope. The user
 	// can still flip any photo to "Everyone" (public) afterward via the
 	// visibility toggle. Do NOT default to 'public' — that exposes it org-wide.
 	$save_args = [
@@ -785,7 +821,7 @@ function zml_ajax_upload() {
 
 	$media = ZDZ_User_Media::save( $save_args );
 	if ( ! $media ) {
-		error_log( 'TSML upload: metadata save failed. db_error:' . $wpdb->last_error );
+		error_log( 'ZML upload: metadata save failed. db_error:' . $wpdb->last_error );
 		wp_send_json_error( 'Could not save photo details. Please try again.' );
 	}
 
@@ -798,7 +834,7 @@ function zml_ajax_upload() {
 }
 
 /**
- * Permanently delete media items — single or bulk (v2.2.0).
+ * Permanently delete media items — single or bulk.
  *
  * AUTHORIZATION (server-enforced PER ID, regardless of what the UI showed):
  *   • The item's OWNER may delete it (users manage their own uploads/captures).
@@ -870,6 +906,177 @@ function zml_ajax_delete() {
 		'deleted' => $deleted,
 		'failed'  => $failed,
 	] );
+}
+
+/**
+ * Rotate ONE photo 90° at a time, IN PLACE. Owner or admin only; photos
+ * only. The pixel work + thumbnail regeneration live in the theme
+ * (ZDZ_User_Media::rotate_photo, the one media authority), which re-authorizes and
+ * bumps the row's updated_at so the gated URL's cache-buster refreshes the image
+ * immediately. Returns the fresh URLs so the client can swap the <img> at once.
+ */
+function zml_ajax_rotate() {
+	check_ajax_referer( ZML_NONCE, 'nonce' );
+	if ( ! is_user_logged_in() )             wp_send_json_error( 'Not logged in.' );
+	if ( ! class_exists( 'ZDZ_User_Media' ) ) wp_send_json_error( 'Unavailable.' );
+	if ( ! method_exists( 'ZDZ_User_Media', 'rotate_photo' ) ) wp_send_json_error( 'Rotate needs the theme updated first.' );
+
+	$id = isset( $_POST['media_id'] ) ? absint( $_POST['media_id'] ) : 0;
+	$cw = isset( $_POST['cw'] ) ? absint( $_POST['cw'] ) : 0;
+	if ( $id <= 0 )                                        wp_send_json_error( 'No item.' );
+	if ( ! in_array( $cw, [ 90, 180, 270 ], true ) )       wp_send_json_error( 'Rotation must be 90, 180, or 270.' );
+
+	$row = ZDZ_User_Media::get_by_id( $id );
+	if ( ! $row ) wp_send_json_error( 'Not found.' );
+
+	$viewer = get_current_user_id();
+	// Owner-or-admin — the same rule as delete. (Server-side; the UI's can_rotate
+	// flag is a convenience, never trusted. The theme re-authorizes as well.)
+	if ( (int) ( $row['user_id'] ?? 0 ) !== $viewer && ! zml_current_user_is_admin() ) {
+		wp_send_json_error( 'You can only rotate your own photos.' );
+	}
+	if ( (string) ( $row['media_type'] ?? 'photo' ) === 'video' ) {
+		wp_send_json_error( 'Only photos can be rotated.' );
+	}
+
+	$res = ZDZ_User_Media::rotate_photo( $id, $viewer, $cw );
+	if ( ! $res ) wp_send_json_error( 'Rotate failed. Please try again.' );
+
+	wp_send_json_success( is_array( $res ) ? $res : [] );
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Share media to a teammate via DM
+ *
+ * The Media app is a thin caller here: it validates the nonce + login + a light
+ * rate limit, then hands off to the DM plugin's published bridge, which records
+ * the per-recipient grants in the theme (ZDZ_Media_Share::create authorizes the
+ * sender against every media id) and posts the gallery card. Authorization is
+ * NOT done here — it lives in the theme, the one media authority.
+ * ──────────────────────────────────────────────────────────────────────────*/
+
+/** Share one or more media items to a teammate via DM. */
+function zml_ajax_share() {
+	check_ajax_referer( ZML_NONCE, 'nonce' );
+	if ( ! is_user_logged_in() ) { wp_send_json_error( 'Not logged in.', 403 ); }
+
+	$sender = get_current_user_id();
+
+	// Light per-user rate limit: blunt the "share bomb" without getting in
+	// a normal user's way. Fail-open if the object cache is unavailable.
+	$rk   = 'zml_share_rl_' . $sender;
+	$hits = (int) get_transient( $rk );
+	if ( $hits >= 20 ) { wp_send_json_error( 'You are sharing too fast — give it a moment.', 429 ); }
+	set_transient( $rk, $hits + 1, 60 );
+
+	$recipient = intval( wp_unslash( $_POST['recipient_id'] ?? 0 ) );
+	$note      = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
+	$ids       = array_values( array_filter( array_map( 'absint', (array) ( $_POST['media_ids'] ?? [] ) ) ) );
+
+	if ( $recipient <= 0 || empty( $ids ) ) {
+		wp_send_json_error( 'Pick a teammate and at least one item.', 400 );
+	}
+	if ( count( $ids ) > 100 ) {
+		wp_send_json_error( 'You can share up to 100 items at once.', 400 );
+	}
+	if ( ! class_exists( 'ZIM_Media_Cards' ) ) {
+		wp_send_json_error( 'Messaging is unavailable, so sharing to a DM is not possible right now.', 503 );
+	}
+
+	$res = ZIM_Media_Cards::post_share_to_dm( $sender, $recipient, $ids, $note );
+	if ( is_wp_error( $res ) ) {
+		wp_send_json_error( $res->get_error_message(), 400 );
+	}
+	wp_send_json_success( $res );
+}
+
+/** Stop sharing (revoke a whole share group). Sender or admin only (enforced in the theme). */
+function zml_ajax_unshare() {
+	check_ajax_referer( ZML_NONCE, 'nonce' );
+	if ( ! is_user_logged_in() ) { wp_send_json_error( 'Not logged in.', 403 ); }
+	if ( ! class_exists( 'ZDZ_Media_Share' ) ) { wp_send_json_error( 'Unavailable.', 503 ); }
+
+	$group = isset( $_POST['group'] ) ? preg_replace( '/[^a-f0-9]/i', '', sanitize_text_field( wp_unslash( $_POST['group'] ) ) ) : '';
+	if ( '' === $group ) { wp_send_json_error( 'Nothing to revoke.', 400 ); }
+
+	$ok = ZDZ_Media_Share::revoke( get_current_user_id(), $group );
+	if ( ! $ok ) { wp_send_json_error( 'You cannot stop this share.', 403 ); }
+	wp_send_json_success( [ 'revoked' => true ] );
+}
+
+/**
+ * may this person move a photo to someone else? The theme decides
+ * (ZDZ_User_Media::actor_may_reassign: administrators only, never the shared kiosk); false on an older theme.
+ */
+function zml_can_move_owner( int $uid ): bool {
+	static $memo = [];
+	if ( ! isset( $memo[ $uid ] ) ) {
+		$memo[ $uid ] = $uid > 0 && class_exists( 'ZDZ_User_Media' ) && method_exists( 'ZDZ_User_Media', 'actor_may_reassign' )
+			&& method_exists( 'ZDZ_User_Media', 'reassign_owner' ) && ZDZ_User_Media::actor_may_reassign( $uid );
+	}
+	return $memo[ $uid ];
+}
+
+/** v2.11.0 - an administrator moves a photo to its rightful owner. The theme keeps who uploaded it and every move. */
+function zml_ajax_set_owner() {
+	check_ajax_referer( ZML_NONCE, 'nonce' );
+	if ( ! is_user_logged_in() ) { wp_send_json_error( 'Not logged in.', 403 ); }
+	$actor = get_current_user_id();
+	if ( ! class_exists( 'ZDZ_User_Media' ) || ! method_exists( 'ZDZ_User_Media', 'reassign_owner' ) ) {
+		wp_send_json_error( 'Moving a photo needs the theme updated first.', 400 );
+	}
+	if ( ! zml_can_move_owner( $actor ) ) {
+		wp_send_json_error( 'Only an administrator can move a photo to someone else.', 403 );
+	}
+	$id = isset( $_POST['media_id'] ) ? absint( $_POST['media_id'] ) : 0;
+	$to = isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0;
+	if ( $id <= 0 || $to <= 0 ) { wp_send_json_error( 'Choose a photo and a person.', 400 ); }
+	$r = ZDZ_User_Media::reassign_owner( $id, $to, $actor );
+	if ( is_wp_error( $r ) ) { wp_send_json_error( $r->get_error_message(), 400 ); }
+	$row = ZDZ_User_Media::get_by_id( $id );
+	wp_send_json_success( [ 'item' => $row ? zml_shape_item( $row, $actor ) : null, 'moved' => ! empty( $r['moved'] ) ] );
+}
+
+/** v2.11.0 - who a photo can be moved to (administrators only): the theme's selectable people, the administrator too. */
+function zml_ajax_owner_people() {
+	check_ajax_referer( ZML_NONCE, 'nonce' );
+	if ( ! is_user_logged_in() ) { wp_send_json_error( 'Not logged in.', 403 ); }
+	if ( ! zml_can_move_owner( get_current_user_id() ) ) { wp_send_json_error( 'Only an administrator can move a photo to someone else.', 403 ); }
+	$people = class_exists( 'ZDZ_Party' ) ? ZDZ_Party::selectable_people( [ 'include_self' => true ] ) : [];
+	wp_send_json_success( [ 'people' => array_values( array_map( function ( $p ) {
+		return [ 'id' => (int) $p['id'], 'name' => (string) $p['name'], 'initials' => (string) ( $p['initials'] ?? '' ) ];
+	}, (array) $people ) ) ] );
+}
+
+/**
+ * Teammate picker for the share dialog. Reads the theme's authoritative
+ * selectable-people roster (ZDZ_Party), which already excludes the shared-kiosk
+ * role. A kiosk account itself gets an empty list (it can't share).
+ */
+function zml_ajax_recipients() {
+	check_ajax_referer( ZML_NONCE, 'nonce' );
+	if ( ! is_user_logged_in() ) { wp_send_json_error( 'Not logged in.', 403 ); }
+
+	if ( class_exists( 'ZDZ_Media_Share' ) && ZDZ_Media_Share::is_kiosk( get_current_user_id() ) ) {
+		wp_send_json_success( [ 'people' => [] ] );
+	}
+
+	$search = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
+	$people = class_exists( 'ZDZ_Party' )
+		? ZDZ_Party::selectable_people( [ 'include_self' => false, 'search' => $search ] )
+		: [];
+
+	$out = array_map(
+		function ( $p ) {
+			return [
+				'id'       => (int) $p['id'],
+				'name'     => (string) $p['name'],
+				'initials' => (string) ( $p['initials'] ?? '' ),
+			];
+		},
+		$people
+	);
+	wp_send_json_success( [ 'people' => $out ] );
 }
 
 /**

@@ -2,7 +2,7 @@
 /**
  * ZDZ_Maps — the map-provider seam for the shared client map-URL helper.
  *
- * Wave D / D-01. The platform builds map deep-links from an address in exactly
+ * The platform builds map deep-links from an address in exactly
  * one place on the client: window.zdzMapsUrl() (theme assets/js/app.js), reused
  * by the analytics chat address linkifier and the jobs dossier. This class is
  * the server-side half: it owns the PROVIDER base-URLs as an Identity-configurable
@@ -14,7 +14,7 @@
  *   apply_filters( 'zdz_maps_providers', <core defaults> )
  * with the generic default living here (and mirrored in the JS so the helper
  * still works if this config never loads). No company/person/place name appears
- * in any base-URL — they are generic vendor endpoints, a vendor fact not a tenant
+ * in any base-URL — they are generic vendor endpoints, a vendor fact not a business
  * one; the ADDRESS that gets appended is runtime contact data, never shipped.
  *
  * SECURITY: every base-URL is a hardcoded https:// endpoint ending at its query
@@ -47,7 +47,7 @@ class ZDZ_Maps {
 
 	/**
 	 * Resolve the provider base-URLs: the Core defaults, run through the
-	 * `zdz_maps_providers` filter so an Identity Pack / a tenant plugin can swap
+	 * `zdz_maps_providers` filter so an Identity Pack or a business's plugin can swap
 	 * the maps service. Any missing key falls back to its Core default, so a
 	 * partial override can never produce an empty base.
 	 *
@@ -76,18 +76,30 @@ class ZDZ_Maps {
 
 	/**
 	 * Locale street-grammar EXTENSION for the chat address linkifier, keyed
-	 * `strong` / `weak` / `spanish` (each an array of street-type tokens). Ships
-	 * EMPTY from Core — the linkifier already carries a US + common-Spanish default
-	 * baked into the JS, and merges per-key — so a `territories` Identity Pack can
-	 * ADD a locale's grammar via the `zdz_street_grammar` filter without Core naming
-	 * any place. Empty by default => the JS defaults stand unchanged.
+	 * `strong` / `weak` / `spanish` (each an array of street-type tokens; `spanish`
+	 * holds the words written BEFORE the street's name). The linkifier carries a
+	 * US + common-Spanish default baked into the JS and takes each key given here
+	 * in place of its default. When the business's region adds street-first words
+	 * (the knowledge pack's addresses.street_first_words, read by
+	 * ZDZ_Sealed::street_first_words()), `spanish` carries the full list; the
+	 * `zdz_street_grammar` filter can set any key. Empty by default => the JS
+	 * defaults stand unchanged.
 	 *
 	 * @return array<string,array<int,string>> grammar overrides, or [] for none.
 	 */
 	public static function street_grammar(): array {
+		$grammar = array();
+		if ( class_exists( 'ZDZ_Sealed' ) && method_exists( 'ZDZ_Sealed', 'street_first_words' ) ) {
+			$first = ZDZ_Sealed::street_first_words();
+			if ( array_diff( $first, ZDZ_Sealed::STREET_FIRST ) ) {
+				$grammar['spanish'] = array_values( array_map( static function ( $w ) {
+					return mb_convert_case( $w, MB_CASE_TITLE, 'UTF-8' );
+				}, $first ) );
+			}
+		}
 		$grammar = function_exists( 'apply_filters' )
-			? apply_filters( 'zdz_street_grammar', array() )
-			: array();
+			? apply_filters( 'zdz_street_grammar', $grammar )
+			: $grammar;
 		return is_array( $grammar ) ? $grammar : array();
 	}
 

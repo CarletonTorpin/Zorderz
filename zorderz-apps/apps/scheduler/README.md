@@ -84,6 +84,40 @@ Identity is read from Core, never hardcoded:
   the Core *Connections* layer will own (`calendar.org`, `calendar.party.*`); the
   module keeps its own storage until that service exists.
 
+## Repeating appointments
+
+An appointment can repeat (the editor's **Repeats** menu, or `rrule` on the REST
+create/update). A series is ONE row carrying an RFC 5545 rule, expanded into
+occurrences when the calendar is read; a rule the engine cannot expand is refused
+at the write with its reason. Editing or deleting one occurrence asks **just this
+one / this and all following / every one**, each a different write
+(`/events/{id}/instance`, `/events/{id}/split`, `/events/{id}/following`).
+Occurrences hold their wall-clock time across daylight-saving changes; a time that
+occurs twice resolves to the first, a skipped one to the offset before the gap. A
+job that spans several days is linked appointments sharing a `job_id`, not a
+repeating one.
+
+Every appointment carries a stable `uid` and a `sequence`, and every write is
+recorded in `wp_zsch_change_log` with its source (a person, or a sync).
+
+## Work calendars
+
+On the team grid, busy time from a connected calendar shows only *that* a person
+is busy. If the business lists its own mail domains under **Settings → Zorderz
+Scheduler → Work calendar domains** (`zsch_work_domains`), busy time from accounts
+on those exact domains also shows *what* — never for a personal account, never for
+an event marked private, never for a feed set to busy-only. Blank (the default)
+discloses no titles.
+
+## Health
+
+The settings screen ends with a read-only **Health** panel: running build vs.
+schema, the five-minute tick, expected columns and indexes, the database's index
+limits, the backfill, and the zone database (fingerprint and a DST self-test). The
+running version and any zone-database change are also written to the site's own
+PHP error log (`Zorderz Scheduler ACTIVE`, `Zorderz Scheduler TZDATA`); nothing is
+sent anywhere else.
+
 ## Appointment states / Flow
 
 Appointment and availability state values (`confirmed`/`tentative`/`cancelled`,
@@ -100,4 +134,5 @@ the theme's `ZDZ_Rename_Migration` performs them. Fresh installs no-op.
 ## Tables
 
 `wp_zsch_appointments` · `wp_zsch_availability` · `wp_zsch_graph_map` ·
-`wp_zsch_calendar_accounts` · `wp_zsch_calendar_feeds` · `wp_zsch_external_events`
+`wp_zsch_calendar_accounts` · `wp_zsch_calendar_feeds` · `wp_zsch_external_events` ·
+`wp_zsch_participants` · `wp_zsch_writeback_map` · `wp_zsch_change_log`

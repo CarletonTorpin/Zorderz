@@ -1,6 +1,6 @@
 <?php
 /**
- * Zdz_Doc_Preservation — the shared document preservation lock (§61).
+ * Zdz_Doc_Preservation — the shared document preservation lock.
  *
  * A priced document's sold lines are not silently rewritten. When the operator's WORDS
  * ask to leave a document as-is (e.g. "just add the photo measurements to the lead"),
@@ -9,8 +9,9 @@
  * caller a correction disclosure to prepend — while a compound "edit AND preserve"
  * request is let through untouched.
  *
- * Shared by the estimate update path (Plan 02 E1/E6) and the invoice line-edit path.
- * Every step is a named method so a test can exercise it in isolation — the §61 lesson.
+ * Shared by the estimate update path and the invoice line-edit path.
+ * Every step is a named method so a test can exercise it in isolation: a lock that can
+ * only be tested end to end hides which step dropped a field.
  *
  * TWO SHIPPED-DEFECT LESSONS, encoded here:
  *   A1 — the provider WIRE shape carries `unit_cost` as an ARRAY ({amount:"85.00"}); a
@@ -244,7 +245,7 @@ class Zdz_Doc_Preservation {
 	}
 
 	/* ============================================================== *
-	 *  DISCLOSURE  (PREPENDED — never appended; §61 truncation lesson)
+	 *  DISCLOSURE  (PREPENDED — never appended: an appended note is lost when a long document is truncated)
 	 * ============================================================== */
 
 	/**

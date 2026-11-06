@@ -16,7 +16,7 @@
  * residence (GDPR/CCPA weight); the client, a public receipt page, and any AJAX
  * payload may receive the status ONLY. Callers must never re-attach coordinates.
  *
- * Status vocabulary (from the location-integrity spec, S5-07 / §78):
+ * Status vocabulary:
  *   - on_site   : centroid <= onsite radius (250 m default) — SELECTABLE.
  *   - off_site  : onsite..candidate radius (250 m..3 km)    — BLOCKED (returned,
  *                 shown blocked in the picker — not silently dropped).

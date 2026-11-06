@@ -1,0 +1,44 @@
+# Identity Pack · rules.yml — EXAMPLE, entirely fictional.
+#
+# The business's own operating rules, as data. Each value is checked by the
+# same rule the setting's own screen uses; a value that fails is refused and
+# listed on the preview with the reason, never rounded into range.
+
+pack:
+  schema: 1
+  tenant_key: example-business
+
+notifications:
+  # Phone notifications that arrive in these hours wait until they end. Each
+  # person may choose their own; this is for everyone who has not. The same
+  # time in both turns quiet hours off.
+  quiet_hours: { start: "20:30", end: "07:00" }
+
+contacts:
+  # Which answers to "How did it go?" count as having reached a customer.
+  # Answers: talked, voicemail, no_answer, replied.
+  reaching_results: [talked, replied]
+
+usage_records:
+  # Days a detailed usage record is kept before only daily totals remain.
+  # At least 90. The notice people are asked to agree to states this number.
+  raw_days: 120
+
+media:
+  # How close a photo must be to a job's address to count as taken there,
+  # in metres (10 to 1000).
+  same_property_m: 150
+
+ai_spend:
+  # Monthly lines for the Ai router, in US dollars. `app` (this site's apps) is
+  # required: with no line set, nothing is sent. `all` is the whole provider
+  # account (defaults to app); `ceiling` is the account's own hard limit at the
+  # provider, shown only.
+  monthly_usd: { app: 25, all: 25, ceiling: 50 }
+
+security_monitor:
+  # How the security monitor reads public registration: "open" counts it as
+  # open whatever WordPress says; "follow" reads WordPress's own setting.
+  # ("closed" lowers how serious flaws that need a login are reported, so it
+  # is chosen on Zorderz → Security Monitor, not in a pack.)
+  public_registration: follow

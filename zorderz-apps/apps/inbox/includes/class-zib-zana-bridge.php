@@ -1,14 +1,14 @@
 <?php
 /**
- * ZIB_ZANA_Bridge — the ONE seam between the Brain-Bot / Analytics engine and the
- * sealed mail store. Egress path #1 ("owner's own Brain-Bot queries").
+ * ZIB_ZANA_Bridge — the ONE seam between the assistant (the Analytics chat engine) and
+ * the sealed mail store. Egress path #1 (a person's own questions to the assistant).
  *
  * House pattern: like the other apps' analytics bridges, this is a public static
  * class the engine calls IN-PROCESS, guarded by class_exists + is_available(). It
  * follows the platform's READ-MARKER contract
- * exactly (the [TS_PROJECT] / [TSEC_LOOKUP] shape):
+ * exactly (the same shape as the other apps' lookup markers):
  *
- *   1. Brain-Bot emits  [ZIB_SEARCH]{"q":"recent supplier orders"}
+ *   1. The assistant emits  [ZIB_SEARCH]{"q":"recent supplier orders"}
  *   2. The engine's marker interceptor (in the analytics chat engine,
  *      process_chat, Step 4a) detects it, refuses on kiosk, then — for a real
  *      person — calls  ZIB_ZANA_Bridge::handle_marker($json, $user_id)  with the
@@ -28,12 +28,12 @@
  * chat's front-end marker/card pass, so EVERY mail-derived field is neutralised
  * (brackets/backticks/fence-chars defanged) before it enters the answer.
  *
- * SERVER-AUTHORITATIVE IDENTITY (INV-1): the caller id comes from the engine's
+ * SERVER-AUTHORITATIVE IDENTITY: the caller id comes from the engine's
  * resolved session, never from the marker JSON. The Gatekeeper additionally
  * FORCES subject == actor, so "search someone else's mail" is unexpressible.
  * KIOSK: denied here, at the Gatekeeper, and stripped upstream — three layers.
  *
- * @since 0.4.0 (P3 — Brain-Bot owner path)
+ * @since 0.4.0
  * @package Zorderz
  */
 
@@ -50,7 +50,7 @@ class ZIB_ZANA_Bridge {
 	 * The P5 thread-state read marker. Same doctrine as MARKER: owner-only,
 	 * kiosk-denied, server-rendered (model never re-reads the mail), READ-ONLY —
 	 * it SURFACES who has the ball; it never sends and never drafts. Composing a
-	 * reply stays the separate human-confirmed [TSA_EMAIL_DRAFT] path, where the
+	 * reply stays the separate human-confirmed [ZDZ_EMAIL_DRAFT] path, where the
 	 * owner sees the full text and clicks Send themselves (INV-SEND). @since 0.5.0
 	 */
 	const FOLLOWUP_MARKER = 'ZIB_FOLLOWUP';
@@ -95,9 +95,27 @@ class ZIB_ZANA_Bridge {
 	public static function handle_marker( $payload, int $viewer_id = 0, string $ask = '' ): array {
 		$query = self::query_from_payload( $payload );
 		$dir   = self::detect_direction( $ask );
+		// A SENT search whose key folds the person and the subject together ("Jordan Blake
+		// patio photos" — what the model emits when it does not split them) is split here, so the
+		// answer does not depend on the model: the longest leading 1-3 words that name someone the
+		// owner has mailed become the person, the rest the topic. Only when the whole key is NOT
+		// already a known recipient, and only on the owner's own sent mail (identity is still the
+		// engine's caller).
+		$topic = self::topic_from_payload( $payload );
+		if ( 'sent' === $dir && '' === $topic && class_exists( 'ZIB_Gatekeeper' ) && method_exists( 'ZIB_Gatekeeper', 'recipient_resolves' ) ) {
+			$uid_split = $viewer_id > 0 ? $viewer_id : (int) ( function_exists( 'get_current_user_id' ) ? get_current_user_id() : 0 );
+			$split     = self::split_person_topic( ZIB_Gatekeeper::normalize_recipient( $query ), function ( $name ) use ( $uid_split ) {
+				return ZIB_Gatekeeper::recipient_resolves( $uid_split, $name );
+			} );
+			if ( $split ) {
+				$query = $split[0];
+				$topic = $split[1];
+			}
+		}
 		// "what did I tell <person> [today/this week]" — cite the composed text as an expandable
-		// [ZIB_MAIL] card, date- and recipient-scoped. Only on a SENT content ask.
-		if ( 'sent' === $dir && self::detect_told_intent( $ask ) ) {
+		// [ZIB_MAIL] card, date- and recipient-scoped. Only on a SENT content ask, and not when
+		// there is a topic — that is a search for mail ABOUT something (search() below).
+		if ( 'sent' === $dir && '' === $topic && self::detect_told_intent( $ask ) ) {
 			return self::told( ZIB_Gatekeeper::normalize_recipient( $query ), $viewer_id, self::detect_window( $ask ), self::aliases_from_payload( $payload ) );
 		}
 		// The RECEIVED twin — "what did <person> send me [today/this week]" / "show me the emails from
@@ -106,7 +124,109 @@ class ZIB_ZANA_Bridge {
 		if ( 'received' === $dir && self::detect_heard_intent( $ask ) ) {
 			return self::heard( ZIB_Gatekeeper::normalize_sender( $query ), $viewer_id, self::detect_window( $ask ), self::aliases_from_payload( $payload ) );
 		}
-		return self::search( $query, $viewer_id, self::detect_intent( $ask ), $dir );
+		// a sent-mail search may carry a TOPIC ("…to Jordan about Sam's invoice") and a match
+		// mode ("search my sent emails for X": X may be a person or a topic). Both are search hints only.
+		return self::search( $query, $viewer_id, self::detect_intent( $ask ), $dir, $topic, self::match_from_payload( $payload ) );
+	}
+
+	/**
+	 * Split "Jordan Blake patio photos" into array( 'jordan blake', 'patio photos' ): the
+	 * longest leading run of 1-3 words that $resolves() accepts as someone the owner has mailed, with at
+	 * least one word left over for the topic. array() when the whole key resolves already, when it is a
+	 * single word, or when no leading run resolves. Pure apart from the callback.
+	 *
+	 * @param callable $resolves fn( string $name ): bool
+	 */
+	public static function split_person_topic( string $q, $resolves ): array {
+		$q     = trim( preg_replace( '/\s+/', ' ', $q ) );
+		$words = '' === $q ? array() : explode( ' ', $q );
+		if ( count( $words ) < 2 || false !== strpos( $q, '@' ) || $resolves( $q ) ) {
+			return array();
+		}
+		for ( $k = min( 3, count( $words ) - 1 ); $k >= 1; $k-- ) {
+			$person = implode( ' ', array_slice( $words, 0, $k ) );
+			$rest   = trim( (string) preg_replace( '/^(?:about|regarding|re|on|the)\s+/i', '', implode( ' ', array_slice( $words, $k ) ) ) );
+			if ( strlen( $person ) < 2 || '' === $rest ) {
+				continue;
+			}
+			if ( $resolves( $person ) ) {
+				return array( $person, $rest );
+			}
+		}
+		return array();
+	}
+
+	/** The marker's "topic" (a search hint, ≤ 80 chars, plain text) or ''. Pure. */
+	public static function topic_from_payload( $payload ): string {
+		if ( is_string( $payload ) ) {
+			$decoded = json_decode( $payload, true );
+			$payload = is_array( $decoded ) ? $decoded : array();
+		}
+		if ( ! is_array( $payload ) || ! isset( $payload['topic'] ) || ! is_string( $payload['topic'] ) ) {
+			return '';
+		}
+		$t = trim( (string) preg_replace( '/[\x00-\x1F\x7F\[\]{}<>]+/u', ' ', $payload['topic'] ) );
+		return function_exists( 'mb_substr' ) ? mb_substr( $t, 0, 80 ) : substr( $t, 0, 80 );
+	}
+
+	/** The marker's match mode: 'any' (addressee, then text) or the default 'recipient'. Pure. */
+	public static function match_from_payload( $payload ): string {
+		if ( is_string( $payload ) ) {
+			$decoded = json_decode( $payload, true );
+			$payload = is_array( $decoded ) ? $decoded : array();
+		}
+		return ( is_array( $payload ) && 'any' === ( $payload['match'] ?? '' ) ) ? 'any' : 'recipient';
+	}
+
+	/**
+	 * Up to $limit of the caller's OWN sent emails that read most like the one the chat is about to
+	 * draft, for VOICE only (length, greeting, tone, sign-off). Identity is the
+	 * engine's server-side caller id — never anything from the request text. Owner-scoped and kiosk-
+	 * refused inside ZIB_Gatekeeper::sent_style_examples(). Each body is cleaned for a model prompt:
+	 * invisible Unicode removed, marker / fence syntax defanged, every email address, phone number and
+	 * link replaced by a tag, at most 700 characters. The engine fences the whole block as DATA.
+	 *
+	 * @return array { ok:bool, related:bool, examples: array<{subject:string, body:string}> }
+	 */
+	public static function style_examples( int $viewer_id, string $topic, int $limit = 3 ): array {
+		if ( $viewer_id <= 0 || ! self::is_available() || ! class_exists( 'ZIB_Gatekeeper' )
+			|| ! method_exists( 'ZIB_Gatekeeper', 'sent_style_examples' ) ) {
+			return array( 'ok' => false, 'related' => false, 'examples' => array() );
+		}
+		$res = ZIB_Gatekeeper::sent_style_examples( $viewer_id, $topic, $limit );
+		if ( empty( $res['ok'] ) ) {
+			return array( 'ok' => false, 'related' => false, 'examples' => array() );
+		}
+		$out = array();
+		foreach ( (array) ( $res['rows'] ?? array() ) as $r ) {
+			$body = self::style_clean( (string) ( $r['body'] ?? '' ), 700 );
+			if ( '' === $body ) {
+				continue;
+			}
+			$out[] = array(
+				'subject' => str_replace( "\n", ' ', self::style_clean( (string) ( $r['subject'] ?? '' ), 120 ) ),
+				'body'    => $body,
+			);
+		}
+		return array( 'ok' => true, 'related' => ! empty( $res['related'] ), 'examples' => $out );
+	}
+
+	/** Mail text made safe and anonymous for a model prompt; line breaks kept (they are style). PURE. */
+	public static function style_clean( string $s, int $max = 700 ): string {
+		$s = self::strip_invisibles( $s );
+		$s = str_replace( array( "\r\n", "\r" ), "\n", $s );
+		$s = str_replace( array( '[', ']', '`', "\xE2\x9F\xA6", "\xE2\x9F\xA7" ), array( '(', ')', "'", '(', ')' ), $s );
+		$s = (string) preg_replace( '#\b(?:https?://|www\.)\S+#i', '(link)', $s );
+		$s = (string) preg_replace( '/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/', '(email)', $s );
+		$s = (string) preg_replace( '/(?<!\d)(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}(?!\d)/', '(phone)', $s );
+		$s = (string) preg_replace( '#\b(?:javascript|vbscript|data|file)(?=\s*:)#i', '$0_', $s );
+		$s = (string) preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F]+/', ' ', $s );
+		$s = (string) preg_replace( "/[ \t]+/", ' ', $s );
+		$s = trim( (string) preg_replace( "/\n{3,}/", "\n\n", $s ) );
+		if ( function_exists( 'mb_strlen' ) ? mb_strlen( $s ) > $max : strlen( $s ) > $max ) {
+			$s = rtrim( function_exists( 'mb_substr' ) ? mb_substr( $s, 0, $max ) : substr( $s, 0, $max ) ) . ' …';
+		}
+		return $s;
 	}
 
 	/**
@@ -118,12 +238,15 @@ class ZIB_ZANA_Bridge {
 	 *                          only — access is server-forced to the caller either way.
 	 * @return array { ok:bool, permitted:bool, count:int, render:string }
 	 */
-	public static function search( string $query, int $viewer_id = 0, string $mode = 'list', string $direction = 'any' ): array {
+	public static function search( string $query, int $viewer_id = 0, string $mode = 'list', string $direction = 'any', string $topic = '', string $match = 'recipient' ): array {
 		$uid = $viewer_id > 0
 			? $viewer_id
 			: (int) ( function_exists( 'get_current_user_id' ) ? get_current_user_id() : 0 );
+		if ( '' !== trim( $topic ) && 'sent' === $direction ) {
+			$mode = 'list'; // a topic answer is "these N are about it" (or "none are"), never one message
+		}
 
-		$res = ZIB_Gatekeeper::owner_chat( $uid, $query, ZIB_Gatekeeper::MAX_CHAT_HITS, $mode, $direction );
+		$res = ZIB_Gatekeeper::owner_chat( $uid, $query, ZIB_Gatekeeper::MAX_CHAT_HITS, $mode, $direction, $topic, $match );
 
 		if ( empty( $res['ok'] ) ) {
 			return array(
@@ -141,6 +264,9 @@ class ZIB_ZANA_Bridge {
 			'candidates' => ( isset( $res['candidates'] ) && is_array( $res['candidates'] ) ) ? $res['candidates'] : array(),
 			'direction'  => (string) ( $res['direction'] ?? $direction ),
 			'fuzzy'      => ! empty( $res['fuzzy'] ),
+			'topic'          => (string) ( $res['topic'] ?? '' ),
+			'topic_state'    => (string) ( $res['topic_state'] ?? '' ),
+			'content_search' => ! empty( $res['content_search'] ),
 		);
 		// v0.9.7: an empty content search gets an honest coverage "as-of" so the render can tell
 		// "not in your mail" apart from "not indexed yet" (owner-scoped; only computed when empty).
@@ -507,7 +633,7 @@ class ZIB_ZANA_Bridge {
 			|| preg_match( '/\bi\s+(?:got|received)\b/', $a )
 			|| preg_match( '/\b(?:received|incoming|inbound)\b/', $a );
 		// OUTBOUND — the verb adjacent to i/we (whitelisted adverbs only between).
-		$sent = preg_match( '/\b(?:i|we)\s+(?:just\s+|already\s+|recently\s+|last\s+|also\s+|only\s+)?(?:sent|send|e-?mail(?:ed|ing)?|wrote|writing|write|replied|responded|said|say|told|tell)\b/', $a )
+		$sent = preg_match( '/\b(?:i|we)\s+(?:just\s+|already\s+|recently\s+|last\s+|also\s+|only\s+|ever\s+|actually\s+)?(?:sent|send|e-?mail(?:ed|ing)?|wrote|writing|write|replied|responded|said|say|told|tell)\b/', $a )
 			|| preg_match( '/\b(?:sent|e-?mailed|wrote|replied|said|told)\s+(?!(?:to\s+)?me\b)(?:to\s+)?[a-z]/', $a )
 			|| preg_match( '/\bmy\s+(?:sent|outgoing|outbound|last\s+sent)\b/', $a )
 			|| preg_match( '/\bwhat did i (?:last\s+)?(?:send|e-?mail|write|say|tell)\b/', $a )
@@ -720,9 +846,21 @@ class ZIB_ZANA_Bridge {
 			$head .= " matching “{$q}”";
 		}
 		$head .= ( ( 'sent' === $dir || 'received' === $dir ) ? ', newest first:' : ' in your mail, newest first:' );
+		// a sent-to search with a TOPIC says whether the topic was found, and a "search my sent
+		// emails for X" that matched the TEXT (not an addressee) says so. Never implies a match it lacks.
+		$topic = self::neutralize( (string) ( $meta['topic'] ?? '' ) );
+		$tstat = (string) ( $meta['topic_state'] ?? '' );
+		if ( 'sent' === $dir && '' !== $topic && 'hit' === $tstat ) {
+			$head = ( 1 === $n ? "📬 **1 message** you sent to “{$q}” mentions “{$topic}”:" : "📬 **{$n} messages** you sent to “{$q}” mention “{$topic}”, newest first:" );
+		} elseif ( 'sent' === $dir && '' !== $topic && 'missed' === $tstat ) {
+			$head = "📬 **None** of your indexed emails to “{$q}” mention “{$topic}” (text inside attachments isn’t searched). "
+				. ( 1 === $n ? 'Here is the one you sent them:' : "Here are the newest {$n} you sent them:" );
+		} elseif ( 'sent' === $dir && ! empty( $meta['content_search'] ) && empty( $meta['fuzzy'] ) ) {
+			$head = "📬 Nothing you sent was addressed to “{$q}”, but " . ( 1 === $n ? '**1 sent message** mentions it:' : "**{$n} sent messages** mention it, newest first:" );
+		}
 			if ( ! empty( $meta['fuzzy'] ) ) {
 				// Exact search found nothing; these are approximate. Say so — never dress a
-				// fuzzy result up as an exact hit (INV-12: an empty result stays honest).
+				// fuzzy result up as an exact hit (honest output: an empty result stays empty).
 				$head = '📬 No exact match' . ( '' !== $q ? " for “{$q}”" : '' ) . ' — closest ' . ( 1 === $n ? 'match' : "{$n}" ) . ':';
 			}
 
@@ -1017,7 +1155,7 @@ class ZIB_ZANA_Bridge {
 	 * DATA AVAILABLE block. The model then writes the answer in the house voice — it sees
 	 * subjects, parties and dates, but NEVER a message body (the injection payload lives in
 	 * the body, which never leaves the Gatekeeper). This is the "de-privileged quarantined
-	 * synthesizer" the best-practices playbook (§4) endorses: bounded, delimited fields;
+	 * synthesizer" pattern: bounded, delimited fields;
 	 * output sanitised like input; worst case a wrong sentence, never a data leak.
 	 *
 	 * @return array { ok, permitted, kind, count, shown, block:string }
@@ -1057,7 +1195,7 @@ class ZIB_ZANA_Bridge {
 
 	/**
 	 * Format the body-free digest as a datamarked DATA section (goes INSIDE the engine's
-	 * TS-DATA fence — no fence of our own). Every mail-derived field is neutralise()d, so a
+	 * data fence — no fence of our own). Every mail-derived field is neutralise()d, so a
 	 * crafted subject can't forge a marker even here in the model's context. Ends with a
 	 * first-party WRITE-THE-ANSWER directive: house voice, facts only, no editorialising and
 	 * no unsolicited action suggestions. Pure but for the clock (age_phrase; pass $now in tests).
@@ -1141,7 +1279,7 @@ class ZIB_ZANA_Bridge {
 	 * newlines/controls — the visible words are otherwise preserved.
 	 */
 	public static function neutralize( string $s ): string {
-		// Bracketed marker syntax → parens, so [TSA_EMAIL_DRAFT]…/[TSEC_WIDGET]… etc.
+		// Bracketed marker syntax → parens, so [ZDZ_EMAIL_DRAFT]…/[ZDZ_EST_WIDGET]… etc.
 		// mailed in by an attacker can never be re-parsed as a real marker/card.
 		$s = str_replace( array( '[', ']' ), array( '(', ')' ), $s );
 		// Code spans / fences and the spotlight brackets.
@@ -1355,7 +1493,7 @@ class ZIB_ZANA_Bridge {
 	/**
 	 * Render composed messages as a lead line + a [ZIB_MAIL] card the front-end turns into an expandable
 	 * list (each message = an "Expand" disclosure revealing the full text). EVERY mail-derived field is
-	 * neutralised first; the body keeps line breaks (neutralize_card). Honest empty (INV-12).
+	 * neutralised first; the body keeps line breaks (neutralize_card). Honest empty.
 	 */
 	public static function render_told( array $items, string $recipient, string $phrase = '' ): string {
 		$who = self::neutralize( trim( $recipient ) );
@@ -1401,7 +1539,7 @@ class ZIB_ZANA_Bridge {
 	 * "Here's what {who} sent you"; each item carries a 'from' field (the sender) where the sent card
 	 * carries 'to'. Everything else — the id/subject/date/body/att schema, the neutralisation, the
 	 * envelope, the [ZIB_MAIL] wrapper — is identical, so the front-end capture, "View full email", and
-	 * "View attachments" all work unchanged. Honest empty (INV-12).
+	 * "View attachments" all work unchanged. Honest empty.
 	 */
 	public static function render_received( array $items, string $sender, string $phrase = '' ): string {
 		$who = self::neutralize( trim( $sender ) );

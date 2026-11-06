@@ -256,13 +256,13 @@
     color: #991b1b;
 }
 
-/* D-04: 'no matches' — a definite, NEUTRAL outcome (slate, not red). */
+/* 'No matches' — a definite, NEUTRAL outcome (slate, not red). */
 .zl-status-no_matches {
     background: #e2e8f0;
     color: #334155;
 }
 
-/* D-03: recover-a-failed-lead button (amber attention, not error red). */
+/* Recover-a-failed-lead button (amber attention, not error red). */
 .zl-recover-lead {
     background: #b45309 !important;
     color: #fff !important;

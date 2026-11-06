@@ -131,7 +131,7 @@ class ZKV_Rest {
 
 		// v1.5.0: the chunk-id pass now joins documents + the ACL predicate.
 		// (Candidate ids were already re-verified through the scoped doc query
-		// below before being returned, but §6.5's invariant is that NO chunk
+		// below before being returned, but the vault's rule is that NO chunk
 		// SELECT runs unscoped — and unscoped ids here could let invisible
 		// docs consume result slots.)
 		$chunk_rows = $wpdb->get_results( $wpdb->prepare(
@@ -181,7 +181,7 @@ class ZKV_Rest {
 		global $wpdb;
 		$q = $request->get_param( 'q' );
 
-		$vis = self::visibility_sql( 'd' );
+		$vis = self::visibility_sql( 'd' ) . ' AND d.is_private = 0'; // built for the chat / AI; never a Private document
 
 		// v1.3.0: Two-layer search — AI index + content chunks.
 		$rows = $wpdb->get_results( $wpdb->prepare(
@@ -301,7 +301,7 @@ class ZKV_Rest {
 	 */
 	public static function handle_pricing( $request ) {
 		global $wpdb;
-		$vis = self::visibility_sql( 'd' );
+		$vis = self::visibility_sql( 'd' ) . ' AND d.is_private = 0'; // built for the chat / AI; never a Private document
 
 		$rows = $wpdb->get_results(
 			"SELECT d.id, d.title, d.slug, d.mime_type, d.file_size, d.user_context,
@@ -367,7 +367,7 @@ class ZKV_Rest {
 		global $wpdb;
 		$q     = $request->get_param( 'q' );
 		$limit = min( (int) ( $request->get_param( 'limit' ) ?: 10 ), 25 );
-		$vis   = self::visibility_sql( 'd' );
+		$vis   = self::visibility_sql( 'd' ) . ' AND d.is_private = 0'; // built for the chat / AI; never a Private document
 
 		// Search content chunks via FULLTEXT.
 		$chunks = $wpdb->get_results( $wpdb->prepare(

@@ -41,3 +41,39 @@
 .zest-badge { font-size: .75em; padding: 2px 8px; border-radius: 999px; background: var(--sys-tint-neutral-bg, #eef1f2); color: var(--sys-tint-neutral-fg, #646970); }
 .zest-empty { color: var(--sys-text-sec, #646970); padding: 16px; text-align: center; }
 .zest-loading::after { content: ""; }
+
+/* ---- the estimate screens (dashboard.js) ---- */
+.zest-sheet-wrap { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 100000; display: flex; align-items: flex-end; justify-content: center; }
+.zest-sheet { background: var(--sys-surface, #fff); color: var(--sys-on-surface, #111); width: 100%; max-width: 760px; max-height: 92vh; overflow: auto; border-radius: 14px 14px 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, .25); }
+.zest-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; position: sticky; top: 0; background: inherit; border-bottom: 1px solid var(--sys-outline-variant, #ddd); }
+.zest-sheet-title { font-weight: 600; }
+.zest-sheet-body { padding: 12px 14px 24px; display: flex; flex-direction: column; gap: 10px; }
+.zest-note { font-size: .9em; opacity: .9; }
+.zest-note.is-error { color: var(--sys-error, #b3261e); }
+.zest-confirm { border: 1px solid var(--sys-outline-variant, #ddd); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.zest-confirm-q { font-weight: 600; }
+.zest-input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--sys-outline, #bbb); border-radius: 8px; font: inherit; background: transparent; color: inherit; }
+.zest-label { font-size: .85em; opacity: .8; }
+.zest-doc-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--sys-outline-variant, #eee); }
+.zest-doc-line.is-removed { opacity: .45; text-decoration: line-through; }
+.zest-doc-line-words { flex: 1 1 60%; min-width: 0; }
+.zest-doc-line-nums { text-align: right; }
+.zest-line-tools { flex-basis: 100%; }
+.zest-token { border-bottom: 2px dotted var(--sys-primary, #0e7c86); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.zest-token.is-changed { background: var(--sys-primary-container, #d6f2f3); }
+.zest-token.is-hint::after { content: " (press and hold)"; font-size: .8em; opacity: .7; }
+.zest-menu { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; margin: 6px 0; border: 1px solid var(--sys-outline, #bbb); border-radius: 10px; }
+.zest-menu-title { flex-basis: 100%; font-weight: 600; }
+.zest-dep { border-radius: 10px; }
+.zest-dep.is-sure { border: 2px solid var(--sys-error, #b3261e); padding: 8px; }
+.zest-dep.is-possible { border: 1px dashed var(--sys-outline, #bbb); padding: 8px; }
+.zest-code-row { display: flex; gap: 8px; align-items: center; }
+.zest-pre { white-space: pre-wrap; font-size: .85em; margin: 0; }
+.zest-thumbs { display: flex; flex-wrap: wrap; gap: 6px; }
+.zest-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 3px solid transparent; cursor: pointer; }
+.zest-thumb.is-picked { border-color: var(--sys-primary, #0e7c86); }
+.zest-team-only { font-size: .85em; font-style: italic; opacity: .85; }
+.zest-totals { text-align: right; }
+.zest-btn.is-active { outline: 2px solid var(--sys-primary, #0e7c86); }
+.zest-client-search { margin-bottom: 8px; }
+.zest-row[role="button"] { cursor: pointer; }

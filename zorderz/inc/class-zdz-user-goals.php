@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Theme — User Goals (v2.13.0)
+ * Zorderz Theme — User Goals
  *
  * Admin-assigned goals per user / KPI / period. Backend infrastructure
  * only — no frontend rendering. Goals can be read via the REST endpoint
@@ -221,7 +221,7 @@ class ZDZ_User_Goals {
 
 		$users = get_users( array( 'fields' => array( 'ID', 'display_name', 'user_email' ) ) );
 
-		echo '<div class="wrap"><h1>Team Goals <span style="font-size:13px;color:#6b7280">v2.13.0</span></h1>';
+		echo '<div class="wrap"><h1>Team Goals</h1>';
 		echo '<p>Set goals per user, per KPI, per period. Read back via the REST endpoint <code>/zorderz/v1/user-goals</code>. Saving bumps the goal cache version.</p>';
 
 		echo '<h2>Create / Update Goal</h2>';

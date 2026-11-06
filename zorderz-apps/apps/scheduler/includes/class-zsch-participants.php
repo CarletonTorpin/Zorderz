@@ -172,7 +172,7 @@ class ZSCH_Participants {
 
 	/**
 	 * Remove one participant (soft — keeps the row so a re-add is a revive and a
-	 * future write-back can purge the party's copy first — INV-Orphan). Gated as
+	 * future write-back can purge the party's copy first — the no-orphan rule). Gated as
 	 * an edit (IDOR re-gate). The owner is not a row, so there is nothing to
 	 * remove for them.
 	 *
@@ -232,6 +232,44 @@ class ZSCH_Participants {
 	}
 
 	/**
+	 * Same as participant_ids(); the name the series writes use when they copy
+	 * or merge a crew onto another row.
+	 *
+	 * @param int $appt_id
+	 * @return int[]
+	 */
+	public static function user_ids_for( int $appt_id ): array {
+		return self::participant_ids( $appt_id );
+	}
+
+	/**
+	 * Active participant ids for MANY appointments in one read — the batched
+	 * form query() uses so a page of 1000 rows is one query, not 1000.
+	 *
+	 * @param int[] $appt_ids
+	 * @return array<int,int[]> appointment id => participant user ids
+	 */
+	public static function map_for( array $appt_ids ): array {
+		global $wpdb;
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $appt_ids ) ) ) );
+		if ( empty( $ids ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$in   = implode( ',', $chunk ); // ints from the caller's own rows, cast above
+			$rows = $wpdb->get_results(
+				'SELECT appointment_id, user_id FROM ' . self::table() . " WHERE appointment_id IN ({$in}) AND removed_at IS NULL", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- self::table() is $wpdb->prefix plus a fixed name; $in is a list of ints cast above.
+				ARRAY_A
+			);
+			foreach ( (array) $rows as $r ) {
+				$out[ (int) $r['appointment_id'] ][] = (int) $r['user_id'];
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * The appointment ids a user is an active participant of (for the query()
 	 * visibility fold-in and the busy overlay). Optionally window-bounded via a
 	 * caller join; here we return the id set (bounded by LIMIT for safety).
@@ -286,6 +324,14 @@ class ZSCH_Participants {
 	 * event you are ON counts against your free time. Reads the LOCAL appointment
 	 * rows (no network). Returns [ {start_utc,end_utc} ] in 'Y-m-d H:i:s'.
 	 *
+	 * A repeating appointment is expanded across the window the same way the
+	 * calendar read expands it (ZSCH_Appointments::window_where() and
+	 * expand_window()), so a participant is busy at EVERY occurrence, not only
+	 * the first. An occurrence moved by an override counts at its new time; a
+	 * cancelled one does not count. An override carries its own participant
+	 * list, so an occurrence counts only when this user is on the row it came
+	 * from (see busy_from_rows()).
+	 *
 	 * @param int    $user_id
 	 * @param string $start_utc 'Y-m-d H:i:s'
 	 * @param string $end_utc
@@ -297,11 +343,40 @@ class ZSCH_Participants {
 		if ( $user_id <= 0 ) {
 			return array();
 		}
-		$appt = $wpdb->prefix . 'zsch_appointments';
-		$part = self::table();
+		$appt   = $wpdb->prefix . 'zsch_appointments';
+		$part   = self::table();
+		$expand = is_callable( array( 'ZSCH_Appointments', 'window_where' ) )
+			&& is_callable( array( 'ZSCH_Appointments', 'expand_window' ) );
+
+		if ( $expand ) {
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $part and $appt are $wpdb->prefix plus fixed names; window_where() returns fixed SQL with %s placeholders; every value is a placeholder.
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT a.* FROM {$part} p
+					 INNER JOIN {$appt} a ON a.id = p.appointment_id
+					 WHERE p.user_id = %d AND p.removed_at IS NULL
+					   AND a.deleted_at IS NULL
+					   AND " . ZSCH_Appointments::window_where( 'a.' ) . '
+					 ORDER BY a.start_utc ASC LIMIT 1000',
+					$user_id,
+					$end_utc,
+					$start_utc,
+					$end_utc,
+					$start_utc
+				),
+				ARRAY_A
+			);
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = is_array( $rows ) ? $rows : array();
+			$mine = array_map( 'intval', array_column( $rows, 'id' ) );
+			return self::busy_from_rows( ZSCH_Appointments::expand_window( $rows, $start_utc, $end_utc ), $mine, $start_utc, $end_utc );
+		}
+
+		/* An older appointment model without the window helpers: the stored rows
+		 * as they are (a series counts at its first occurrence only). */
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT a.start_utc, a.end_utc
+				"SELECT a.id, a.start_utc, a.end_utc
 				 FROM {$part} p
 				 INNER JOIN {$appt} a ON a.id = p.appointment_id
 				 WHERE p.user_id = %d AND p.removed_at IS NULL
@@ -314,13 +389,53 @@ class ZSCH_Participants {
 			),
 			ARRAY_A
 		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$out = array();
-		foreach ( (array) $rows as $r ) {
-			$out[] = array(
-				'start_utc' => (string) ( $r['start_utc'] ?? '' ),
-				'end_utc'   => (string) ( $r['end_utc'] ?? '' ),
+		$rows = is_array( $rows ) ? $rows : array();
+		return self::busy_from_rows( $rows, array_map( 'intval', array_column( $rows, 'id' ) ), $start_utc, $end_utc );
+	}
+
+	/**
+	 * The busy intervals among a set of occurrences: those that came from a row
+	 * this user is on ($mine), are not cancelled, and overlap the window. PURE.
+	 *
+	 * The id test matters for overrides: expansion fetches every override of a
+	 * series so a moved occurrence is suppressed at its old slot, but a person
+	 * taken off one occurrence is not on that override's row and is free then.
+	 *
+	 * @param array  $occurrences rows (expanded or plain) with id/start_utc/end_utc.
+	 * @param int[]  $mine        appointment ids this user is an active participant of.
+	 * @param string $start_utc
+	 * @param string $end_utc
+	 * @return array<int,array{start_utc:string,end_utc:string}>
+	 */
+	public static function busy_from_rows( array $occurrences, array $mine, string $start_utc, string $end_utc ): array {
+		$mine = array_fill_keys( array_map( 'intval', $mine ), true );
+		$out  = array();
+		$seen = array();
+		foreach ( $occurrences as $r ) {
+			if ( ! is_array( $r ) || empty( $mine[ (int) ( $r['id'] ?? 0 ) ] ) ) {
+				continue;
+			}
+			if ( 'cancelled' === (string) ( $r['status'] ?? '' ) ) {
+				continue;
+			}
+			$s = (string) ( $r['start_utc'] ?? '' );
+			$e = (string) ( $r['end_utc'] ?? '' );
+			if ( '' === $s || '' === $e || strcmp( $s, $end_utc ) >= 0 || strcmp( $e, $start_utc ) <= 0 ) {
+				continue;
+			}
+			$key = $s . '|' . $e;
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[]        = array(
+				'start_utc' => $s,
+				'end_utc'   => $e,
 			);
 		}
+		usort( $out, static function ( $a, $b ) {
+			return strcmp( $a['start_utc'], $b['start_utc'] );
+		} );
 		return $out;
 	}
 

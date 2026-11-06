@@ -1,0 +1,252 @@
+{
+ "role": "classify",
+ "note": "Made-up invoice lines.",
+ "cases": [
+  {
+   "id": "cls-parts",
+   "system": "Sort one invoice line into a category: parts (physical items and their parts), labor (installation or service time, billed by the hour), delivery (shipping, delivery and trip charges), discount (discounts, credits and coupons), other (anything else: a fee, a tax line, a payment note).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Invoice line: Shelf bracket kit, steel, pack of 4"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "category": {
+      "type": "string",
+      "enum": [
+       "parts",
+       "labor",
+       "delivery",
+       "discount",
+       "other"
+      ]
+     }
+    },
+    "required": [
+     "category"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "category": "parts"
+    }
+   },
+   "example_answer": "{\"category\": \"parts\"}"
+  },
+  {
+   "id": "cls-delivery",
+   "system": "Sort one invoice line into a category: parts (physical items and their parts), labor (installation or service time, billed by the hour), delivery (shipping, delivery and trip charges), discount (discounts, credits and coupons), other (anything else: a fee, a tax line, a payment note).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Invoice line: Delivery to site, flat rate"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "category": {
+      "type": "string",
+      "enum": [
+       "parts",
+       "labor",
+       "delivery",
+       "discount",
+       "other"
+      ]
+     }
+    },
+    "required": [
+     "category"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "category": "delivery"
+    }
+   },
+   "example_answer": "{\"category\": \"delivery\"}"
+  },
+  {
+   "id": "cls-labor",
+   "system": "Sort one invoice line into a category: parts (physical items and their parts), labor (installation or service time, billed by the hour), delivery (shipping, delivery and trip charges), discount (discounts, credits and coupons), other (anything else: a fee, a tax line, a payment note).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Invoice line: Installation labor, 2 hours"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "category": {
+      "type": "string",
+      "enum": [
+       "parts",
+       "labor",
+       "delivery",
+       "discount",
+       "other"
+      ]
+     }
+    },
+    "required": [
+     "category"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "category": "labor"
+    }
+   },
+   "example_answer": "{\"category\": \"labor\"}"
+  },
+  {
+   "id": "cls-discount",
+   "system": "Sort one invoice line into a category: parts (physical items and their parts), labor (installation or service time, billed by the hour), delivery (shipping, delivery and trip charges), discount (discounts, credits and coupons), other (anything else: a fee, a tax line, a payment note).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Invoice line: Returning customer discount, 10%"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "category": {
+      "type": "string",
+      "enum": [
+       "parts",
+       "labor",
+       "delivery",
+       "discount",
+       "other"
+      ]
+     }
+    },
+    "required": [
+     "category"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "category": "discount"
+    }
+   },
+   "example_answer": "{\"category\": \"discount\"}"
+  },
+  {
+   "id": "cls-other",
+   "system": "Sort one invoice line into a category: parts (physical items and their parts), labor (installation or service time, billed by the hour), delivery (shipping, delivery and trip charges), discount (discounts, credits and coupons), other (anything else: a fee, a tax line, a payment note).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Invoice line: Permit fee"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "category": {
+      "type": "string",
+      "enum": [
+       "parts",
+       "labor",
+       "delivery",
+       "discount",
+       "other"
+      ]
+     }
+    },
+    "required": [
+     "category"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "category": "other"
+    }
+   },
+   "example_answer": "{\"category\": \"other\"}"
+  },
+  {
+   "id": "cls-company-catalog",
+   "system": "Pick the catalog entry for one invoice line. The catalog (business text: product names, not customers):\n- ID: widget-std | Example Widget — standard\n- ID: widget-xl | Example Widget — XL\n- ID: bracket-small | Mounting bracket, small\n- ID: none | no entry fits\nAnswer with the ID exactly as written in the catalog.",
+   "system_company": true,
+   "messages": [
+    {
+     "role": "user",
+     "content": "Invoice line: Example widget, standard size, mounted"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "catalog_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "catalog_id"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "catalog_id": "widget-std"
+    }
+   },
+   "example_answer": "{\"catalog_id\": \"widget-std\"}"
+  },
+  {
+   "id": "cls-payment-note",
+   "system": "Sort one invoice line into a category: parts (physical items and their parts), labor (installation or service time, billed by the hour), delivery (shipping, delivery and trip charges), discount (discounts, credits and coupons), other (anything else: a fee, a tax line, a payment note).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Invoice line: Payment note: spoke to Robin, check is on its way"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "category": {
+      "type": "string",
+      "enum": [
+       "parts",
+       "labor",
+       "delivery",
+       "discount",
+       "other"
+      ]
+     }
+    },
+    "required": [
+     "category"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "category": "other"
+    }
+   },
+   "example_answer": "{\"category\": \"other\"}"
+  }
+ ]
+}

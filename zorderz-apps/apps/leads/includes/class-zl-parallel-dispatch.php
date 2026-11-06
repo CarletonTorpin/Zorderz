@@ -13,7 +13,7 @@
  * Concurrency is hard-capped by caller via the $max_concurrent argument.
  * The dispatcher NEVER fires more than N requests in flight. Callers set:
  *
- *   POE           cap=4  (halved on 429 — see TSLG_POE_PARALLEL)
+ *   POE           cap=4  (halved on 429 — see the zlg_poe_parallel filter)
  *   NUTSHELL      cap=8
  *   FRESHBOOKS    cap=4
  *

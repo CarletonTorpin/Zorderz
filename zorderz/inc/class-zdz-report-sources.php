@@ -8,7 +8,7 @@
  *   sources()  A declarative registry. Each source declares a plottable Flow event
  *              (which outbox event_type(s), which row entities it may group by, its
  *              visibility ceiling, whether it is a money source). Registered via the
- *              `zdz_report_sources` filter — mirroring zdz_register_apps / zdz_kpi_metrics.
+ *              `zdz_report_sources` filter — mirroring zdz_register_apps.
  *              CORE SHIPS EMPTY: no estimate.* / invoice.* / sale stage vocabulary is named
  *              here (that is Identity → flows/mappings). Adding a stage is one array entry;
  *              the validator, the reader and the visibility gate are untouched.
@@ -17,7 +17,7 @@
  *              then enforces the money entitlement (an unentitled viewer is refused BEFORE any
  *              gathering), then stamps the spec. A spec that has not passed here cannot be read.
  *
- *   read()     Reads wp_zdz_flow_outbox (the Wave-B Zdz_Flow writer's event outbox) by
+ *   read()     Reads wp_zdz_flow_outbox (the Zdz_Flow writer's event outbox) by
  *              event_type / visibility / window. NEVER a network or provider API call — the
  *              mirror is provider-truth via the Connections importer that emits Flow transitions;
  *              "if the sync is behind, the plot is out of date; it never becomes slow, and it
@@ -336,7 +336,7 @@ if ( ! class_exists( 'ZDZ_Report_Sources' ) ) {
 			$filters = (array) $clean['filters'];
 
 			// One-time honesty disposition when the attribution precedence expects overrides but no
-			// resolver is wired — never a silent fall-through to inference (S8-04).
+			// resolver is wired — never a silent fall-through to inference.
 			self::maybe_warn_unwired_overrides( $entity );
 
 			$cells         = array();
@@ -525,7 +525,7 @@ if ( ! class_exists( 'ZDZ_Report_Sources' ) ) {
 						}
 					}
 				} elseif ( 'override_row' === $step ) {
-					// No override lookup ships in Core (S8-04). A tenant/commission app supplies one
+					// No override lookup ships in Core. A tenant/commission app supplies one
 					// via this filter; when it does, it wins over inference. When it does not, the
 					// one-time warning disposition has already fired in assemble_grid().
 					$ov = function_exists( 'apply_filters' )
@@ -580,7 +580,7 @@ if ( ! class_exists( 'ZDZ_Report_Sources' ) ) {
 			return 0;
 		}
 
-		/** Money-axis value: collected cents at the source's amount_path (D-04: collected, not face). */
+		/** Money-axis value: collected cents at the source's amount_path (collected, not face value). */
 		private static function amount_cents( array $env, ?array $source ): int {
 			$path = $source['amount_path'] ?? '';
 			if ( '' === $path ) {

@@ -68,7 +68,7 @@ class ZSCH_Availability {
 			$by_user[ $b['owner_user_id'] ][] = $b;
 		}
 
-		// v1.7.0 (Connected Calendars Phase 1) — fold each member's EXTERNAL
+		// v1.7.0 (Connected Calendars sync) — fold each member's EXTERNAL
 		// conflict-calendar busy (Google/Microsoft) into their blocks as
 		// read-only, busy-only entries (kind:'busy', source:'external'), so the
 		// grid reflects outside commitments. These are personal data: excluded

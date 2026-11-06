@@ -1,6 +1,6 @@
 <?php
 /**
- * Migration: v2.20.4 — EXIF provenance columns on zdz_user_media.
+ * Migration: EXIF provenance columns on zdz_user_media.
  *
  * Adds three indexed columns used to retain photo provenance and to match
  * photos to an invoice by date + location for the receipt flow:

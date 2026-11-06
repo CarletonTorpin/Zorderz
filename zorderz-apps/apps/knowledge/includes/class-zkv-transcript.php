@@ -41,7 +41,7 @@ class ZKV_Transcript {
 	/** A label must speak on at least this many lines to count as a speaker. */
 	const MIN_SPEAKER_LINES = 2;
 
-	/** user_meta key holding extra names that resolve to a user ("CJ, Carl"). */
+	/** user_meta key holding extra names that resolve to a user ("AJ, Al"). */
 	const ALIAS_META = 'ts_transcript_aliases';
 
 	/**
@@ -240,7 +240,7 @@ class ZKV_Transcript {
 		$users = get_users( array( 'fields' => 'all' ) );
 		foreach ( $users as $user ) {
 			$roles = (array) $user->roles;
-			if ( in_array( 'zdz_general', $roles, true ) ) { continue; } // kiosk never a party
+			if ( in_array( 'zdz_general', $roles, true ) || ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_shared_device( $user ) ) ) { continue; } // the shared device is never a party
 			$uid   = (int) $user->ID;
 			$names = array(
 				(string) $user->display_name,
@@ -657,7 +657,7 @@ class ZKV_Transcript {
 		if ( ! $user ) {
 			return array( 'ok' => false, 'error' => 'no such user' );
 		}
-		if ( in_array( 'zdz_general', (array) $user->roles, true ) ) {
+		if ( in_array( 'zdz_general', (array) $user->roles, true ) || ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_shared_device( $user ) ) ) {
 			return array( 'ok' => false, 'error' => 'the kiosk account can never be a party' );
 		}
 		$ok = self::grant_party( $doc_id, $user_id, $label, 'manual', $actor_uid );

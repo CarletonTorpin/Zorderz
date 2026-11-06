@@ -9,8 +9,12 @@
  *
  * SAFETY: the shared kiosk HARD-REFUSES any figure; the tier gate
  * (ZDZ_Data_Permissions) is checked BEFORE any computation; the amount is
- * OMITTED from the return when the caller's tier does not permit it. Read-only —
- * no pay path is ever mutated here.
+ * OMITTED from the return when the caller's tier does not permit it. A person's
+ * figure counts ONLY the invoices attributed to them (ZCC_Attribution); an
+ * invoice nobody can be named for is a review item, never added to whoever asked.
+ * Costs and margins are left out of the answer for anyone below the
+ * administrator tier (ZCC_Visibility). It writes only the person's draft ledger
+ * rows and the audit row, never a locked month.
  *
  * @package Zorderz\Commission
  */
@@ -55,7 +59,8 @@ class ZCC_ZANA_Bridge {
 		$subject     = self::resolve_subject( $subject_raw, $requesting_uid );
 		if ( empty( $subject['party_id'] ) ) {
 			$result['success'] = true;
-			$result['message'] = $subject_raw === '' ? 'Whose commission should I calculate?' : "I couldn't match \"{$subject_raw}\" to a rep with a compensation plan.";
+			$result['message'] = $subject_raw === '' ? 'Whose commission should I calculate?'
+				: ( ! empty( $subject['ambiguous'] ) ? "More than one person matches \"{$subject_raw}\". Say their full name." : "I couldn't match \"{$subject_raw}\" to a rep with a compensation plan." );
 			return $result;
 		}
 		$subject_uid       = (int) $subject['party_id'];
@@ -73,13 +78,23 @@ class ZCC_ZANA_Bridge {
 
 		$window           = self::resolve_period( $payload );
 		$result['period'] = $window['label'];
+		$status           = $payload['status'] ?? null;
 
 		try {
-			$invoices = ZCC_FreshBooks::get_invoices( $window['date_start'], $window['date_end'], $payload['status'] ?? null );
-			$calc     = ZCC_Calc_Engine::calculate( $invoices, $subject_uid, str_replace( '-', '', substr( $window['date_start'], 0, 7 ) ) );
+			$invoices = ZCC_FreshBooks::get_invoices( $window['date_start'], $window['date_end'], $status );
+			if ( ! $invoices && '' !== ZCC_FreshBooks::last_error() ) {
+				$result['error'] = 'The invoices could not be loaded just now. Try again in a minute.';
+				return $result;
+			}
+			$split = ZCC_Attribution::partition( $invoices, $subject_uid );
+			$calc  = ZCC_Calc_Engine::calculate( $split['matched'], $subject_uid, substr( $window['date_start'], 0, 7 ) );
 		} catch ( \Throwable $e ) {
-			$result['error'] = 'Could not complete the commission calculation: ' . $e->getMessage();
+			error_log( 'ZCC bridge: calculation failed (' . get_class( $e ) . ')' );
+			$result['error'] = 'Could not complete the commission calculation.';
 			return $result;
+		}
+		if ( ! empty( $split['review'] ) && class_exists( 'ZCC_Review' ) ) {
+			ZCC_Review::note( $split['review'] );
 		}
 
 		$summary = $calc['summary'] ?? [];
@@ -89,11 +104,37 @@ class ZCC_ZANA_Bridge {
 			$result['audit_id'] = ZCC_Audit::log_calculation( $calc, $requesting_uid, $subject_uid, $window['date_start'], $window['date_end'] );
 		}
 
-		$result['success'] = true;
-		$result['amount']  = round( $amount, 2 );
-		$result['basis']   = sprintf( '%s on %s net, %d invoice(s)', $summary['commission_rate'] ?? '', self::money( $summary['net_commissionable'] ?? 0 ), (int) ( $summary['invoice_count'] ?? 0 ) );
-		$result['breakdown'] = self::build_breakdown( $calc );
-		$result['message'] = sprintf( '%s earned %s in %s.', $result['subject'], self::money( $amount ), $window['label'] );
+		$costs     = ZCC_Visibility::may_see_costs( $requesting_uid );
+		$pay_admin = ZCC_Visibility::is_pay_admin( $requesting_uid );
+		$shown     = ZCC_Visibility::shape_calc( $calc, $costs );
+
+		$result['success']     = true;
+		$result['amount']      = round( $amount, 2 );
+		$result['subject_uid'] = $subject_uid;              // set only after the tier gate
+		$result['date_start']  = $window['date_start'];
+		$result['date_end']    = $window['date_end'];
+		$result['basis']       = $costs
+			? sprintf( '%s on %s net, %d invoice(s)', $summary['commission_rate'] ?? '', self::money( $summary['net_commissionable'] ?? 0 ), (int) ( $summary['invoice_count'] ?? 0 ) )
+			: sprintf( '%s, %d invoice(s)', $summary['commission_rate'] ?? '', (int) ( $summary['invoice_count'] ?? 0 ) );
+		$result['breakdown']   = self::build_breakdown( $shown );
+		$result['costs_shown'] = $costs;
+		$result['review_count'] = count( $split['review'] );
+		if ( $pay_admin ) {
+			$result['review'] = array_map( function ( $r ) {
+				return $r + [ 'why' => ZCC_Attribution::reason_text( (string) $r['reason'] ) ];
+			}, $split['review'] );
+			if ( $costs ) {
+				$result['flags'] = $calc['flags'] ?? [];
+			}
+		}
+		if ( class_exists( 'ZCC_Month_Lock' ) ) {
+			$result['lock'] = ZCC_Month_Lock::block( $subject_uid, $result['subject'], $window['date_start'], $window['date_end'], is_array( $status ) ? implode( ',', $status ) : (string) ( $status ?? '' ), (array) ( $calc['ledger_stats'] ?? [] ), $summary, $pay_admin );
+		}
+		if ( 0 === (int) ( $summary['invoice_count'] ?? 0 ) ) {
+			$result['message'] = sprintf( 'No commission for %s in %s yet.', $result['subject'], $window['label'] );
+		} else {
+			$result['message'] = sprintf( '%s earned %s in %s.', $result['subject'], self::money( $amount ), $window['label'] );
+		}
 		return $result;
 	}
 
@@ -167,6 +208,11 @@ class ZCC_ZANA_Bridge {
 			$u = get_userdata( $requesting_uid );
 			return [ 'party_id' => $requesting_uid, 'display_name' => $u ? $u->display_name : '' ];
 		}
+		// A user id ("Open in Commission" sends one).
+		if ( ctype_digit( $raw ) && (int) $raw > 0 ) {
+			$u = get_userdata( (int) $raw );
+			return $u ? [ 'party_id' => (int) $raw, 'display_name' => (string) ( $u->display_name ?? '' ) ] : [ 'party_id' => 0, 'display_name' => '' ];
+		}
 		// A short code?
 		if ( preg_match( '/^[A-Za-z]{2,4}$/', $raw ) && class_exists( 'ZDZ_Compensation' ) ) {
 			$plan = ZDZ_Compensation::plan_by_code( strtoupper( $raw ) );
@@ -174,13 +220,28 @@ class ZCC_ZANA_Bridge {
 				return [ 'party_id' => (int) $plan['party_id'], 'display_name' => (string) $plan['display_name'] ];
 			}
 		}
-		// A display name via the party roster.
+		// A display name via the party roster: an exact name wins; otherwise exactly one
+		// partial match. Two or more partial matches are never guessed between.
 		if ( class_exists( 'ZDZ_Party' ) && method_exists( 'ZDZ_Party', 'selectable_people' ) ) {
-			$needle = strtolower( $raw );
+			$needle  = strtolower( $raw );
+			$partial = [];
 			foreach ( (array) ZDZ_Party::selectable_people() as $p ) {
-				if ( strpos( strtolower( (string) ( $p['name'] ?? '' ) ), $needle ) !== false ) {
+				$name = strtolower( trim( (string) ( $p['name'] ?? '' ) ) );
+				if ( '' === $name ) {
+					continue;
+				}
+				if ( $name === $needle ) {
 					return [ 'party_id' => (int) ( $p['id'] ?? 0 ), 'display_name' => (string) ( $p['name'] ?? '' ) ];
 				}
+				if ( strpos( $name, $needle ) !== false ) {
+					$partial[] = $p;
+				}
+			}
+			if ( 1 === count( $partial ) ) {
+				return [ 'party_id' => (int) ( $partial[0]['id'] ?? 0 ), 'display_name' => (string) ( $partial[0]['name'] ?? '' ) ];
+			}
+			if ( count( $partial ) > 1 ) {
+				return [ 'party_id' => 0, 'display_name' => '', 'ambiguous' => true ];
 			}
 		}
 		return [ 'party_id' => 0, 'display_name' => '' ];
@@ -189,10 +250,14 @@ class ZCC_ZANA_Bridge {
 	/** Tier gate via ZDZ_Data_Permissions. Own vs others; plus run permission. */
 	private static function authorize( int $uid, bool $is_self ): array {
 		if ( ! class_exists( 'ZDZ_Data_Permissions' ) ) {
-			return [ 'allowed' => user_can( $uid, 'manage_options' ), 'message' => 'Not permitted.' ];
+			$ok = user_can( $uid, 'manage_options' ) && ( $is_self || ! ( class_exists( 'ZCC_Visibility' ) && ZCC_Visibility::emulating() ) );
+			return [ 'allowed' => $ok, 'message' => 'Not permitted.' ];
 		}
 		if ( ! ZDZ_Data_Permissions::can( $uid, 'run_commission_calculation' ) ) {
 			return [ 'allowed' => false, 'message' => "You don't have permission to run commission calculations." ];
+		}
+		if ( ! $is_self && class_exists( 'ZCC_Visibility' ) && ZCC_Visibility::emulating() ) {
+			return [ 'allowed' => false, 'message' => "Another rep's commission isn't shown while you preview the app as another role." ];
 		}
 		$perm = $is_self ? 'view_own_commission' : 'view_others_commissions';
 		if ( ! ZDZ_Data_Permissions::can( $uid, $perm ) ) {
@@ -233,8 +298,9 @@ class ZCC_ZANA_Bridge {
 				'invoice_number'    => $inv['invoice_number'] ?? '',
 				'customer_name'     => $inv['customer_name'] ?? '',
 				'date'              => $inv['date_completed'] ?? '',
+				'gross_billed'      => (float) ( $inv['gross_billed'] ?? 0 ),
 				'commission_amount' => (float) ( $inv['commission_amount'] ?? 0 ),
-				'fb_url'            => $inv['fb_url'] ?? '',
+				'ledger_status'     => (string) ( $inv['ledger_status'] ?? '' ),
 			];
 		}
 		return [ 'invoices' => $rows, 'summary' => $calc['summary'] ?? [] ];
@@ -250,7 +316,7 @@ class ZCC_ZANA_Bridge {
 	public static function get_format_spec(): array {
 		return [
 			'marker'      => ( defined( 'ZCC_CALC_MARKER' ) ? ZCC_CALC_MARKER : '[ZCC_CALC]' ) . '{json}[/ZCC_CALC]',
-			'deprecated'  => [ '[TSCC_CALC]' ],
+			'deprecated'  => [],
 			'payload'     => [ 'subject' => 'string — name, code, or "me"', 'period' => 'string — "YYYY-MM" | "this_month" | "last_month" | "mtd"' ],
 			'side_effect' => false,
 			'kiosk'       => false,
@@ -265,7 +331,7 @@ class ZCC_ZANA_Bridge {
 	public static function get_units_format_spec(): array {
 		return [
 			'marker'      => '[ZCC_UNITS]{json}[/ZCC_UNITS]',
-			'deprecated'  => [ '[TSCC_UNITS]' ],
+			'deprecated'  => [],
 			'payload'     => [ 'period' => 'string — "YYYY-MM" | "this_month" | "last_month" | "mtd"' ],
 			'side_effect' => false,
 			'kiosk'       => false,

@@ -14,7 +14,8 @@
  *     ZDZ_Item_Engine::count_phrase()/classify()); the old hardcoded 'vent/screen' heuristic
  *     degrades to a neutral all-line count on an empty catalog.
  *   - Letterhead / email identity (name, colours, sender, logo, address) come from
- *     ZDZ_Business_Profile; the receipt-writer bot handle is a setting (ZDZ_Core_Poe).
+ *     ZDZ_Business_Profile; the words come from the platform's Ai router (ZRCPT_Writer, caller
+ *     'receipts'), which codes every customer detail before anything leaves the site.
  *   - Document conventions (closing line, price rounding, reference code, receipt-link line)
  *     bind through the `zrcpt_document_convention` filter with neutral fallbacks (the Core
  *     Document Conventions service is not built yet — see app.php).
@@ -41,7 +42,7 @@ final class ZRCPT_Receipt {
         return self::$instance;
     }
 
-    const VERSION      = '3.10.0';
+    const VERSION      = '3.13.0';
 
     /** @var int last authoritative unit count computed by build_customer_block (diagnostics). */
     private $last_vent_count = 0;
@@ -50,8 +51,14 @@ final class ZRCPT_Receipt {
     const OPTION_GROUP = 'zrcpt';
     const OPTION_KEY   = 'zrcpt_options';
     const NONCE_ACTION = 'zrcpt_nonce';
-    const API_ENDPOINT = 'https://api.poe.com/v1/chat/completions';
-    const API_TIMEOUT  = 300;
+
+    /**
+     * Revision of the receipt sanitizer. A stored page is marked "<rev>:<sha256 of the
+     * page>" once it has been through ZRCPT_Sanitize; a page without the current mark is
+     * sanitized again before it is shown for review, approved or served.
+     */
+    const SANITIZE_REV  = '2';
+    const SANITIZE_META = '_zrcpt_sanitized';
 
     /**
      * Receipt "modes". The default mode is bound to an admin-chosen Item Engine tag/subtype
@@ -77,7 +84,7 @@ final class ZRCPT_Receipt {
     const APP_ID = 'receipts';
 
     /**
-     * v3.6.9 — Server-authoritative app-access check (INV-1 / INV-10).
+     * v3.6.9 — Server-authoritative app-access check (the server is the boundary / a shared device is never a person).
      *
      * Mirrors the theme's app-visibility rule (ZDZ_Plugin_API::get_user_app_configs):
      * manage_options -> allow; Safe Mode -> deny; app in zdz_denied_apps -> deny (even
@@ -88,11 +95,10 @@ final class ZRCPT_Receipt {
      * which therefore over-authorized roles that were never granted this app.
      * (A shared-device role granted this app in its default set still passes.)
      *
-     * Evaluates the REAL current user (not a ZDZ_View_As emulation).
-     *
-     * TODO(theme-infra): swap the body for a shared
-     * ZDZ_Plugin_API::user_can_access_app($uid, self::APP_ID) helper once the
-     * consolidated theme pass adds it (same TODO as the Prep module).
+     * Evaluates the REAL current user (not a ZDZ_View_As emulation). The platform's own
+     * ladder (ZDZ_Plugin_API::user_can_access_app) answers when the theme has it, so the
+     * per-person grants and Privacy View apply here exactly as on the dashboard; the inline
+     * copy below is the fallback for an older theme.
      */
     public static function user_can_access( ?int $user_id = null ): bool {
         $user_id = $user_id ?? get_current_user_id();
@@ -100,6 +106,9 @@ final class ZRCPT_Receipt {
             return false;
         }
         $app_id = apply_filters( 'zrcpt_app_id', self::APP_ID );
+        if ( is_callable( [ 'ZDZ_Plugin_API', 'user_can_access_app' ] ) ) {
+            return (bool) ZDZ_Plugin_API::user_can_access_app( (int) $user_id, (string) $app_id );
+        }
 
         if ( current_user_can( 'manage_options' ) ) {
             return true;
@@ -152,8 +161,8 @@ final class ZRCPT_Receipt {
     }
 
     /* =====================================================================
-       v3.6.9 (C1) — SECRET SHARE LINKS (capability-URL word tokens)
-       Design + rationale: claude/Secret-Share-Link-Design-2026-07-12.md
+       SECRET SHARE LINKS (capability-URL word tokens): a link made of random
+       words is the capability; it is minted by the Core share-link primitive.
        ===================================================================== */
 
     /**
@@ -185,7 +194,7 @@ final class ZRCPT_Receipt {
     public static function generate_share_token( int $words = 4 ): string {
         $words = max( 4, $words );
         $list  = self::share_wordlist();
-        // C-12 — CONSOLIDATE onto the Core primitive: ZDZ_Share_Link::mint_words()
+        // CONSOLIDATE onto the Core primitive: ZDZ_Share_Link::mint_words()
         // owns the CSPRNG draw and the ≥1000-word entropy floor (refuses below it).
         // Keeps the 4-word human-typeable default receipts print/forward. Local
         // fallback preserved for an older theme without the primitive.
@@ -218,7 +227,7 @@ final class ZRCPT_Receipt {
         return trim( (string) $t, '-' );
     }
 
-    /** C-12 — resolve the OPT-IN receipt share-link TTL in days (default 0 = OFF,
+    /** Resolve the OPT-IN receipt share-link TTL in days (default 0 = OFF,
      *  so forwarded-to-insurer links never break). Delegates to the Core policy
      *  (ZDZ_Share_Link::ttl_days('receipt')), which reads the Business Profile
      *  opt-in and the zdz_share_link_ttl_days filter. 0 when the primitive absent. */
@@ -229,7 +238,7 @@ final class ZRCPT_Receipt {
         return 0;
     }
 
-    /** C-12 — stamp the immutable expiry companion on a FRESH mint only. Computed
+    /** Stamp the immutable expiry companion on a FRESH mint only. Computed
      *  ONCE from the TTL-at-mint; never recomputed, so a later TTL change can't
      *  move (or create) the deadline of an already-issued link. TTL off => 0
      *  (never expires); we still write 0 so the field is explicit. */
@@ -266,7 +275,7 @@ final class ZRCPT_Receipt {
             return '';
         }
         update_post_meta( $post_id, '_share_token', $token );
-        // C-12 — stamp the opt-in expiry ONCE, at mint. The early-return above
+        // Stamp the opt-in expiry ONCE, at mint. The early-return above
         // (an already-issued token) never reaches here, so a live link's expiry
         // is never re-stamped or created by a later config change.
         self::stamp_share_expiry( $post_id );
@@ -298,7 +307,7 @@ final class ZRCPT_Receipt {
             return '';
         }
         update_post_meta( (int) $post_id, '_share_token', $token );
-        // C-12 — a deliberate revoke mints a NEW link, so it gets a NEW expiry
+        // A deliberate revoke mints a NEW link, so it gets a NEW expiry
         // computed from the current TTL (fresh link, fresh clock).
         self::stamp_share_expiry( (int) $post_id );
         return $token;
@@ -424,7 +433,7 @@ final class ZRCPT_Receipt {
         if ( $limit <= 0 ) {
             return true;
         }
-        // C-12 — delegate to the Core per-IP limiter (namespaced 'receipt', so it
+        // Delegate to the Core per-IP limiter (namespaced 'receipt', so it
         // never shares a budget with another app), passing the receipts filter's
         // limit. Fail-open behaviour and the transient store are identical; the
         // local implementation stays as a fallback for an older theme.
@@ -510,6 +519,7 @@ final class ZRCPT_Receipt {
         // v3.6.9 (C1) — secret share-link routing + de-index.
         add_action( 'init', [ $this, 'add_share_rewrite' ] );
         add_action( 'init', [ $this, 'maybe_set_token_cutover' ] );
+        add_action( 'init', [ $this, 'maybe_set_approval_cutoff' ], 0 );
         add_action( 'init', [ $this, 'maybe_flush_rewrite_rules' ], 99 ); // v3.6.9 (C1): flush on first front-end hit too (printed links)
         add_filter( 'query_vars', [ $this, 'add_share_query_var' ] );
         add_filter( 'post_type_link', [ $this, 'filter_receipt_permalink' ], 10, 2 );
@@ -569,43 +579,21 @@ final class ZRCPT_Receipt {
         // v3.1.0 — bridge to the shared ZDZ_User_Media store (already-captured photos).
         require_once __DIR__ . '/class-zrcpt-media.php';
 
-        // Migrate stale bot name from database
-        $this->maybe_migrate_bot_name();
+        $this->forget_gateway_settings();
     }
 
     /**
-     * Clear a legacy, product-named receipt-writer bot handle from stored options so a fresh
-     * Zorderz install carries no vendor-specific bot name. The tenant sets their own handle in
-     * settings; NO default handle is compiled in (ship-empty). Runs on load, writes only when
-     * a legacy value is present.
+     * Receipts are written through the platform's Ai router, so this module keeps no gateway key and
+     * no bot handle of its own. An install that stored them here (a key in plain text) has both
+     * removed once; nothing reads them.
      */
-    private function maybe_migrate_bot_name() {
+    private function forget_gateway_settings() {
         $opts = get_option( self::OPTION_KEY, [] );
-        if ( ! is_array( $opts ) || empty( $opts['bot_name'] ) ) {
+        if ( ! is_array( $opts ) || ( ! array_key_exists( 'api_key', $opts ) && ! array_key_exists( 'bot_name', $opts ) ) ) {
             return;
         }
-        // Legacy bot handles to clear ship EMPTY — a tenant supplies its
-        // own set via this filter (or its private pack), so no vendor bot name is
-        // ever compiled into the public module.
-        $legacy = (array) apply_filters( 'zrcpt_legacy_bot_handles', [] );
-        if ( $legacy && in_array( $opts['bot_name'], $legacy, true ) ) {
-            $opts['bot_name'] = '';
-            update_option( self::OPTION_KEY, $opts );
-        }
-    }
-
-    /**
-     * The receipt-writer bot handle: the tenant's configured handle, else a filter, else the
-     * platform's general AI model (ZDZ_Core_Settings) so the feature still works. NO product
-     * bot name is compiled in.
-     */
-    private function receipt_bot_handle(): string {
-        $handle = (string) ( self::get_options()['bot_name'] ?? '' );
-        $handle = (string) apply_filters( 'zrcpt_bot_handle', $handle );
-        if ( $handle === '' && class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_ai_model' ) ) {
-            $handle = (string) ZDZ_Core_Settings::get_ai_model();
-        }
-        return $handle;
+        unset( $opts['api_key'], $opts['bot_name'] );
+        update_option( self::OPTION_KEY, $opts );
     }
 
     /* =====================================================================
@@ -682,7 +670,7 @@ final class ZRCPT_Receipt {
         );
 
         // Dashboard page for Zorderz iframe bridge
-        // Uses 'read' capability so non-admin app roles (ts_sales, ts_operator) can access it.
+        // Uses 'read' capability so non-admin app roles (zdz_sales, zdz_operator) can access it.
         // Hidden from the admin menu (null parent) — accessed via direct URL or SPA bridge.
         add_submenu_page(
             null,
@@ -698,22 +686,22 @@ final class ZRCPT_Receipt {
         $new = [];
         $new['cb']           = $columns['cb'];
         $new['title']        = 'Title';
-        $new['ts_address']   = 'Address';
-        $new['ts_date']      = 'Install Date';
-        $new['ts_slug']      = 'URL Slug';
+        $new['zrcpt_address'] = 'Address';
+        $new['zrcpt_date']    = 'Install Date';
+        $new['zrcpt_slug']    = 'URL Slug';
         $new['date']         = 'Created';
         return $new;
     }
 
     public function receipt_column_content( $column, $post_id ) {
         switch ( $column ) {
-            case 'ts_address':
+            case 'zrcpt_address':
                 echo esc_html( get_post_meta( $post_id, '_address_short', true ) );
                 break;
-            case 'ts_date':
+            case 'zrcpt_date':
                 echo esc_html( get_post_meta( $post_id, '_install_date', true ) );
                 break;
-            case 'ts_slug':
+            case 'zrcpt_slug':
                 $slug = get_post_meta( $post_id, '_vanity_slug', true );
                 if ( $slug ) {
                     $link = get_permalink( $post_id );
@@ -793,20 +781,10 @@ final class ZRCPT_Receipt {
             'default'           => self::defaults(),
         ] );
 
-        add_settings_section( 'zrcpt_api', 'Poe API Configuration', function () {
-            echo '<p>Get your API key at <a href="https://poe.com/api_key" target="_blank">poe.com/api_key</a>.</p>';
+        add_settings_section( 'zrcpt_api', __( 'Receipt writer', 'zorderz' ), function () {
+            echo '<p>' . esc_html__( 'Receipts are written through the platform\'s Ai router: its models, budgets and privacy coding (Zorderz → Ai usage). Nothing is set here.', 'zorderz' ) . ' '
+                . '<strong>' . esc_html( class_exists( 'ZRCPT_Writer' ) ? ZRCPT_Writer::ready_label() : __( 'not available', 'zorderz' ) ) . '</strong></p>';
         }, 'zrcpt-settings' );
-
-        add_settings_field( 'api_key', 'Poe API Key', function () {
-            $val = esc_attr( self::get_options()['api_key'] );
-            echo "<input type='password' name='" . self::OPTION_KEY . "[api_key]' value='{$val}' class='regular-text' autocomplete='off' />";
-        }, 'zrcpt-settings', 'zrcpt_api' );
-
-        add_settings_field( 'bot_name', 'Bot Handle', function () {
-            $val = esc_attr( self::get_options()['bot_name'] );
-            echo "<input type='text' name='" . self::OPTION_KEY . "[bot_name]' value='{$val}' class='regular-text' />";
-            echo "<p class='description'>Exact bot/model handle on your AI gateway (optional; blank uses the platform's configured model).</p>";
-        }, 'zrcpt-settings', 'zrcpt_api' );
 
         add_settings_field( 'cdn_base_url', 'Image CDN base URL', function () {
             $val = esc_attr( self::get_options()['cdn_base_url'] );
@@ -826,11 +804,13 @@ final class ZRCPT_Receipt {
                 $cdn = 'https://' . $cdn;
             }
         }
-        return [
-            'api_key'      => sanitize_text_field( $input['api_key'] ?? '' ),
-            'bot_name'     => sanitize_text_field( $input['bot_name'] ?? '' ),
-            'cdn_base_url' => esc_url_raw( $cdn ),
-        ];
+        // The item tag has no field here (a filter or a pack sets it): a save keeps it.
+        $raw = get_option( self::OPTION_KEY, [] );
+        $out = [ 'cdn_base_url' => esc_url_raw( $cdn ) ];
+        if ( is_array( $raw ) && isset( $raw['item_tag'] ) && is_string( $raw['item_tag'] ) ) {
+            $out['item_tag'] = sanitize_text_field( $raw['item_tag'] );
+        }
+        return $out;
     }
 
     public function render_settings_page() {
@@ -999,7 +979,7 @@ final class ZRCPT_Receipt {
     /* =====================================================================
        Zorderz DASHBOARD PAGE
        Renders the receipt form in a standalone admin page accessible by all
-       app roles. Detects ts_mobile=1 to hide WP Admin chrome when loaded
+       app roles. Detects zdz_mobile=1 to hide WP Admin chrome when loaded
        inside the Zorderz SPA bottom sheet iframe.
        ===================================================================== */
 
@@ -1008,8 +988,8 @@ final class ZRCPT_Receipt {
             wp_die( 'Please log in to use the receipt generator.' );
         }
 
-        // Zorderz iframe bridge appends ?ts_mobile=1 to hide WP Admin chrome
-        $is_mobile = isset( $_GET['ts_mobile'] ) && $_GET['ts_mobile'] === '1';
+        // The Zorderz iframe bridge appends ?zdz_mobile=1 to hide WP Admin chrome.
+        $is_mobile = isset( $_GET['zdz_mobile'] ) && $_GET['zdz_mobile'] === '1'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display flag only
 
         if ( $is_mobile ) {
             echo '<style>
@@ -1026,11 +1006,9 @@ final class ZRCPT_Receipt {
             echo '<h1>Receipt Generator</h1>';
         }
 
-        $opts = self::get_options();
-        if ( empty( $opts['api_key'] ) && current_user_can( 'manage_options' ) ) {
-            echo '<div class="notice notice-error"><p>Poe API key not configured. '
-               . '<a href="' . esc_url( admin_url( 'admin.php?page=zrcpt-settings' ) ) . '">Set it up here</a>.'
-               . '</p></div>';
+        if ( ! ZRCPT_Writer::ready() && current_user_can( 'manage_options' ) ) {
+            echo '<div class="notice notice-error"><p>' . esc_html__( 'Receipts cannot be written yet:', 'zorderz' ) . ' '
+               . esc_html( ZRCPT_Writer::ready_label() ) . '.</p></div>';
         }
 
         $this->render_form();
@@ -1088,7 +1066,7 @@ final class ZRCPT_Receipt {
             $this->receipt_404();
         }
 
-        // C-12 — OPT-IN link expiry. A link past its stamped deadline resolves to
+        // OPT-IN link expiry. A link past its stamped deadline resolves to
         // a 404 (never a distinguishable "expired" response, so it stays non-
         // enumerable). Absent/0 means "never expires" — the default-off posture,
         // and the reason a TTL change can't invalidate an already-issued link.
@@ -1103,12 +1081,28 @@ final class ZRCPT_Receipt {
             $this->receipt_404();
         }
 
+        // A receipt nobody has approved or sent is not public yet: the same 404 as a
+        // wrong link, so its existence is not confirmed.
+        if ( ! $this->public_view_allowed( (int) $post_id ) ) {
+            $this->receipt_404();
+        }
+        // Never serve receipt HTML that has not been through the current sanitizer.
+        if ( ! $this->is_sanitized( (int) $post_id, $html ) ) {
+            $html = $this->sanitize_stored_receipt( (int) $post_id, $html );
+            if ( $html === '' ) {
+                $this->receipt_404(); // nothing on the page was safe to show
+            }
+        }
+
         while ( ob_get_level() > 0 ) {
             ob_end_clean();
         }
 
         status_header( 200 );
         header( 'Content-Type: text/html; charset=utf-8' );
+        // The page may run only this app's own receipt script file.
+        header( 'Content-Security-Policy: ' . $this->receipt_csp(), true );
+        header( 'X-Content-Type-Options: nosniff', true );
         // Layered de-index + capability-URL hygiene, via the Core primitive when
         // present (X-Robots-Tag noindex/nofollow, Referrer-Policy, nosniff,
         // private no-store) — one source for the private-artifact header set.
@@ -1120,7 +1114,7 @@ final class ZRCPT_Receipt {
             header( 'Cache-Control: private, no-store, max-age=0', true );
         }
         nocache_headers();
-        echo $html;
+        echo $this->inject_receipt_runtime( $html ); // phpcs:ignore WordPress.Security.EscapeOutput -- sanitized at the write (ZRCPT_Sanitize) and checked above
         exit;
     }
 
@@ -1154,9 +1148,8 @@ final class ZRCPT_Receipt {
         if ( ! self::user_can_access() ) { // v3.6.9 (L1): only users granted this app see the generator UI
             return '<p style="text-align:center;padding:2rem;color:#888;">You do not have access to the receipt generator.</p>';
         }
-        $opts = self::get_options();
-        if ( empty( $opts['api_key'] ) && current_user_can( 'manage_options' ) ) {
-            return '<p style="text-align:center;padding:2rem;color:#c00;">Poe API key not configured. <a href="' . admin_url( 'options-general.php?page=zorderz' ) . '">Set it up here</a>.</p>';
+        if ( ! ZRCPT_Writer::ready() && current_user_can( 'manage_options' ) ) {
+            return '<p style="text-align:center;padding:2rem;color:#c00;">' . esc_html__( 'Receipts cannot be written yet:', 'zorderz' ) . ' ' . esc_html( ZRCPT_Writer::ready_label() ) . '.</p>';
         }
 
         // v2.9.0 — enqueue the Auto-Lookup assets.
@@ -1210,7 +1203,7 @@ final class ZRCPT_Receipt {
                 <p class="zrcpt-lookup-hint">Type an estimate #, invoice #, customer name, or phone.</p>
 
                 <div class="zrcpt-lookup-row">
-                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 5541 or Jordan Blake or Example City" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 5541 or Jordan Blake or 555-555-0123" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                     <button type="button" id="zrcpt-lookup-btn">Find</button>
                 </div>
 
@@ -1619,7 +1612,7 @@ final class ZRCPT_Receipt {
         // v3.6.2 — read the photo's forensic capture provenance (EXIF capture
         // time + GPS) from the ORIGINAL file, BEFORE Imagick strips it below, so
         // the shared-library mirror keeps the real "when/where" the shot was
-        // taken (the same provenance ts-camera records). Best-effort: a photo
+        // taken (the same provenance the Camera app records). Best-effort: a photo
         // with no EXIF simply mirrors with a null captured_at.
         $exif_provenance = $this->read_exif_provenance( $tmp_path );
 
@@ -1840,7 +1833,7 @@ final class ZRCPT_Receipt {
         ];
 
         // Carry forensic capture provenance when we have it (read-only at ingest,
-        // exactly like ts-camera). When absent, the store records upload time.
+        // exactly like the Camera app). When absent, the store records upload time.
         if ( ! empty( $exif_provenance['captured_at'] ) ) {
             $save_args['captured_at'] = $exif_provenance['captured_at'];
         }
@@ -1985,7 +1978,7 @@ final class ZRCPT_Receipt {
         $photo_ids     = [];   // uploaded photos (safe to re-parent to the receipt)
         $library_ids   = [];   // library photos (must NOT be re-parented)
 
-        // S5-08 — re-enforce one-time-use SERVER-SIDE: a library photo already on
+        // Re-enforce one-time-use SERVER-SIDE: a library photo already on
         // another published receipt is refused here even if a stale client offers
         // it. The current job's OWN receipt is excluded (a redo keeps its photos).
         $used_index    = self::get_used_media_index( $source_invoice_numbers );
@@ -2037,7 +2030,7 @@ final class ZRCPT_Receipt {
             $photo_urls[] = $url;
         }
 
-        // S5-08 — if every offered photo was rejected as already-used, say so
+        // If every offered photo was rejected as already-used, say so
         // plainly (a used install photo belongs to the receipt it first went on).
         if ( empty( $photo_urls ) && $used_rejected > 0 ) {
             wp_send_json_error(
@@ -2110,8 +2103,8 @@ final class ZRCPT_Receipt {
 
         } elseif ( $has_lookup ) {
             // ── NEW PATH: Lookup-based (no file upload) ─────────────────
-            // Build a text invoice summary from the lookup data so the bot
-            // receives a "file" it can parse. The bot expects an attachment.
+            // Build a text document from the lookup data; it goes to the writer as text
+            // (ZRCPT_Writer::invoice_part()).
             $inv_lines = [];
             $inv_lines[] = '=== INVOICE FROM FRESHBOOKS (auto-lookup) ===';
             $inv_lines[] = '';
@@ -2176,16 +2169,14 @@ final class ZRCPT_Receipt {
         $mode_cfg = $this->mode_config( $mode );
 
         $msg = '';
-        // Mode header — tells the bot what kind of receipt this is. Today this is
+        // Mode header — tells the writer what kind of receipt this is. Today this is
         // always the tagged install; future modes (before/after, per-unit) change
         // only this header + the photo framing, not the pipeline.
         $msg .= "Receipt type: {$mode_cfg['label']}\n";
         $msg .= "Document heading: {$mode_cfg['doc_heading']}\n";
         $msg .= "Installed: {$install_date}\n";
-        // NOTE: the "Invoice link:" line is added LATER (after the share link is
-        // resolved from FreshBooks), not here — see v3.3.13 fix below. Adding it
-        // here used the OLD/empty $invoice_url, so the bot's button fell back to
-        // "#" and never loaded for the customer.
+        // The invoice links never go to the writer: the page draws them once the share
+        // links are resolved (below).
 
         // v3.0.0: If we have lookup data, inject the customer block.
         // v3.2.0: also detect supplemental (non-screen) materials and inject the
@@ -2205,12 +2196,45 @@ final class ZRCPT_Receipt {
         // its number) so a combo receipt can resolve a customer share link for
         // each and link the receipt back onto all of them — not just the primary.
         $invoice_ids = []; // number(string) => fb invoice id(int)
-        // S5-02 — capture the per-source PAYMENT FACTS (provider status + amounts)
+        // Capture the per-source PAYMENT FACTS (provider status + amounts)
         // for the paid-panel honesty gate. SoR-derived, server-side, never trusted
         // from the client. Only invoices contribute a payment source.
         $payment_sources = [];
+        // SAME-CUSTOMER GUARD (privacy). A receipt is for ONE billing customer; its public
+        // link must never ride on another customer's invoice. The first kept invoice fixes
+        // the receipt's customer; a later invoice of a different (or unconfirmable)
+        // customer is dropped, failing closed. When the receipt is bound to an item tag,
+        // invoices without the tag are dropped too (that filter alone fails open). The
+        // link-write check in fb_add_receipt_link() is the final backstop.
+        $found_docs = [];
         foreach ( $source_invoice_numbers as $inv_no ) {
-            $found = $this->fb_find_document( $inv_no );
+            $f = $this->fb_find_document( $inv_no );
+            if ( $f && ! empty( $f['doc'] ) ) {
+                $found_docs[ (string) $inv_no ] = $f;
+            }
+        }
+        $tag_only  = ( $mode === self::MODE_TAGGED ) && zrcpt_receipt_item_tag() !== '';
+        $partition = ZRCPT_Guards::partition_invoices(
+            array_map( static function ( $f ) { return (array) $f['doc']; }, $found_docs ),
+            $tag_only,
+            [ $this, 'invoice_matches_item_tag' ]
+        );
+        $primary_customer_id = (string) $partition['anchor'];
+        if ( ! empty( $partition['kept'] ) ) {
+            $source_invoice_numbers = array_values( array_unique( array_merge(
+                $partition['kept'],
+                // a number that did not resolve stays (nothing is known against it)
+                array_values( array_diff( $source_invoice_numbers, array_keys( $found_docs ) ) )
+            ) ) );
+        }
+        if ( $partition['dropped_tag'] || $partition['dropped_customer'] || $partition['fail_open'] ) {
+            error_log( 'ZRCPT GUARDS: kept=[' . implode( ',', $partition['kept'] )
+                . '] dropped_untagged=[' . implode( ',', $partition['dropped_tag'] )
+                . '] dropped_other_customer=[' . implode( ',', $partition['dropped_customer'] ) . ']'
+                . ( $partition['fail_open'] ? ' (no invoice carried the tag: kept them)' : '' ) );
+        }
+        foreach ( $partition['kept'] as $inv_no ) {
+            $found = $found_docs[ $inv_no ] ?? null;
             if ( $found && ! empty( $found['doc'] ) ) {
                 $this_id = (int) ( $found['doc']['invoiceid'] ?? $found['doc']['id'] ?? 0 );
                 if ( $this_id > 0 ) { $invoice_ids[ (string) $inv_no ] = $this_id; }
@@ -2243,6 +2267,11 @@ final class ZRCPT_Receipt {
                 if ( $found && ! empty( $found['doc'] ) ) {
                     $primary_invoice_id = (int) ( $found['doc']['invoiceid'] ?? $found['doc']['id'] ?? 0 );
                     if ( $primary_invoice_id > 0 ) { $invoice_ids[ (string) $fallback_no ] = $primary_invoice_id; }
+                    // Anchor the receipt's customer here too, so the link-write check has
+                    // an identity on this fallback path.
+                    if ( $primary_customer_id === '' ) {
+                        $primary_customer_id = trim( (string) ( $found['doc']['customerid'] ?? '' ) );
+                    }
                     if ( empty( $payment_sources ) && ( $found['type'] ?? '' ) === 'invoice' ) {
                         $payment_sources[] = $this->fb_payment_source( (array) $found['doc'], $fallback_no );
                     }
@@ -2256,15 +2285,11 @@ final class ZRCPT_Receipt {
             }
         }
 
-        // v3.3.11 — Compute the AUTHORITATIVE unit count here (from the
-        // server-fetched FreshBooks lines) and rebuild the text "invoice" we send
-        // the bot so the count is IMPOSSIBLE to miss. Why: the Poe bot's text
-        // path (parse_invoice_from_text) regexes a count out of this text and, on
-        // failure, asks the model to ESTIMATE it FROM PRICING — and our unit lines
-        // are $0.00 (flat-rate job), so it guesses ~1. We pre-empt that by leading
-        // the text with an explicit, machine-readable total in the exact phrasing
-        // the bot already recognizes ("N total ... units") plus a tagged
-        // line a bot-side fix can read directly.
+        // Compute the AUTHORITATIVE unit count here (from the server-fetched billing lines)
+        // and rebuild the text document the writer reads so the count cannot be missed: a
+        // model left to itself may estimate a count from prices, and unit lines on a
+        // flat-rate job carry none. The text leads with the total twice: a tagged
+        // ZRCPT_COUNT_MARKER line the writer's instructions name, and a sentence.
         $auth_vent_count = $this->compute_vent_count( $authoritative_lines );
         if ( $auth_vent_count > 0 && $has_lookup ) {
             $file_b64  = base64_encode( $this->build_bot_invoice_text( $lookup_data, $authoritative_lines, $auth_vent_count ) );
@@ -2286,30 +2311,14 @@ final class ZRCPT_Receipt {
             }
         }
 
-        // v3.3.13 — THE FIX: add the "Invoice link:" line to the bot message HERE,
-        // AFTER the share link is resolved — not up top where $invoice_url was
-        // still empty. The bot reads this line for the receipt's "view invoice"
-        // button; before this, the working /#/link/eyJ… URL never reached the bot
-        // and the button fell back to "#" (dead). We pass the URL verbatim (NOT
-        // through esc_url_raw, which strips the "#/link/" fragment that makes the
-        // FreshBooks share URL work). We also send it under an explicit tag so a
-        // bot that ignores "Invoice link:" can still pick it up unambiguously.
-        if ( $invoice_url !== '' && strpos( $invoice_url, '#/invoice/' ) === false ) {
-            // Only emit a customer-facing link when it's the share URL (or a
-            // Zorderz/host URL) — never the internal staff /#/invoice/ view.
-            $msg .= "Invoice link: {$invoice_url}\n";
-            $msg .= "ZRCPT_INVOICE_URL: {$invoice_url}\n";
-        }
-
-        // v3.6.6 — COMBO JOBS: resolve a customer-facing share link for EVERY
-        // source invoice and send them all as ZRCPT_INVOICE_URLS so the
-        // receipt shows one "View invoice #N" button per invoice (the bot
-        // template already renders this list). Before this, only the primary
-        // invoice's link reached the bot, so a 2-invoice combo (e.g. Via Del
-        // Cerro #15495 + #15516) showed just one FreshBooks link. We reuse the
-        // primary's already-resolved $invoice_url to avoid a duplicate API call.
+        // The invoice links never go to the model: the page draws them. The primary invoice's
+        // customer-facing share link goes on the invoice panel (ZRCPT_Finalize); a receipt that
+        // covers several invoices also lists one "View invoice #N" link per invoice. Only a
+        // customer-facing link is used, never the internal staff /#/invoice/ view, and the share
+        // URL is kept verbatim (esc_url_raw would strip the fragment that makes it work).
+        $invoice_links = []; // number => customer-facing link
         if ( count( $source_invoice_numbers ) > 1 ) {
-            $invoice_link_pairs = []; // "num=url"
+            $invoice_link_pairs = []; // "num=url", for the log line below
             foreach ( $source_invoice_numbers as $inv_no ) {
                 $num = (string) $inv_no;
                 $iid = $invoice_ids[ $num ] ?? 0;
@@ -2322,12 +2331,8 @@ final class ZRCPT_Receipt {
                 }
                 if ( $url !== '' && strpos( $url, '#/invoice/' ) === false ) {
                     $invoice_link_pairs[] = $num . '=' . $url;
+                    $invoice_links[ $num ] = $url;
                 }
-            }
-            if ( count( $invoice_link_pairs ) > 1 ) {
-                // Only emit the multi-link tag when we actually resolved 2+ links;
-                // otherwise the single ZRCPT_INVOICE_URL above is correct.
-                $msg .= "ZRCPT_INVOICE_URLS: " . implode( ' | ', $invoice_link_pairs ) . "\n";
             }
             error_log( sprintf(
                 'ZRCPT COMBO LINKS: invoices=[%s] resolved_links=%d',
@@ -2335,7 +2340,7 @@ final class ZRCPT_Receipt {
             ) );
         }
 
-        // v3.3.9 — CONTENT DIAGNOSTICS (pre-bot). One greppable line that proves
+        // v3.3.9 — CONTENT DIAGNOSTICS (before the call). One greppable line that proves
         // whether the data feeding the receipt is actually correct, instead of us
         // inferring from timestamps. If authoritative_lines is 0 here, the
         // server-side fetch loop above did NOT run (empty invoice numbers) or
@@ -2399,9 +2404,9 @@ final class ZRCPT_Receipt {
             // FreshBooks invoice but NO matching Nutshell lead (online orders,
             // walk-ins, leads logged under a different name). Before this, the
             // customer block then simply had no install-notes section and the
-            // bot lost the detail that was sitting in plain sight ON the
+            // writer lost the detail that was sitting in plain sight ON the
             // invoice ("(4) units. White Color.", a reference code,
-            // "Tax and Installation Included."). Now, when Nutshell yielded
+            // "Tax included."). Now, when Nutshell yielded
             // nothing, we read the invoice itself: its substantive line text +
             // reference + the computed unit count become the install details,
             // under an honest "read from the FreshBooks invoice" header.
@@ -2426,7 +2431,7 @@ final class ZRCPT_Receipt {
 
             // v3.3.0 — Combined-invoice framing. When several invoices were
             // merged, the line items above already include all of them; tell the
-            // bot to present ONE complete installation covering the full scope,
+            // writer to present ONE complete installation covering the full scope,
             // not separate per-invoice sections. The customer sees completed
             // work, not our billing logistics.
             if ( count( $source_invoice_numbers ) > 1 ) {
@@ -2470,47 +2475,63 @@ final class ZRCPT_Receipt {
                 . count( $all_lead_notes ) . ', install_notes=' . count( $install_notes_arr ) . '.' );
         }
 
-        // v3.1.0 — Photo provenance framing. When the photos came from the shared
-        // library (the tech's own captures), tell the bot these are the verified
-        // installation photos for THIS job, and how the set was chosen, so it
-        // treats them as the after/install images. Future modes use the same
-        // hook to describe before/after pairs or per-unit groupings.
-        $from_library = ! empty( $library_ids );
-        if ( $from_library ) {
-            $msg .= "\n=== Installation photos (from the technician's own captures) ===\n";
-            $msg .= "These " . count( $photo_urls ) . " photo(s) are the installation/after photos for this job, "
-                  . "selected as the most recent capture set for this customer. Use them as the completed-work images.\n";
-        } else {
-            $msg .= "\n=== Installation photos (manually uploaded) ===\n";
+        // The colour the shop recorded cutting this job in (Prep's per-job plan record), as
+        // a fact the receipt states — never a guess from text. Only when every piece of the
+        // job was one colour; nothing is said otherwise.
+        $shop_color = $this->color_from_prep( $has_lookup ? $lookup_data : [], $primary_customer_id );
+        if ( $shop_color !== '' ) {
+            $msg .= "\n=== Material colour recorded by the shop ===\n";
+            $msg .= 'Every piece on this job was cut in: ' . $shop_color . ". State this colour where the receipt names the material colour; do not use any other colour.\n";
         }
 
-        $msg .= "\nPhotos:\n" . implode( "\n", $bot_photo_urls );
+        // The photos never go to the model: the page places the checked set itself (ZRCPT_Writer::page()),
+        // in this order. The model is told only how many there are.
 
-        /* --- Call Poe API --- */
-        $response = $this->call_poe_bot( $msg, $file_b64, $file_mime, $orig_name, $file_ext );
-        if ( is_wp_error( $response ) ) {
-            $err = $response->get_error_message();
-            // If the error mentions photo URLs, append the URLs we sent for debugging
-            if ( stripos( $err, 'photo URL' ) !== false || stripos( $err, 'photo url' ) !== false ) {
-                $err .= "\n\n[Debug] Photo URLs sent (" . count( $photo_urls ) . "): " . implode( ', ', $photo_urls );
+        // Which house? Every photo handed to the generator is placed against this customer's house; a photo the
+        // system is not sure of, and nobody has answered for, stops the receipt (checked here, whatever the picker
+        // showed). A source that cannot answer refuses everything.
+        if ( class_exists( 'ZRCPT_Houses' ) ) {
+            $wh_vouched = json_decode( sanitize_text_field( wp_unslash( $_POST['vouched_media_ids'] ?? '[]' ) ), true );
+            $wh_check   = ZRCPT_Houses::gate(
+                array_merge( $library_ids, $photo_ids ),
+                ZRCPT_Houses::target( [
+                    'address'         => $has_lookup ? (string) ( $lookup_data['customer_detail']['address'] ?? '' ) : '',
+                    'invoice_numbers' => $source_invoice_numbers,
+                ] ),
+                is_array( $wh_vouched ) ? $wh_vouched : [],
+                0,
+                (int) get_current_user_id(),
+                (string) $primary_customer_id
+            );
+            if ( empty( $wh_check['ok'] ) ) {
+                error_log( 'ZRCPT which house: generate refused - ' . wp_json_encode( $wh_check['counts'] ) );
+                wp_send_json_error( (string) $wh_check['message'] );
             }
-            wp_send_json_error( $err );
         }
 
-        /* --- Parse bot response --- */
-        $receipt = $this->parse_receipt_response( $response );
-        if ( is_wp_error( $receipt ) ) wp_send_json_error( $receipt->get_error_message() );
+        /* --- The words, through the platform's Ai router; the page around them is built here --- */
+        // Only after every photo passed the house check above. The model gets the facts and the invoice;
+        // never a photo, a link or a price to place.
+        $receipt = ZRCPT_Writer::write( $msg, ZRCPT_Writer::invoice_part( $file_b64, (string) $file_mime ), [
+            'heading'          => (string) $mode_cfg['doc_heading'],
+            'install_date'     => $install_date,
+            'photo_urls'       => $bot_photo_urls,
+            'invoice_links'    => $invoice_links,
+            'closing_line'     => (string) zrcpt_document_convention( 'closing_line', '' ),
+            'fallback_address' => $has_lookup ? (string) ( $lookup_data['customer_detail']['address'] ?? '' ) : '',
+        ] );
+        if ( is_wp_error( $receipt ) ) {
+            wp_send_json_error( $receipt->get_error_message() );
+        }
 
         $html = base64_decode( $receipt['html_base64'] );
         if ( ! $html ) wp_send_json_error( 'Failed to decode receipt HTML.' );
 
-        // v3.3.9 — AUTHORITATIVE COUNT OVERRIDE. The Poe bot sometimes writes
-        // "This home has 1 unit" even when we hand it the correct total
-        // in the prompt (the headline count lives in the bot's template and it
-        // doesn't always substitute our number). We KNOW the right count from the
-        // FreshBooks line items ($this->last_vent_count, computed in
-        // build_customer_block). So we deterministically rewrite the headline in
-        // the returned HTML and the vent_summary, rather than trusting the bot.
+        // AUTHORITATIVE COUNT OVERRIDE. A model may still write a different number
+        // than the total it was handed. We KNOW the right count from the billing line
+        // items ($this->last_vent_count, computed in build_customer_block). So we
+        // deterministically rewrite every "N <unit>" in the page and the unit summary,
+        // rather than trusting the model.
         // No-op when we have no authoritative count (e.g. manual-file path).
         // Prefer build_customer_block's total; fall back to the count we computed
         // from $authoritative_lines earlier (covers any path where the customer
@@ -2528,7 +2549,7 @@ final class ZRCPT_Receipt {
             $receipt['html_base64'] = base64_encode( $html );
         }
 
-        // S5-01 / S5-02 — FINALIZE: append the print/email-durable full-size photo
+        // FINALIZE: append the print/email-durable full-size photo
         // gallery and the proof-of-payment panel via the idempotent sentinel
         // pipeline. The gallery uses the receipt's OWN rendered photo order (so it
         // matches the inline strip exactly); the paid panel asserts "Payment in
@@ -2544,7 +2565,7 @@ final class ZRCPT_Receipt {
                 'invoice_numbers' => $source_invoice_numbers,
                 'payment_sources' => $payment_sources,
             ] );
-            // S5-14 — SANITIZE AT GENERATE too, not only at approve. The receipt is
+            // SANITIZE AT GENERATE too, not only at approve. The receipt is
             // published (token-reachable) the instant it is created, and the
             // reviewer previews the STORED HTML in a same-origin iframe — both
             // before any approval. Storing only sanitized HTML closes the stored-
@@ -2562,7 +2583,7 @@ final class ZRCPT_Receipt {
         // place (same URL) instead of spawning a new post each time. Pass the
         // source invoice numbers so create_receipt_page can find the prior
         // receipt by invoice (one invoice → one receipt) rather than by the
-        // bot's vanity slug, which varies between runs and caused a NEW page
+        // writer's vanity slug, which varies between runs and caused a NEW page
         // (…-2, …-3) every regeneration.
         $page = $this->create_receipt_page( $slug, $html, $title, $receipt, $source_invoice_numbers );
         if ( is_wp_error( $page ) ) wp_send_json_error( $page->get_error_message() );
@@ -2700,6 +2721,11 @@ final class ZRCPT_Receipt {
         // receipts too, and so a single invoice maps to its receipt for the
         // one-invoice-one-receipt rule). Stored as a LIST deliberately — a future
         // "split one invoice across multiple receipts" needs no schema change.
+        // The receipt's billing customer, for the same-customer link-write check on every
+        // later re-sync of the invoice link.
+        if ( $primary_customer_id !== '' ) {
+            update_post_meta( $post_id, '_fb_customer_id', $primary_customer_id );
+        }
         if ( ! empty( $source_invoice_numbers ) ) {
             delete_post_meta( $post_id, '_fb_doc_numbers' );
             foreach ( $source_invoice_numbers as $num ) {
@@ -2729,14 +2755,15 @@ final class ZRCPT_Receipt {
             $page['permalink'],
             $orig_name,
             $receipt,
-            $source_invoice_numbers
+            $source_invoice_numbers,
+            $primary_customer_id
         );
 
         // v3.3.9 — CONTENT DIAGNOSTICS (post-create). The single line that
         // answers "did this actually work?": which post was written, its final
         // URL (should be the clean /receipt/{address}/ canonical), whether it was
         // an update or a new post, the computed unit count (compare against the
-        // bot's "N units" headline), and the resolved customer share link. Grep
+        // writer's "N units" headline), and the resolved customer share link. Grep
         // the log for `ZRCPT GEN SUMMARY`.
         error_log( sprintf(
             'ZRCPT GEN SUMMARY: post_id=%d updated=%s permalink=%s vent_count_computed=%d bot_vent_summary=%s share_link=%s fb_linked=%s',
@@ -2769,149 +2796,6 @@ final class ZRCPT_Receipt {
         ] );
     }
 
-    /* =====================================================================
-       POE API CLIENT
-       ===================================================================== */
-
-    private function call_poe_bot( $message_text, $file_b64, $file_mime, $filename, $file_ext ) {
-
-        $opts     = self::get_options();
-        $api_key  = $opts['api_key'];
-        $bot_name = $this->receipt_bot_handle();
-
-        if ( empty( $api_key ) ) return new \WP_Error( 'no_key', 'API key not configured.' );
-
-        $content = [ [ 'type' => 'text', 'text' => $message_text ] ];
-
-        $img_exts = [ 'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif' ];
-        if ( in_array( $file_ext, $img_exts, true ) ) {
-            $content[] = [ 'type' => 'image_url', 'image_url' => [ 'url' => "data:{$file_mime};base64,{$file_b64}" ] ];
-        } else {
-            $content[] = [ 'type' => 'file', 'file' => [ 'filename' => $filename, 'file_data' => "data:{$file_mime};base64,{$file_b64}" ] ];
-        }
-
-        $body = wp_json_encode( [
-            'model'    => $bot_name,
-            'stream'   => false,
-            'messages' => [ [ 'role' => 'user', 'content' => $content ] ],
-        ] );
-
-        if ( false === $body ) {
-            return new \WP_Error( 'json', 'Failed to encode API request. The invoice file may be too large.' );
-        }
-
-        $payload_mb = round( strlen( $body ) / 1048576, 1 );
-
-        // Retry up to 2 times on transient errors
-        $max_attempts = 2;
-        $last_error   = null;
-
-        for ( $attempt = 1; $attempt <= $max_attempts; $attempt++ ) {
-
-            $r = wp_remote_post( self::API_ENDPOINT, [
-                'headers' => [
-                    'Content-Type'  => 'application/json',
-                    'Authorization' => 'Bearer ' . $api_key,
-                    'HTTP-Referer'  => home_url(),
-                    'X-Title'       => 'Zorderz Receipt',
-                ],
-                'body'                => $body,
-                'timeout'             => self::API_TIMEOUT,
-                'limit_response_size' => 5 * 1024 * 1024,
-            ] );
-
-            if ( is_wp_error( $r ) ) {
-                $last_error = new \WP_Error( 'req', 'API request failed: ' . $r->get_error_message() );
-                sleep( 2 );
-                continue;
-            }
-
-            $code     = wp_remote_retrieve_response_code( $r );
-            $res_body = wp_remote_retrieve_body( $r );
-
-            if ( $code === 401 ) return new \WP_Error( 'auth', 'Invalid API key. Check Installation Receipts → Settings.' );
-            if ( $code === 429 ) return new \WP_Error( 'rate', 'Rate limit hit. Wait a moment and retry.' );
-
-            // Retry on 400/500 errors (transient API issues)
-            if ( $code >= 400 ) {
-                $last_error = new \WP_Error( 'http',
-                    "API error (HTTP {$code}, attempt {$attempt}/{$max_attempts}, payload {$payload_mb} MB): "
-                    . substr( $res_body, 0, 300 )
-                );
-                if ( $attempt < $max_attempts ) {
-                    sleep( 3 );
-                    continue;
-                }
-                return $last_error;
-            }
-
-            // Success
-            $data = json_decode( $res_body, true );
-            if ( empty( $data['choices'][0]['message']['content'] ) ) {
-                return new \WP_Error( 'empty', "Empty response from API (HTTP {$code}, payload {$payload_mb} MB)." );
-            }
-
-            return $data['choices'][0]['message']['content'];
-        }
-
-        return $last_error ?: new \WP_Error( 'unknown', 'API call failed after retries.' );
-    }
-
-    /**
-     * v3.0.0 — Text-only Poe API call for lookup-based receipts.
-     */
-    private function call_poe_bot_text_only( $message_text ) {
-        $opts     = self::get_options();
-        $api_key  = $opts['api_key'];
-        $bot_name = $this->receipt_bot_handle();
-
-        if ( empty( $api_key ) ) {
-            return new \WP_Error( 'no_key', 'API key not configured.' );
-        }
-
-        $body = wp_json_encode( [
-            'model'    => $bot_name,
-            'stream'   => false,
-            'messages' => [ [ 'role' => 'user', 'content' => $message_text ] ],
-        ] );
-
-        if ( false === $body ) {
-            return new \WP_Error( 'json', 'Failed to encode API request.' );
-        }
-
-        $r = wp_remote_post( self::API_ENDPOINT, [
-            'headers' => [
-                'Content-Type'  => 'application/json',
-                'Authorization' => 'Bearer ' . $api_key,
-                'HTTP-Referer'  => home_url(),
-                'X-Title'       => 'Zorderz Receipt',
-            ],
-            'body'                => $body,
-            'timeout'             => self::API_TIMEOUT,
-            'limit_response_size' => 5 * 1024 * 1024,
-        ] );
-
-        if ( is_wp_error( $r ) ) {
-            return new \WP_Error( 'req', 'API request failed: ' . $r->get_error_message() );
-        }
-
-        $code     = wp_remote_retrieve_response_code( $r );
-        $res_body = wp_remote_retrieve_body( $r );
-
-        if ( $code === 401 ) return new \WP_Error( 'auth', 'Invalid API key.' );
-        if ( $code === 429 ) return new \WP_Error( 'rate', 'Rate limit hit. Wait a moment.' );
-        if ( $code >= 400 ) {
-            return new \WP_Error( 'http', "API error (HTTP {$code}): " . substr( $res_body, 0, 300 ) );
-        }
-
-        $data = json_decode( $res_body, true );
-        if ( empty( $data['choices'][0]['message']['content'] ) ) {
-            return new \WP_Error( 'empty', "Empty response from API (HTTP {$code})." );
-        }
-
-        return $data['choices'][0]['message']['content'];
-    }
-
     /**
      * v3.3.11 — Sum the unit quantities from FreshBooks line items,
      * using the SAME rule as build_customer_block: count catalog-unit lines
@@ -2922,7 +2806,7 @@ final class ZRCPT_Receipt {
     private function compute_vent_count( $lines ): int {
         if ( ! is_array( $lines ) ) { return 0; }
 
-        // S5-03 (§76 3.11.3–3.11.6) — DOCUMENT-TOTAL rule. When a unit line states
+        // DOCUMENT-TOTAL rule. When a unit line states
         // the count in PROSE ("…Total of 33 units…") at Qty 1, that stated
         // total OVERRIDES the per-line sum (deliberately override, NOT max — a
         // summary line plus its itemised lines must not double-count). Gated so a
@@ -2957,7 +2841,7 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * S5-03 — detect a stated DOCUMENT TOTAL in a unit line's prose:
+     * Detect a stated DOCUMENT TOTAL in a unit line's prose:
      * "total of N <noun>", where N is followed WITHIN ≤2 WORDS by the unit noun
      * (so "total of 250 linear feet" ≠ 250 unless "feet" is the unit noun). The
      * candidate line must pass the unit-line filter (the $noncount_tokens), so a
@@ -3156,9 +3040,9 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * Build the text "invoice" we attach for the receipt-writer bot, leading with an explicit,
-     * unambiguous total so the bot never has to guess the count from pricing. The authoritative
-     * count is stated two ways: a tagged ZRCPT_COUNT_MARKER line a bot-side fix can read
+     * Build the text "invoice" we attach for the receipt writer, leading with an explicit,
+     * unambiguous total so the writer never has to guess the count from pricing. The authoritative
+     * count is stated two ways: a tagged ZRCPT_COUNT_MARKER line the writer's instructions name
      * directly, and a prose line using the item's OWN unit noun (COUNTS CONTRACT — never a
      * hardcoded product word). The unit noun comes from the Item Engine (or the neutral
      * fallback) so this text carries no product name.
@@ -3167,7 +3051,7 @@ final class ZRCPT_Receipt {
         $out = [];
         $out[] = '=== JOB DOCUMENT (auto-lookup from the billing provider) ===';
         $out[] = '';
-        // The authoritative count, stated two ways the bot understands.
+        // The authoritative count, stated two ways the writer understands.
         $tag    = zrcpt_receipt_item_tag();
         $phrase = zrcpt_count_phrase( $tag, $vent_count ); // e.g. "63 screens" / "63 items"
         $out[] = ZRCPT_COUNT_MARKER . ': ' . $vent_count;
@@ -3197,7 +3081,7 @@ final class ZRCPT_Receipt {
             $line = '  • ' . $label;
             // v3.5.0 — when the line text carries the real unit count
             // ("(4) units…", qty 1), state the effective count inline
-            // so the bot never re-derives the wrong number from the bare qty.
+            // so the writer never re-derives the wrong number from the bare qty.
             $eff = $this->line_effective_count( $name, $desc, $qty );
             if ( $qty !== '' && $qty !== '0' ) {
                 if ( $eff > 0 && is_numeric( $qty ) && $eff !== (int) $qty ) {
@@ -3212,7 +3096,7 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * The unit-noun regex fragment used to find the bot's count headline. Built from the
+     * The unit-noun regex fragment used to find the writer's count headline. Built from the
      * configured unit noun (Item Engine per-item noun, or the neutral fallback) — NO product
      * word is hardcoded. Matches both the plural and singular forms.
      */
@@ -3225,9 +3109,9 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * Force the authoritative unit count into the bot's HTML headline.
+     * Force the authoritative unit count into the writer's HTML headline.
      *
-     * The bot's headline is some variation of "This home has N <units>" (the number is often
+     * The writer's headline is some variation of "This home has N <units>" (the number is often
      * wrapped, e.g. "<strong>1</strong> screens"). We replace the number immediately preceding
      * the configured unit noun with the authoritative count from the billing line items,
      * targeting ONLY the "<number> <unit-noun>" pattern so we never touch counts that mean
@@ -3276,32 +3160,6 @@ final class ZRCPT_Receipt {
     private function force_vent_count_in_html( string $html, int $count ): string { return $this->force_unit_count_in_html( $html, $count ); }
     private function force_vent_count_in_text( string $text, int $count ): string { return $this->force_unit_count_in_text( $text, $count ); }
 
-    private function parse_receipt_response( $content ) {
-        // Accept the neutral in-repo marker AND any legacy markers a tenant supplies via
-        // filter (ships EMPTY — no product-named marker literal in the public module), so a
-        // receipt written by either a Zorderz-templated bot or a business's existing bot parses.
-        $markers = array_merge( [ 'ZRCPT_RECEIPT_JSON' ], (array) apply_filters( 'zrcpt_legacy_receipt_markers', [] ) );
-        $open = $close = ''; $s = false; $e = false;
-        foreach ( $markers as $mk ) {
-            $s = strpos( $content, '<!--' . $mk );
-            $e = strpos( $content, $mk . '-->' );
-            if ( false !== $s && false !== $e ) {
-                $open = '<!--' . $mk;
-                break;
-            }
-        }
-        if ( false === $s || false === $e || $open === '' ) {
-            return new \WP_Error( 'parse', 'Could not find receipt data in bot response.' );
-        }
-        $json_str = trim( substr( $content, $s + strlen( $open ), $e - $s - strlen( $open ) ) );
-        $data = json_decode( $json_str, true );
-        if ( ! $data ) return new \WP_Error( 'json', 'Failed to parse receipt JSON.' );
-        foreach ( [ 'address_short', 'vanity_slug', 'install_date', 'html_base64' ] as $f ) {
-            if ( empty( $data[ $f ] ) ) return new \WP_Error( 'field', "Missing field: {$f}" );
-        }
-        return $data;
-    }
-
     /* =====================================================================
        FILE PROCESSING
        ===================================================================== */
@@ -3342,16 +3200,19 @@ final class ZRCPT_Receipt {
     private function create_receipt_page( $slug, $html, $title, $meta, $invoice_numbers = [] ) {
         // v3.3.6 — Find the existing receipt to UPDATE, preferring the INVOICE
         // match (one invoice → one receipt) so a regenerate refreshes the SAME
-        // page/URL. The bot's vanity slug varies run-to-run, so matching by slug
+        // page/URL. The writer's vanity slug varies run-to-run, so matching by slug
         // alone spawned a new post (…-2, …-3) every time — the stale-URL problem.
         $existing_id  = 0;
         $existing_post = null;
+
+        $matched_by_invoice = false; // only an invoice match may reuse a page bound to another invoice
 
         // 1) By source invoice number (authoritative).
         foreach ( (array) $invoice_numbers as $inv_no ) {
             $hit = $this->receipt_for_invoice( $inv_no );
             if ( $hit && ! empty( $hit['post_id'] ) ) {
-                $existing_id = (int) $hit['post_id'];
+                $existing_id        = (int) $hit['post_id'];
+                $matched_by_invoice = true;
                 break;
             }
         }
@@ -3370,7 +3231,7 @@ final class ZRCPT_Receipt {
             $existing_id = $this->find_receipt_by_address( $canonical_slug, $address_short );
         }
 
-        // 3) Fallback: by the bot's vanity slug (legacy; varies run-to-run).
+        // 3) Fallback: by the writer's vanity slug (legacy; varies run-to-run).
         if ( ! $existing_id ) {
             $by_slug = get_posts( [
                 'post_type'      => self::POST_TYPE,
@@ -3379,6 +3240,15 @@ final class ZRCPT_Receipt {
                 'post_status'    => 'any',
             ] );
             if ( ! empty( $by_slug ) ) { $existing_id = (int) $by_slug[0]->ID; }
+        }
+
+        // Two jobs, one place: a page found only by address/slug that is bound to other
+        // invoices belongs to a different job. Make a new page instead of taking over the
+        // link that job's customer already has.
+        if ( $existing_id && ! ZRCPT_Guards::reuse_allowed( $matched_by_invoice, (array) get_post_meta( $existing_id, '_fb_doc_numbers', false ), (array) $invoice_numbers ) ) {
+            error_log( 'ZRCPT DEDUPE GUARD: address/slug match on post #' . $existing_id
+                . ' is bound to other invoice(s); creating a new receipt for [' . implode( ',', array_map( 'strval', (array) $invoice_numbers ) ) . '].' );
+            $existing_id = 0;
         }
 
         if ( $existing_id ) {
@@ -3409,13 +3279,15 @@ final class ZRCPT_Receipt {
             $post_id = wp_update_post( $post_data, true );
         } else {
             // No existing receipt → create one at the clean canonical address slug
-            // (falls back to the bot's vanity slug only if we couldn't derive one).
+            // (falls back to the writer's vanity slug only if we couldn't derive one).
             $post_data['post_name'] = ( $canonical_slug !== '' ) ? $canonical_slug : $slug;
             $post_id = wp_insert_post( $post_data, true );
         }
         if ( is_wp_error( $post_id ) ) return $post_id;
 
-        update_post_meta( $post_id, '_receipt_html', $html );
+        // Sanitized at the write, stored byte-for-byte (update_post_meta() unslashes).
+        $html = class_exists( 'ZRCPT_Finalize' ) ? ZRCPT_Finalize::sanitize( (string) $html ) : (string) $html;
+        $this->store_receipt_html( (int) $post_id, $html, false );
         // v3.6.9 (H3): stamp the creator ONCE so ownership survives regenerates
         // (create_receipt_page reuses the canonical post for the same job).
         if ( ! get_post_meta( $post_id, '_created_by', true ) ) {
@@ -3445,12 +3317,12 @@ final class ZRCPT_Receipt {
     /**
      * v3.3.9 — Build the clean, canonical address slug for a receipt, e.g.
      * "123 Example St." → "123-example-st" (plus zip if the vanity slug
-     * carried one). We anchor on the bot's vanity slug when it already looks like
+     * carried one). We anchor on the writer's vanity slug when it already looks like
      * an address slug (it usually encodes the same address + zip), falling back
      * to sanitizing the human address. Returns '' if nothing usable.
      */
     private function canonical_address_slug( string $address_short, string $vanity_slug ): string {
-        // The vanity slug from the bot is typically the address already (e.g.
+        // The vanity slug from the writer is typically the address already (e.g.
         // "123-example-st-90210"); strip any numeric dedupe suffix WordPress
         // may have appended on a prior insert (…-2, …-3) — but DON'T strip a zip.
         $vs = sanitize_title( $vanity_slug );
@@ -3547,11 +3419,67 @@ final class ZRCPT_Receipt {
        ===================================================================== */
 
     private static function defaults() {
-        return [ 'api_key' => '', 'bot_name' => '', 'cdn_base_url' => '' ];
+        return [ 'cdn_base_url' => '' ];
     }
 
+    /** The module's options (the image CDN base; the item tag a filter or a pack sets). */
     public static function get_options() {
         return wp_parse_args( get_option( self::OPTION_KEY, [] ), self::defaults() );
+    }
+
+    /**
+     * The colour Prep recorded cutting this job in, or ''. Read through
+     * ZPREP_Plan_Preview::cut_color_for() (per job: the document number first, then the
+     * customer's latest plan); '' when Prep is absent, nothing was recorded, or the job was
+     * more than one colour.
+     */
+    private function color_from_prep( array $lookup_data, string $customer_id ): string {
+        if ( ! class_exists( 'ZPREP_Plan_Preview' ) || ! method_exists( 'ZPREP_Plan_Preview', 'cut_color_for' ) ) {
+            return '';
+        }
+        $name = trim( (string) ( $lookup_data['customer_name'] ?? '' ) );
+        if ( $name === '' ) {
+            return '';
+        }
+        try {
+            $c = (string) ZPREP_Plan_Preview::cut_color_for( $name, $customer_id !== '' ? $customer_id : trim( (string) ( $lookup_data['customer_id'] ?? '' ) ), trim( (string) ( $lookup_data['number'] ?? '' ) ) );
+        } catch ( \Throwable $e ) {
+            return '';
+        }
+        return preg_match( '/^[a-z][a-z0-9 -]{0,30}$/', $c ) ? $c : '';
+    }
+
+    /**
+     * Does a billing document carry the receipt's item tag? True when the tag is empty (no
+     * restriction); when the reference / PO carries the tag as its own token; when a note
+     * mentions it; or when a line classifies (Item Engine) to the tag's item. Used only to
+     * keep untagged invoices out of a tagged receipt, and that filter fails open.
+     */
+    public function invoice_matches_item_tag( array $doc ): bool {
+        $tag = strtolower( trim( zrcpt_receipt_item_tag() ) );
+        if ( $tag === '' ) {
+            return true;
+        }
+        $ref = strtolower( (string) ( $doc['reference'] ?? '' ) . ' ' . (string) ( $doc['po_number'] ?? '' ) );
+        if ( preg_match( '/(?:^|[^a-z0-9])' . preg_quote( $tag, '/' ) . '(?:[^a-z0-9]|$)/', $ref ) ) {
+            return true;
+        }
+        if ( strpos( strtolower( (string) ( $doc['notes'] ?? '' ) ), $tag ) !== false ) {
+            return true;
+        }
+        foreach ( (array) ( $doc['lines'] ?? [] ) as $ln ) {
+            if ( ! is_array( $ln ) ) {
+                continue;
+            }
+            $text = trim( (string) ( $ln['name'] ?? '' ) . ' ' . (string) ( $ln['description'] ?? '' ) );
+            if ( $text === '' ) {
+                continue;
+            }
+            if ( strpos( strtolower( $text ), $tag ) !== false || strtolower( zrcpt_count_classify( $text ) ) === $tag ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /* =====================================================================
@@ -3624,7 +3552,7 @@ final class ZRCPT_Receipt {
     }
 
     /* =====================================================================
-       IMAGE CDN (crosswalk 03-B31) — base + origins from ZDZ_Business_Profile.
+       IMAGE CDN — base + origins from ZDZ_Business_Profile.
        NO production hostname is compiled in. The CDN base ships EMPTY (a no-op).
        ===================================================================== */
 
@@ -3677,107 +3605,63 @@ final class ZRCPT_Receipt {
     }
 
     /* =====================================================================
-       FRESHBOOKS INVOICE INTEGRATION (v2.8.0)
-       Uses the platform shared billing credentials (ZDZ_Core_Settings), with a read-only legacy fallback
-       from the theme Core settings.
-       After a receipt page is created, finds the matching FreshBooks
-       invoice/estimate and appends an "Installation Receipt - Link"
-       line item with $0.00 cost pointing to the receipt URL.
+       BILLING INVOICE INTEGRATION
+       Uses Zorderz Core's billing credentials (ZDZ_Core_Settings::get_credential(),
+       managed in Zorderz → Credentials). After a receipt page is created, finds
+       the matching invoice/estimate and appends a receipt-link line item with
+       $0.00 cost pointing to the receipt URL.
        ===================================================================== */
 
-    /**
-     * Legacy option prefixes (read-only fallback) for billing credentials.
-     * Order: Core first, then legacy prefixes (read-only fallback).
-     */
-    const FB_PREFIXES = [ 'tsec_', 'tsl_', 'tsa_', 'ts_surveys_', 'ts_core_' ];
-
-    /**
-     * Get a billing option from Core, with a read-only legacy prefix fallback.
-     */
-    private function fb_get_shared_option( $key ) {
-        foreach ( self::FB_PREFIXES as $prefix ) {
-            $val = get_option( $prefix . $key, '' );
-            if ( ! empty( $val ) ) return $val;
+    /** One billing credential from Zorderz Core, or '' (decoded whatever format it is stored in). */
+    private function fb_credential( string $key ): string {
+        if ( class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_credential' ) ) {
+            return trim( (string) ZDZ_Core_Settings::get_credential( $key ) );
         }
         return '';
     }
 
-    /**
-     * Decrypt AES-256-CBC encrypted values (matches the legacy AES-256-CBC option pattern).
-     */
-    private function fb_decrypt( $value ) {
-        if ( empty( $value ) ) return '';
-        $decoded = base64_decode( $value );
-        if ( strpos( $decoded, '::' ) === false ) return $value; // Not encrypted (plaintext)
-        list( $iv, $cipher ) = explode( '::', $decoded, 2 );
-        $key = substr( hash( 'sha256', wp_salt( 'auth' ) ), 0, 32 );
-        $dec = openssl_decrypt( $cipher, 'AES-256-CBC', $key, 0, $iv );
-        return $dec !== false ? $dec : '';
-    }
-
-    /* --- FreshBooks credential getters --- */
-
-    private function fb_get_access_token()  { return $this->fb_get_shared_option( 'fb_access_token' ); }
-    private function fb_get_refresh_token() { return $this->fb_get_shared_option( 'fb_refresh_token' ); }
-    private function fb_get_account_id()    { return $this->fb_get_shared_option( 'fb_account_id' ); }
-    private function fb_get_client_id()     { return $this->fb_get_shared_option( 'fb_client_id' ); }
-
-    private function fb_get_client_secret() {
-        foreach ( self::FB_PREFIXES as $prefix ) {
-            $raw = get_option( $prefix . 'fb_client_secret', '' );
-            if ( empty( $raw ) ) continue;
-            $dec = $this->fb_decrypt( $raw );
-            if ( ! empty( $dec ) ) return $dec;
-            return $raw; // May be stored as plaintext by older version
-        }
-        return '';
-    }
+    private function fb_get_access_token()  { return $this->fb_credential( 'fb_access_token' ); }
+    private function fb_get_account_id()    { return $this->fb_credential( 'fb_account_id' ); }
 
     /**
-     * Check if FreshBooks credentials are available from any sibling plugin.
+     * Check if billing credentials are available in Core.
      */
     private function fb_has_credentials() {
         return ! empty( $this->fb_get_access_token() ) && ! empty( $this->fb_get_account_id() );
     }
 
-    /* --- Token refresh (syncs back to all sibling prefixes) --- */
-
+    /**
+     * Refresh the billing access token through the kernel, never here. Refresh tokens are
+     * single-use: two independent refreshers revoke each other, so the refresh goes through
+     * the single-flight token service (via ZDZ_Core_FreshBooks when present) and the rotated
+     * token is read back from Core. A refresh the service declines is not retried here.
+     *
+     * @return string|false the new access token, or false.
+     */
     private function fb_refresh_access_token() {
-        $client_id     = $this->fb_get_client_id();
-        $client_secret = $this->fb_get_client_secret();
-        $refresh_token = $this->fb_get_refresh_token();
-
-        if ( empty( $refresh_token ) || empty( $client_id ) ) return false;
-
-        $resp = wp_remote_post( 'https://api.freshbooks.com/auth/oauth/token', [
-            'timeout' => 30,
-            'headers' => [ 'Content-Type' => 'application/json' ],
-            'body'    => wp_json_encode( [
-                'grant_type'    => 'refresh_token',
-                'client_id'     => $client_id,
-                'client_secret' => $client_secret,
-                'refresh_token' => $refresh_token,
-            ] ),
-        ] );
-
-        if ( is_wp_error( $resp ) ) return false;
-
-        $data = json_decode( wp_remote_retrieve_body( $resp ), true );
-        if ( empty( $data['access_token'] ) ) return false;
-
-        $new_access  = $data['access_token'];
-        $new_refresh = $data['refresh_token'] ?? $refresh_token;
-
-        // Sync to all known sibling prefixes whose Client ID matches (or is empty)
-        foreach ( self::FB_PREFIXES as $prefix ) {
-            $sibling_id = get_option( $prefix . 'fb_client_id', '' );
-            if ( empty( $sibling_id ) || $sibling_id === $client_id ) {
-                update_option( $prefix . 'fb_access_token',  $new_access );
-                update_option( $prefix . 'fb_refresh_token', $new_refresh );
+        if ( class_exists( 'ZDZ_Core_FreshBooks' ) ) {
+            $core = new ZDZ_Core_FreshBooks();
+            if ( method_exists( $core, 'refresh_token' ) && $core->refresh_token() ) {
+                $fresh = $this->fb_get_access_token();
+                return $fresh !== '' ? $fresh : false;
             }
+            error_log( 'ZRCPT billing: token refresh via the kernel failed; not retrying here.' );
+            return false;
         }
-
-        return $new_access;
+        if ( class_exists( 'ZDZ_Token_Service' ) && method_exists( 'ZDZ_Token_Service', 'refresh' ) ) {
+            $svc_access = ZDZ_Token_Service::refresh( [
+                'client_id'     => $this->fb_credential( 'fb_client_id' ),
+                'client_secret' => $this->fb_credential( 'fb_client_secret' ),
+                'refresh_token' => $this->fb_credential( 'fb_refresh_token' ),
+            ] );
+            if ( is_string( $svc_access ) && $svc_access !== '' ) {
+                return $svc_access;
+            }
+            error_log( 'ZRCPT billing: token refresh via the token service failed; not retrying here.' );
+            return false;
+        }
+        error_log( 'ZRCPT billing: no kernel token service; refresh unavailable.' );
+        return false;
     }
 
     /* --- HTTP helpers (with auto token refresh on 401) --- */
@@ -3870,7 +3754,7 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * S5-02 — normalize a FreshBooks invoice doc to the payment-source shape the
+     * Normalize a FreshBooks invoice doc to the payment-source shape the
      * paid-panel honesty gate consumes: the provider status string plus the SoR
      * amounts. The gate (ZRCPT_Finalize::resolve_payment + ZDZ_Answer_Authority)
      * decides paid/void/partial from these; this only extracts the facts. The
@@ -4046,7 +3930,7 @@ final class ZRCPT_Receipt {
         return in_array( $name, $known, true );
     }
 
-    private function fb_add_receipt_link( $doc_type, $doc_id, $receipt_url ) {
+    private function fb_add_receipt_link( $doc_type, $doc_id, $receipt_url, $expected_customer_id = '' ) {
         $account_id = $this->fb_get_account_id();
         if ( empty( $account_id ) || empty( $doc_id ) ) {
             error_log( 'ZRCPT fb_add_receipt_link: missing account_id=' . ( $account_id ?: 'EMPTY' ) . ' or doc_id=' . ( $doc_id ?: 'EMPTY' ) );
@@ -4063,6 +3947,14 @@ final class ZRCPT_Receipt {
         $doc  = $resp['response']['result'][ $doc_key ] ?? null;
         if ( ! $doc ) {
             error_log( "ZRCPT fb_add_receipt_link: GET failed for {$doc_type} {$doc_id}" );
+            return false;
+        }
+
+        // The backstop of the same-customer guard: the receipt link is written only onto a
+        // document of the receipt's own customer (fail closed when either is unknown).
+        // Blanking a link line is always allowed.
+        if ( ! ZRCPT_Guards::link_write_allowed( (string) $receipt_url, (string) $expected_customer_id, (string) ( $doc['customerid'] ?? '' ) ) ) {
+            error_log( "ZRCPT PRIVACY GUARD: refusing receipt-link write on {$doc_type} #{$doc_id} (customer mismatch or unresolved; fail-closed)." );
             return false;
         }
 
@@ -4194,10 +4086,10 @@ final class ZRCPT_Receipt {
      * @param int    $post_id       The receipt WordPress post ID.
      * @param string $receipt_url   The receipt page permalink.
      * @param string $invoice_name  The uploaded invoice filename.
-     * @param array  $receipt_data  Parsed receipt data from the AI bot.
+     * @param array  $receipt_data  Parsed receipt data from the receipt writer.
      * @return array  Status array: [ 'linked' => bool, 'doc_type' => ..., 'doc_number' => ..., 'error' => ... ]
      */
-    public function fb_link_receipt( $post_id, $receipt_url, $invoice_name, $receipt_data = [], $all_numbers = [] ) {
+    public function fb_link_receipt( $post_id, $receipt_url, $invoice_name, $receipt_data = [], $all_numbers = [], $expected_customer_id = '' ) {
         $result = [
             'linked'     => false,
             'doc_type'   => '',
@@ -4216,7 +4108,7 @@ final class ZRCPT_Receipt {
         // v3.6.6 — Build the list of invoice/estimate numbers to link. For a
         // combo receipt the caller passes EVERY source invoice number so the
         // receipt link is written back onto ALL of them; otherwise we fall back
-        // to the single number derived from the filename / bot response.
+        // to the single number derived from the filename / writer response.
         $numbers = [];
         foreach ( (array) $all_numbers as $n ) {
             $d = preg_replace( '/[^0-9]/', '', (string) $n );
@@ -4257,6 +4149,13 @@ final class ZRCPT_Receipt {
                 error_log( "ZRCPT FreshBooks: Document #{$doc_number} not found." );
                 continue;
             }
+            // Same-customer check (privacy): a document of another or an unknown customer
+            // is skipped before anything is written to it.
+            if ( ! ZRCPT_Guards::link_write_allowed( (string) $receipt_url, (string) $expected_customer_id, (string) ( $found['doc']['customerid'] ?? '' ) ) ) {
+                $errors[] = "#{$doc_number} skipped (customer mismatch)";
+                error_log( "ZRCPT IDENTITY GUARD: fb_link_receipt skipping #{$doc_number} (document customer differs from the receipt's, or one is unknown)." );
+                continue;
+            }
             $type = $found['type'];
             $fb_doc_id = $found['doc'][ ( $type === 'estimate' ) ? 'estimateid' : 'invoiceid' ]
                       ?? $found['doc']['id']
@@ -4266,7 +4165,7 @@ final class ZRCPT_Receipt {
                 continue;
             }
 
-            $linked = $this->fb_add_receipt_link( $type, $fb_doc_id, $receipt_url );
+            $linked = $this->fb_add_receipt_link( $type, $fb_doc_id, $receipt_url, (string) $expected_customer_id );
             if ( ! $linked ) {
                 $errors[] = "#{$doc_number} link failed";
                 error_log( "ZRCPT FreshBooks: Failed to add receipt link to {$type} #{$doc_number}." );
@@ -4357,7 +4256,16 @@ final class ZRCPT_Receipt {
         }
         $url = get_permalink( $post_id );
         error_log( 'ZRCPT FB SYNC: post_id=' . $post_id . ' → re-pointing [' . implode( ',', $numbers ) . '] at ' . $url );
-        return $this->fb_link_receipt( $post_id, $url, '', [], $numbers );
+        $expected_customer_id = (string) get_post_meta( $post_id, '_fb_customer_id', true );
+        if ( $expected_customer_id === '' ) {
+            // A receipt saved before the customer was recorded: its primary invoice names it.
+            $primary = $this->fb_find_document( (string) $numbers[0] );
+            if ( $primary && ! empty( $primary['doc']['customerid'] ) ) {
+                $expected_customer_id = (string) $primary['doc']['customerid'];
+                update_post_meta( $post_id, '_fb_customer_id', $expected_customer_id );
+            }
+        }
+        return $this->fb_link_receipt( $post_id, $url, '', [], $numbers, $expected_customer_id );
     }
 
     /**
@@ -4668,7 +4576,7 @@ final class ZRCPT_Receipt {
             return [ 'type' => 'email', 'value' => $trimmed, 'raw' => $input ];
         }
 
-        // Phone: 7+ digits total in the string (catches 555-518-3209, (Example City, etc.)
+        // Phone: 7+ digits total in the string (catches 555-555-0142, (555) 555-0123, etc.)
         $all_digits = preg_replace( '/[^0-9]/', '', $trimmed );
         if ( strlen( $all_digits ) >= 7 && strlen( $all_digits ) <= 15 ) {
             return [ 'type' => 'phone', 'value' => $trimmed, 'raw' => $input ];
@@ -4742,7 +4650,7 @@ final class ZRCPT_Receipt {
             $suggested_date = $result['sessions'][0]['date_input'];
         }
 
-        // S5-07 — LOCATION INTEGRITY (geo-PII boundary). Classify each set
+        // LOCATION INTEGRITY (geo-PII boundary). Classify each set
         // server-side and hand the client ONLY a categorical loc_status; strip
         // every coordinate (session centroid + per-photo GPS). The anchor
         // (customer coordinates) is used only to classify and never emitted.
@@ -4750,13 +4658,25 @@ final class ZRCPT_Receipt {
         if ( is_numeric( $near_lat ) && is_numeric( $near_lng ) && ( $near_lat || $near_lng ) ) {
             $anchor = [ 'lat' => (float) $near_lat, 'lng' => (float) $near_lng ];
         }
+        // Which house? Every photo is placed against THIS customer's house (the address and invoice numbers the
+        // widget already holds) before the coordinates are stripped; only statuses, reasons, distances and each
+        // house's letter and street line go to the browser.
+        $raw_sessions = (array) ( $result['sessions'] ?? [] );
+        $wh_address   = sanitize_text_field( wp_unslash( $_POST['address'] ?? '' ) );
+        $wh_numbers   = json_decode( sanitize_text_field( wp_unslash( $_POST['invoice_numbers'] ?? '' ) ), true );
+        if ( class_exists( 'ZRCPT_Houses' ) && $raw_sessions && ( '' !== $wh_address || ! empty( $wh_numbers ) ) ) {
+            $raw_sessions = ZRCPT_Houses::annotate( $raw_sessions, ZRCPT_Houses::target( [
+                'address'         => $wh_address,
+                'invoice_numbers' => is_array( $wh_numbers ) ? $wh_numbers : [],
+            ] ) );
+        }
         $sessions = ZRCPT_Media::sanitize_sessions_for_client(
-            (array) ( $result['sessions'] ?? [] ),
+            $raw_sessions,
             $anchor,
             'self'
         );
 
-        // S5-08 — ONE-TIME-USE PHOTOS. Mark photos already on a PUBLISHED receipt
+        // ONE-TIME-USE PHOTOS. Mark photos already on a PUBLISHED receipt
         // as locked in the picker (server re-enforces at generate regardless).
         // Exclude the current job's own receipt so a redo keeps its photos.
         $exclude_numbers = [];
@@ -4795,7 +4715,7 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * S5-08 — the cross-receipt USED-PHOTO index: the union of _source_media_ids
+     * The cross-receipt USED-PHOTO index: the union of _source_media_ids
      * (WP attachment ids) across every PUBLISHED receipt, so an install photo
      * already on one customer's receipt can't land on another's. Only
      * post_status=publish counts (trashing a receipt frees its photos). The
@@ -4856,9 +4776,9 @@ final class ZRCPT_Receipt {
      * usually says everything the receipt needs — product, count, color,
      * what's included — it was just never being READ as install context:
      *   "(4) units. White Color."  → product, count, color
-     *   "Tax and Installation Included."   → scope wording
-     *   Reference "12345-EM"               → job/category code
-     * We pass the substantive line text through verbatim (the bot is good at
+     *   "Tax included."                    → scope wording
+     *   Reference "12345-AB"               → job/category code
+     * We pass the substantive line text through verbatim (the writer is good at
      * reading prose) plus the computed unit count, and skip pure plumbing
      * (the receipt-link line, URLs, empty/zero rows' boilerplate).
      *
@@ -4921,7 +4841,7 @@ final class ZRCPT_Receipt {
         if ( ! empty( $lines ) ) {
             $parts[] = '';
             $parts[] = '=== Line items (with quantities) ===';
-            // CRITICAL: include the QUANTITY on every line. Without it the bot
+            // CRITICAL: include the QUANTITY on every line. Without it the writer
             // can't total the units and falls back to "1 unit" (it was
             // only seeing the headline line). FreshBooks puts the real counts on
             // the per-line quantities (e.g. one unit line × 55, another × 2,
@@ -4936,7 +4856,7 @@ final class ZRCPT_Receipt {
                     if ( $label === '' ) continue;
                     // v3.5.0 — effective units: QTY × any count embedded in the
                     // line's own text ("(4) units…" with QTY 1 = 4).
-                    // When they differ, SAY SO on the line so the bot can't
+                    // When they differ, SAY SO on the line so the writer can't
                     // re-derive the wrong number from the raw qty.
                     $eff = $this->line_effective_count( $name, $desc, $qty );
                     $line = '  • ' . $label;
@@ -4970,7 +4890,7 @@ final class ZRCPT_Receipt {
                     . 'single flat-price "installation"/labor line also appears, it is the '
                     . 'whole-job labor line — do not add it to the count.';
             }
-            // S5-03 — SINGLE SOURCE OF TRUTH. The authoritative headline count is
+            // SINGLE SOURCE OF TRUTH. The authoritative headline count is
             // compute_vent_count() (which honours the document-total rule), NOT a
             // parallel local sum. In the common no-document-total case this is
             // byte-identical to $vent_qty_total (same line filter + effective
@@ -4984,7 +4904,7 @@ final class ZRCPT_Receipt {
             $parts[] = '';
             // v3.5.0 — honest header: when no Nutshell lead exists, the notes
             // below were derived from the FreshBooks document itself, and the
-            // bot should treat them as the install details.
+            // writer should treat them as the install details.
             $parts[] = ( $notes_source === 'invoice' )
                 ? '=== Install details (read from the FreshBooks invoice — no Nutshell lead was found) ==='
                 : '=== Install-day notes from Nutshell ===';
@@ -5005,7 +4925,7 @@ final class ZRCPT_Receipt {
        A job sometimes involves catalog items OTHER than the receipt's primary
        tagged item — accessories, companion products, extra materials. This
        detects them from the job text THROUGH THE ITEM ENGINE (never a hardcoded
-       product, brand or part-number list) and asks the bot to document each one
+       product, brand or part-number list) and asks the writer to document each one
        briefly, pulling any authoritative spec text from a knowledge source via a
        neutral filter.
 
@@ -5022,7 +4942,7 @@ final class ZRCPT_Receipt {
      * result on an empty catalog / absent engine. NO brand or product word is
      * hardcoded here — the vocabulary lives in the catalog.
      *
-     * S5-09 (§78 D2) — installed products are what the job BILLED (line items),
+     * Installed products are what the job BILLED (line items),
      * never what a note merely mentions. So a product is EVIDENCED only by the
      * line-item text; the note text may ONLY enrich the display brand of an item
      * the lines already show (e.g. the lines name a catalog item, a note
@@ -5106,7 +5026,7 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * S5-09 (§78 D1) — does this material class DOCUMENT ITSELF FROM external spec
+     * Does this material class DOCUMENT ITSELF FROM external spec
      * knowledge (a vent, which pulls an approved-product spec), or is it SELF-
      * DOCUMENTED (a caulk / sealant, which is described from a fixed instruction
      * with no knowledge pull)? Reads the Item Engine `documents_from` attribute
@@ -5143,7 +5063,7 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * The canonical material keys for the bot's allowlist: the Item Engine ids of
+     * The canonical material keys for the writer's allowlist: the Item Engine ids of
      * the detected supplemental items. Catalog-driven — NO hardcoded key list.
      *
      * @param array $detected Result of detect_supplemental_materials().
@@ -5161,10 +5081,10 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * Build the "additional items" prompt block for the bot. Detects supplemental
+     * Build the "additional items" prompt block for the writer. Detects supplemental
      * catalog items from the job text, pulls any authoritative spec text from a
      * knowledge source via the neutral `zrcpt_materials_context` filter (ships
-     * returning '' — a knowledge module registers on it), and instructs the bot to
+     * returning '' — a knowledge module registers on it), and instructs the writer to
      * document each detected item briefly and ONLY from supported detail. Returns
      * '' when nothing applies (empty catalog / nothing detected).
      *
@@ -5173,7 +5093,7 @@ final class ZRCPT_Receipt {
      * @param string $extra_text    Any extra text (reference, description).
      */
     private function build_supplemental_materials_block( array $lines, array $install_notes = [], string $extra_text = '' ): string {
-        // S5-09 (D2) — keep LINE-ITEM text and NOTE text SEPARATE. Line items are
+        // Keep LINE-ITEM text and NOTE text SEPARATE. Line items are
         // the evidence for what was installed; notes/reference/description may only
         // enrich a line-evidenced item, never introduce one.
         $line_parts = [];
@@ -5196,7 +5116,7 @@ final class ZRCPT_Receipt {
 
         $detected = $this->detect_supplemental_materials( $line_text, $note_text );
         if ( empty( $detected['tags'] ) ) {
-            // S5-09 diagnostic — makes a wrong/absent render diagnosable from the log.
+            // Diagnostic — makes a wrong/absent render diagnosable from the log.
             error_log( 'ZRCPT materials: keys=[] line_evidenced=no knowledge=no' );
             return '';
         }
@@ -5204,11 +5124,11 @@ final class ZRCPT_Receipt {
         // Explicit, machine-readable allowlist of what to document (catalog ids).
         $material_keys = $this->canonical_material_keys( $detected );
 
-        // S5-09 (D1) — pull external spec knowledge ONLY for a class that DOCUMENTS
+        // Pull external spec knowledge ONLY for a class that DOCUMENTS
         // FROM knowledge (a vent). A self-documented class (caulk/sealant) never
         // triggers a knowledge query, so a caulk tag can't drag in a vent
         // manufacturer's guideline. When nothing is knowledge-documented the
-        // context stays '' and the bot documents the item(s) generically.
+        // context stays '' and the writer documents the item(s) generically.
         $context = '';
         if ( ! empty( $detected['knowledge'] ) ) {
             $query = 'Supplemental materials specification: ' . implode( ', ', $detected['tags'] )
@@ -5223,7 +5143,7 @@ final class ZRCPT_Receipt {
             }
         }
 
-        // S5-09 diagnostic (§78): keys / whether knowledge was pulled / tags.
+        // Diagnostic: keys / whether knowledge was pulled / tags.
         error_log( sprintf(
             'ZRCPT materials: keys=[%s] line_evidenced=yes knowledge=%s vault=%s tags=[%s]',
             implode( ',', $material_keys ),
@@ -5232,7 +5152,7 @@ final class ZRCPT_Receipt {
             implode( ',', $detected['tags'] )
         ) );
 
-        // Build the block. Even without a knowledge source we still tell the bot
+        // Build the block. Even without a knowledge source we still tell the writer
         // WHAT was detected so it can note it conservatively.
         $block  = "\n=== Additional items (not the primary product) ===\n";
         $block .= "ZRCPT_MATERIALS: " . implode( ', ', $material_keys ) . "\n";
@@ -5435,17 +5355,17 @@ final class ZRCPT_Receipt {
         return $post;
     }
 
-    /** Best-effort client IP (handles common proxy headers, validates format). */
+    /**
+     * The client IP an approval, a deletion request or a rate limit records: the connection's address
+     * (ZDZ_Client_IP::get(): REMOTE_ADDR, or a trusted proxy's value on zdz_client_ip). Never a forwarded header,
+     * which the client writes itself. '' when there is none.
+     */
     private function client_ip(): string {
-        $keys = [ 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR' ];
-        foreach ( $keys as $k ) {
-            if ( empty( $_SERVER[ $k ] ) ) { continue; }
-            // X-Forwarded-For may be a comma list; the first entry is the client.
-            $raw = explode( ',', (string) $_SERVER[ $k ] )[0];
-            $ip  = trim( $raw );
-            if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) { return $ip; }
+        if ( class_exists( 'ZDZ_Client_IP' ) ) {
+            return ZDZ_Client_IP::get();
         }
-        return '';
+        $ip = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( (string) $_SERVER['REMOTE_ADDR'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- validated by FILTER_VALIDATE_IP on the next line; anything else becomes ''
+        return filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
     }
 
     /**
@@ -5498,6 +5418,10 @@ final class ZRCPT_Receipt {
         $post_id = (int) $post->ID;
 
         $html = (string) get_post_meta( $post_id, '_receipt_html', true );
+        // The preview is same-origin: never hand it a page that has not been sanitized.
+        if ( $html !== '' && ! $this->is_sanitized( $post_id, $html ) ) {
+            $html = $this->sanitize_stored_receipt( $post_id, $html );
+        }
 
         wp_send_json_success( [
             'post_id'     => $post_id,
@@ -5579,13 +5503,14 @@ final class ZRCPT_Receipt {
             wp_send_json_error( [ 'message' => 'Could not update the receipt photos. Please regenerate the receipt.' ] );
         }
 
-        // S5-01 — keep the appended full-size gallery in sync with the removal
+        // Keep the appended full-size gallery in sync with the removal
         // (the paid panel and everything else are left untouched). Idempotent.
         if ( class_exists( 'ZRCPT_Finalize' ) ) {
             $new_html = ZRCPT_Finalize::refresh_fullsize_gallery( $new_html, $kept );
+            $new_html = ZRCPT_Finalize::sanitize( $new_html );
         }
 
-        update_post_meta( $post_id, '_receipt_html', $new_html );
+        $this->store_receipt_html( $post_id, $new_html, false );
 
         // Keep _source_media_ids consistent: drop the rows whose file_url was
         // removed (best-effort — these ids power provenance, not the rendered
@@ -5683,12 +5608,13 @@ final class ZRCPT_Receipt {
             wp_send_json_error( [ 'message' => 'Could not reorder the receipt photos. Please regenerate the receipt.' ] );
         }
 
-        // S5-01 — re-order the appended full-size gallery to match (idempotent).
+        // Re-order the appended full-size gallery to match (idempotent).
         if ( class_exists( 'ZRCPT_Finalize' ) ) {
             $new_html = ZRCPT_Finalize::refresh_fullsize_gallery( $new_html, $order );
+            $new_html = ZRCPT_Finalize::sanitize( $new_html );
         }
 
-        update_post_meta( $post_id, '_receipt_html', $new_html );
+        $this->store_receipt_html( $post_id, $new_html, false );
 
         // Reordering changes the approval surface (the order of photos the
         // approver signs off on), so clear any prior approval — consistent with
@@ -5754,12 +5680,13 @@ final class ZRCPT_Receipt {
      * @return string|null
      */
     private function rewrite_receipt_photos( string $html, array $kept ): ?string {
-        // (1) Rebuild the gallery items. Mirror the bot's build_gallery_html
-        // markup exactly (div.gallery-item[onclick=openLightbox(i)] > img).
+        // (1) Rebuild the gallery items (div.gallery-item > img). The page's lightbox
+        // comes from the receipt script file, which opens any .gallery-item photo, so no
+        // inline handler is written.
         $items = '';
         foreach ( array_values( $kept ) as $i => $url ) {
             $u = esc_url( $url );
-            $items .= '            <div class="gallery-item" onclick="openLightbox(' . $i . ')">' . "\n";
+            $items .= '            <div class="gallery-item">' . "\n";
             $items .= '                <img src="' . $u . '" alt="Installation photo ' . ( $i + 1 ) . '" loading="eager">' . "\n";
             $items .= '            </div>' . "\n";
         }
@@ -5833,6 +5760,170 @@ final class ZRCPT_Receipt {
         update_post_meta( $post_id, '_source_media_ids', array_values( array_unique( $kept_ids ) ) );
     }
 
+    /* =====================================================================
+       STORED HTML — sanitized at every write, gated before it is public
+       ===================================================================== */
+
+    /** Is the stored page marked as cleaned by the current sanitizer revision? */
+    private function is_sanitized( int $post_id, ?string $html = null ): bool {
+        $html = $html ?? (string) get_post_meta( $post_id, '_receipt_html', true );
+        $mark = (string) get_post_meta( $post_id, self::SANITIZE_META, true );
+        return $mark !== '' && hash_equals( self::SANITIZE_REV . ':' . hash( 'sha256', $html ), $mark );
+    }
+
+    /** Record that $html, as stored, has been through the current sanitizer. */
+    private function mark_sanitized( int $post_id, string $html ): void {
+        update_post_meta( $post_id, self::SANITIZE_META, self::SANITIZE_REV . ':' . hash( 'sha256', $html ) );
+    }
+
+    /**
+     * Save sanitized receipt HTML byte-for-byte (update_post_meta() unslashes, so wp_slash()
+     * first: a backslash in stored CSS or text survives) and mark it sanitized. $keep_approval
+     * is true only for a rewrite that keeps the content (re-sanitizing an older page): an
+     * approved receipt stays approved, its hash re-bound to the stored page.
+     */
+    private function store_receipt_html( int $post_id, string $html, bool $keep_approval ): void {
+        update_post_meta( $post_id, '_receipt_html', wp_slash( $html ) );
+        $this->mark_sanitized( $post_id, $html );
+        if ( $keep_approval && (string) get_post_meta( $post_id, '_approved_at', true ) !== '' ) {
+            update_post_meta( $post_id, '_approved_html_hash', hash( 'sha256', $html ) );
+        }
+    }
+
+    /**
+     * Sanitize a stored receipt that is not marked (saved by an older build, or by an older
+     * sanitizer revision) and store it. Used when such a receipt is opened for review,
+     * approved or served. An empty result is stored too: the page had nothing safe to show
+     * (the public link then 404s). Returns the HTML to use.
+     */
+    private function sanitize_stored_receipt( int $post_id, string $html ): string {
+        $new = class_exists( 'ZRCPT_Finalize' ) ? ZRCPT_Finalize::sanitize( $html ) : '';
+        if ( $new === $html ) {
+            $this->mark_sanitized( $post_id, $html );
+            return $html;
+        }
+        $this->store_receipt_html( $post_id, $new, true );
+        error_log( 'ZRCPT SANITIZE: post_id=' . $post_id . ' stored receipt sanitized (rev ' . self::SANITIZE_REV . ').' );
+        return $new;
+    }
+
+    /**
+     * May this request see the public receipt page? Signed-in users with Receipts access:
+     * always. Everyone else: only once the receipt was approved or sent (now, or before a
+     * redo), or when it predates the approval flow (made before the rule first ran).
+     * Filter: zrcpt_public_view_allowed( $allowed, $post_id ) — it may only narrow: a filter
+     * cannot open an unapproved receipt to the public.
+     */
+    public function public_view_allowed( int $post_id ): bool {
+        $allowed = self::user_can_access()
+            || (string) get_post_meta( $post_id, '_approved_at', true ) !== ''
+            || (string) get_post_meta( $post_id, '_sent_at', true ) !== ''
+            || (string) get_post_meta( $post_id, '_prev_sent_at', true ) !== ''
+            || $this->predates_approval_flow( $post_id );
+        return self::narrow_only( $allowed, apply_filters( 'zrcpt_public_view_allowed', $allowed, $post_id ) );
+    }
+
+    /** A filter may turn a yes into a no, never a no into a yes. */
+    public static function narrow_only( bool $decided, $filtered ): bool {
+        return $decided && (bool) $filtered;
+    }
+
+    /**
+     * Record when the approval rule started on this install (option
+     * `zrcpt_approval_cutoff_gmt`, 'Y-m-d H:i:s' GMT): the first request that runs this
+     * code writes the current time, once. Receipt links shared before then keep working
+     * (see predates_approval_flow()); every receipt made after it needs an approval before
+     * its link opens for the public. On a fresh install the moment is its first boot, so
+     * nothing predates it. A stored value is never moved, including an empty one an
+     * administrator set to require approval for every receipt.
+     */
+    public function maybe_set_approval_cutoff() {
+        $now = self::approval_cutoff_to_record( get_option( 'zrcpt_approval_cutoff_gmt', false ), gmdate( 'Y-m-d H:i:s' ) );
+        if ( null !== $now ) {
+            add_option( 'zrcpt_approval_cutoff_gmt', $now );
+        }
+    }
+
+    /** Pure: the time to record on first run (nothing stored yet), otherwise null. */
+    public static function approval_cutoff_to_record( $stored, string $now ): ?string {
+        return ( false === $stored ) ? $now : null;
+    }
+
+    /**
+     * Created and last changed before the install's approval cutoff, and never reviewed.
+     * The cutoff is the moment the approval rule first ran (maybe_set_approval_cutoff()),
+     * so links shared before an upgrade stay working and new ones need an approval. With
+     * an empty cutoff nothing predates the flow and every receipt needs an approval.
+     */
+    private function predates_approval_flow( int $post_id ): bool {
+        $cutoff = trim( (string) get_option( 'zrcpt_approval_cutoff_gmt', '' ) );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $cutoff ) ) {
+            return false;
+        }
+        $log = get_post_meta( $post_id, '_approval_log', true );
+        if ( is_array( $log ) && ! empty( $log ) ) {
+            return false;
+        }
+        $post = get_post( $post_id );
+        if ( ! $post ) {
+            return false;
+        }
+        return self::before_cutoff( (string) ( $post->post_date_gmt ?? '' ), (string) ( $post->post_modified_gmt ?? '' ), $cutoff );
+    }
+
+    /** Pure: created before $cutoff, and not changed since (a redo moves the modified date). */
+    public static function before_cutoff( string $created, string $changed, string $cutoff ): bool {
+        $empty = [ '', '0000-00-00 00:00:00' ];
+        if ( $cutoff === '' || in_array( $created, $empty, true ) || strcmp( $created, $cutoff ) >= 0 ) {
+            return false;
+        }
+        return in_array( $changed, $empty, true ) || strcmp( $changed, $cutoff ) < 0;
+    }
+
+    /** The URL of the folder the receipt page's script is served from. */
+    private function receipt_script_base(): string {
+        return defined( 'ZRCPT_URL' ) ? trailingslashit( ZRCPT_URL ) . 'assets/js/' : '';
+    }
+
+    /**
+     * Content-Security-Policy for the public receipt page. Scripts only from this app's
+     * receipt script file's folder (not all of 'self': WordPress answers ?_jsonp= callbacks
+     * on its own origin); images from any https host (receipt photos may live on a CDN);
+     * fonts and font stylesheets only from the hosts in `zrcpt_receipt_font_hosts` (none by
+     * default). Filter: zrcpt_receipt_csp.
+     */
+    public function receipt_csp(): string {
+        return (string) apply_filters( 'zrcpt_receipt_csp', self::build_csp( $this->receipt_script_base(), ZRCPT_Sanitize::font_hosts() ) );
+    }
+
+    /** Pure: the policy string for a script folder and the allowed font hosts. */
+    public static function build_csp( string $script_base, array $font_hosts ): string {
+        $script = $script_base !== '' ? $script_base : "'none'";
+        $styles = "'self' 'unsafe-inline'";
+        $fonts  = "'self' data:";
+        foreach ( $font_hosts as $h ) {
+            $styles .= ' https://' . $h;
+            $fonts  .= ' https://' . $h;
+        }
+        return "default-src 'none'; script-src " . $script . "; img-src 'self' data: https:; media-src 'self' https:; "
+            . 'style-src ' . $styles . '; font-src ' . $fonts . '; '
+            . "connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
+    }
+
+    /**
+     * Load the page's behaviour (the photo lightbox and "Print this page" links) from a file,
+     * added at serve time only. The stored receipt carries no inline script, so the page's
+     * CSP can forbid it.
+     */
+    private function inject_receipt_runtime( string $html ): string {
+        $base = $this->receipt_script_base();
+        if ( $base === '' ) {
+            return $html;
+        }
+        $ver = rawurlencode( function_exists( 'zrcpt_asset_ver' ) ? zrcpt_asset_ver( 'assets/js/zrcpt-receipt.js' ) : self::VERSION );
+        return $html . "\n" . '<script src="' . esc_url( $base . 'zrcpt-receipt.js?ver=' . $ver ) . '" defer></script>' . "\n";
+    }
+
     /**
      * v3.6.4 — Invalidate any existing approval (used after the receipt content
      * changes, e.g. photos removed). Clears the approval fields so the receipt
@@ -5873,6 +5964,9 @@ final class ZRCPT_Receipt {
         }
 
         $html = (string) get_post_meta( $post_id, '_receipt_html', true );
+        if ( $html !== '' && ! $this->is_sanitized( $post_id, $html ) ) {
+            $html = $this->sanitize_stored_receipt( $post_id, $html );
+        }
         if ( $html === '' ) {
             wp_send_json_error( [ 'message' => 'This receipt has no content to approve.' ] );
         }
@@ -5885,21 +5979,21 @@ final class ZRCPT_Receipt {
             wp_send_json_error( [ 'message' => 'The receipt changed since you opened it. Please re-open and review it again.' ] );
         }
 
-        // S5-14 — wp_kses AT APPROVE (defense-in-depth for model-authored public
-        // HTML). The reviewer's echo-back was validated against exactly what they
-        // saw ($server_hash) above. Now strip any active content from the STORED,
-        // publicly-served HTML through the curated receipt allowlist, and RE-BIND
-        // the approval hash to the SANITIZED artifact — so even a prompt-injected
-        // <script>/on*= payload a reviewer clicked through can never become active
-        // content on the public receipt URL. A clean receipt is unchanged (the
-        // hash and stored bytes are identical), so this is a no-op in the normal
-        // case and never surprises a legitimate gallery/paid-panel receipt.
+        // Sanitize again at approve (defense in depth for model-authored public HTML).
+        // The reviewer's echo-back was validated against exactly what they saw
+        // ($server_hash) above. Any active content left in the stored page is removed
+        // and the approval hash is bound to the sanitized page, so a prompt-injected
+        // payload a reviewer clicked through can never run on the public receipt URL.
+        // A clean receipt is unchanged, so this is a no-op in the normal case.
         $clean = class_exists( 'ZRCPT_Finalize' ) ? ZRCPT_Finalize::sanitize( $html ) : $html;
         if ( $clean !== $html ) {
-            update_post_meta( $post_id, '_receipt_html', $clean );
-            error_log( 'ZRCPT APPROVE: kses stripped active content from stored HTML for post ' . $post_id );
+            error_log( 'ZRCPT APPROVE: the sanitizer removed active content from stored HTML for post ' . $post_id );
             $html = $clean;
         }
+        if ( $html === '' ) {
+            wp_send_json_error( [ 'message' => 'This receipt has no content that is safe to show.' ] );
+        }
+        $this->store_receipt_html( $post_id, $html, false );
         // Bind the approval to what is actually SERVED (the sanitized HTML), so the
         // send-time re-check compares like-for-like.
         $server_hash = hash( 'sha256', $html );

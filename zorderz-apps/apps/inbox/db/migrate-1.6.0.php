@@ -1,10 +1,10 @@
 <?php
 /**
- * Inbox schema migration — v1.6.0 (Phase 0.2a — all-folder sync foundation).
+ * Inbox schema migration — v1.6.0 (all-folder sync foundation).
  *
  * Widens wp_zib_folders.ms_folder_id  varchar(255) → TEXT.
  *
- * WHY: Phase 0.2 drives the sync loop off the STORED folder id (GET /me/mailFolders/{id}/messages
+ * WHY: the folder-driven sync loop runs off the STORED folder id (GET /me/mailFolders/{id}/messages
  * /delta), so a truncated id is no longer merely cosmetic — it would be an unusable Graph target.
  * Immutable ids (the Prefer: IdType="ImmutableId" header discovery already sends) run longer than
  * Graph's default ids and have no documented ceiling, so varchar(255) is a latent corruption risk.

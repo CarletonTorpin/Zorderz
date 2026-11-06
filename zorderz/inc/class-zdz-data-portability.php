@@ -68,7 +68,6 @@ class ZDZ_Data_Portability {
 		return (array) apply_filters( 'zdz_export_table_prefixes', array(
 			'zdz_', 'zana_', 'zstock_', 'zg_', 'zcc_', 'zkv_', 'zjob_', 'zim_',
 			'zic_', 'zsch_', 'zest_', 'zsv_', 'zl_', 'zlg_', 'zprep_', 'zsketch_',
-			'tsec_', 'tsl_', 'tsa_', 'tscc_',
 		) );
 	}
 
@@ -77,7 +76,6 @@ class ZDZ_Data_Portability {
 		return (array) apply_filters( 'zdz_export_option_prefixes', array(
 			'zdz_', 'zana_', 'zstock_', 'zg_', 'zcc_', 'zkv_', 'zjob_', 'zim_',
 			'zic_', 'zsch_', 'zest_', 'zsv_', 'zorderz_',
-			'tsec_', 'tsl_', 'tsa_', 'tscc_', 'ts_core_', 'ts_surveys_',
 		) );
 	}
 

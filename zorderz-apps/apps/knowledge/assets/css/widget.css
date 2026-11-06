@@ -553,9 +553,9 @@
 .zkv-scanner-retake-btn { flex:0 0 auto; min-width:70px; }
 
 /* ══════════════════════════════════════════════════════════════
-   v1.5.0 — Private transcripts (banner, sharing, admin queue)
+   Private transcripts (banner, sharing, admin queue)
    All colors ride the --sys-* tokens so every theme mode (light /
-   dark / system / sunlight) resolves correct pairs (INV-5/6).
+   dark / system / sunlight) resolves correct pairs.
    ══════════════════════════════════════════════════════════════ */
 .zkv-transcript-banner { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:var(--ref-radius-md,8px); margin-bottom:14px; font-size:13px; line-height:1.45; border:1px solid var(--sys-border,#E2E8F0); background:var(--sys-surface-raised,#F8FAFC); color:var(--sys-text,#0F172A); }
 .zkv-transcript-banner i, .zkv-transcript-banner svg { flex:0 0 auto; width:16px; height:16px; margin-top:2px; color:var(--sys-text-sec,#475569); }
@@ -580,3 +580,23 @@
 .zkv-tq-dim { color:var(--sys-text-sec,#475569); }
 #zkv-share-form input[type="text"], #zkv-share-form select { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--sys-border,#E2E8F0); border-radius:var(--ref-radius-sm,6px); background:var(--sys-surface,#FFF); color:var(--sys-text,#0F172A); font-size:13px; }
 #zkv-share-form .zkv-radio-group label { display:block; font-size:13px; color:var(--sys-text,#0F172A); }
+
+/* Keep private, Share outside, the recovery code. Theme tokens only; inputs 16px so iPhone does not zoom. */
+.zkv-private-pick { display:flex; flex-direction:column; gap:4px; padding:10px 12px; margin:0 0 12px; border:1px solid var(--sys-border); border-radius:var(--ref-radius-md,8px); background:var(--sys-surface-raised); }
+.zkv-private-label { display:flex; align-items:center; gap:8px; font-size:var(--ref-font-base,16px); color:var(--sys-text); cursor:pointer; }
+.zkv-private-label input { width:20px; height:20px; }
+.zkv-private-warn { color:var(--sys-tint-warning-fg); }
+.zkv-badge-private { background:var(--sys-surface-raised); color:var(--sys-text); border:1px solid var(--sys-border); }
+.zkv-private-note { font-size:13px; color:var(--sys-text-sec); }
+.zkv-inline-confirm { margin:8px 0 12px; padding:10px 12px; border:1px solid var(--sys-border); border-radius:var(--ref-radius-md,8px); font-size:13px; }
+.zkv-inline-confirm p { margin:0 0 8px; }
+.zkv-out-form, .zkv-out-result { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0; }
+.zkv-out-form input, .zkv-out-form select, .zkv-out-result input { flex:1 1 180px; min-width:0; box-sizing:border-box; padding:8px 10px; border:1px solid var(--sys-border); border-radius:var(--ref-radius-sm,6px); background:var(--sys-surface); color:var(--sys-text); font-size:var(--ref-font-base,16px); }
+.zkv-out-form select { flex:0 0 auto; }
+.zkv-out-link { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; padding:8px 0; border-top:1px solid var(--sys-border); font-size:13px; }
+.zkv-out-who { font-weight:600; color:var(--sys-text); overflow-wrap:anywhere; }
+.zkv-out-meta { color:var(--sys-text-sec); }
+.zkv-private-code { display:block; margin:6px 0; padding:10px; font-size:15px; letter-spacing:.06em; word-spacing:.3em; overflow-wrap:anywhere; background:var(--sys-surface-raised); border:1px solid var(--sys-border); border-radius:var(--ref-radius-sm,6px); }
+#zkv-private-unlock-box { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+#zkv-private-unlock-box input { flex:1 1 220px; min-width:0; padding:8px 10px; font-size:var(--ref-font-base,16px); }
+.zkv-private-nag { margin:0 0 10px; padding:8px 12px; border:1px solid var(--sys-border); border-left:3px solid var(--sys-tint-warning-fg); border-radius:var(--ref-radius-sm,6px); font-size:13px; color:var(--sys-text); }

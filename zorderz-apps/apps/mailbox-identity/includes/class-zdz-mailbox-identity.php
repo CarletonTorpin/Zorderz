@@ -2,12 +2,12 @@
 /**
  * ZDZ_Mailbox_Identity — the ONE authoritative "which addresses ARE this person?" resolver.
  *
- * Sibling to ZDZ_Party (BID-2, "which person?"); this is the BID-7 Connection concretion,
+ * Sibling to ZDZ_Party ("which person?"); this answers the Connection question,
  * "which mailbox / addresses?". Every connector that used to do its own
  * get_user_by('email', $addr) — the Scheduler's mailbox targeting + intake matcher, the
  * Inbox's classifier + ingest attribution, the magic-link login bridge — READS this
  * instead, so an alias, a shared root inbox, or a second-domain address all resolve to the
- * one account (INV-Ownership), and a shared/service box (e.g. a support inbox) is a
+ * one account (one person, one owner of their mail), and a shared/service box (e.g. a support inbox) is a
  * first-class, never-a-person address.
  *
  * PUBLIC API (stable — consumers depend on these signatures; a clean platform-level name
@@ -219,6 +219,9 @@ class ZDZ_Mailbox_Identity {
 		$u = get_userdata( $uid );
 		if ( ! $u ) {
 			return false;
+		}
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $uid ) ) {
+			return false;   // the shared device, by the platform's trait
 		}
 		return ! in_array( 'zdz_general', (array) $u->roles, true );
 	}

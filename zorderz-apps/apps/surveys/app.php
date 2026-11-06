@@ -9,7 +9,7 @@
  *   review. Consumes the theme's Business Profile (senders + review dests), Party roster
  *   (operator + salesperson resolution), and the Core billing / CRM / AI / review-bridge
  *   services. No business data is shipped; every drop is a logged disposition.
- * Version:     2.12.0
+ * Version:     2.13.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -40,6 +40,20 @@
  * optional `zsv_allow_system_close_won` policy (which only ever reaches genuinely
  * satisfied outcomes). This closes the "excluded customer auto-Won at 96h" defect.
  *
+ * ── 2.13.0 ────────────────────────────────────────────────────────────
+ * - Review e-mails go one customer per request (the widget shows "Sending 2 of 6"), so a slow
+ *   CRM on one customer never stops the rest; one log line per press (numbers and reason codes).
+ * - CRM work that could not be done is OWED, never lost (ZSV_Owed): a note not posted now is
+ *   posted by the next sweep (each carries a Ref line and is never posted twice); a Won mark
+ *   that fails after an e-mail is made by the daily sweep while the CRM still reads the lead open.
+ * - The auto-close sweep and the review check run under a time budget (ZSV_Budget over the
+ *   kernel's request guard and circuit breaker) and say what they left for the next run.
+ * - `survey.counts` on the capability registry (ZSV_Counts): a month's counts in the site's time
+ *   zone plus the call list as it stands now. Staff and admins; never the shared device.
+ * - Review dates from the bridge, the 6-hour recheck window and the month's e-mail count are in
+ *   the site's time. A full voice mailbox is "not reached"; an unclear note no longer outranks a
+ *   newer voicemail. Two staff actions are counted in the Usage view.
+ *
  * @package Zorderz\Surveys
  */
 
@@ -48,7 +62,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZSV_VERSION', '2.12.0' );
+define( 'ZSV_VERSION', '2.13.0' );
 define( 'ZSV_FILE', __FILE__ );
 define( 'ZSV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZSV_URL', plugin_dir_url( __FILE__ ) );
@@ -58,7 +72,6 @@ define( 'ZSV_APP_ID', 'surveys' );
 /**
  * Chat/orchestrator marker tokens. Protocol strings live in ONE constant each,
  * referenced by the bridge and exposed via `zdz_survey_markers` — never typed twice.
- * Replaces the legacy '[TSSV_LOOKUP]' / '[TSSV_EXCLUDE]' / '[TSSV_EXCLUDE_DRAFT]'.
  */
 if ( ! defined( 'ZSV_MARKER_LOOKUP' ) ) {
 	define( 'ZSV_MARKER_LOOKUP', '[ZDZ_SURVEY_LOOKUP]' );
@@ -84,6 +97,9 @@ function zsv_asset_ver( $rel ) {
 // class-zsv-app.php implements the theme interface and is required later, inside
 // after_setup_theme, once \Zorderz\Widget_App_Interface exists.
 require_once ZSV_DIR . 'includes/class-zsv-db.php';
+require_once ZSV_DIR . 'includes/class-zsv-budget.php';
+require_once ZSV_DIR . 'includes/class-zsv-owed.php';
+require_once ZSV_DIR . 'includes/class-zsv-counts.php';
 require_once ZSV_DIR . 'includes/class-zsv-settings.php';
 require_once ZSV_DIR . 'includes/class-zsv-survey-manager.php';
 require_once ZSV_DIR . 'includes/class-zsv-review-checker.php';
@@ -122,6 +138,7 @@ add_action(
 		ZSV_Review_Checker::init();
 		ZSV_Auto_Closer::init();
 		ZSV_Chat_Bridge::init();
+		ZSV_Counts::init();
 
 		if ( is_admin() ) {
 			ZSV_Admin::init();
@@ -142,19 +159,18 @@ add_action(
 			}
 		);
 
-		// Expose this module's marker tokens via one map (never a literal). Legacy
-		// '[TSSV_*]' tokens are recorded as deprecated aliases.
+		// Expose this module's marker tokens via one map (never a literal).
 		add_filter(
 			'zdz_survey_markers',
 			function ( $markers ) {
 				if ( ! is_array( $markers ) ) {
 					$markers = array();
 				}
-				$markers['survey.lookup']  = array( 'token' => ZSV_MARKER_LOOKUP, 'deprecated' => array( '[TSSV_LOOKUP]' ) );
+				$markers['survey.lookup']  = array( 'token' => ZSV_MARKER_LOOKUP, 'deprecated' => array() );
 				$markers['survey.exclude'] = array(
 					'token'      => ZSV_MARKER_EXCLUDE,
 					'draft'      => ZSV_MARKER_EXCLUDE_DRAFT,
-					'deprecated' => array( '[TSSV_EXCLUDE]', '[TSSV_EXCLUDE_DRAFT]' ),
+					'deprecated' => array(),
 				);
 				return $markers;
 			}
@@ -163,25 +179,42 @@ add_action(
 	20
 );
 
-// ── KPI metrics contribution (theme's zdz_kpi_metrics filter) ──────
+// ── Usage records (the theme's Usage view: what people do inside the apps) ──
+// Recorded on the server once an action has succeeded, never for a click that failed, through
+// ZDZ_Usage::record(), which applies the usage-records consent, keeps no network address and
+// stores the item's number only, never a name. Customers' answers are never counted.
 add_filter(
-	'zdz_kpi_metrics',
-	function ( $metrics ) {
-		if ( ! is_array( $metrics ) ) {
-			$metrics = array();
+	'zdz_register_usage_actions',
+	function ( $a ) {
+		if ( ! is_array( $a ) ) {
+			$a = array();
 		}
-		global $wpdb;
-		$t = $wpdb->prefix . ZSV_DB::LEADS_TABLE;
-		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) {
-			return $metrics;
-		}
-		$month_start   = gmdate( 'Y-m-01 00:00:00' );
-		$surveys_month = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE email_sent_at IS NOT NULL AND email_sent_at >= %s", $month_start ) );
-		$reviews_total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE review_left = 1" );
+		$a[ ZSV_APP_ID ] = array(
+			'survey_batch_created' => __( 'Created a survey batch', 'zorderz' ),
+			'survey_emails_sent'   => __( 'Sent survey emails', 'zorderz' ),
+		);
+		return $a;
+	}
+);
 
-		$metrics['surveys_month'] = array( 'value' => (string) $surveys_month, 'raw' => $surveys_month, 'source' => 'surveys' );
-		$metrics['reviews_total'] = array( 'value' => (string) $reviews_total, 'raw' => $reviews_total, 'source' => 'surveys' );
-		return $metrics;
+if ( ! function_exists( 'zsv_usage' ) ) {
+	/** Record one of this app's actions in the Usage view (no-op without the theme's usage records). */
+	function zsv_usage( string $key, $ref = 0, array $opts = array() ): void {
+		if ( class_exists( 'ZDZ_Usage' ) && method_exists( 'ZDZ_Usage', 'record' ) ) {
+			ZDZ_Usage::record( ZSV_APP_ID, $key, $ref, $opts );
+		}
+	}
+}
+
+// Pending CRM work (owed notes and Won marks) belongs to this install's CRM connection: it never
+// travels in a Company Data export or import.
+add_filter(
+	'zdz_export_non_portable_option_patterns',
+	function ( $p ) {
+		$p   = is_array( $p ) ? $p : array();
+		$p[] = '/^zsv_owed_/';
+		$p[] = '/^zsv_won_owed$/';
+		return $p;
 	}
 );
 

@@ -41,6 +41,10 @@ class ZL_Admin {
         add_action( 'admin_init', array( $this, 'register_settings' ) );
         // Intercept the FreshBooks OAuth redirect callback
         add_action( 'admin_init', array( $this, 'handle_oauth_callback' ) );
+        // Connect starts here: it issues the CSRF state, then sends the admin to the billing sign-in.
+        add_action( 'admin_post_zl_fb_connect', array( $this, 'handle_fb_connect' ) );
+        // The credentials screen can offer a one-click Connect while Leads holds the billing sign-in.
+        add_filter( 'zdz_billing_connect_url', array( __CLASS__, 'billing_connect_url' ), 10, 2 );
         // v1.5.2 — FreshBooks diagnostic test (settings page button)
         add_action( 'wp_ajax_zl_test_freshbooks', array( $this, 'ajax_test_freshbooks' ) );
     }
@@ -113,6 +117,14 @@ class ZL_Admin {
      * @return mixed The resolved option value.
      */
     public static function get_shared_option( $zl_key, $survey_key, $default = '' ) {
+        // The platform's copy first (Core settings), so this app's own copies can retire.
+        $core = self::core_first( $zl_key );
+        if ( '' !== $core ) return $core;
+        // The Nutshell login email Zorderz → Credentials manages wins.
+        if ( 'zl_ns_email' === $zl_key ) {
+            $managed = self::managed_nutshell();
+            if ( null !== $managed ) return $managed['email'];
+        }
         $val = get_option( $zl_key, '' );
         if ( ! empty( $val ) ) return $val;
         return get_option( $survey_key, $default );
@@ -139,11 +151,194 @@ class ZL_Admin {
      * @return string The decrypted plaintext.
      */
     public static function decrypt_shared( $zl_key, $survey_key ) {
+        // The platform's copy first (Core settings), so this app's own copies can retire.
+        $core = self::core_first( $zl_key );
+        if ( '' !== $core ) return $core;
+        // The key Zorderz → Credentials manages wins.
+        if ( 'zl_poe_api_key' === $zl_key ) {
+            $managed = self::managed_key( 'poe' );
+            if ( '' !== $managed ) return $managed;
+        } elseif ( 'zl_ns_api_key' === $zl_key ) {
+            $managed = self::managed_nutshell();
+            if ( null !== $managed ) return $managed['api_key'];
+        }
         $encrypted = self::get_shared_encrypted( $zl_key, $survey_key );
         if ( empty( $encrypted ) ) return '';
         $key = wp_salt( 'auth' );
         $iv  = substr( hash( 'sha256', $key ), 0, 16 );
         return openssl_decrypt( $encrypted, 'AES-256-CBC', $key, 0, $iv );
+    }
+
+    // ── keys managed by Zorderz → Credentials ──
+
+    /** The key Zorderz → Credentials manages for $svc, or '' (then use our own). */
+    public static function managed_key( string $svc, string $field = 'api_key' ): string {
+        if ( ! class_exists( 'ZDZ_Core_Credentials' ) || ! is_callable( array( 'ZDZ_Core_Credentials', 'engaged' ) )
+            || ! ZDZ_Core_Credentials::engaged( $svc ) || ! class_exists( 'ZDZ_Core_Settings' ) ) {
+            return '';
+        }
+        if ( 'poe' === $svc ) {
+            $v = is_callable( array( 'ZDZ_Core_Settings', 'get_poe_api_key' ) ) ? ZDZ_Core_Settings::get_poe_api_key() : '';
+        } elseif ( 'email' === $field ) {
+            $v = is_callable( array( 'ZDZ_Core_Settings', 'get_ns_email' ) ) ? ZDZ_Core_Settings::get_ns_email() : '';
+        } else {
+            $v = is_callable( array( 'ZDZ_Core_Settings', 'get_ns_api_key' ) ) ? ZDZ_Core_Settings::get_ns_api_key() : '';
+        }
+        $v = trim( (string) $v );
+        return ( '' !== $v && strlen( $v ) <= 200 && 1 === preg_match( '/^[\x20-\x7E]+$/', $v ) ) ? $v : '';
+    }
+
+    /**
+     * The managed Nutshell login as a matched pair, or null (then both come from our own rows).
+     *
+     * @return array|null array( 'email' => …, 'api_key' => … ) only when BOTH are non-empty.
+     */
+    public static function managed_nutshell() {
+        $email = self::managed_key( 'nutshell', 'email' );
+        $key   = self::managed_key( 'nutshell', 'api_key' );
+        return ( '' !== $email && '' !== $key ) ? array( 'email' => $email, 'api_key' => $key ) : null;
+    }
+
+    /** True while Zorderz → Credentials manages $svc ('poe' | 'nutshell'); false on an older theme or none. */
+    public static function managed_engaged( string $svc ): bool {
+        return class_exists( 'ZDZ_Core_Credentials' ) && is_callable( array( 'ZDZ_Core_Credentials', 'engaged' ) )
+            && (bool) ZDZ_Core_Credentials::engaged( $svc );
+    }
+
+    /**
+     * True when the submitted form was rendered while $svc was managed (it carries the
+     * zdz_cred_managed[$svc] marker and has no key input). Presence check only.
+     */
+    public static function managed_posted( string $svc ): bool {
+        return isset( $_POST['zdz_cred_managed'] ) && is_array( $_POST['zdz_cred_managed'] ) // phpcs:ignore WordPress.Security.NonceVerification.Missing -- a presence check read inside an options.php save, which verifies its own settings nonce; it can only keep the stored value
+            && ! empty( $_POST['zdz_cred_managed'][ $svc ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- same check as the line above
+    }
+
+    /** Is $svc managed on Zorderz → Credentials? */
+    public static function cred_managed( string $svc ): bool {
+        return class_exists( 'ZDZ_Core_Credentials' )
+            && is_callable( array( 'ZDZ_Core_Credentials', 'is_app' ) )
+            && is_callable( array( 'ZDZ_Core_Credentials', 'engaged' ) )
+            && ZDZ_Core_Credentials::engaged( $svc );
+    }
+
+    /** The one line shown in place of a managed key's inputs. No part of any key is printed. */
+    private static function managed_note_html(): string {
+        return '<p class="zl-managed-credentials">Managed in <a href="' . esc_url( is_callable( array( 'ZDZ_Core_Credentials', 'page_url' ) ) ? ZDZ_Core_Credentials::page_url() : admin_url( 'admin.php?page=zdz-core-credentials' ) )
+            . '">Zorderz → Credentials</a> — one key for every app.</p>';
+    }
+
+    // ── Core-first credentials ─────────────────────────────────────
+
+    /** This app's option => the platform credential it mirrors. Pairs are read together (see core_first()). */
+    const CORE_KEYS = array(
+        'zl_poe_api_key'      => 'poe_api_key',
+        'zl_ns_email'         => 'ns_email',
+        'zl_ns_api_key'       => 'ns_api_key',
+        'zl_fb_client_id'     => 'fb_client_id',
+        'zl_fb_client_secret' => 'fb_client_secret',
+    );
+
+    /** Credentials that only work as a matched pair: both from the platform, or neither. */
+    const CORE_PAIRS = array(
+        'zl_ns_email'         => 'zl_ns_api_key',
+        'zl_ns_api_key'       => 'zl_ns_email',
+        'zl_fb_client_id'     => 'zl_fb_client_secret',
+        'zl_fb_client_secret' => 'zl_fb_client_id',
+    );
+
+    /** The platform's copy of one credential ('' when the credentials service is absent or holds none). */
+    public static function core_credential( string $core_key ): string {
+        if ( ! class_exists( 'ZDZ_Core_Credentials' ) || ! class_exists( 'ZDZ_Core_Settings' )
+            || ! is_callable( array( 'ZDZ_Core_Settings', 'get_credential' ) ) ) {
+            return '';
+        }
+        return trim( (string) ZDZ_Core_Settings::get_credential( $core_key ) );
+    }
+
+    /**
+     * Read a credential Core-first: the platform's copy when it has one, else '' (the caller then reads this app's own).
+     * A paired credential (the CRM login, the billing app's id and secret) comes from the platform only when BOTH
+     * halves are there, so a half-moved pair never mixes two accounts. PURE given $lookup.
+     *
+     * @param string        $zl_key This app's option name.
+     * @param callable|null $lookup fn( core_key ): string (tests); default core_credential().
+     */
+    public static function core_first( string $zl_key, $lookup = null ): string {
+        if ( ! isset( self::CORE_KEYS[ $zl_key ] ) ) {
+            return '';
+        }
+        $lookup = $lookup ? $lookup : array( __CLASS__, 'core_credential' );
+        $mine   = (string) call_user_func( $lookup, self::CORE_KEYS[ $zl_key ] );
+        if ( '' === $mine ) {
+            return '';
+        }
+        if ( isset( self::CORE_PAIRS[ $zl_key ] ) ) {
+            $other = (string) call_user_func( $lookup, self::CORE_KEYS[ self::CORE_PAIRS[ $zl_key ] ] );
+            if ( '' === $other ) {
+                return '';
+            }
+        }
+        return $mine;
+    }
+
+    // ── Billing sign-in (OAuth) with a CSRF state ──────────────────
+
+    /** The Connect button's address: this site's start action, nonce-protected. */
+    public static function connect_start_url(): string {
+        return wp_nonce_url( admin_url( 'admin-post.php?action=zl_fb_connect' ), 'zl_fb_connect' );
+    }
+
+    /**
+     * zdz_billing_connect_url: Leads owns the billing sign-in callback (zl-callback), so for an admin it answers
+     * with the provider's authorize URL for the given client id (the managed one from the credentials screen,
+     * else Leads' own), carrying a fresh signed state that the callback checks. Anything already offered is
+     * left alone; no client id or no admin means no URL.
+     */
+    public static function billing_connect_url( $url, $client_id = '' ) {
+        if ( is_string( $url ) && '' !== $url ) {
+            return $url;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return $url;
+        }
+        $client_id = trim( (string) $client_id );
+        if ( '' === $client_id ) {
+            $client_id = trim( (string) self::get_shared_option( 'zl_fb_client_id', 'zdz_surveys_fb_client_id' ) );
+        }
+        $auth = self::authorize_url_for( $client_id, (int) get_current_user_id() );
+        return '' !== $auth ? $auth : $url;
+    }
+
+    /** The provider's authorize URL for $client_id with a fresh state bound to $uid; '' without a client id or user. */
+    public static function authorize_url_for( string $client_id, int $uid ): string {
+        $client_id = trim( $client_id );
+        if ( '' === $client_id || $uid <= 0 || ! class_exists( 'ZL_OAuth_State' ) || ! class_exists( 'ZL_FreshBooks' ) ) {
+            return '';
+        }
+        $state = ZL_OAuth_State::issue( $uid );
+        if ( '' === (string) $state ) {
+            return '';
+        }
+        $fb = new ZL_FreshBooks( $client_id, '' );
+        return (string) $fb->get_auth_url( $state );
+    }
+
+    /** Start: issue the state for this admin and send them to the billing sign-in. */
+    public function handle_fb_connect() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'Only an admin can connect the billing system.', 'zorderz' ) );
+        }
+        check_admin_referer( 'zl_fb_connect' );
+        $client_id = self::get_shared_option( 'zl_fb_client_id', 'zdz_surveys_fb_client_id' );
+        if ( '' === (string) $client_id ) {
+            wp_die( esc_html__( 'Add the billing app\'s Client ID in the Leads settings first.', 'zorderz' ) );
+        }
+        $state = ZL_OAuth_State::issue( (int) get_current_user_id() );
+        $fb    = new ZL_FreshBooks( (string) $client_id, '' );
+        // An external host: wp_redirect, not wp_safe_redirect. The address is the provider's fixed authorize URL.
+        wp_redirect( $fb->get_auth_url( $state ) ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect
+        exit;
     }
 
     // ── Register settings ──────────────────────────────────────────
@@ -153,22 +348,49 @@ class ZL_Admin {
      */
     public function register_settings() {
         // FreshBooks API Settings
-        register_setting( 'zl_options_group', 'zl_fb_client_id' );
-        register_setting( 'zl_options_group', 'zl_fb_client_secret', array(
-            'sanitize_callback' => array( $this, 'sanitize_encrypted' ),
-        ) );
+        // While Zorderz → Credentials manages the FreshBooks app
+        // (client id / secret), those two rows are not registered, so saving never writes them.
+        if ( ! self::cred_managed( 'freshbooks' ) ) {
+            register_setting( 'zl_options_group', 'zl_fb_client_id' );
+            register_setting( 'zl_options_group', 'zl_fb_client_secret', array(
+                'sanitize_callback' => array( $this, 'sanitize_encrypted' ),
+            ) );
+        }
         register_setting( 'zl_options_group', 'zl_fb_account_id' );
+        // a form rendered while FreshBooks was managed (marker posted) never writes those rows.
+        foreach ( array( 'zl_fb_client_id', 'zl_fb_client_secret' ) as $fb_opt ) {
+            add_filter( 'pre_update_option_' . $fb_opt, function ( $new, $old ) {
+                return self::managed_posted( 'freshbooks' ) ? $old : $new;
+            }, 10, 2 );
+        }
+
+        // a form rendered while a key was managed (marker posted) never writes that key's
+        // rows, even if Credentials was undone before it was submitted (options.php would blank them).
+        add_filter( 'pre_update_option_zl_poe_api_key', function ( $new, $old ) {
+            return self::managed_posted( 'poe' ) ? $old : $new;
+        }, 10, 2 );
+        foreach ( array( 'zl_ns_email', 'zl_ns_api_key' ) as $ns_opt ) {
+            add_filter( 'pre_update_option_' . $ns_opt, function ( $new, $old ) {
+                return self::managed_posted( 'nutshell' ) ? $old : $new;
+            }, 10, 2 );
+        }
 
         // Nutshell CRM API Settings
-        register_setting( 'zl_options_group', 'zl_ns_email' );
-        register_setting( 'zl_options_group', 'zl_ns_api_key', array(
-            'sanitize_callback' => array( $this, 'sanitize_encrypted' ),
-        ) );
+        // while Zorderz → Credentials manages a key, its rows are not registered,
+        // so saving this form never writes them (the theme owns and guards those rows).
+        if ( ! self::managed_engaged( 'nutshell' ) ) {
+            register_setting( 'zl_options_group', 'zl_ns_email' );
+            register_setting( 'zl_options_group', 'zl_ns_api_key', array(
+                'sanitize_callback' => array( $this, 'sanitize_encrypted' ),
+            ) );
+        }
 
         // Poe AI Settings
-        register_setting( 'zl_options_group', 'zl_poe_api_key', array(
-            'sanitize_callback' => array( $this, 'sanitize_encrypted' ),
-        ) );
+        if ( ! self::managed_engaged( 'poe' ) ) {
+            register_setting( 'zl_options_group', 'zl_poe_api_key', array(
+                'sanitize_callback' => array( $this, 'sanitize_encrypted' ),
+            ) );
+        }
         register_setting( 'zl_options_group', 'zl_ai_model' );
 
         // Batch processing and filtering settings
@@ -242,9 +464,18 @@ class ZL_Admin {
         if ( isset( $_GET['page'] ) && $_GET['page'] === 'zl-callback' && isset( $_GET['code'] ) ) {
             if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Unauthorized' );
 
+            // The state must be the one this site issued to this admin, unused and unexpired: otherwise the code
+            // could be someone else's account, sent here in a link. Nothing is exchanged without it.
+            $state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
+            $why   = ZL_OAuth_State::verify( $state, (int) get_current_user_id() );
+            if ( '' !== $why ) {
+                error_log( '[ZL] billing sign-in refused: state ' . $why . '.' );
+                wp_die( esc_html( ZL_OAuth_State::refusal( $why ) ), esc_html__( 'Sign-in refused', 'zorderz' ), array( 'response' => 403, 'back_link' => true ) );
+            }
+
             $code          = sanitize_text_field( $_GET['code'] );
-            $client_id     = self::get_shared_option( 'zl_fb_client_id', 'ts_surveys_fb_client_id' );
-            $client_secret = self::decrypt_shared( 'zl_fb_client_secret', 'ts_surveys_fb_client_secret' );
+            $client_id     = self::get_shared_option( 'zl_fb_client_id', 'zdz_surveys_fb_client_id' );
+            $client_secret = self::decrypt_shared( 'zl_fb_client_secret', 'zdz_surveys_fb_client_secret' );
             $redirect_uri  = admin_url( 'admin.php?page=zl-callback' );
 
             // Step 1: Exchange authorization code for tokens
@@ -321,17 +552,17 @@ class ZL_Admin {
         $results = array();
 
         // Gather credentials
-        $client_id     = self::get_shared_option( 'zl_fb_client_id', 'ts_surveys_fb_client_id' );
-        $client_secret = self::decrypt_shared( 'zl_fb_client_secret', 'ts_surveys_fb_client_secret' );
-        $account_id    = self::get_shared_option( 'zl_fb_account_id', 'ts_surveys_fb_account_id' );
-        $access_token  = self::get_shared_option( 'zl_fb_access_token', 'ts_surveys_fb_access_token' );
+        $client_id     = self::get_shared_option( 'zl_fb_client_id', 'zdz_surveys_fb_client_id' );
+        $client_secret = self::decrypt_shared( 'zl_fb_client_secret', 'zdz_surveys_fb_client_secret' );
+        $account_id    = self::get_shared_option( 'zl_fb_account_id', 'zdz_surveys_fb_account_id' );
+        $access_token  = self::get_shared_option( 'zl_fb_access_token', 'zdz_surveys_fb_access_token' );
 
         $results['credentials'] = array(
             'client_id'    => ! empty( $client_id ) ? substr( $client_id, 0, 12 ) . '...' : '(EMPTY)',
             'client_secret'=> ! empty( $client_secret ) ? 'set (' . strlen( $client_secret ) . ' chars)' : '(EMPTY)',
             'account_id'   => ! empty( $account_id ) ? $account_id : '(EMPTY)',
             'access_token' => ! empty( $access_token ) ? 'set (' . strlen( $access_token ) . ' chars)' : '(EMPTY)',
-            'token_source' => ! empty( get_option( 'zl_fb_access_token', '' ) ) ? 'ZL plugin' : ( ! empty( get_option( 'ts_surveys_fb_access_token', '' ) ) ? 'Shared from Surveys' : 'NONE' ),
+            'token_source' => ! empty( get_option( 'zl_fb_access_token', '' ) ) ? 'ZL plugin' : ( ! empty( get_option( 'zdz_surveys_fb_access_token', '' ) ) ? 'Shared from Surveys' : 'NONE' ),
         );
 
         if ( empty( $access_token ) ) {
@@ -508,15 +739,28 @@ class ZL_Admin {
         }
 
         // Check for survey plugin credentials to display sharing notices
-        $survey_fb  = get_option( 'ts_surveys_fb_access_token', '' );
-        $survey_ns  = get_option( 'ts_surveys_ns_api_key', '' );
-        $survey_poe = get_option( 'ts_surveys_poe_api_key', '' );
+        $survey_fb  = get_option( 'zdz_surveys_fb_access_token', '' );
+        $survey_ns  = get_option( 'zdz_surveys_ns_api_key', '' );
+        $survey_poe = get_option( 'zdz_surveys_poe_api_key', '' );
         $has_survey = ! empty( $survey_fb ) || ! empty( $survey_ns );
 
         // Determine current credential status (resolving shared fallbacks)
-        $fb_token   = self::get_shared_option( 'zl_fb_access_token', 'ts_surveys_fb_access_token' );
-        $ns_key     = self::get_shared_encrypted( 'zl_ns_api_key', 'ts_surveys_ns_api_key' );
-        $poe_key    = self::get_shared_encrypted( 'zl_poe_api_key', 'ts_surveys_poe_api_key' );
+        $fb_token   = self::get_shared_option( 'zl_fb_access_token', 'zdz_surveys_fb_access_token' );
+        $ns_key     = self::get_shared_encrypted( 'zl_ns_api_key', 'zdz_surveys_ns_api_key' );
+        $poe_key    = self::get_shared_encrypted( 'zl_poe_api_key', 'zdz_surveys_poe_api_key' );
+        // a managed service's status reflects the managed key (and is never "shared from Survey").
+        // When engaged but the managed value is empty, the status falls back exactly like the reads do.
+        $fb_managed  = self::cred_managed( 'freshbooks' );
+        $ns_managed  = self::managed_engaged( 'nutshell' );
+        $poe_managed = self::managed_engaged( 'poe' );
+        if ( $ns_managed && null !== self::managed_nutshell() ) {
+            $ns_key    = true;
+            $survey_ns = '';
+        }
+        if ( $poe_managed && '' !== self::managed_key( 'poe' ) ) {
+            $poe_key    = true;
+            $survey_poe = '';
+        }
 
         $fb_status  = $fb_token ? '<span style="color:green;font-weight:bold;">✅ Connected</span>' : '<span style="color:red;font-weight:bold;">❌ Not Connected</span>';
         $ns_status  = $ns_key ? '<span style="color:green;font-weight:bold;">✅ Configured</span>' : '<span style="color:red;font-weight:bold;">❌ Not Configured</span>';
@@ -526,10 +770,9 @@ class ZL_Admin {
         $salespeople = json_decode( get_option( 'zl_salespeople', '[]' ), true );
         if ( ! is_array( $salespeople ) ) $salespeople = zl_salespeople();
 
-        // Prepare OAuth URL for FreshBooks
-        $client_id    = self::get_shared_option( 'zl_fb_client_id', 'ts_surveys_fb_client_id' );
-        $redirect_uri = urlencode( admin_url( 'admin.php?page=zl-callback' ) );
-        $oauth_url    = "https://auth.freshbooks.com/service/auth/oauth/authorize?client_id={$client_id}&response_type=code&redirect_uri={$redirect_uri}";
+        // Connect goes through this site's start action, which issues the sign-in's CSRF state.
+        $client_id = self::get_shared_option( 'zl_fb_client_id', 'zdz_surveys_fb_client_id' );
+        $oauth_url = self::connect_start_url();
 
         ?>
         <div class="wrap">
@@ -551,6 +794,9 @@ class ZL_Admin {
 
             <form action="options.php" method="post">
                 <?php settings_fields( 'zl_options_group' ); ?>
+                <?php if ( $poe_managed ) : ?><input type="hidden" name="zdz_cred_managed[poe]" value="1" /><?php endif; ?>
+                <?php if ( $ns_managed ) : ?><input type="hidden" name="zdz_cred_managed[nutshell]" value="1" /><?php endif; ?>
+                <?php if ( $fb_managed ) : ?><input type="hidden" name="zdz_cred_managed[freshbooks]" value="1" /><?php endif; ?>
 
                 <!-- ── Salespeople Configuration ────────────────── -->
                 <h2>👥 Salespeople &amp; Territories</h2>
@@ -662,8 +908,13 @@ class ZL_Admin {
                 <!-- ── API Credentials ──────────────────────────── -->
 
                 <h2>🔑 FreshBooks API</h2>
+                <?php if ( $fb_managed ) : ?>
+                <?php echo self::managed_note_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from esc_url() and fixed text. ?>
+                <?php else : ?>
                 <p class="description">Leave blank to use credentials from Satisfaction Surveys plugin (if installed).</p>
+                <?php endif; ?>
                 <table class="form-table">
+                    <?php if ( ! $fb_managed ) : ?>
                     <tr>
                         <th>Client ID</th>
                         <td><input type="text" name="zl_fb_client_id" value="<?php echo esc_attr( get_option( 'zl_fb_client_id' ) ); ?>" class="regular-text" placeholder="<?php echo $survey_fb ? 'Using survey plugin credentials' : ''; ?>" /></td>
@@ -672,6 +923,7 @@ class ZL_Admin {
                         <th>Client Secret</th>
                         <td><input type="password" name="zl_fb_client_secret" value="<?php echo get_option( 'zl_fb_client_secret' ) ? '********' : ''; ?>" class="regular-text" /></td>
                     </tr>
+                    <?php endif; ?>
                     <tr>
                         <th>Account ID</th>
                         <td><input type="text" name="zl_fb_account_id" value="<?php echo esc_attr( get_option( 'zl_fb_account_id' ) ); ?>" class="regular-text" readonly /></td>
@@ -679,8 +931,10 @@ class ZL_Admin {
                 </table>
                 <?php if ( $client_id ) : ?>
                     <p>
+                        <?php if ( ! $fb_managed ) : // the one Connect link is on Zorderz → Credentials ?>
                         <a href="<?php echo esc_url( $oauth_url ); ?>" class="button button-secondary">Connect FreshBooks</a>
                         &nbsp;
+                        <?php endif; ?>
                         <button type="button" id="zl-test-fb" class="button button-secondary" style="background:#f0f7ff;border-color:#2271b1;">🔍 Test FreshBooks Connection</button>
                     </p>
                     <div id="zl-fb-test-results" style="display:none;margin:10px 0;padding:12px 16px;background:#fafafa;border:1px solid #ccd0d4;border-radius:4px;max-width:700px;font-family:monospace;font-size:13px;white-space:pre-wrap;line-height:1.6;"></div>
@@ -792,6 +1046,9 @@ class ZL_Admin {
                 <hr>
                 <h2>🔑 Nutshell CRM API</h2>
 
+                <?php if ( $ns_managed ) : ?>
+                <?php echo self::managed_note_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- managed_note_html() is fixed text and an esc_url() link ?>
+                <?php else : ?>
                 <p class="description">Leave blank to use credentials from Satisfaction Surveys plugin.</p>
 
                 <table class="form-table">
@@ -804,6 +1061,7 @@ class ZL_Admin {
                         <td><input type="password" name="zl_ns_api_key" value="<?php echo get_option( 'zl_ns_api_key' ) ? '********' : ''; ?>" class="regular-text" /></td>
                     </tr>
                 </table>
+                <?php endif; ?>
                 <hr>
                 <h2>🤖 Poe AI (LLM Integration)</h2>
 
@@ -812,8 +1070,12 @@ class ZL_Admin {
                 <table class="form-table">
                     <tr>
                         <th>Poe API Key</th>
+                        <?php if ( $poe_managed ) : ?>
+                        <td><?php echo self::managed_note_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from esc_url() and fixed text. ?></td>
+                        <?php else : ?>
                         <td><input type="password" name="zl_poe_api_key" value="<?php echo get_option( 'zl_poe_api_key' ) ? '********' : ''; ?>" class="regular-text" />
                         <p class="description">Get from <a href="https://poe.com/api_key" target="_blank">poe.com/api_key</a></p></td>
+                        <?php endif; ?>
                     </tr>
                     <tr>
                         <th>AI Model</th>

@@ -1,0 +1,119 @@
+{
+ "role": "chat",
+ "note": "Made-up jobs, zones and initials.",
+ "cases": [
+  {
+   "id": "chat-count",
+   "system": "Answer from the data you are given, in one short sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": [
+      {
+       "type": "text",
+       "text": "Made-up jobs:\nEX-1 zone-1 install AA\nEX-2 zone-2 measure BB\nEX-3 zone-1 install AA\nEX-4 zone-3 repair AA\nEX-5 zone-1 measure BB\nEX-6 zone-4 install CC",
+       "cache": "1h"
+      },
+      {
+       "type": "text",
+       "text": "How many jobs are in zone-1?"
+      }
+     ]
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "3"
+    ]
+   },
+   "example_answer": "Answer: 3."
+  },
+  {
+   "id": "chat-most",
+   "system": "Answer from the data you are given, in one short sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": [
+      {
+       "type": "text",
+       "text": "Made-up jobs:\nEX-1 zone-1 install AA\nEX-2 zone-2 measure BB\nEX-3 zone-1 install AA\nEX-4 zone-3 repair AA\nEX-5 zone-1 measure BB\nEX-6 zone-4 install CC",
+       "cache": "1h"
+      },
+      {
+       "type": "text",
+       "text": "Which salesperson's initials appear on the most jobs?"
+      }
+     ]
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "AA"
+    ]
+   },
+   "example_answer": "Answer: AA."
+  },
+  {
+   "id": "chat-total",
+   "system": "Answer in one short sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Three made-up invoices are 120.00, 80.50 and 99.50 dollars. What is their total?"
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "300"
+    ]
+   },
+   "example_answer": "Answer: 300."
+  },
+  {
+   "id": "chat-turns",
+   "system": "Answer from the conversation, in one short sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Remember this made-up job number: EX-7731."
+    },
+    {
+     "role": "assistant",
+     "content": "Noted: EX-7731."
+    },
+    {
+     "role": "user",
+     "content": "What job number did I give you?"
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "EX-7731"
+    ]
+   },
+   "example_answer": "Answer: EX-7731."
+  },
+  {
+   "id": "chat-yesno",
+   "system": "Answer yes or no, then one short reason.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Made-up schedule: EX-7 on Monday, EX-9 on Wednesday. Is EX-7 before EX-9?"
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "yes"
+    ]
+   },
+   "example_answer": "Answer: yes."
+  }
+ ]
+}

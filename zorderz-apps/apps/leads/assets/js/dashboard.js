@@ -197,7 +197,7 @@
                     _pollTimer = null;
                     generationComplete();
                 } else if (status === 'no_matches') {
-                    // D-04: a definite empty result — terminal, neutral (never red).
+                    // A definite empty result — terminal, neutral (never red).
                     clearInterval(_pollTimer);
                     _pollTimer = null;
                     setProgress(100);
@@ -319,7 +319,7 @@
 
             // Show AI info
             if (data.ai_model) {
-                log('🧠 AI Model: ' + data.ai_model + ' (High Reasoning + Web)');
+                log('🧠 AI Model: ' + data.ai_model + ' (High Reasoning)');
             }
 
             setProgress(10);
@@ -420,7 +420,7 @@
             enrichFailReasons.commercial += data.skip_commercial || 0;
 
             // v1.2.10: Log every 100 customers (not every chunk) to prevent
-            // browser memory exhaustion on 9,000+ customer runs.
+            // browser memory exhaustion on runs over several thousand customers.
             // Always log when candidate count changes (new eligible found).
             var shouldLog = (data.processed % 100 < 26) || (data.candidate_count !== (window._tslLastCandCount || 0));
             window._tslLastCandCount = data.candidate_count;
@@ -512,8 +512,8 @@
             return;
         }
 
-        log('🤖 Gemini 3.1 Pro verifying each lead against filter: "' + currentProductFilter + '"');
-        log('   Using High Reasoning + Web Search for maximum accuracy...');
+        log('🤖 AI verifying each lead against filter: "' + currentProductFilter + '"');
+        log('   Using high reasoning for maximum accuracy...');
 
         ajaxPost('zl_ai_validate', { batch_id: currentBatchId, is_test: currentIsTest ? 1 : 0 }, function (data) {
             if (data.skipped) {
@@ -769,7 +769,7 @@
     /**
      * Appends a message to the generation log and auto-scrolls to the bottom.
      * Trims oldest entries when the log exceeds 300 lines to prevent browser
-     * memory exhaustion on long enrichment runs (9,000+ customers).
+     * memory exhaustion on long enrichment runs (several thousand customers).
      */
     function log(msg) {
         var $log = $('#zl-progress-log');
@@ -887,7 +887,7 @@
                     html += '<button class="button button-small zl-mark-skipped" data-lead-id="' + lead.id + '">✕ Skip</button>';
                 }
                 
-                // D-03: recover a lead that failed to reach the CRM (duplicate-safe retry).
+                // Recover a lead that failed to reach the CRM (duplicate-safe retry).
                 if ((lead.crm_recoverable === 1 || lead.crm_recoverable === '1' || lead.crm_recoverable === true) && !lead.nutshell_lead_id) {
                     html += ' <button class="button button-small zl-recover-lead" data-lead-id="' + lead.id + '" title="This lead never reached the CRM. Create it now (safe to retry).">↻ Create Now</button>';
                 }
@@ -1041,7 +1041,7 @@
     });
 
     /**
-     * D-03: recover a lead that never reached the CRM. Duplicate-safe, CRM-only retry.
+     * Recover a lead that never reached the CRM. Duplicate-safe, CRM-only retry.
      * A failed retry is a real, human-labelled response (retryable or not), not a crash.
      */
     $(document).on('click', '.zl-recover-lead', function () {

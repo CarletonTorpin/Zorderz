@@ -2,8 +2,8 @@
 /**
  * Zorderz Surveys — settings page.
  *
- * Every value the source plugin baked in (the operator's name, the exclusion list, the
- * review URLs + routing rule, the grace windows, the resurvey cooldown, the safety-floor
+ * Every business-specific value (the operator's name, the exclusion list, the review
+ * URLs + routing rule, the grace windows, the resurvey cooldown, the safety-floor
  * policy) is a field here. Review destinations + the sender identity are NOT duplicated:
  * those live in the theme's Business Profile and are only shown as read-only hints.
  *

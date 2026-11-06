@@ -2,8 +2,7 @@
 /**
  * ZSCH_ZANA_Bridge — orchestrator capability bridge for the scheduler.
  *
- * Per ORCHESTRATOR-INTEROP-CONTRACT-v1 §2.1, this is the static class the
- * operator bot (the assistant) calls server-side. Every method returns a
+ * This is the static class the assistant calls server-side. Every method returns a
  * structured array (never throws, never null), is self-contained, accepts the
  * caller's tier, and reads through this plugin's own models.
  *
@@ -24,7 +23,7 @@
  *     refuses; the engine should also strip the [ZSCH_BOOK] marker on kiosk as
  *     a backstop.
  *
- * REGISTRY-READY (§2.3): get_capability_descriptor() shapes the verbs as
+ * REGISTRY-READY: get_capability_descriptor() shapes the verbs as
  * future zdz_register_capabilities callbacks with side_effect declared.
  *
  * @since 1.0.0
@@ -66,6 +65,13 @@ class ZSCH_ZANA_Bridge {
 		if ( $uid > 0 ) {
 			$u = get_userdata( $uid );
 			if ( $u && is_array( $u->roles ) && in_array( 'zdz_general', $u->roles, true ) ) {
+				$is_kiosk = true;
+			}
+			// The platform's trait (the shared-device capability, whichever role carries it), and Demo Mode.
+			if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $uid ) ) {
+				$is_kiosk = true;
+			}
+			if ( $uid === (int) get_current_user_id() && class_exists( 'ZDZ_Kiosk_Demo' ) && method_exists( 'ZDZ_Kiosk_Demo', 'is_active' ) && ZDZ_Kiosk_Demo::is_active() ) {
 				$is_kiosk = true;
 			}
 		}
@@ -118,7 +124,7 @@ class ZSCH_ZANA_Bridge {
 			}
 		}
 
-		// v1.7.0 (Connected Calendars Phase 1) — also count EXTERNAL conflict
+		// v1.7.0 (Connected Calendars sync) — also count EXTERNAL conflict
 		// calendars (Google/Microsoft) as busy-makers so "is a teammate free?"
 		// reflects their outside commitments. Busy-only (no titles); personal data → never
 		// surfaced on the shared kiosk.
@@ -259,8 +265,7 @@ class ZSCH_ZANA_Bridge {
 	// ── L4-ready descriptor ────────────────────────────────────────
 
 	/**
-	 * Capability descriptors, shaped for the future zdz_register_capabilities
-	 * registry (contract §2.3).
+	 * Capability descriptors, published on the zdz_register_capabilities registry.
 	 *
 	 * @return array
 	 */

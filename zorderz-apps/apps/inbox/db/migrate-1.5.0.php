@@ -1,14 +1,14 @@
 <?php
 /**
- * Inbox schema migration — v1.5.0 (Phase 0: all-folder sync — the folder model).
+ * Inbox schema migration — v1.5.0 (all-folder sync — the folder model).
  *
  * wp_zib_folders — ONE row per mail folder per account, discovered by recursive enumeration.
  * This is the per-folder sync-state store the client needs: Graph has NO mailbox-wide message
  * delta (confirmed by MS — delta is per-folder only), so all-folder sync means one delta cursor
  * PER FOLDER, not the two fixed columns (delta_inbox_cursor / delta_sent_cursor) on wp_zib_accounts.
  *
- * Phase 0.1 (this migration) only ADDS the table + discovery; the sync loop still runs Inbox+Sent
- * until Phase 0.2 switches it over (with a clean re-index). Additive + safe.
+ * This migration only ADDS the table + discovery; the sync loop still runs Inbox+Sent until
+ * the folder-driven loop switches it over (with a clean re-index). Additive + safe.
  *
  * folder_hash = md5(ms_folder_id) carries the UNIQUE key — immutable folder ids are long, so this
  * dodges MySQL prefix-index length limits and keeps dbDelta happy.

@@ -2,56 +2,29 @@
 /**
  * ZRCPT FreshBooks — billing client for the Receipts module.
  *
- * Credentials (crosswalk 03 §B, B6/B7/B13) resolve through the theme's ONE
- * shared source (ZDZ_Core_Settings), and the OAuth refresh delegates to the kernel
- * (ZDZ_Core_FreshBooks / ZDZ_Token_Service single-flight lock) — this module never POSTs the
- * token endpoint itself, so it can no longer revoke a sibling's single-use refresh token. The
- * old plaintext per-plugin prefix cascade is retained ONLY as a read-only legacy fallback so a
- * business's existing install keeps working until it re-connects through Core.
+ * Credentials resolve through Zorderz Core's one store (ZDZ_Core_Settings::get_credential(),
+ * managed in Zorderz → Credentials), and the OAuth refresh goes through the kernel
+ * (ZDZ_Core_FreshBooks / ZDZ_Token_Service single-flight lock): this module never POSTs the
+ * token endpoint itself, so it cannot revoke another app's single-use refresh token.
  *
  * Receipts search invoices AND estimates (a receipt attaches to an invoice); the search /
- * format plumbing below is neutral REST. An optional sibling billing client (e.g. the Prep
- * module) is used for search() when present, but is NOT required.
+ * format plumbing below is neutral REST.
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class ZRCPT_FreshBooks {
 
-	/** @var object|null — optional sibling billing client (Prep) when present. */
-	private $delegate = null;
-
 	private string $last_error = '';
 
-	/**
-	 * Legacy plaintext option prefixes — READ-ONLY fallback for an in-place upgrade only. New
-	 * installs resolve everything through ZDZ_Core_Settings; nothing is written here.
-	 * @deprecated Superseded by Core credential resolution.
-	 */
-	const PREFIX_CASCADE = [ 'zdz_core_', 'tsec_', 'ts_surveys_', 'tsa_', 'tsl_', 'ts_core_' ];
-
-	public function __construct() {
-		// Optional: a sibling billing client (the Prep module) may answer plain-string search.
-		if ( class_exists( 'ZPREP_FreshBooks' ) ) {
-			$this->delegate = new ZPREP_FreshBooks();
-		}
-	}
-
 	public function is_ready(): bool {
-		if ( $this->delegate && method_exists( $this->delegate, 'is_ready' ) ) return $this->delegate->is_ready();
 		return (bool) $this->get_credential( 'fb_access_token' )
 			&& (bool) $this->get_credential( 'fb_account_id' );
 	}
 
+	/** Where the billing credentials are read from: Core's store, or '' when none is configured. */
 	public function get_active_prefix(): string {
-		if ( $this->delegate && method_exists( $this->delegate, 'get_active_prefix' ) ) return $this->delegate->get_active_prefix();
-		if ( class_exists( 'ZDZ_Core_Settings' ) && $this->get_credential( 'fb_access_token' ) !== '' ) {
-			return 'zdz_core_';
-		}
-		foreach ( self::PREFIX_CASCADE as $p ) {
-			if ( get_option( $p . 'fb_access_token' ) ) return $p;
-		}
-		return '';
+		return $this->get_credential( 'fb_access_token' ) !== '' ? 'zdz_core_' : '';
 	}
 
 	public function get_last_error(): string { return $this->last_error; }
@@ -70,8 +43,7 @@ class ZRCPT_FreshBooks {
 	 *   $query['value']   — the classified value
 	 *   $query['raw']     — the original user input
 	 *
-	 * For backward compat, also accepts a plain string (delegates to the Prep module or
-	 * treats as a raw query for legacy lookup bar).
+	 * Also accepts a plain string, treated as a raw query (the lookup bar).
 	 *
 	 * Return shape:
 	 *   [
@@ -84,16 +56,10 @@ class ZRCPT_FreshBooks {
 		$opts = array_merge( [
 			'include_estimates' => true,
 			'include_invoices'  => true,
-			// The item tag/subtype the lookup is restricted to ('' = no restriction). The old
-			// hardcoded "EM ref" filter is now the admin-chosen Item Engine tag. NO product
-			// name is compiled in.
+			// The item tag/subtype the lookup is restricted to ('' = no restriction): the
+			// admin-chosen Item Engine tag. No product name is compiled in.
 			'tag_filter'        => '',
 		], $opts );
-
-		// If the Prep module is active and query is a plain string, delegate.
-		if ( $this->delegate && is_string( $query ) ) {
-			return $this->delegate->search( $query );
-		}
 
 		if ( ! $this->is_ready() ) {
 			return [
@@ -303,11 +269,11 @@ class ZRCPT_FreshBooks {
 			}
 		}
 
-		// Strategy 5 (§131): soundalike recall. When the literal search is thin, re-search
+		// Strategy 5: soundalike recall. When the literal search is thin, re-search
 		// the curated soundalike spellings of the surname, so a client on file under a
 		// variant spelling still surfaces. Suggestion-grade — the caller's per-row
-		// customerid verify (INV-2/INV-13) still applies. Guarded, so a missing matcher
-		// simply skips this widening (INV-9).
+		// customerid verify still applies (a source's answer is checked, never trusted).
+		// Guarded, so a missing matcher simply skips this widening.
 		$sound_seed = $lname ?: $fname;
 		if ( count( $all_clients ) < 5 && $sound_seed !== '' && class_exists( 'ZDZ_Name_Match' ) ) {
 			foreach ( \ZDZ_Name_Match::soundalike_variants( $sound_seed ) as $variant ) {
@@ -349,7 +315,7 @@ class ZRCPT_FreshBooks {
 					[ 'search[customerid]' => $client_id, 'include[]' => [ 'lines', 'direct_links' ], 'per_page' => 10 ]
 				);
 				foreach ( ( $resp['response']['result']['invoices'] ?? [] ) as $inv ) {
-					// INV-2: FreshBooks sometimes ignores search[customerid]; never
+					// FreshBooks sometimes ignores search[customerid]; never
 					// trust it — a foreign invoice here would be shown/labeled under
 					// THIS client's name (cross-customer PII leak). Verify each row.
 					$row_cid = (int) ( $inv['customerid'] ?? $inv['client_id'] ?? $inv['ownerid'] ?? 0 );
@@ -539,7 +505,7 @@ class ZRCPT_FreshBooks {
 			return [ 'type' => 'email', 'value' => $raw, 'raw' => $raw ];
 		}
 
-		// Phone: 7+ total digits (check before number to avoid 555-518-3209 → "760")
+		// Phone: 7+ total digits (check before number, so 555-555-0142 is never read as the number "555")
 		$all_digits = preg_replace( '/[^0-9]/', '', $raw );
 		if ( strlen( $all_digits ) >= 7 && strlen( $all_digits ) <= 15 ) {
 			return [ 'type' => 'phone', 'value' => $raw, 'raw' => $raw ];
@@ -563,8 +529,6 @@ class ZRCPT_FreshBooks {
 	 * Fetch client/customer detail by ID.
 	 */
 	public function get_client( $client_id ): ?array {
-		if ( $this->delegate ) return $this->delegate->get_client( $client_id );
-
 		$account_id = $this->get_credential( 'fb_account_id' );
 		if ( ! $account_id || ! $client_id ) return null;
 
@@ -580,8 +544,6 @@ class ZRCPT_FreshBooks {
 	 * ================================================================ */
 
 	public function test_connection(): array {
-		if ( $this->delegate ) return $this->delegate->test_connection();
-
 		if ( ! $this->is_ready() ) {
 			return [
 				'overall' => [
@@ -637,63 +599,32 @@ class ZRCPT_FreshBooks {
 	 * with a read-only legacy option fallback for in-place upgrades. NO plaintext copy is
 	 * written back — the kernel owns credential storage now.
 	 */
+	/**
+	 * One billing credential from Zorderz Core (decoded whatever format it is stored in), or ''.
+	 * Pre-rename option names are carried into Core's names by the rename migration, so no
+	 * per-app copies are read here.
+	 */
 	private function get_credential( string $field ): string {
-		if ( class_exists( 'ZDZ_Core_Settings' ) ) {
-			$map = [
-				'fb_access_token'  => 'get_fb_access_token',
-				'fb_refresh_token' => 'get_fb_refresh_token',
-				'fb_account_id'    => 'get_fb_account_id',
-				'fb_client_id'     => 'get_fb_client_id',
-			];
-			if ( isset( $map[ $field ] ) && method_exists( 'ZDZ_Core_Settings', $map[ $field ] ) ) {
-				$v = (string) call_user_func( [ 'ZDZ_Core_Settings', $map[ $field ] ] );
-				if ( $v !== '' ) return $v;
-			}
-		}
-		// Legacy read-only fallback (in-place upgrade only).
-		foreach ( self::PREFIX_CASCADE as $p ) {
-			$v = get_option( $p . $field );
-			if ( ! empty( $v ) ) return (string) $v;
+		if ( class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_credential' ) ) {
+			return trim( (string) ZDZ_Core_Settings::get_credential( $field ) );
 		}
 		return '';
 	}
 
 	private function get_client_secret(): string {
-		if ( class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_fb_client_secret' ) ) {
-			$v = (string) ZDZ_Core_Settings::get_fb_client_secret();
-			if ( $v !== '' ) return $v;
-		}
-		foreach ( self::PREFIX_CASCADE as $p ) {
-			$raw = get_option( $p . 'fb_client_secret', '' );
-			if ( empty( $raw ) ) continue;
-			$dec = $this->decrypt( $raw );
-			if ( ! empty( $dec ) ) return $dec;
-			return $raw;
-		}
-		return '';
+		return $this->get_credential( 'fb_client_secret' );
 	}
 
-	private function decrypt( string $value ): string {
-		if ( empty( $value ) ) return '';
-		$decoded = base64_decode( $value );
-		if ( strpos( $decoded, '::' ) === false ) return $value;
-		list( $iv, $cipher ) = explode( '::', $decoded, 2 );
-		$key = substr( hash( 'sha256', wp_salt( 'auth' ) ), 0, 32 );
-		$dec = openssl_decrypt( $cipher, 'AES-256-CBC', $key, 0, $iv );
-		return $dec !== false ? $dec : '';
-	}
-
+	/**
+	 * Is a credential present in Core's store? Masked: the value never leaves this method.
+	 *
+	 * @return array{present:bool,prefix:string,value_masked:string,cascade:string[]}
+	 */
 	public static function resolve_credential_source( string $field ): array {
-		if ( class_exists( 'ZDZ_Core_Settings' ) ) {
-			return [ 'present' => true, 'prefix' => 'zdz_core_', 'value_masked' => '•••', 'cascade' => [ 'zdz_core_' ] ];
-		}
-		foreach ( self::PREFIX_CASCADE as $p ) {
-			$v = get_option( $p . $field );
-			if ( ! empty( $v ) ) {
-				return [ 'present' => true, 'prefix' => $p, 'value_masked' => '•••', 'cascade' => self::PREFIX_CASCADE ];
-			}
-		}
-		return [ 'present' => false, 'prefix' => '', 'value_masked' => '', 'cascade' => self::PREFIX_CASCADE ];
+		$v = ( class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_credential' ) )
+			? (string) ZDZ_Core_Settings::get_credential( $field ) : '';
+		$present = '' !== trim( $v );
+		return [ 'present' => $present, 'prefix' => $present ? 'zdz_core_' : '', 'value_masked' => $present ? '•••' : '', 'cascade' => [ 'zdz_core_' ] ];
 	}
 
 	/* ================================================================
@@ -777,7 +708,7 @@ class ZRCPT_FreshBooks {
 	}
 
 	/**
-	 * Refresh the billing access token through the KERNEL — never here (crosswalk 03-B13).
+	 * Refresh the billing access token through the KERNEL — never here (one single-flight refresh).
 	 *
 	 * FreshBooks refresh tokens are single-use; two independent refreshers revoke each other.
 	 * The theme's ZDZ_Core_FreshBooks::refresh_token() delegates to ZDZ_Token_Service, which

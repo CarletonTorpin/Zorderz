@@ -1,13 +1,13 @@
 <?php
 /**
- * §131 — Prep same_customer() soundalike de-dup is GIVEN-NAME GATED.
+ * Prep same_customer() soundalike de-dup is GIVEN-NAME GATED.
  *
- * Pins the safety property (the §131 review's top concern): a soundalike surname may
- * fold two Approved-to-Cut cards into one ONLY when a given name also agrees. A
- * soundalike surname with a divergent given name, or with surname-only on either side,
- * must stay DISTINCT — never merge two people on sound alone (INV-12).
+ * Pins the safety property: a soundalike surname may fold two Approved-to-Cut cards
+ * into one ONLY when a given name also agrees. A soundalike surname with a divergent
+ * given name, or with surname-only on either side, must stay DISTINCT — never merge two
+ * people on sound alone (no answer is stronger than its evidence).
  *
- * Uses a minimal ZDZ_Name_Match stand-in (generic, non-customer surnames) so the GATE
+ * Uses a minimal ZDZ_Name_Match stand-in (invented surnames) so the GATE
  * is tested without the theme present; the real matcher's linguistics are pinned in the
  * theme's tests/unit/test-name-match.php.
  *
@@ -23,7 +23,7 @@ if ( ! class_exists( 'ZDZ_Name_Match' ) ) {
 	class ZDZ_Name_Match {
 		public static function sounds_like( $a, $b ) {
 			$a = strtolower( trim( $a ) ); $b = strtolower( trim( $b ) );
-			foreach ( array( array( 'reed', 'read' ), array( 'shaw', 'schau' ) ) as $g ) {
+			foreach ( array( array( 'hale', 'haile' ), array( 'marsh', 'marsch' ) ) as $g ) {
 				if ( in_array( $a, $g, true ) && in_array( $b, $g, true ) ) { return true; }
 			}
 			return $a === $b;
@@ -45,10 +45,10 @@ function ok( bool $c, string $m ): void {
 }
 function fold( string $a, string $b ): bool { return ZPREP_Dashboard::same_customer( $a, '', $b, '' ); }
 
-ok( fold( 'Steve Reed', 'Steve Read' ) === true,      'soundalike surname + same given -> FOLD (Reed/Read, both Steve)' );
-ok( fold( 'Steve Reed', 'John Read' ) === false,      'soundalike surname + different given -> distinct (never merge)' );
-ok( fold( 'Reed', 'Read' ) === false,                 'soundalike surname, surname-only -> distinct (never merge on sound alone)' );
-ok( fold( 'Steve Shaw', 'Steve Schau' ) === true,     'second soundalike pair + same given -> FOLD' );
+ok( fold( 'Robin Hale', 'Robin Haile' ) === true,     'soundalike surname + same given -> FOLD (Hale/Haile, both Robin)' );
+ok( fold( 'Robin Hale', 'Morgan Haile' ) === false,   'soundalike surname + different given -> distinct (never merge)' );
+ok( fold( 'Hale', 'Haile' ) === false,                'soundalike surname, surname-only -> distinct (never merge on sound alone)' );
+ok( fold( 'Quinn Marsh', 'Quinn Marsch' ) === true,   'second soundalike pair + same given -> FOLD' );
 ok( fold( 'Alex Rivera', 'Alex Rivera' ) === true,    'exact surname + given -> FOLD (unchanged)' );
 ok( fold( 'Jordan Rivera', 'Alex Rivera' ) === false, 'exact surname, different given -> distinct (unchanged)' );
 ok( fold( 'Rivera', 'Rivera' ) === true,              'exact surname-only -> FOLD (unchanged)' );

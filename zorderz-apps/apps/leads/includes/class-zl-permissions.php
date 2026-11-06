@@ -11,7 +11,7 @@
  * - Each "feature" is a string key (e.g. 'can_generate_full', 'view_pricing').
  * - Roles get a default set of features.
  * - Per-username overrides can grant ('+feature') or revoke ('!feature') specific capabilities.
- * - Admin (manage_options or ts_admin) always has all features unless explicitly revoked by username.
+ * - Admin (manage_options or zdz_admin) always has all features unless explicitly revoked by username.
  *
  * FUTURE-PROOFING:
  * The 'view_pricing' and 'edit_pricing' features are defined now but unused until
@@ -302,11 +302,11 @@ class ZL_Permissions {
 			return true;
 		}
 
-		// WP Admin (manage_options) or ts_owner gets everything not explicitly revoked
+		// WP Admin (manage_options) or zdz_owner gets everything not explicitly revoked
 		if ( user_can( $user_id, 'manage_options' ) ) {
 			return true;
 		}
-		// v1.6.0 — ts_owner role has full access (theme v2.3.0 super-admin role)
+		// v1.6.0 — zdz_owner role has full access (the super-admin role)
 		if ( in_array( 'zdz_owner', (array) $user->roles, true ) ) {
 			return true;
 		}

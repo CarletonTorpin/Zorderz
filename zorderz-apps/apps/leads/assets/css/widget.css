@@ -11,7 +11,7 @@
  *   --ref-*  = Reference (constant across modes)
  *   Fallback values ensure graceful degradation if theme tokens are absent.
  *
- * v1.4.0 — the app compatibility (ts_admin + ts_operator roles).
+ * v1.4.0 — the app compatibility (zdz_admin + zdz_operator roles).
  *           Added dashboard header, 4-stat grid with icons, contacted stat,
  *           role-aware data-attribute, enhanced Sunlight Mode overrides.
  * v1.5.0 — Full-parity dashboard widget: generation panel with filters,
@@ -639,7 +639,7 @@
   color: #991B1B;
 }
 
-/* D-04: 'no matches' — a definite, NEUTRAL outcome (not red, not green). Slate. */
+/* 'No matches' — a definite, NEUTRAL outcome (not red, not green). Slate. */
 .zl-w-status-nomatch {
   background: #E2E8F0;
   color: #334155;
@@ -2320,7 +2320,7 @@ body.sunlight-active .zl-w-context-how,
     border-color: var(--ref-gray-300, #d1d5db);
 }
 
-/* D-03: recover a failed lead — attention, but NOT an error colour (amber). */
+/* Recover a failed lead — attention, but NOT an error colour (amber). */
 .zl-lc-recover {
     background: #B45309; color: #fff; border-color: #B45309;
 }
@@ -2470,7 +2470,7 @@ body.sunlight-active .zl-w-context-how,
 
 /* ══════════════════════════════════════════════════════════
    v2.0.0: SURVEYS-ALIGNED REFINEMENTS
-   Patterns adopted from ts-satisfaction-surveys v2.9.3
+   Patterns shared with the Surveys widget
    ══════════════════════════════════════════════════════════ */
 
 /* Slide-down animation for expandable sections */
@@ -3171,21 +3171,20 @@ body.sunlight-active .zl-w-context-how,
 }
 
 /* ───────────────────────────────────────────────────────────────────────
-   v2.1.0 — E. NO-LAYOUT-SHIFT SUBMIT  (Prompt 7)
-   Local fallback for the theme's forthcoming .ts-btn-busy / .ts-inline-status
-   hooks so submits don't reflow BEFORE the theme ships them. Scoped to .zl-w
-   and written so the theme's own definitions (unscoped) take precedence when
-   present. Animate opacity only — never size/position.
+   E. NO-LAYOUT-SHIFT SUBMIT
+   This app's .zl-btn-busy / .zl-inline-status hooks, so submits don't reflow.
+   Scoped to .zl-w and written so a theme definition of the same hooks
+   (unscoped) takes precedence when present. Animate opacity only — never size/position.
    ─────────────────────────────────────────────────────────────────────── */
 
 /* Busy button: hold the box size, show a spinner, block input. */
-.zl-w .ts-btn-busy,
+.zl-w .zl-btn-busy,
 .zl-w-btn.is-busy {
     position: relative;
     pointer-events: none;
     color: transparent !important;     /* hide label without resizing */
 }
-.zl-w .ts-btn-busy::after,
+.zl-w .zl-btn-busy::after,
 .zl-w-btn.is-busy::after {
     content: "";
     position: absolute;
@@ -3207,7 +3206,7 @@ body.sunlight-active .zl-w-context-how,
 
 /* Pre-reserved inline status slot: occupies space even when empty, so
    revealing a message pushes NOTHING. Fades in via opacity only. */
-.zl-w .ts-inline-status,
+.zl-w .zl-inline-status,
 .zl-w .zl-inline-status {
     display: block;
     min-height: 20px;                  /* reserved height when empty */
@@ -3219,7 +3218,7 @@ body.sunlight-active .zl-w-context-how,
     opacity: 0;
     transition: opacity var(--ref-dur,200ms) var(--ref-ease,ease);
 }
-.zl-w .ts-inline-status.is-visible,
+.zl-w .zl-inline-status.is-visible,
 .zl-w .zl-inline-status.is-visible {
     opacity: 1;
 }
@@ -3254,11 +3253,11 @@ body.sunlight-active .zl-w-context-how,
 @media (prefers-reduced-motion: reduce) {
     .zl-w .zl-expand-arrow,
     .zl-w .zl-batch-leads.zl-animating,
-    .zl-w .ts-inline-status,
+    .zl-w .zl-inline-status,
     .zl-w .zl-w-stat.zl-w-stat-clickable {
         transition: none !important;
     }
-    .zl-w .ts-btn-busy::after,
+    .zl-w .zl-btn-busy::after,
     .zl-w-btn.is-busy::after {
         animation-duration: 1.2s;   /* slow, not off, so "busy" still reads */
     }
@@ -3327,3 +3326,100 @@ body.sunlight-active .zl-w-context-how,
   line-height: 1.35;
 }
 .zl-w-field-hint-warn { color: var(--sys-tint-warning-fg, #92400E); }
+
+/* ───────────────────────────────────────────────────────────────────────
+   Two buttons per row
+   The generation row holds four buttons (3 Test Leads, Full Batch, Sync CRM,
+   Refresh). With a flex row, on a phone the outline buttons shrank below
+   their own text and the labels ran over each other. A two-column grid gives
+   each button half the row at every width; a very narrow widget stacks them.
+   ─────────────────────────────────────────────────────────────────────── */
+.zl-w .zl-w-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+.zl-w .zl-w-actions > .zl-w-btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+}
+@media (max-width: 300px) {
+    .zl-w .zl-w-actions { grid-template-columns: 1fr; }
+}
+
+
+/* ═══ TEAM LEADS (the work runs in the Estimate Creator). Theme tokens with light
+   fallbacks; the theme's tokens carry dark mode. 16px controls so iPhone does not zoom. ═══ */
+.zl-w .zl-tl-modebar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+.zl-w .zl-tl-mode { appearance: none; cursor: pointer; min-height: 44px; padding: 8px 10px; font-size: 14px; font-weight: 600;
+  border-radius: var(--ref-radius-md, 10px); border: 1px solid var(--sys-border, #E2E8F0);
+  background: var(--sys-surface, #fff); color: var(--sys-text-sec, #475569); -webkit-tap-highlight-color: transparent; }
+.zl-w .zl-tl-mode-active { background: var(--sys-brand, #2C5F8A); border-color: var(--sys-brand, #2C5F8A); color: var(--sys-on-brand, #fff); }
+.zl-w .zl-tl-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.zl-w .zl-tl-title { font-size: 13px; font-weight: 700; color: var(--sys-text, #0F172A); }
+.zl-w .zl-tl-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.zl-w .zl-tl-select { min-width: 0; max-width: 100%; min-height: 44px; font-size: 16px; padding: 4px 8px;
+  border-radius: var(--ref-radius-sm, 8px); border: 1px solid var(--sys-border, #E2E8F0);
+  background: var(--sys-surface, #fff); color: var(--sys-text, #0F172A); }
+.zl-w .zl-tl-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sys-text-sec, #64748B); white-space: nowrap; }
+.zl-w .zl-tl-refresh { min-width: 44px; min-height: 44px; border-radius: var(--ref-radius-sm, 8px); border: 1px solid var(--sys-border, #E2E8F0);
+  background: var(--sys-surface, #fff); color: var(--sys-text, #0F172A); font-size: 16px; cursor: pointer; }
+.zl-w .zl-tl-empty { padding: 14px 4px; font-size: 14px; color: var(--sys-text-sec, #64748B); text-align: center; }
+.zl-w .zl-tl-hint { font-size: 12px; color: var(--sys-text-ter, #94A3B8); }
+.zl-w .zl-tl-group { margin-bottom: 14px; }
+.zl-w .zl-tl-group-h { font-size: 13px; font-weight: 700; color: var(--sys-text, #0F172A); padding: 6px 2px; }
+.zl-w .zl-tl-group-n { font-weight: 500; color: var(--sys-text-ter, #94A3B8); }
+.zl-w .zl-tl-card, .zl-w .zl-tl-row { background: var(--sys-surface, #fff); border: 1px solid var(--sys-border, #E2E8F0);
+  border-radius: var(--ref-radius-md, 10px); padding: 12px; margin-bottom: 8px; }
+.zl-w .zl-tl-card-head { display: flex; align-items: center; gap: 10px; }
+.zl-w .zl-tl-score { flex: none; width: 34px; height: 34px; border-radius: var(--ref-radius-sm, 8px); display: flex; align-items: center;
+  justify-content: center; font-size: 13px; font-weight: 800; color: var(--sys-on-brand, #fff); font-variant-numeric: tabular-nums; }
+.zl-w .zl-tl-score-high { background: var(--sys-success, #16A34A); }
+.zl-w .zl-tl-score-mid { background: var(--sys-warning, #B45309); }
+.zl-w .zl-tl-score-low { background: var(--sys-text-sec, #64748B); }
+.zl-w .zl-tl-id { flex: 1; min-width: 0; }
+.zl-w .zl-tl-name { font-size: 15px; font-weight: 600; color: var(--sys-text, #0F172A); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zl-w .zl-tl-loc { font-size: 12px; color: var(--sys-text-sec, #64748B); }
+.zl-w .zl-tl-status { flex: none; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: var(--ref-radius-sm, 6px);
+  background: var(--sys-bg-alt, #EEF2F7); color: var(--sys-text-sec, #475569); }
+.zl-w .zl-tl-status-contacted { color: var(--sys-success, #15803D); }
+.zl-w .zl-tl-status-closed { color: var(--sys-brand, #2C5F8A); }
+.zl-w .zl-tl-why { font-size: 13px; color: var(--sys-text-sec, #64748B); margin-top: 8px; }
+.zl-w .zl-tl-hist { margin-top: 8px; font-size: 13px; }
+.zl-w .zl-tl-hist summary { cursor: pointer; color: var(--sys-brand, #2C5F8A); font-weight: 600; min-height: 44px; display: list-item; padding-top: 12px; box-sizing: border-box; }
+.zl-w .zl-tl-pi { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-top: 1px solid var(--sys-border, #EEF2F7); }
+.zl-w .zl-tl-pi-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sys-text, #0F172A); }
+.zl-w .zl-tl-pi-meta { flex: none; white-space: nowrap; color: var(--sys-text-ter, #94A3B8); }
+.zl-w .zl-tl-pip { display: flex; align-items: center; padding: 10px 0 2px; font-size: 11px; }
+.zl-w .zl-tl-pip-step { display: flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--sys-text-ter, #94A3B8); }
+.zl-w .zl-tl-pip-step.done { color: var(--sys-brand, #2C5F8A); }
+.zl-w .zl-tl-pip-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+.zl-w .zl-tl-pip-conn { flex: 1; min-width: 8px; height: 2px; margin: 0 3px; background: var(--sys-border, #E2E8F0); }
+.zl-w .zl-tl-pip-conn.done { background: var(--sys-brand, #2C5F8A); }
+.zl-w .zl-tl-acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; margin-top: 10px; }
+.zl-w .zl-tl-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 6px 10px; font-size: 13px; font-weight: 600;
+  border-radius: var(--ref-radius-sm, 8px); text-decoration: none; border: 1px solid var(--sys-border, #E2E8F0);
+  background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); }
+.zl-w .zl-tl-btn-ns { color: var(--sys-brand, #2C5F8A); }
+.zl-w .zl-tl-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.zl-w .zl-tl-row.is-loading { opacity: .55; pointer-events: none; }
+.zl-w .zl-tl-row-main { flex: 1 1 200px; min-width: 0; }
+.zl-w .zl-tl-row-name { font-size: 15px; font-weight: 600; color: var(--sys-text, #0F172A); }
+.zl-w .zl-tl-row-meta { font-size: 12px; color: var(--sys-text-sec, #64748B); margin-top: 2px; }
+.zl-w .zl-tl-row-appt { margin-top: 4px; }
+.zl-w .zl-tl-appt { display: inline-block; font-size: 12px; font-weight: 600; color: var(--sys-brand, #1D4ED8);
+  background: var(--sys-bg-alt, #EFF6FF); border-radius: var(--ref-radius-sm, 6px); padding: 2px 8px; }
+.zl-w .zl-tl-appt-none { color: var(--sys-text-ter, #94A3B8); }
+.zl-w .zl-tl-linked { margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--sys-success, #15803D); }
+.zl-w .zl-tl-row-acts { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; justify-content: flex-end; min-width: 0; }
+.zl-w .zl-tl-assignee { flex: 1 1 auto; }
+.zl-w .zl-tl-create { flex: none; min-height: 44px; padding: 6px 14px; border: none; border-radius: var(--ref-radius-sm, 8px);
+  background: var(--sys-brand, #2C5F8A); color: var(--sys-on-brand, #fff); font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.zl-w .zl-tl-create:disabled { opacity: .6; cursor: default; }
+.zl-w .zl-tl-done { font-size: 13px; font-weight: 600; color: var(--sys-text-sec, #64748B); white-space: nowrap; }
+.zl-w .zl-tl-error { flex-basis: 100%; font-size: 13px; color: var(--sys-error, #B91C1C); background: rgba(185, 28, 28, .08);
+  border-radius: var(--ref-radius-sm, 8px); padding: 6px 9px; }
+.zl-w .zl-tl-success { font-size: 14px; font-weight: 600; color: var(--sys-success, #15803D); background: rgba(21, 128, 61, .1);
+  border-radius: var(--ref-radius-sm, 8px); padding: 8px 12px; margin: 0 0 8px; }

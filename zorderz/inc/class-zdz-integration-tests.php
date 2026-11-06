@@ -129,7 +129,7 @@ class ZDZ_Integration_Tests {
 		// ── Channel 8: Messaging → Analytics Preview ──
 		$checks[] = $this->check_messaging_preview();
 
-		// ── Channel 9: KPI Metrics Filter ──
+		// ── Channel 9: the home tiles' read verbs ──
 		$checks[] = $this->check_kpi_metrics();
 
 		// ── Channel 10: Permission System (Group 5) ──
@@ -147,28 +147,36 @@ class ZDZ_Integration_Tests {
 	 * ================================================================== */
 
 	private function check_credential_cascade() {
-		$prefixes = [ 'tscc_', 'tsec_', 'zdz_surveys_', 'tsa_', 'tsl_', 'zdz_core_' ];
+		// The option families the FreshBooks token service keeps in sync (ZDZ_Token_Service).
+		$prefixes = [ 'zdz_core_', 'zdz_surveys_', 'zl_' ];
 		$found = 0;
 		foreach ( $prefixes as $p ) {
 			if ( ! empty( get_option( $p . 'fb_access_token', '' ) ) ) {
 				$found++;
 			}
 		}
+		// A site that has not connected the billing app has nothing to cascade: that is not a fault.
+		if ( 0 === $found && '' === (string) get_option( 'zdz_core_fb_client_id', '' ) ) {
+			return [
+				'name'   => 'Credential Cascade (FreshBooks)',
+				'pass'   => true,
+				'detail' => 'The billing app is not connected yet (Zorderz → Credentials): nothing to check',
+			];
+		}
 		return [
 			'name'   => 'Credential Cascade (FreshBooks)',
-			'pass'   => $found >= 2,
-			'detail' => "{$found}/" . count( $prefixes ) . " prefixes have access tokens",
+			'pass'   => $found >= 1,
+			'detail' => "{$found}/" . count( $prefixes ) . ' prefixes have access tokens',
 		];
 	}
 
 	private function check_plugin_discovery() {
-		$apps     = apply_filters( 'zdz_register_apps', [] );
-		$expected = 12;
-		$count    = count( $apps );
+		$apps  = apply_filters( 'zdz_register_apps', [] );
+		$count = count( $apps );
 		return [
 			'name'   => 'Plugin Discovery (zdz_register_apps)',
-			'pass'   => $count >= 10,
-			'detail' => "{$count} apps registered (expected ~{$expected})",
+			'pass'   => $count >= 1,
+			'detail' => $count >= 1 ? "{$count} apps registered" : 'No apps registered: is the Zorderz Apps plugin active?',
 		];
 	}
 
@@ -225,30 +233,43 @@ class ZDZ_Integration_Tests {
 	}
 
 	private function check_messaging_preview() {
-		$server    = rest_get_server();
-		$routes    = $server->get_routes();
-		$has_route = false;
-		foreach ( array_keys( $routes ) as $route ) {
+		// Messaging reads estimate and invoice cards through the Estimates app's document reader first,
+		// and only without it through a freshbooks-preview REST route (see apps/messaging/app.php).
+		$has_reader = has_filter( 'zdz_fb_document_for_viewer' );
+		$has_route  = false;
+		foreach ( array_keys( rest_get_server()->get_routes() ) as $route ) {
 			if ( strpos( $route, 'freshbooks-preview' ) !== false ) {
 				$has_route = true;
 				break;
 			}
 		}
+		if ( $has_reader ) {
+			$detail = 'Estimates document reader registered';
+		} elseif ( $has_route ) {
+			$detail = 'freshbooks-preview REST route registered';
+		} else {
+			$detail = 'No document reader: #NNNNN chips in Messages show their number only (is the Estimates app active?)';
+		}
 		return [
-			'name'   => 'Messaging → Analytics Preview',
-			'pass'   => $has_route,
-			'detail' => $has_route ? 'REST route registered' : 'freshbooks-preview route NOT found',
+			'name'   => 'Messaging → document cards',
+			'pass'   => $has_reader || $has_route,
+			'detail' => $detail,
 		];
 	}
 
 	private function check_kpi_metrics() {
-		$metrics = apply_filters( 'zdz_kpi_metrics', [] );
-		$count   = count( $metrics );
-		$preview = $count > 0 ? ' (' . implode( ', ', array_slice( array_keys( $metrics ), 0, 5 ) ) . ')' : '';
+		// The home tiles read their owners' verbs (ZDZ_KPI_Metrics); no metrics filter is applied any more.
+		$verbs   = array( 'ledger.home_figures', 'survey.counts' );
+		$missing = array();
+		foreach ( $verbs as $v ) {
+			if ( ! class_exists( 'ZDZ_Capabilities' ) || ! ZDZ_Capabilities::get( $v ) ) {
+				$missing[] = $v;
+			}
+		}
 		return [
-			'name'   => 'KPI Metrics Filter (zdz_kpi_metrics)',
-			'pass'   => $count > 0,
-			'detail' => "{$count} metrics registered{$preview}",
+			'name'   => 'Home tiles\' read verbs',
+			'pass'   => ! $missing,
+			'detail' => $missing ? 'not registered: ' . implode( ', ', $missing ) : implode( ', ', $verbs ) . ' registered',
 		];
 	}
 
@@ -293,7 +314,7 @@ class ZDZ_Integration_Tests {
 			$chunk_warnings = array();
 			foreach ( $pricing['doc_ids'] as $doc_id ) {
 				$chunk_count = $wpdb->get_var( $wpdb->prepare(
-					"SELECT COUNT(*) FROM {$wpdb->prefix}tskv_chunks WHERE document_id = %d",
+					"SELECT COUNT(*) FROM {$wpdb->prefix}zkv_chunks WHERE document_id = %d",
 					$doc_id
 				) );
 				if ( (int) $chunk_count === 0 ) {

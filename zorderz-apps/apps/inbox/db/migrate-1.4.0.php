@@ -6,8 +6,7 @@
  * (actor|subject, local-day) over a date window. The v1.2.0 single-column indexes —
  * (actor), (subject), (ts) — don't serve that shape, so add (actor_user_id, ts) and
  * (subject_owner_user_id, ts). This keeps the grouped reads index-served AND keeps the
- * ts-dot-plot registry's missing-index check quiet (an unindexed source is a latent outage,
- * per that plugin's own scar log). Idempotent: each key is added only if absent. No data change.
+ * Dot Plot registry's missing-index check quiet (an unindexed source is a latent outage). Idempotent: each key is added only if absent. No data change.
  *
  * @package Zorderz
  */

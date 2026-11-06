@@ -175,8 +175,8 @@ class ZSV_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * Company EXCLUSION list — admin-managed, EMPTY by default. Replaces the
-	 * TS_EXCLUDED_COMPANIES constant that shipped real client names.
+	 * Company EXCLUSION list — admin-managed, EMPTY by default; no client
+	 * names ship with the app.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/**
@@ -362,9 +362,8 @@ class ZSV_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * WORK-CATEGORY vocabulary — Item Engine binding with a NEUTRAL fallback.
-	 * Replaces the TS_TAG_PRIORITY constant (a product taxonomy) and the
-	 * description-refiner fallback string ('your recent screen service').
+	 * WORK-CATEGORY vocabulary — Item Engine binding with a plain fallback
+	 * ('your recent service'); the app carries no product taxonomy.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/**
@@ -398,8 +397,8 @@ class ZSV_Settings {
 	}
 
 	/**
-	 * Neutral, tenant-overridable description used when a line item has no readable
-	 * work text. Replaces the hardcoded 'your recent screen service'.
+	 * Plain, business-overridable description used when a line item has no readable
+	 * work text.
 	 *
 	 * @return string
 	 */
@@ -423,7 +422,8 @@ class ZSV_Settings {
 	 * @return array<string,string[]> outcome => phrase list. Lowercase phrases.
 	 *   Outcomes: issue (-> needs_attention/follow_up), voicemail (-> left_vm),
 	 *   no_review (-> no_online_review), no_primary_account (-> custom page),
-	 *   satisfied (-> satisfied). Everything else defaults to needs_attention:
+	 *   satisfied (-> satisfied), voicemail_full (-> left_vm, after satisfied).
+	 *   Everything else defaults to needs_attention:
 	 *   an invite must be EARNED by a recognised positive signal.
 	 */
 	public static function status_vocabulary(): array {
@@ -433,6 +433,9 @@ class ZSV_Settings {
 			'no_review' => array( 'no online review', 'no review', "won't review", 'declined review', 'do not send', "don't send", 'no thanks' ),
 			'no_primary_account' => array( 'no google', 'no google account', 'not on google', 'send the other', 'use the other link' ),
 			'satisfied' => array( 'satisfied', 'happy', 'working fine', 'works great', 'all good', 'great', 'good', 'fine', 'no problems', 'no issues', 'send review', 'send link', 'send google' ),
+			// A full voice mailbox, however it is written: the customer was not reached (unless
+			// the same note shows they were — a reached outcome is checked first).
+			'voicemail_full' => array( 'vm full', 'vm is full', 'vm box full', 'voicemail full', 'voicemail is full', 'voice mail full', 'voice mail is full', 'mailbox full', 'mailbox is full', 'mailbox was full', 'voicemail box full', 'voicemail box is full', 'box is full' ),
 		);
 		$vocab = apply_filters( 'zsv_status_vocabulary', $default );
 		return is_array( $vocab ) && ! empty( $vocab ) ? $vocab : $default;

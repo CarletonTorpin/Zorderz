@@ -3,48 +3,31 @@
 /**
  * THE ONE version floor. Keep in lock-step with style.css.
  *
- * v1.1.0 — New this release: the Party roster service (ZDZ_Party)
- * and the Connected Calendars card in Settings -> App Authorizations (via the
- * zdz_app_authorizations filter). Keep this constant in lock-step with style.css.
+ * Zorderz versions start at 1.0.0. The update check compares this string for
+ * INEQUALITY, not ordering, so a lower number than an install last saw is
+ * mechanically safe: it fires the reload prompt once.
  *
- * v1.0.1 — RENUMBERED. This theme had been carrying `2.37.1`, an earlier
- * version lineage that predates the 1.0.x line. Shipping
- * that number on a first public release is misleading twice over: it overstates
- * how long Zorderz has existed, and it hides that this is a new line rather than
- * a continuation. Zorderz versions start at 1.0.0.
- *
- * The update check compares this string for INEQUALITY, not ordering, so going
- * "backwards" is mechanically safe — it fires the reload prompt once, which is
- * exactly right. The one visible consequence is that an existing install may
- * show a smaller number than it did before.
- *
- * v2.31.0 — the original note, kept because the bug it records is instructive:
- * wp_get_theme()->get('Version') returns '' under WPE's early-callback stacking,
- * so several spots carry an explicit fallback. There were THREE hand-maintained
- * copies; one release bumped two and missed the footer ping's — which made the
- * page report one version against the beacon's other and showed a PERMANENT
- * "App update ready" toast. One constant now feeds all of them. wp_get_theme()->get('Version') returns ''
- * under WPE's early-callback stacking (the v2.24.8 saga), so several spots
- * carry an explicit fallback. There were THREE hand-maintained copies; the
- * 2.30.0 release bumped two and missed the footer ping's — which made the
- * page report bootVer 2.29.1 against the beacon's 2.30.0 and showed a
- * PERMANENT "App update ready" toast (live finding, Jul 3 test pass).
- * One constant now feeds all of them. Keep in lock-step with style.css.
+ * Why one constant: wp_get_theme()->get('Version') can return '' when a host
+ * runs early callbacks before the theme header is read, so several places need
+ * an explicit fallback (the asset version, the boot version the page reports,
+ * and the footer update ping). When those were separate hand-kept copies, one
+ * release bumped two of them and missed the third; the page then reported one
+ * version against the ping's other and showed a permanent "App update ready"
+ * toast. One constant now feeds all of them.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '1.10.2' );
+	define( 'ZDZ_THEME_VER_FLOOR', '2.0.0' );
 }
 /**
  * The REST namespace, in exactly one place.
  *
  * WHY A CONSTANT AND NOT A LITERAL
- * The Z-rename moved every register_rest_route() to `zorderz/v1` but MISSED the
- * four rest_url() calls that hand the base URL to the browser, so the entire
- * front end went on requesting `ts/v1/` against a server that no longer answered
- * there. Nothing errored server-side — every call just 404'd, which looked like
- * "the photo upload is broken" and "KPI fetch failed" rather than like a rename
- * defect. A literal that has to agree with itself in two dozen files will
- * eventually disagree; a constant cannot.
+ * Every register_rest_route() call and every rest_url() call that hands the base
+ * URL to the browser must agree. If one rest_url() is missed when the namespace
+ * changes, nothing errors server-side: the front end simply gets a 404 on every
+ * call, which looks like "the photo upload is broken" or "KPI fetch failed"
+ * rather than like a namespace mismatch. A literal that has to agree with itself
+ * in two dozen files will eventually disagree; a constant cannot.
  */
 if ( ! defined( 'ZDZ_REST_NS' ) ) {
 	define( 'ZDZ_REST_NS', 'zorderz/v1' );
@@ -61,7 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * v2.25.4: Silence the WooCommerce "translation triggered too early" notice.
+ * Silence the WooCommerce "translation triggered too early" notice.
  *
  * WordPress 6.7 added a _doing_it_wrong notice when any textdomain is loaded
  * before the `init` hook. WooCommerce core (and several WC-aware plugins) register
@@ -88,9 +71,9 @@ add_filter(
 	3
 );
 
-// v2.20.4: Force display_errors off for AJAX requests.
+// Force display_errors off for AJAX requests.
 // PHP Warnings/Notices output to the response body corrupt JSON and
-// silently break frontend AJAX chains (discovered in Surveys v2.9.3
+// silently break frontend AJAX chains (discovered in Surveys
 // batch creation failure — a single "Undefined array key" Warning
 // killed the entire multi-step batch process). Errors still go to
 // debug.log via WP_DEBUG_LOG; this only prevents screen output.
@@ -100,6 +83,7 @@ if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
 
 // Load all inc/ class files explicitly
 require_once get_template_directory() . '/inc/interface-zdz-app.php';
+require_once get_template_directory() . '/inc/class-zdz-salesperson-code.php'; // ZDZ_Salesperson_Code — one person's salesperson code (the profile's, else the party code)
 require_once get_template_directory() . '/inc/class-zdz-core-settings.php';
 // v1.1.1 fix: instantiate Core Settings NOW so its parent admin menu (zdz-core-settings)
 // hooks admin_menu before the Business Profile / Item Engine submenu classes (loaded just
@@ -114,28 +98,36 @@ require_once get_template_directory() . '/inc/class-zdz-business-profile-admin.p
 
 require_once get_template_directory() . '/inc/class-zdz-item-engine.php';       // v1.1.0: Item Engine — the shared admin-defined catalog (Products/Services, subtypes, aliases, pricing schemes) and the single authority for the cross-app COUNTS CONTRACT. Ships EMPTY. Self-boots (schema only); jobs taxonomy filters resolve through it.
 require_once get_template_directory() . '/inc/class-zdz-item-engine-admin.php'; // v1.1.0: the Item Engine admin screen (catalog, subtypes, pricing schemes, counts-contract status, optional sample set)
-require_once get_template_directory() . '/inc/class-zdz-doc-conventions.php'; // v1.1.0: Document Conventions (ZDZ_Doc_Conventions) — tenant house style applied ON OUTPUT (BID-9). Ships neutral; self-boots.
+require_once get_template_directory() . '/inc/class-zdz-doc-conventions.php'; // v1.1.0: Document Conventions (ZDZ_Doc_Conventions) — the business's house style applied ON OUTPUT. Ships neutral; self-boots.
 require_once get_template_directory() . '/inc/class-zdz-compensation.php'; // v1.1.0: Compensation Core service (ZDZ_Compensation) — commission structures/tiers, split policies, piece rates, product minimums, ledger kinds, card-fee handling, pay calendar, payability gate, attribution precedence. Ships EMPTY. Self-boots.
-require_once get_template_directory() . '/inc/class-zdz-answer-authority.php'; // v1.1.0: Answer Authority — confidence tier (confirmed>derived>inferred>unknown, propagates through arithmetic) + the SINGLE outbound gate (chat/email/push/digest/stream) enforcing INV-12. Ships neutral; self-boots.
+require_once get_template_directory() . '/inc/class-zdz-answer-authority.php'; // Answer Authority — confidence tier (confirmed>derived>inferred>unknown, propagates through arithmetic) + the SINGLE outbound gate (chat/email/push/digest/stream): no answer leaves stronger than its evidence. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-rule-governance.php'; // v1.1.0: Rule Governance — rules as typed parameterised objects; the prompt is a rendering of the rule set. A cited rule must exist (fails loudly); the safety floor is non-overridable. Self-boots.
-require_once get_template_directory() . '/inc/class-zdz-doc-preservation.php'; // Wave C (Plan 02 E2): Zdz_Doc_Preservation — shared estimate+invoice preservation lock (arm-from-typed-rules, restore-preserving-internal-fields). Stateless; no self-boot.
-require_once get_template_directory() . '/inc/class-zdz-doc-guard.php';        // Wave C (Plan 02 E3): Zdz_Doc_Guard — identity-blind, fail-open zero-regression value floor (protects document totals on update). Stateless; no self-boot.
+require_once get_template_directory() . '/inc/class-zdz-doc-preservation.php'; // Zdz_Doc_Preservation — shared estimate+invoice preservation lock (arm-from-typed-rules, restore-preserving-internal-fields). Stateless; no self-boot.
+require_once get_template_directory() . '/inc/class-zdz-doc-guard.php';        // Zdz_Doc_Guard — identity-blind, fail-open zero-regression value floor (protects document totals on update). Stateless; no self-boot.
 require_once get_template_directory() . '/inc/class-zdz-model-registry.php'; // v1.1.0: Model Registry — per-task model slots replacing hardcoded model names; capability/fallback/retired maps ship EMPTY; base model read from ZDZ_Core_Settings; Poe stays the v1 gateway. Self-boots.
-require_once get_template_directory() . '/inc/class-zdz-request-guard.php';   // Wave A: Zdz_Request_Guard — wall-clock request budget (reserve-next-call), per-cURL-handle timeout clamp, crash-safe global cron lock. Ends worker-exhaustion 502s. Self-boots.
-require_once get_template_directory() . '/inc/class-zdz-service-breaker.php'; // Wave A: Zdz_Service_Breaker — general per-service circuit breaker (3 fails → 15-min pause) + auth-wall. Self-boots.
-require_once get_template_directory() . '/inc/class-zdz-sweep.php';           // Wave A: Zdz_Sweep — budgeted wall-clock background sweep composing guard+breaker (cursor, lock, starved-pass logging). The shared sweep Plan 01/02 consume. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-request-guard.php';   // Zdz_Request_Guard — wall-clock request budget (reserve-next-call), per-cURL-handle timeout clamp, crash-safe global cron lock. Ends worker-exhaustion 502s. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-service-breaker.php'; // Zdz_Service_Breaker — general per-service circuit breaker (3 fails → 15-min pause) + auth-wall. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-sweep.php';           // Zdz_Sweep — budgeted wall-clock background sweep composing guard+breaker (cursor, lock, starved-pass logging). The shared sweep that background jobs (schedule inference, the Jobs project and geo sweeps) build on. Self-boots.
 
 require_once get_template_directory() . '/inc/class-zdz-core-poe.php';
 require_once get_template_directory() . '/inc/class-zdz-core-freshbooks.php';
 require_once get_template_directory() . '/inc/class-zdz-token-service.php'; // v1.1.0: Connections credential authority — provider-agnostic single-flight OAuth refresher (ZDZ_Token_Service). Self-boots; registers the bundled FreshBooks provider via zdz_token_providers. Consumed by ZDZ_Core_FreshBooks::refresh_token().
 require_once get_template_directory() . '/inc/class-zdz-core-nutshell.php';
-require_once get_template_directory() . '/inc/class-zdz-core-review-bridge.php'; // v2.14.5
-require_once get_template_directory() . '/inc/class-zdz-name-match.php'; // v1.10.0: ZDZ_Name_Match — shared soundalike/homophone name matcher (Core). Neutral general-English seed; a tenant's confirmed spellings load via the zdz_name_homophones_map filter.
-require_once get_template_directory() . '/inc/class-zdz-contact-bridge.php'; // v2.21.4: orchestrator contact-lookup capability ([ZDZ_CONTACT])
-require_once get_template_directory() . '/inc/class-zdz-orchestrator.php'; // v2.22.0: deterministic Poe-free dashboard intent classifier (/zorderz/v1/orchestrate)
+require_once get_template_directory() . '/inc/class-zdz-core-review-bridge.php';
+require_once get_template_directory() . '/inc/class-zdz-name-match.php'; // ZDZ_Name_Match — shared soundalike/homophone name matcher (Core). No name list ships: the curated groups live in the private option zdz_name_homophones (+ the zdz_name_homophones_map filter).
+// An older build kept the curated list as a file beside the class; move it into the private option and
+// delete it. Only a file_exists() runs once the move is done, so the database is not asked on every request.
+add_action( 'init', function () {
+	if ( class_exists( 'ZDZ_Name_Match' ) && method_exists( 'ZDZ_Name_Match', 'migrate_legacy_file' )
+		&& is_file( get_template_directory() . '/inc/' . ZDZ_Name_Match::LEGACY_FILE ) ) {
+		ZDZ_Name_Match::migrate_legacy_file( get_template_directory() . '/inc' );
+	}
+}, 1 );
+require_once get_template_directory() . '/inc/class-zdz-contact-bridge.php'; // orchestrator contact-lookup capability ([ZDZ_CONTACT])
+require_once get_template_directory() . '/inc/class-zdz-orchestrator.php'; // deterministic Poe-free dashboard intent classifier (/zorderz/v1/orchestrate)
 require_once get_template_directory() . '/inc/class-zdz-plugin-api.php';
-require_once get_template_directory() . '/inc/class-zdz-share-link.php'; // v2.35.0: reusable secret share-link primitives (ZDZ_Share_Link)
-require_once get_template_directory() . '/inc/class-zdz-maps.php'; // Wave D (D-01): ZDZ_Maps — map-provider seam (zdz_maps_providers filter, Core default) + client config emitter for the shared zdzMapsUrl() helper. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-share-link.php'; // reusable secret share-link primitives (ZDZ_Share_Link)
+require_once get_template_directory() . '/inc/class-zdz-maps.php'; // ZDZ_Maps — map-provider seam (zdz_maps_providers filter, Core default) + client config emitter for the shared zdzMapsUrl() helper. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-rest-api.php';
 require_once get_template_directory() . '/inc/class-zdz-user-roles.php';
 
@@ -155,39 +147,161 @@ require_once get_template_directory() . '/inc/class-zdz-admin-ui.php';
 require_once get_template_directory() . '/inc/class-zdz-bug-tracker.php';
 require_once get_template_directory() . '/inc/class-zdz-admin-dashboard.php';
 require_once get_template_directory() . '/inc/class-zdz-view-as.php';
-require_once get_template_directory() . '/inc/class-zdz-kiosk-demo.php'; // v2.21.0: PIN-gated kiosk/demo identity switch
+require_once get_template_directory() . '/inc/class-zdz-kiosk-demo.php'; // PIN-gated kiosk/demo identity switch
 require_once get_template_directory() . '/inc/class-zdz-kpi-metrics.php';
-require_once get_template_directory() . '/inc/class-zdz-data-permissions.php'; // v2.17.0: Cross-plugin data permission resolution
-require_once get_template_directory() . '/inc/class-zdz-hierarchy.php'; // v2.32.0: Crew Lead hierarchy (ZDZ_Hierarchy)
-require_once get_template_directory() . '/inc/class-zdz-report-spec.php';    // Wave C (C-15 / P3a-AC5): report/chart spec validator — the security boundary (pure; allow-lists source/entity/filter/window). Self-contained.
-require_once get_template_directory() . '/inc/class-zdz-report-sources.php'; // Wave C (C-15 / P3a-AC5): report event-source registry + money-entitlement gate + Flow-outbox reader. Ships EMPTY. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-data-permissions.php'; // Cross-plugin data permission resolution
+require_once get_template_directory() . '/inc/class-zdz-hierarchy.php'; // Crew Lead hierarchy (ZDZ_Hierarchy)
+require_once get_template_directory() . '/inc/class-zdz-report-spec.php';    // report/chart spec validator — the security boundary (pure; allow-lists source/entity/filter/window). Self-contained.
+require_once get_template_directory() . '/inc/class-zdz-report-sources.php'; // report event-source registry + money-entitlement gate + Flow-outbox reader. Ships EMPTY. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-party.php'; // v1.1.0: authoritative "selectable people" roster (ZDZ_Party) — first shape of the Party core service
-require_once get_template_directory() . '/inc/class-zdz-inference.php'; // Wave C (C-14 / P3a-AC4): Zdz_Inference — CRON-only, side-effect-free advisory schedule inference (Connections-in → Identity parser → TIER_INFERRED → non-autoloaded cache → read-only consumers). Self-boots its cron; ships no parser (infers nothing until configured).
-require_once get_template_directory() . '/inc/class-zdz-integration-tests.php'; // v2.17.0 7B: Integration health check panel
+require_once get_template_directory() . '/inc/class-zdz-inference.php'; // Zdz_Inference — CRON-only, side-effect-free advisory schedule inference (Connections-in → Identity parser → TIER_INFERRED → non-autoloaded cache → read-only consumers). Self-boots its cron; ships no parser (infers nothing until configured).
+require_once get_template_directory() . '/inc/class-zdz-integration-tests.php'; // 7B: Integration health check panel
 
-// ── v2.13.0 Backend infrastructure (no frontend changes) ──────────────
+// ── Kernel: verbs, people, app groups, consent, credential formats ──────
+require_once get_template_directory() . '/inc/class-zdz-capabilities.php';  // ZDZ_Capabilities — one list of every app's verbs; can()/invoke() with a fail-closed write rule; GET /zorderz/v1/capabilities (admins)
+require_once get_template_directory() . '/inc/class-zdz-person-color.php';  // ZDZ_Person_Color — one tone and one role shape per person (initials only reach the browser)
+require_once get_template_directory() . '/inc/class-zdz-app-groups.php';    // ZDZ_App_Groups — five app groups with fixed accessible colours; arrangement is the business's (org.yml app_groups)
+require_once get_template_directory() . '/inc/class-zdz-consent.php';       // ZDZ_Consent — one usage-records consent; card off until switched on; notice from the Business Profile
+require_once get_template_directory() . '/inc/class-zdz-core-crypto.php';   // ZDZ_Core_Crypto — exact round-trip reader for the three at-rest credential formats
+require_once get_template_directory() . '/inc/class-zdz-salt-watch.php';   // ZDZ_Salt_Watch — notices (and Site Health) when wp-config.php's salts change, naming what breaks
+require_once get_template_directory() . '/inc/class-zdz-cred-expiry.php';   // ZDZ_Cred_Expiry — an expiry DATE per provider credential, with a notice from 30 days before
+
+// ── Credentials: one key per service, one billing credential, the staging guard ──
+// The staging guard decides first: on a copy of the live site it holds mail, provider
+// writes and background jobs from this request on.
+require_once get_template_directory() . '/inc/class-zdz-staging-guard.php';      // ZDZ_Staging_Guard — a copy of the live site never reaches customers (fail-safe live-site pin)
+ZDZ_Staging_Guard::boot();
+// The billing views are registered now (before any request-time read of an app's billing
+// rows), then the credentials layer, which re-encodes their client secret per reader
+// (priority 20 on the same filters) and adds its write guards before any settings save.
+require_once get_template_directory() . '/inc/class-zdz-fb-credentials.php';     // ZDZ_Core_FB_Credentials — one billing credential, served to each app family in the format it reads
+require_once get_template_directory() . '/inc/class-zdz-core-credentials.php';   // ZDZ_Core_Credentials — Zorderz → Credentials: one key per service, every copy in its reader's format
+ZDZ_Core_FB_Credentials::init();
+ZDZ_Core_Credentials::init();
+// The business's own Google reviews (read-only): its OAuth client is a Credentials entry, registered before the
+// credentials layer arms its write guards (after_setup_theme).
+require_once get_template_directory() . '/inc/class-zdz-core-google-business.php'; // ZDZ_Core_Google_Business — Connect, the location, the total and average for the home tile
+ZDZ_Core_Google_Business::init();
+// One-time election of the billing app, on an admin request only (housekeeping, never a front-end request).
+add_action( 'admin_init', array( 'ZDZ_Core_FB_Credentials', 'consolidate' ) );
+
+require_once get_template_directory() . '/inc/class-zdz-quiet-hours.php';   // ZDZ_Quiet_Hours — when a phone notification waits: the person's window, the business's, or Core's overnight one
+require_once get_template_directory() . '/inc/class-zdz-push-setup.php';    // ZDZ_Push_Setup — GET /zorderz/v1/push/setup asks every <app>.push_setup verb (Settings -> Notifications)
+require_once get_template_directory() . '/inc/class-zdz-contacts.php';      // ZDZ_Contacts — the contact log behind "Contacted": log() / reached() / counts(), owed CRM notes, contact.log / contact.counts
+ZDZ_Capabilities::init();
+ZDZ_Consent::boot();
+ZDZ_Quiet_Hours::boot();
+ZDZ_Push_Setup::init();
+ZDZ_Contacts::boot();
+ZDZ_Salt_Watch::boot();
+ZDZ_Cred_Expiry::boot();
+
+// ── Kernel: request and outbound safety (BEGIN) ─────────────────────────
+// Helpers the apps call before the server sends to an address a person or an administrator
+// gave it, or records who asked. No hooks of their own.
+require_once get_template_directory() . '/inc/class-zdz-push-endpoint.php'; // ZDZ_Push_Endpoint — a Web Push endpoint is stored and sent to only on a known push service (zdz_push_endpoint_hosts adds hosts)
+require_once get_template_directory() . '/inc/class-zdz-client-ip.php';     // ZDZ_Client_IP — the address a record keeps: REMOTE_ADDR, or a trusted proxy's value on zdz_client_ip; never a forwarded header
+require_once get_template_directory() . '/inc/class-zdz-outbound.php';      // ZDZ_Outbound — admin-configured addresses through wp_safe_remote_request(), redirects capped; private only where a service sits there by design
+// ── Kernel: request and outbound safety (END) ───────────────────────────
+
+// ── Kernel: privacy and usage records ────────────────────────────────
+require_once get_template_directory() . '/inc/class-zdz-sealed.php';       // ZDZ_Sealed — the vault for gate, lockbox, alarm, door and keypad codes; POST /zorderz/v1/sealed/<id>/open
+require_once get_template_directory() . '/inc/class-zdz-private.php';      // ZDZ_Private — codes customer details before words reach a model or an app's own tables (ZDZ_Private::for( 'assistant' ))
+require_once get_template_directory() . '/inc/class-zdz-sealed-admin.php'; // Zorderz → Gate code key: the codes' key state, printed recovery code, ZDZ_SEALED_KEY
+require_once get_template_directory() . '/inc/class-zdz-ask-context.php';  // ZDZ_Ask_Context — "Ask chat about this": a widget's text, privacy-checked, POST /zorderz/v1/ask-context
+require_once get_template_directory() . '/inc/class-zdz-usage.php';        // ZDZ_Usage — the Usage view (GET /zorderz/v1/admin/usage), each person's own (GET /zorderz/v1/usage/mine), record()
+ZDZ_Sealed::boot();
+ZDZ_Sealed_Admin::boot();
+ZDZ_Ask_Context::init();
+ZDZ_Usage::boot();
+// ── Kernel: the Ai router ───────────────────────────────────────────────
+// One router for every app's Ai call: roles (not model names) resolved through the
+// Model Registry's llm_* slots, customer details coded before anything leaves, a
+// zero-data-retention guard, spend booked before a call is sent, one ledger row per
+// call (numbers only). Nothing is sent until an admin sets the models, their prices
+// and a monthly budget (Zorderz → Ai usage → Setup).
+require_once get_template_directory() . '/inc/llm/class-zdz-llm-provider.php';           // ZDZ_LLM_Provider (the seam) + ZDZ_LLM_Wire
+require_once get_template_directory() . '/inc/class-zdz-llm-guard.php';                  // ZDZ_LLM_Guard — refuses anything outside zero data retention
+require_once get_template_directory() . '/inc/llm/class-zdz-llm-anthropic.php';          // the native Messages API adapter
+require_once get_template_directory() . '/inc/llm/class-zdz-llm-openai-compatible.php'; // any OpenAI-style provider entry
+require_once get_template_directory() . '/inc/llm/class-zdz-llm-poe.php';                // an admin's choice to point a role at the Poe gateway
+if ( defined( 'ZDZ_LLM_FAKE' ) && ZDZ_LLM_FAKE ) {
+	require_once get_template_directory() . '/inc/llm/class-zdz-llm-fake.php';           // scripted answers, for test runs only
+}
+require_once get_template_directory() . '/inc/class-zdz-llm-ledger.php';                 // ZDZ_LLM_Ledger — one row per call + the spend holds
+require_once get_template_directory() . '/inc/class-zdz-core-llm.php';                   // ZDZ_Core_LLM::ask( $role, $request, $ctx )
+require_once get_template_directory() . '/inc/class-zdz-llm-admin.php';                  // Zorderz → Ai usage (with Setup) and Ai checks
+require_once get_template_directory() . '/db/migrate-llm-ledger.php';                    // the ledger and holds tables, once per schema version
+ZDZ_Core_LLM::boot();
+ZDZ_LLM_Ledger::boot();
+ZDZ_LLM_Admin::boot();
+
+// ── Kernel: Privacy View and the price book ─────────────────────────────
+// ZDZ_Privacy_View boots here, before after_setup_theme: its gate runs first of
+// all on that hook, before any plugin's init, for an account an administrator
+// has put in Privacy View.
+require_once get_template_directory() . '/inc/class-zdz-privacy-view.php';  // ZDZ_Privacy_View — deny-by-default surfaces and pseudonyms for one account; Zorderz → Privacy View look-up
+require_once get_template_directory() . '/inc/class-zdz-price-book.php';    // ZDZ_Price_Book — the priced catalog over the Item Engine (grid schemes); costs admin-only; filled by the Identity Pack
+require_once get_template_directory() . '/inc/class-zdz-price-book-admin.php'; // Zorderz → Price Book
+ZDZ_Privacy_View::boot();
+ZDZ_Price_Book::boot();
+ZDZ_Price_Book_Admin::init();
+// ── end Privacy View and the price book ─────────────────────────────────
+
+// ── The assistant's kernel: ask-bar phrases and actions, each person's apps (BEGIN) ──
+// The ask bar's rules are data (ZDZ_Ask_Phrases, ZDZ_Ask_Actions), sent to the page so the page and the server run the
+// same rules; each person's home apps, at work and after hours, come from ZDZ_For_You. Both reach the page on
+// zdzData (askPhrases, forYou), added after the main data block so this stays one self-contained piece.
+require_once get_template_directory() . '/inc/class-zdz-ask-phrases.php'; // ZDZ_Ask_Phrases — launch rows, the commission and stock rules (zdz_ask_launch_rows, zdz_ask_trade_words)
+require_once get_template_directory() . '/inc/class-zdz-ask-actions.php'; // ZDZ_Ask_Actions — the work people do, said or typed, opens the app that does it (zdz_ask_actions)
+require_once get_template_directory() . '/inc/class-zdz-for-you.php';     // ZDZ_For_You — each person's apps by work hours and the hour; POST /zorderz/v1/for-you/reset
+ZDZ_For_You::init();
+add_action( 'wp_enqueue_scripts', function () {
+	if ( ! is_user_logged_in() || ! function_exists( 'wp_script_is' ) || ! wp_script_is( 'zdz-app-js', 'enqueued' ) ) {
+		return;
+	}
+	$uid  = (int) get_current_user_id();
+	$user = wp_get_current_user();
+	$role = $user && ! empty( $user->roles ) ? (string) reset( $user->roles ) : '';
+	if ( class_exists( 'ZDZ_View_As' ) && ZDZ_View_As::is_emulating() && ZDZ_View_As::get_emulated_role() ) {
+		$role = (string) ZDZ_View_As::get_emulated_role();   // the row the page draws is the viewed role's
+	}
+	$add = array(
+		'forYou'     => ZDZ_For_You::for_js( $uid, $role ),
+		'askPhrases' => ZDZ_Ask_Phrases::for_js( $uid ),
+	);
+	wp_add_inline_script( 'zdz-app-js', 'window.zdzData=Object.assign(window.zdzData||{},' . wp_json_encode( $add ) . ');', 'before' );
+}, 30 );
+// ── The assistant's kernel (END) ──
+
+// ── Backend infrastructure (no frontend changes) ──────────────
 // Adds ZDZ_User_Goals + ZDZ_Personal_Records classes and runs their
 // one-time DB migration. Purely additive — does NOT modify KPI metric
 // collection, cache keys, or any existing render path.
 require_once get_template_directory() . '/inc/class-zdz-user-goals.php';
 require_once get_template_directory() . '/inc/class-zdz-personal-records.php';
-require_once get_template_directory() . '/inc/class-zdz-user-media.php'; // v2.17.1: Shared media management for sketches, photos, documents
+require_once get_template_directory() . '/inc/class-zdz-user-media.php'; // Shared media management for sketches, photos, documents
+require_once get_template_directory() . '/inc/class-zdz-media-share.php';  // ZDZ_Media_Share — per-recipient media share grants under the tokened media links
+require_once get_template_directory() . '/inc/class-zdz-media-marks.php';  // ZDZ_Media_Marks — drawings on a photo, kept apart from it: per-person layers, sharing, notes; /media/{id}/marks
 require_once get_template_directory() . '/inc/class-zdz-media-geocoder.php';   // EXIF inspector: offline reverse geocoder (privacy-first)
 require_once get_template_directory() . '/inc/class-zdz-media-exif.php';       // EXIF inspector: report builder
 require_once get_template_directory() . '/inc/class-zdz-media-exif-rest.php';  // EXIF inspector: GET /zorderz/v1/media/{id}/exif
-require_once get_template_directory() . '/inc/class-zdz-geocoder.php';         // Wave C (C-10 / P3b-C1): ZDZ_Geocoder — forward geocoder + shared address cache-key contract (networked-off by default). Server-side only; coordinates never cross a client boundary.
-require_once get_template_directory() . '/inc/class-zdz-media-location.php';   // Wave C (C-10 / P3b-C1): ZDZ_Media_Location — media-set location classifier (CATEGORICAL STATUS ONLY; closes the raw-centroid leak).
-require_once get_template_directory() . '/inc/class-zdz-magic-link-bridge.php'; // v2.18.0: PWA magic login bridge
-require_once get_template_directory() . '/inc/class-zdz-alert-router.php'; // v2.19.0: Cross-plugin alert routing + notification delivery
+require_once get_template_directory() . '/inc/class-zdz-geocoder.php';         // ZDZ_Geocoder — forward geocoder + shared address cache-key contract (networked-off by default). Server-side only; coordinates never cross a client boundary.
+require_once get_template_directory() . '/inc/class-zdz-media-location.php';   // ZDZ_Media_Location — media-set location classifier (CATEGORICAL STATUS ONLY; closes the raw-centroid leak).
+require_once get_template_directory() . '/inc/class-zdz-magic-link-bridge.php'; // PWA magic login bridge
+require_once get_template_directory() . '/inc/class-zdz-login-next.php';         // ZDZ_Login_Next — signing in returns to the in-app page that asked for it (same-site, allow-listed paths only)
+require_once get_template_directory() . '/inc/class-zdz-alert-router.php'; // Cross-plugin alert routing + notification delivery
 require_once get_template_directory() . '/inc/class-zdz-data-portability.php'; // v1.4.0: Company Data Export / Import (portability, backup, migration) under Tools -> Zorderz Data
 require_once get_template_directory() . '/inc/class-zdz-apps-autoinstall.php'; // v1.6.0: one-upload onboarding — the active theme installs + activates the bundled apps plugin once, so a first install is a single upload
 require_once get_template_directory() . '/db/migrate-2.13.0.php';
-require_once get_template_directory() . '/db/migrate-2.17.1.php'; // v2.17.1: zdz_user_media table
-require_once get_template_directory() . '/db/migrate-alert-router.php'; // v2.19.0: zdz_notifications table
-require_once get_template_directory() . '/db/migrate-2.20.3.php'; // v2.20.3: clean deprecated zdz_pr_* user meta
-require_once get_template_directory() . '/db/migrate-2.20.4.php'; // v2.20.4: zdz_user_media EXIF columns (captured_at, gps_lat, gps_lng)
+require_once get_template_directory() . '/db/migrate-2.17.1.php'; // zdz_user_media table
+require_once get_template_directory() . '/db/migrate-alert-router.php'; // zdz_notifications table
+require_once get_template_directory() . '/db/migrate-bell.php';         // the bell's first day: alerts older than 30 days marked read
+require_once get_template_directory() . '/db/migrate-places.php';       // zdz_places: the geocoder's permanent cache
+require_once get_template_directory() . '/db/migrate-2.20.3.php'; // clean deprecated zdz_pr_* user meta
+require_once get_template_directory() . '/db/migrate-2.20.4.php'; // zdz_user_media EXIF columns (captured_at, gps_lat, gps_lng)
 
-// v2.18.0: Initialize PWA Magic Link Bridge (registers REST routes + login_redirect filter)
+// Initialize PWA Magic Link Bridge (registers REST routes + login_redirect filter)
 ZDZ_Magic_Link_Bridge::get_instance();
 
 // Initialize View-As role switcher (registers hooks before 'init' fires)
@@ -206,7 +320,7 @@ add_action( 'init', function() {
 	ZDZ_Rest_API::get_instance();
 	ZDZ_Admin_Dashboard::get_instance();
 	ZDZ_KPI_Metrics::get_instance();
-	ZDZ_Alert_Router::get_instance(); // v2.19.0: Alert routing + notification delivery
+	ZDZ_Alert_Router::get_instance(); // Alert routing + notification delivery
 } );
 
 // Theme Setup
@@ -222,7 +336,7 @@ add_action( 'after_setup_theme', function() {
 	] );
 } );
 
-/* ── v2.15.0: Strip WordPress core bloat ──
+/* ── Strip WordPress core bloat ──
  * This SPA doesn't use the block editor, emoji detection, oEmbed, or RSS
  * feeds. Each of these adds render-blocking or parser-blocking resources
  * to <head> via wp_head(). Removing them cuts 3-5 HTTP requests and ~60KB
@@ -278,7 +392,7 @@ remove_action( 'wp_head', 'wp_shortlink_wp_head', 10 );
 
 // Enqueue Scripts and Styles
 add_action( 'wp_enqueue_scripts', function() {
-	// ── v2.24.8 FIX: $version was resolving to EMPTY on the live site. ──
+	// ── FIX: $version was resolving to EMPTY on the live site. ──
 	// Live evidence: every theme asset shipped as `?ver=.1781587569` — note the
 	// LEADING DOT with no version before it — and assets passing the bare
 	// $version (lucide, dashboard-personalization) shipped as `?ver=7.0`, i.e.
@@ -294,7 +408,7 @@ add_action( 'wp_enqueue_scripts', function() {
 		$version = ZDZ_THEME_VER_FLOOR; // single source — see the constant's docblock
 	}
 
-	// ── v2.21.6 (hardened v2.24.8): Content-based cache-busting for the theme's
+	// ── (hardened): Content-based cache-busting for the theme's
 	// OWN assets. Versioning by the theme version string alone lets a CDN /
 	// NitroPack / PWA service-worker keep serving an OLD app.js after a deploy if
 	// the ?ver= didn't change. Append the file's modification time so the ?ver=
@@ -308,7 +422,7 @@ add_action( 'wp_enqueue_scripts', function() {
 		return $mtime ? ( $version . '.' . $mtime ) : $version;
 	};
 
-	// ── v2.15.0: Performance — self-host Inter fonts and Lucide icons.
+	// ── Performance — self-host Inter fonts and Lucide icons.
 	// Eliminates three external CDN dependencies (fonts.googleapis.com,
 	// fonts.gstatic.com, cdn.jsdelivr.net) that were render-blocking and
 	// added 1-8 seconds on slow cellular connections. Font files now live
@@ -320,17 +434,40 @@ add_action( 'wp_enqueue_scripts', function() {
 	wp_enqueue_style( 'zdz-style', get_stylesheet_uri(), [ 'zdz-fonts' ], $asset_ver( '/style.css' ) );
 	wp_enqueue_style( 'zdz-app-css', get_template_directory_uri() . '/assets/css/app.css', [ 'zdz-fonts' ], $asset_ver( '/assets/css/app.css' ) );
 	wp_enqueue_style( 'zdz-bug-reporter-css', get_template_directory_uri() . '/assets/css/bug-reporter.css', [ 'zdz-app-css' ], $asset_ver( '/assets/css/bug-reporter.css' ) );
+	if ( class_exists( 'ZDZ_App_Groups' ) ) {
+		wp_add_inline_style( 'zdz-app-css', ZDZ_App_Groups::css_vars() ); // the five group colours + the reserved "needs you" colour
+	}
 
-	// ── v2.15.0: Resource preloading is handled by NitroPack ──
+	// ── Resource preloading is handled by NitroPack ──
 	// NitroPack analyzes real page loads and generates optimal preload
 	// hints automatically. Manual preloads would duplicate its work.
 
 	wp_enqueue_script( 'zdz-overlay-escape-js', get_template_directory_uri() . '/assets/js/overlay-escape.js', [], $asset_ver( '/assets/js/overlay-escape.js' ), true );
 	wp_enqueue_script( 'zdz-app-js', get_template_directory_uri() . '/assets/js/app.js', ['zdz-lucide', 'zdz-overlay-escape-js'], $asset_ver( '/assets/js/app.js' ), true );
 	wp_enqueue_script( 'zdz-bridge-js', get_template_directory_uri() . '/assets/js/bridge.js', ['zdz-app-js'], $asset_ver( '/assets/js/bridge.js' ), true );
+	// The kit of parts (ZDZ.ui): one loader, toast, sheet, request helper, person badge and paper for every app.
+	wp_enqueue_style( 'zdz-kit-css', get_template_directory_uri() . '/assets/css/zdz-kit.css', [ 'zdz-app-css' ], $asset_ver( '/assets/css/zdz-kit.css' ) );
+	wp_enqueue_script( 'zdz-kit-js', get_template_directory_uri() . '/assets/js/zdz-kit.js', [ 'zdz-app-js' ], $asset_ver( '/assets/js/zdz-kit.js' ), true );
+	// The usage-records card (does nothing while the card is off).
+	wp_enqueue_style( 'zdz-consent-css', get_template_directory_uri() . '/assets/css/consent.css', [ 'zdz-kit-css' ], $asset_ver( '/assets/css/consent.css' ) );
+	wp_enqueue_script( 'zdz-consent-js', get_template_directory_uri() . '/assets/js/zdz-consent.js', [ 'zdz-kit-js' ], $asset_ver( '/assets/js/zdz-consent.js' ), true );
+	// Settings -> Notifications: one switch for phone notifications on this device (ZDZPush), the self-heal on each
+	// start, and the routine an app's own bell runs. Before the bell, which asks it.
+	wp_enqueue_style( 'zdz-push-css', get_template_directory_uri() . '/assets/css/push.css', [ 'zdz-kit-css' ], $asset_ver( '/assets/css/push.css' ) );
+	wp_enqueue_script( 'zdz-push-js', get_template_directory_uri() . '/assets/js/zdz-push.js', [ 'zdz-kit-js' ], $asset_ver( '/assets/js/zdz-push.js' ), true );
+	// The bell: ZDZ_Alert_Router's in-app alerts, on the home screen and the bottom navigation.
+	wp_enqueue_style( 'zdz-bell-css', get_template_directory_uri() . '/assets/css/bell.css', [ 'zdz-kit-css' ], $asset_ver( '/assets/css/bell.css' ) );
+	wp_enqueue_script( 'zdz-bell-js', get_template_directory_uri() . '/assets/js/zdz-bell.js', [ 'zdz-kit-js', 'zdz-push-js' ], $asset_ver( '/assets/js/zdz-bell.js' ), true );
+	// Contacts made from the page: marked Call / Text / E-mail taps, and "How did the call go?".
+	wp_enqueue_script( 'zdz-contacts-js', get_template_directory_uri() . '/assets/js/zdz-contacts.js', [ 'zdz-kit-js' ], $asset_ver( '/assets/js/zdz-contacts.js' ), true );
+	// Settings → Your app use: this person's own last 30 days (draws nothing for the shared device or in Demo Mode).
+	wp_enqueue_script( 'zdz-usage-js', get_template_directory_uri() . '/assets/js/zdz-usage.js', [ 'zdz-kit-js' ], $asset_ver( '/assets/js/zdz-usage.js' ), true );
+	// "Ask chat about this" on every widget: the server (ZDZ_Ask_Context) removes private details before the preview.
+	wp_enqueue_style( 'zdz-ask-chat-css', get_template_directory_uri() . '/assets/css/ask-chat.css', [ 'zdz-app-css' ], $asset_ver( '/assets/css/ask-chat.css' ) );
+	wp_enqueue_script( 'zdz-ask-chat-js', get_template_directory_uri() . '/assets/js/ask-chat.js', [ 'zdz-bridge-js' ], $asset_ver( '/assets/js/ask-chat.js' ), true );
 	wp_enqueue_script( 'zdz-bug-reporter-js', get_template_directory_uri() . '/assets/js/bug-reporter.js', ['zdz-app-js'], $asset_ver( '/assets/js/bug-reporter.js' ), true );
 
-	// EXIF inspector (v2.21.0): on-demand photo metadata panel. CSS depends on
+	// EXIF inspector: on-demand photo metadata panel. CSS depends on
 	// zdz-app-css for the shared design tokens; JS depends on zdz-app-js so the
 	// localized `zdzData` (carrying the wp_rest nonce the panel sends as
 	// X-WP-Nonce) is defined before the panel runs. The REST route self-registers.
@@ -348,7 +485,7 @@ add_action( 'wp_enqueue_scripts', function() {
 		true
 	);
 
-	// v2.13.1: optional personalization layer — drag-reorder KPI cards
+	// optional personalization layer — drag-reorder KPI cards
 	// and Personal Records strip. Self-contained; fails closed via its
 	// own sessionStorage kill switch if anything goes wrong.
 	wp_enqueue_style(
@@ -413,9 +550,9 @@ add_action( 'wp_enqueue_scripts', function() {
 
 	$logo_light = get_theme_mod( 'zdz_logo_light', '' );
 	$logo_dark  = get_theme_mod( 'zdz_logo_dark', '' );
-	$logo_vertical = get_theme_mod( 'zdz_logo_vertical', '' ); // v2.14.4 A5
+	$logo_vertical = get_theme_mod( 'zdz_logo_vertical', '' );
 
-	// v2.16.0 T12: Logo variant fallbacks — if only one variant is uploaded,
+	// Logo variant fallbacks — if only one variant is uploaded,
 	// use it for both so the logo never goes blank on theme switch.
 	if ( empty( $logo_dark ) && ! empty( $logo_light ) ) {
 		$logo_dark = $logo_light;
@@ -439,17 +576,31 @@ add_action( 'wp_enqueue_scripts', function() {
 		'apps'           => ZDZ_Plugin_API::get_instance()->get_user_app_configs( $user_id ),
 		'appOrder'       => get_user_meta( $user_id, 'zdz_app_order', true ) ?: [],
 		'widgetOrder'    => get_user_meta( $user_id, 'zdz_dash_widget_order', true ) ?: [],
+		// ── Home screen: the focus view, pins, each person's apps and the ask bar's rules ──
+		// focusView: tapping an app opens it as its own page, unless the person turned it off in Settings (a site
+		// changes the default with the 'zdz_focus_view_default' filter). homePins: the widgets this person keeps on
+		// home. forYou: this person's apps ranked for work hours and after hours, with their hours and the site's
+		// zone (null for the shared device, or when that service is not installed). askPhrases: the ask bar's
+		// phrase rules, the one copy the page and ZDZ_Orchestrator both run (null when not installed: the page
+		// uses its own written-out rules). askHint: the business's own trade words that also mark a typed question
+		// for the quick answers ('' when it lists none; ZDZ_Orchestrator::quick_hint_pattern()).
+		'focusView'      => ZDZ_Rest_API::focus_view_for( $user_id ),
+		'homePins'       => ZDZ_Rest_API::home_pins_for( $user_id ),
+		'forYou'         => ( class_exists( 'ZDZ_For_You' ) && method_exists( 'ZDZ_For_You', 'for_js' ) ) ? ZDZ_For_You::for_js( $user_id, $effective_role ) : null,
+		'askPhrases'     => ( is_user_logged_in() && class_exists( 'ZDZ_Ask_Phrases' ) && method_exists( 'ZDZ_Ask_Phrases', 'for_js' ) ) ? ZDZ_Ask_Phrases::for_js( (int) $user_id ) : null,
+		'askHint'        => ZDZ_Orchestrator::quick_hint_pattern(),
+		// ── end home screen ──
 		'themeVersion'   => $version,
 		'logoutUrl'      => wp_logout_url( home_url( '/login/' ) ),
 		'userFirstName'  => $first_name,
 		'customLogoUrl'  => $custom_logo_url,
 		'logoLight'      => $logo_light,
 		'logoDark'       => $logo_dark,
-		'logoVertical'   => $logo_vertical,  // v2.14.4 A5
-		'reviewBridge'   => ( new ZDZ_Core_ReviewBridge() )->is_configured(), // v2.14.5
-		'gameAvailable'  => class_exists( 'ZG_App' ) && defined( 'TSG_PLUGIN_URL' ), // v2.14.6: Game embed flag — lets app.js/bridge.js offer the game during chat wait times without DOM sniffing
-		'dataPermissions' => class_exists( 'ZDZ_Data_Permissions' ) ? ZDZ_Data_Permissions::resolve( $user_id ) : [], // v2.17.0: Cross-plugin data permissions for frontend gating
-		// v2.21.0: Kiosk / Demo mode flags. These are computed against the
+		'logoVertical'   => $logo_vertical,
+		'reviewBridge'   => ( new ZDZ_Core_ReviewBridge() )->is_configured(), //
+		'gameAvailable'  => defined( 'ZG_PLUGIN_URL' ), // true when the Game app is loaded (the constant its entry file defines) — read this flag instead of sniffing the DOM for the game
+		'dataPermissions' => class_exists( 'ZDZ_Data_Permissions' ) ? ZDZ_Data_Permissions::resolve( $user_id ) : [], // Cross-plugin data permissions for frontend gating
+		// Kiosk / Demo mode flags. These are computed against the
 		// REAL (cookie-authenticated) administrator — NOT the switched runtime
 		// user — so the SPA shows the right control in each state:
 		//   • kioskDemoActive = true  → currently running as the General
@@ -464,16 +615,38 @@ add_action( 'wp_enqueue_scripts', function() {
 			&& ! ZDZ_Kiosk_Demo::is_active()
 			&& user_can( ZDZ_Kiosk_Demo::get_real_user_id_public(), 'manage_options' )
 			&& ZDZ_Kiosk_Demo::get_target_user_id() > 0,
+		'appGroups'       => class_exists( 'ZDZ_App_Groups' ) ? ZDZ_App_Groups::for_js() : [],      // the five groups in launcher order + the "needs you" colour
+		'people'          => class_exists( 'ZDZ_Person_Color' ) ? ZDZ_Person_Color::for_js() : [],  // initials, tone and shape per person — no names, no e-mails
+		'consent'         => class_exists( 'ZDZ_Consent' ) ? ZDZ_Consent::for_page( $user_id ) : [ 'on' => false ],
+		// The bell is drawn for a signed-in person, never the shared device and never in Demo Mode (the server
+		// refuses them too). siteOffsetMin turns the alerts' site-local times into "5 min ago".
+		'bellOn'          => is_user_logged_in() && ! ( class_exists( 'ZDZ_Kiosk_Demo' ) && ZDZ_Kiosk_Demo::is_active() )
+			&& ! ( class_exists( 'ZDZ_Alert_Router' ) && ZDZ_Alert_Router::is_kiosk_user( $user_id ) ),
+		'siteOffsetMin'   => (int) round( (float) get_option( 'gmt_offset', 0 ) * 60 ),
+		// Settings -> Notifications is drawn on the same terms as the bell (GET /zorderz/v1/push/setup refuses the rest).
+		'pushOn'          => is_user_logged_in() && class_exists( 'ZDZ_Push_Setup' ) && ZDZ_Push_Setup::allowed( $user_id ),
+		// The name on the Home Screen icon, for the iPhone steps in Settings -> Notifications.
+		'appName'         => class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.pwa.short_name', ZDZ_Business_Profile::name() ) : get_bloginfo( 'name' ),
+		// The activity beacon's settings: beat = the one heartbeat rhythm; rec = may this page's person be recorded at
+		// all (ZDZ_Consent::may_record), so a "no" sends nothing; mine = Settings → Your app use is drawn (never the
+		// shared device, never Demo Mode).
+		'track'           => [
+			'beat' => ZDZ_Admin_Dashboard::HEARTBEAT_S,
+			'rec'  => is_user_logged_in() && ZDZ_Admin_Dashboard::may_record( $user_id ),
+			'mine' => is_user_logged_in() && class_exists( 'ZDZ_Usage' ) && ! ZDZ_Usage::is_shared( $user_id ) && ! ( class_exists( 'ZDZ_Kiosk_Demo' ) && ZDZ_Kiosk_Demo::is_active() ),
+		],
+		'askChatApps'     => class_exists( 'ZDZ_Ask_Context' ) ? ZDZ_Ask_Context::chat_apps() : [],
+		'customerLinkPatterns' => zdz_customer_link_patterns(), // regex sources the kit's paper may copy as a customer link
 	];
 
 	wp_localize_script( 'zdz-app-js', 'zdzData', $zdz_data );
 } );
 
-/* ── v2.18.0: Minimal Service Worker for PWA login bridge ──
- * NitroPack still handles all caching (CDN, browser cache headers). The SW
- * is re-enabled with a minimal scope: it ONLY handles the virtual
- * /_ts-bridge-token endpoint used to pass auth tokens from Safari to the
- * standalone PWA via CacheStorage. No caching logic, no NitroPack conflict.
+/* ── Minimal Service Worker for the PWA login bridge ──
+ * A page cache or CDN still handles all caching (browser cache headers). The SW
+ * has a minimal scope: it handles the virtual /_zdz-bridge-token endpoint used
+ * to pass auth tokens from Safari to the standalone PWA via CacheStorage, plus
+ * the network-first shell and the camera upload drain. No asset caching logic.
  *
  * The SW must be registered for ALL users (including logged-out) because
  * the bridge operates during the login flow.
@@ -484,16 +657,14 @@ add_action( 'template_redirect', function () {
 	$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
 	$path        = trim( parse_url( $request_uri, PHP_URL_PATH ), '/' );
 
-	// v2.23.1: the virtual /sw.js route NEVER worked in production — WP Engine's
-	// nginx serves *.js paths statically and 404s a .js URL that has no physical
-	// file, without ever consulting WordPress (verified live: GET /sw.js →
-	// nginx 404). So navigator.serviceWorker.register('/sw.js') has failed
-	// silently on every device since 2.18.0 — no PWA bridge SW, no camera
-	// Background-Sync drain, and (the real cost) no service worker available
-	// to keep app shells fresh. The SW is therefore ALSO served at the
-	// extension-less path /zdz-sw, which nginx passes through to WordPress
-	// like any permalink. Registration (below) now points there. /sw.js is
-	// kept for non-WPE environments where it already worked.
+	// Many managed hosts configure nginx to serve *.js paths statically and to
+	// 404 a .js URL that has no physical file, without ever consulting
+	// WordPress. On such a host navigator.serviceWorker.register('/sw.js')
+	// fails silently: no PWA bridge SW, no camera Background-Sync drain, and no
+	// service worker to keep app shells fresh. The SW is therefore ALSO served
+	// at the extension-less path /zdz-sw, which nginx passes through to
+	// WordPress like any permalink. Registration (below) points there; /sw.js
+	// is kept for hosts that route it to WordPress.
 	if ( 'sw.js' !== $path && 'zdz-sw' !== $path ) {
 		return;
 	}
@@ -504,15 +675,12 @@ add_action( 'template_redirect', function () {
 		exit;
 	}
 
-	// v2.29.1 ROOT CAUSE FIX: WordPress marks this unknown path 404 in the
-	// main query (handle_404) BEFORE template_redirect fires, so this route
-	// has been serving the sw.js BODY with a **404 status line** since it was
-	// created in v2.23.1 — and browsers REFUSE to register a service worker
-	// from a non-200 response. Net effect: the theme SW never actually
-	// registered on any device (verified live Jul 3 2026: GET /zdz-sw →
-	// status 404 + full v2.29.0 body), another app's service worker (which does send 200)
-	// took the root scope, and the v2.22.0 network-first shell + v2.24.2
-	// self-heal flows never ran anywhere. status_header(200) closes it.
+	// WordPress marks this unknown path 404 in the main query (handle_404)
+	// BEFORE template_redirect fires, so without an explicit status the route
+	// serves the sw.js BODY with a 404 status line, and browsers REFUSE to
+	// register a service worker from a non-200 response. Another app's
+	// service worker would then take the root scope and the network-first
+	// shell and self-heal flows would never run. status_header(200) prevents it.
 	status_header( 200 );
 	header( 'Content-Type: application/javascript; charset=utf-8' );
 	header( 'Service-Worker-Allowed: /' );
@@ -524,13 +692,12 @@ add_action( 'template_redirect', function () {
 }, 1 ); // Priority 1: run before access control
 
 /**
- * v2.29.0: /zdz-version — tiny JSON version beacon for the installed-PWA
- * freshness cycle (Workstream F, Deploy & Update Runbook). The SW update
- * check compares sw.js bytes; this beacon catches everything the byte-diff
- * can't see (the inline registration script, theme + component versions)
- * for PWAs that stay open for days without a navigation. Extension-less for
- * the same WP Engine nginx reason as /zdz-sw; no-store so no cache layer
- * (WPE page cache, NitroPack, browser HTTP cache) can ever pin it.
+ * /zdz-version — tiny JSON version beacon for the installed-PWA freshness
+ * cycle. The SW update check compares sw.js bytes; this beacon catches
+ * everything the byte-diff can't see (the inline registration script, theme +
+ * component versions) for PWAs that stay open for days without a navigation.
+ * Extension-less for the same nginx reason as /zdz-sw; no-store so no cache
+ * layer (host page cache, optimisation plugin, browser HTTP cache) can pin it.
  */
 add_action( 'template_redirect', function () {
 	$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
@@ -539,7 +706,7 @@ add_action( 'template_redirect', function () {
 		return;
 	}
 
-	// Same empty-version hardening as the enqueue callback (v2.24.8 saga).
+	// Same empty-version hardening as the enqueue callback (see ZDZ_THEME_VER_FLOOR).
 	$theme_ver = wp_get_theme()->get( 'Version' );
 	if ( ! is_string( $theme_ver ) || $theme_ver === '' ) {
 		$theme_ver = ZDZ_THEME_VER_FLOOR; // single source — see the constant's docblock
@@ -558,7 +725,7 @@ add_action( 'template_redirect', function () {
 		}
 	}
 
-	status_header( 200 ); // v2.29.1: WP pre-marks unknown paths 404 (see /zdz-sw note)
+	status_header( 200 ); // WP pre-marks unknown paths 404 (see the /zdz-sw note)
 	nocache_headers();
 	header( 'Content-Type: application/json; charset=utf-8' );
 	header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
@@ -568,22 +735,20 @@ add_action( 'template_redirect', function () {
 }, 1 );
 
 // SW registration — runs for all users (logged-in and logged-out)
-// v2.23.1: registers /zdz-sw (extension-less; see the route handler above for
-// why /sw.js can never be served on WP Engine). Default scope for a root-level
-// script URL is '/', and the route also sends Service-Worker-Allowed: /.
+// Registers /zdz-sw (extension-less; see the route handler above for why /sw.js
+// cannot be served on some hosts). Default scope for a root-level script URL
+// is '/', and the route also sends Service-Worker-Allowed: /.
 add_action( 'wp_footer', function () {
-	// Same empty-version hardening as the enqueue callback (v2.24.8 saga).
+	// Same empty-version hardening as the enqueue callback (see ZDZ_THEME_VER_FLOOR).
 	$zdz_boot_ver = wp_get_theme()->get( 'Version' );
 	if ( ! is_string( $zdz_boot_ver ) || $zdz_boot_ver === '' ) {
-		$zdz_boot_ver = ZDZ_THEME_VER_FLOOR; // v2.31.0: THIS was the missed third copy — the permanent-toast bug
+		$zdz_boot_ver = ZDZ_THEME_VER_FLOOR; // the boot version the update toast compares against
 	}
-	// v2.29.1: theme-SW registration is FLAG-GATED (default off). Live testing
-	// (Jul 3) proved the theme SW has never registered (the 404-status bug fixed
-	// above), and another app's service worker may own scope '/' carrying its push
-	// subscriptions. Flipping registration on now would make the two workers
-	// REPLACE each other on alternating page loads (feature flap: network-first
-	// shell vs push). The Phase-1 E-addendum merges them (theme SW absorbs push,
-	// Analytics defers); until then set option zdz_sw_register='on' only for testing.
+	// Theme-SW registration is FLAG-GATED (default off). Another app's service
+	// worker may own scope '/' carrying its push subscriptions; registering this
+	// one as well would make the two workers REPLACE each other on alternating
+	// page loads (network-first shell vs push). Until one worker carries both,
+	// set the option zdz_sw_register='on' only for testing.
 	$zdz_sw_on = ( 'on' === get_option( 'zdz_sw_register', 'off' ) );
 	?>
 	<script>
@@ -623,12 +788,11 @@ add_action( 'wp_footer', function () {
 			document.body.appendChild(t);
 		}
 
-		// ── v2.29.1 FRESHNESS CYCLE — SW-INDEPENDENT ────────────────────
-		// v2.29.0 nested this inside the SW registration .then(); since
-		// registration was silently failing (404-status bug), the whole
-		// freshness cycle was parked. Now the /zdz-version poll + update pill
-		// run unconditionally; the SW update() ride-along happens only when a
-		// registration exists (window.__tsReg).
+		// ── FRESHNESS CYCLE — SW-INDEPENDENT ────────────────────────────
+		// The /zdz-version poll and the update pill run unconditionally, so a
+		// service worker that fails to register cannot park them. The SW
+		// update() ride-along happens only when a registration exists
+		// (window.__zdzReg).
 		var lastCheck = Date.now();
 		var verNagged = false;
 		function zdzVersionPing() {
@@ -647,7 +811,7 @@ add_action( 'wp_footer', function () {
 			if (document.visibilityState !== 'visible') return;
 			if (!force && Date.now() - lastCheck < 5 * 60 * 1000) return;
 			lastCheck = Date.now();
-			if (window.__tsReg) { try { window.__tsReg.update(); } catch (e) {} }
+			if (window.__zdzReg) { try { window.__zdzReg.update(); } catch (e) {} }
 			zdzVersionPing();
 		}
 		document.addEventListener('visibilitychange', function () { zdzFreshnessCheck(false); });
@@ -658,18 +822,17 @@ add_action( 'wp_footer', function () {
 		var SW_ON = <?php echo $zdz_sw_on ? 'true' : 'false'; ?>;
 		if (SW_ON && 'serviceWorker' in navigator) {
 		navigator.serviceWorker.register('/zdz-sw', { scope: '/', updateViaCache: 'none' }).then(function (reg) {
-			window.__tsReg = reg;
+			window.__zdzReg = reg;
 			try {
-				// ── v2.29.0 UPDATE FLOW (replaces the v2.24.2 always-auto-apply) ──
-				// v2.24.2 skipWaiting-and-reloaded the moment ANY update installed.
-				// At launch that is the right self-heal — the user hasn't started
-				// anything yet. MID-SESSION it is exactly wrong: a deploy while a
-				// rep is halfway through dictating an estimate force-reloaded the
-				// page under them (research pass, Jul 2026: never yank working
-				// users; offer a consented refresh — no blanket skipWaiting).
-				// So: updates found within LAUNCH_MS of boot auto-apply silently
-				// (v2.24.2 behavior preserved where it was right); updates found
-				// later show a small "App update ready — Refresh" pill and wait.
+				// ── UPDATE FLOW ──
+				// Applying an update the moment it installs is the right self-heal
+				// at launch: the user hasn't started anything yet. MID-SESSION it is
+				// exactly wrong: a deploy while someone is halfway through dictating
+				// an estimate would reload the page under them. Never yank a working
+				// user; offer a consented refresh instead of a blanket skipWaiting.
+				// So: updates found within LAUNCH_MS of boot auto-apply silently;
+				// updates found later show a small "App update ready — Refresh" pill
+				// and wait.
 				var bootT = Date.now();
 				var LAUNCH_MS = 15000;
 
@@ -680,7 +843,7 @@ add_action( 'wp_footer', function () {
 
 				function zdzOnUpdateReady(nw) {
 					if (Date.now() - bootT < LAUNCH_MS) {
-						zdzApplyUpdate(nw); // launch-window self-heal (v2.24.2 behavior)
+						zdzApplyUpdate(nw); // launch-window self-heal
 					} else {
 						zdzUpdateToast(function () { zdzApplyUpdate(nw); });
 					}
@@ -716,17 +879,16 @@ add_action( 'wp_footer', function () {
 	<?php
 }, 99 );
 
-/* ── v2.23.1: Logged-in HTML must never be cached by the device ──
- * The Zorderz Camera nonce saga (Jun 2026) proved devices reuse a CACHED dashboard
- * shell for days: the iOS home-screen PWA kept serving its locally cached
- * HTML — with a long-stale baked nonce and old ?ver= script URLs — so plugin
- * updates and fresh nonces never reached the device (server-side purges
- * can't touch a device's own HTTP cache). Send explicit no-cache headers on
- * logged-in front-end page loads so browsers/PWAs revalidate the shell on
- * every launch. Anonymous traffic is untouched — NitroPack keeps caching it
- * exactly as before. (Belt & braces: the 2.22.0 service worker also fetches
- * navigations network-first with an HTTP-cache bypass; this header makes the
- * non-SW first load correct too.)
+/* ── Logged-in HTML must never be cached by the device ──
+ * Devices can reuse a CACHED dashboard shell for days: an iOS home-screen PWA
+ * keeps serving its locally cached HTML (with a long-stale baked nonce and old
+ * ?ver= script URLs), so plugin updates and fresh nonces never reach the
+ * device (server-side purges can't touch a device's own HTTP cache). Send
+ * explicit no-cache headers on logged-in front-end page loads so browsers and
+ * PWAs revalidate the shell on every launch. Anonymous traffic is untouched: a
+ * page cache keeps caching it exactly as before. (Belt and braces: the service
+ * worker also fetches navigations network-first with an HTTP-cache bypass;
+ * this header makes the non-SW first load correct too.)
  */
 add_action( 'send_headers', function () {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
@@ -737,28 +899,28 @@ add_action( 'send_headers', function () {
 	}
 } );
 
-/* ── v2.14.5: Performance — defer non-critical JS ──
+/* ── Performance — defer non-critical JS ──
  * Bug reporter and dashboard personalization are interactive features that
  * don't need to block initial render. Adding `defer` lets the browser parse
  * and paint the page before downloading/executing these scripts. The core
  * app.js and bridge.js stay synchronous (in-footer) since the SPA depends
  * on them for initial routing.
  *
- * v2.14.6: Added tsg-game-js — the block-breaker game is purely interactive
- * and never needed for initial render (either as a dashboard tile or Analytics
- * chat embed). The game plugin enqueues its own script; we just defer it.
+ * The Game app's script (zg-game-js) is deferred too: the block-breaker is
+ * purely interactive and never needed for initial render (either as a
+ * dashboard tile or a chat embed). The app enqueues it; this only defers it.
  */
 add_filter( 'script_loader_tag', function( $tag, $handle ) {
 	$defer_handles = [
 		'zdz-bug-reporter-js',
 		'zdz-dashboard-personalization-js',
-		'tsg-game-js',  // v2.14.6: Game block-breaker
+		'zg-game-js',   // the Game app's block-breaker
 	];
 	if ( in_array( $handle, $defer_handles, true ) && false === strpos( $tag, 'defer' ) ) {
 		$tag = str_replace( ' src=', ' defer src=', $tag );
 	}
 
-	// ── v2.15.0: NitroPack Strong mode — protect SPA boot chain ──
+	// ── NitroPack Strong mode — protect the SPA boot chain ──
 	// NitroPack Strong defers JavaScript (adds `defer` attribute) and may
 	// combine or reorder scripts for performance. This is safe for most
 	// sites, but the SPA boot chain has strict dependency ordering:
@@ -782,12 +944,12 @@ add_filter( 'script_loader_tag', function( $tag, $handle ) {
 	return $tag;
 }, 10, 2 );
 
-/* ── v2.14.5: Performance — non-render-blocking CSS for secondary sheets ──
+/* ── Performance — non-render-blocking CSS for secondary sheets ──
  * Bug reporter, personalization, and game CSS are not needed for first paint.
  * Switching them to media="print" with an onload swap to "all" lets the
  * browser download them without blocking rendering.
  *
- * v2.15.0: Core CSS (zdz-fonts, zdz-style, zdz-app-css) is LEFT as normal
+ * Core CSS (zdz-fonts, zdz-style, zdz-app-css) is LEFT as normal
  * render-blocking. NitroPack (Strong mode) handles CSS optimization for
  * the authenticated SPA — it extracts critical above-the-fold CSS, inlines
  * it, and defers the rest. This is smarter than blanket deferral because
@@ -795,9 +957,9 @@ add_filter( 'script_loader_tag', function( $tag, $handle ) {
  * its page analysis. We only defer secondary/plugin CSS that NitroPack
  * might not recognise as non-critical.
  *
- * app plugin CSS (zim-*, etc.) is also deferred via prefix match —
- * these plugins' styles are only needed when their specific sub-view is
- * active, well after first paint.
+ * App CSS (Messaging zim-*, Game zg-*, Estimates zest-*, Leads zl-*,
+ * Invoices zic-*) is also deferred via prefix match: these apps' styles are
+ * only needed when their specific sub-view is active, well after first paint.
  */
 add_filter( 'style_loader_tag', function( $tag, $handle ) {
 	// Core theme CSS — let NitroPack handle these
@@ -810,11 +972,11 @@ add_filter( 'style_loader_tag', function( $tag, $handle ) {
 	$lazy_handles = [
 		'zdz-bug-reporter-css',
 		'zdz-dashboard-personalization-css',
-		'tsg-game-css',
+		'zg-game-css',
 	];
-	// Also catch app plugin CSS by prefix (zim-*, tsg-*, tsec-*, etc.)
+	// Also catch app CSS by prefix (see the docblock above).
 	$is_lazy = in_array( $handle, $lazy_handles, true )
-		|| preg_match( '/^(zim-|tsg-|tsec-|tss-|tsl-|tsic-)/', $handle );
+		|| preg_match( '/^(zim-|zg-|zest-|zl-|zic-)/', $handle );
 	if ( $is_lazy ) {
 		// Swap to print → all on load (Filament Group pattern)
 		$tag = str_replace(
@@ -867,6 +1029,11 @@ add_action( 'template_redirect', function() {
 	}
 
 	if ( ! is_user_logged_in() ) {
+		// An in-app page opened signed out (a vault document, say) is remembered, so signing in
+		// comes back to it. ZDZ_Login_Next keeps only an allow-listed, same-site path.
+		if ( class_exists( 'ZDZ_Login_Next' ) ) {
+			ZDZ_Login_Next::remember( (string) parse_url( $request_uri, PHP_URL_PATH ) );
+		}
 		// Serve the login page directly with HTTP 200 instead of redirecting (HTTP 302).
 		// Redirects block WP Engine SSL certificate provisioning because the
 		// verification system cannot follow redirect chains to validate the domain.
@@ -925,7 +1092,7 @@ add_action( 'customize_register', function( $wp_customize ) {
 		'section'     => 'zdz_logos',
 	] ) );
 
-	// v2.14.4 A5: Vertical / square logo for the sidebar nav
+	// Vertical / square logo for the sidebar nav
 	$wp_customize->add_setting( 'zdz_logo_vertical', [
 		'default'           => '',
 		'sanitize_callback' => 'esc_url_raw',
@@ -972,173 +1139,40 @@ add_action( 'after_switch_theme', function() {
 } );
 
 
-/**
- * v2.14.0: Front-end OAuth bounce.
- *
- * ROOT CAUSE (first reported in v2.14.0, hot-fixed here in v2.14.0):
- *   TSEC_Admin::handle_oauth_callback runs on admin_init. It calls
- *     wp_redirect( admin_url( 'admin.php?page=tsec-settings&connected=1' ) )
- *   on success, or ...&error=oauth_failed on failure — which drops the
- *   user in the WordPress backend. Non-admin app users shouldn't see
- *   wp-admin at all, and even admins shouldn't be deposited there after a
- *   front-end authorize action.
- *
- *   v2.14.0 tried to gate this on the INCOMING request URL (looking for
- *   ?page=tsec or tsec_oauth=1). That never matched — inspecting the
- *   shipped Estimates plugin proves its redirect URI is the CLEAN
- *   site_url('/wp-admin/admin.php') with no query params, so neither
- *   marker is ever present on the callback request. The filter always
- *   short-circuited and the user ended up on wp-admin anyway.
- *
- * FIX: Gate on the OUTGOING $location — the URL Estimates is trying to
- * wp_redirect() to. Estimates's handle_oauth_callback only ever redirects to
- * one of two URLs after completing the token exchange:
- *     admin.php?page=tsec-settings&connected=1        (success)
- *     admin.php?page=tsec-settings&error=oauth_failed (failure)
- * Those patterns are exclusive to the post-OAuth handler, so matching them
- * is safe. The origin transient (zdz_fb_auth_origin_<uid>, set in
- * handle_fb_auth_start) is still consulted so admins who launched the
- * authorize flow from wp-admin itself are NOT bounced — their existing
- * re-authorize flow continues to land on the wp-admin settings page.
- *
- * Flow end-to-end:
- *   1. Front-end [Authorize FreshBooks] button calls /zorderz/v1/fb-auth-start,
- *      which sets zdz_fb_auth_origin_<uid> = 'frontend' (10 min) and
- *      returns the FreshBooks authorize URL.
- *   2. User is redirected to FreshBooks, approves, FB redirects to
- *      wp-admin/admin.php?code=XXX&state=YYY.
- *   3. Estimates's admin_init handler runs the token exchange, then calls
- *      wp_redirect( admin.php?page=tsec-settings&connected=1 ).
- *   4. THIS filter fires, sees the transient marker, recognises the
- *      outbound URL as Estimates's post-OAuth redirect, consumes the marker,
- *      and rewrites to home_url( '/?zdz_authorized=freshbooks' ) (or
- *      ?zdz_auth_error=... on failure).
- *   5. The existing app.js handler on the homepage picks up the flag,
- *      shows a toast, and switches to the Settings view.
- * No Estimates plugin change required.
- */
-add_filter( 'wp_redirect', 'zdz_frontend_oauth_bounce', 1, 2 );
-function zdz_frontend_oauth_bounce( $location, $status ) {
-	if ( ! is_user_logged_in() ) {
-		return $location;
-	}
-
-	// Match on the OUTGOING redirect target, not the incoming request URL.
-	// Estimates builds these two exclusively in its post-OAuth handler.
-	$loc_has_tsec = ( strpos( $location, 'page=tsec-settings' ) !== false );
-	$is_success   = $loc_has_tsec && ( strpos( $location, 'connected=1' )      !== false );
-	$is_error     = $loc_has_tsec && ( strpos( $location, 'error=oauth_failed' ) !== false );
-	if ( ! $is_success && ! $is_error ) {
-		return $location;
-	}
-
-	// Only rewrite if this user started the flow from the front-end. If the
-	// transient isn't set, the user launched authorize from wp-admin and
-	// we leave Estimates's redirect alone.
-	$uid = get_current_user_id();
-	$key = 'zdz_fb_auth_origin_' . $uid;
-	if ( get_transient( $key ) !== 'frontend' ) {
-		return $location;
-	}
-	delete_transient( $key );
-
-	if ( $is_error ) {
-		// Estimates stashes the detail message in its own transient — surface
-		// whatever's there to the user so they don't see a bare "failed".
-		$detail  = get_transient( 'tsec_oauth_error' );
-		$err_val = $detail ? (string) $detail : 'oauth_failed';
-		return home_url( '/?zdz_auth_error=' . rawurlencode( $err_val ) );
-	}
-	return home_url( '/?zdz_authorized=freshbooks' );
-}
-
-/**
- * v2.14.3.1: Safety net — if the wp_redirect filter above didn't fire
- * (e.g., Estimates changed its redirect URL pattern, or the redirect was
- * handled differently), catch the user in wp-admin and bounce them home.
- *
- * CRITICAL: Must run AFTER Estimates's handle_oauth_callback (priority 10)
- * so the code exchange completes first. We fire at priority 99.
- * Also must NOT fire when ?code= is present — that means Estimates hasn't
- * processed the callback yet (or failed to redirect), so we let
- * Estimates finish first. We only intercept the POST-exchange redirect
- * (connected=1 or page=tsec-settings).
- */
-add_action( 'admin_init', function () {
-	if ( ! is_user_logged_in() ) {
-		return;
-	}
-
-	$uid = get_current_user_id();
-	$key = 'zdz_fb_auth_origin_' . $uid;
-	if ( get_transient( $key ) !== 'frontend' ) {
-		return;
-	}
-
-	$request = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
-
-	// Do NOT intercept when ?code= is still in the URL — that means Estimates's
-	// handle_oauth_callback already ran (at priority 10) but its wp_redirect
-	// didn't fire or was blocked. If ?code= is present AND we're at priority 99,
-	// Estimates already had its chance. But to be safe, only intercept the
-	// post-exchange "connected=1" redirect.
-	if ( strpos( $request, 'code=' ) !== false ) {
-		return; // Let Estimates handle the code exchange
-	}
-
-	// Only intercept the Estimates settings page landing (post-exchange redirect
-	// that the wp_redirect filter should have caught but didn't).
-	$is_post_exchange = ( strpos( $request, 'connected=1' ) !== false )
-		|| ( strpos( $request, 'page=tsec-settings' ) !== false );
-
-	if ( ! $is_post_exchange ) {
-		return;
-	}
-
-	delete_transient( $key );
-
-	$is_error = strpos( $request, 'error=oauth_failed' ) !== false;
-	if ( $is_error ) {
-		$detail  = get_transient( 'tsec_oauth_error' );
-		$err_val = $detail ? (string) $detail : 'oauth_failed';
-		wp_safe_redirect( home_url( '/?zdz_auth_error=' . rawurlencode( $err_val ) ) );
-	} else {
-		wp_safe_redirect( home_url( '/?zdz_authorized=freshbooks' ) );
-	}
-	exit;
-}, 99 );
-
-
-/* ── PHASE 4 · G2 (v2.30.0): fresh-nonce endpoint for widget keepalive ──
+/* ── Fresh-nonce endpoint for widget keepalive ──
  * Installed PWAs hold their auth cookie for days, but WP nonces expire in
  * 12–24h — the root of the "mysteriously logged out / quietly stopped
- * saving" class. Widgets (scheduler v1.5.1+, Analytics has its own twin) call
+ * saving" class. Widgets (the Scheduler; Analytics has its own twin) call
  * this on a 6h timer + on foreground to keep a live REST nonce. Cookie-auth
  * only; minting a nonce for the logged-in user is exactly what a page load
  * does, so this exposes nothing new. */
-add_action( 'wp_ajax_ts_fresh_nonce', function () {
+$zdz_fresh_nonce = function () {
 	if ( ! is_user_logged_in() ) {
 		wp_send_json_error( 'not_logged_in', 401 );
 	}
 	wp_send_json_success( array(
 		'rest' => wp_create_nonce( 'wp_rest' ),
+		// Whether THIS device is in Demo Mode, so the PIN sheet can tell the truth after a failed request (the
+		// nonce above is already for whichever identity the device now runs as).
+		'demo' => class_exists( 'ZDZ_Kiosk_Demo' ) && ZDZ_Kiosk_Demo::is_active(),
 	) );
-} );
+};
+add_action( 'wp_ajax_zdz_fresh_nonce', $zdz_fresh_nonce );
 
-/* ── PHASE 4 · G5 (v2.30.0): session hygiene ──
+/* ── Session hygiene ──
  * 1. A password reset kills every OTHER session for that user — a stolen
  *    or shared login can be evicted by resetting the password.
  * 2. Admin-capable accounts get a capped "remember me" (3 days instead of
  *    14) — the roles that can see pay data shouldn't ride month-old
  *    cookies on a lost phone. Field/kiosk roles keep the long cookie
  *    (convenience is the point on the shop iPad).
- * NOTE: the wpe-auth cookie is WP Engine platform-managed — never build
- * logic on it (documented in TS-DEPLOY-RUNBOOK). */
+ * NOTE: a managed host may set its own auth cookie (for example wpe-auth on
+ * WP Engine). It is platform-managed: never build logic on it. */
 add_action( 'after_password_reset', function ( $user ) {
 	if ( $user instanceof WP_User ) {
 		$manager = WP_Session_Tokens::get_instance( $user->ID );
 		$manager->destroy_all(); // includes the resetting device — they just got a new password; one fresh login is the safe trade.
-		error_log( 'Zorderz Theme G5: destroyed all sessions for user #' . $user->ID . ' after password reset.' );
+		error_log( 'Zorderz: destroyed all sessions for user #' . $user->ID . ' after password reset.' );
 	}
 }, 10, 1 );
 
@@ -1150,9 +1184,51 @@ add_filter( 'auth_cookie_expiration', function ( $seconds, $user_id, $remember )
 }, 10, 3 );
 
 /**
+ * The customer-link shapes the kit's paper may copy (regex sources). The bundled billing connector
+ * contributes its own; another connector adds its shape on the `zdz_customer_link_patterns` filter.
+ * Nothing matching: the paper offers no copy at all.
+ */
+function zdz_customer_link_patterns(): array {
+	$p = apply_filters( 'zdz_customer_link_patterns', [ '^https://([a-z0-9-]+\\.)*freshbooks\\.com/#/link/[A-Za-z0-9._~-]+$' ] );
+	return array_values( array_filter( (array) $p, 'is_string' ) );
+}
+
+/**
+ * The kit of parts also loads on wp-admin pages opened inside the app (?zdz_mobile=1), so an app's full
+ * view and its home-screen widget share one set of parts. There is no zdzData there; the kit gets the few
+ * values it reads.
+ */
+add_action( 'admin_enqueue_scripts', function ( $hook_suffix = '' ) {
+	// Also on Zorderz → User Management, which draws the person badges with the kit.
+	if ( empty( $_GET['zdz_mobile'] ) && 'zorderz_page_zdz-user-management' !== $hook_suffix ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display flag only
+		return;
+	}
+	$dir = get_template_directory();
+	$uri = get_template_directory_uri();
+	$ver = function ( $rel ) use ( $dir ) {
+		$m = @filemtime( $dir . $rel );
+		return ZDZ_THEME_VER_FLOOR . ( $m ? '.' . $m : '' );
+	};
+	wp_enqueue_style( 'zdz-kit-css', $uri . '/assets/css/zdz-kit.css', [], $ver( '/assets/css/zdz-kit.css' ) );
+	if ( class_exists( 'ZDZ_App_Groups' ) ) {
+		wp_add_inline_style( 'zdz-kit-css', ZDZ_App_Groups::css_vars() );
+	}
+	wp_enqueue_script( 'zdz-kit-js', $uri . '/assets/js/zdz-kit.js', [], $ver( '/assets/js/zdz-kit.js' ), true );
+	$kit = [
+		'ajaxUrl'              => admin_url( 'admin-ajax.php' ),
+		'apiUrl'               => esc_url_raw( rest_url( ZDZ_REST_NS . '/' ) ),
+		'nonce'                => wp_create_nonce( 'wp_rest' ),
+		'appGroups'            => class_exists( 'ZDZ_App_Groups' ) ? ZDZ_App_Groups::for_js() : [],
+		'people'               => ( class_exists( 'ZDZ_Person_Color' ) && is_user_logged_in() ) ? ZDZ_Person_Color::for_js() : [],
+		'customerLinkPatterns' => zdz_customer_link_patterns(),
+	];
+	wp_add_inline_script( 'zdz-kit-js', 'window.zdzData=Object.assign(' . wp_json_encode( $kit ) . ',window.zdzData||{});', 'before' );
+} );
+
+/**
  * ── Business Profile: dynamic PWA manifest ────────────────────────────
- * The manifest was a static file carrying one company's name, colours and a
- * path to a theme folder that no longer existed. It is now generated from the
+ * The manifest was a static file with a fixed name and colours that ignored
+ * the profile, and a path to a theme folder that no longer existed. It is now generated from the
  * Business Profile and served at /zdz-manifest.json (extension-less routes are
  * unreliable on some managed hosts, so this one keeps its extension).
  */

@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Theme — v2.13.0 Database Migration
+ * Zorderz Theme — Database Migration
  *
  * Creates two tables for backend infrastructure that supports
  * per-user goals and all-time personal records. Admin-facing UI

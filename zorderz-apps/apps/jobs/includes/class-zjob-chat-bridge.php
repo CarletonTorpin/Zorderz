@@ -7,9 +7,9 @@
  * server-side, injects the TRUE caller identity, and calls handoff_from_chat(). The
  * assistant never touches the DB or the CRM directly.
  *
- * MARKER: ZJOB_MARKER = '[ZDZ_JOB_HANDOFF]' (defined in app.php). This replaces the
- * legacy '[TS_HANDOFF]' token; the token lives in ONE constant, referenced here and
- * exposed to the engine via the `zdz_job_markers` filter — never typed as a literal.
+ * MARKER: ZJOB_MARKER = '[ZDZ_JOB_HANDOFF]' (defined in app.php). The token lives in
+ * ONE constant, referenced here and exposed to the engine via the `zdz_job_markers`
+ * filter — never typed as a literal.
  *
  * CONTRACT:
  *   - SIDE-EFFECTING -> preview-then-confirm (two turns). Turn 1 writes nothing.

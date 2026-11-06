@@ -361,9 +361,9 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 		}
 
 		/**
-		 * WORK: the RECORD — photos + notes under the per-component gate (B5). Counts span EVERY
+		 * WORK: the RECORD — photos + notes under the per-component gate. Counts span EVERY
 		 * component (a count discloses nothing); the visible photo strip and the notes come ONLY from
-		 * jobs this viewer could open in Jobs. INV-12: the panel states when it holds FEWER pictures
+		 * jobs this viewer could open in Jobs. Honest output: the panel states when it holds FEWER pictures
 		 * than the count — a short strip under a big number is a silent lie. Every media URL is a
 		 * secure token minted by ZJOB_Photos::for_jobs (never a raw uploads URL — geo-PII); notes are
 		 * top-level with NO include-internal flag anywhere. The MODEL never sees this panel — the model
@@ -451,7 +451,7 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 					'photos'         => $photos,      // only openable, secure URLs
 					'notes'          => $notes,       // only openable, top-level
 					'shown_photos'   => $shown_photos,
-					'strip_is_short' => ( $shown_photos < $photo_count ), // INV-12: honest short strip
+					'strip_is_short' => ( $shown_photos < $photo_count ), // honest output: a short strip says so
 					'openable_jobs'  => count( $openable_ids ),
 					'total_jobs'     => count( $all_ids ),
 				),

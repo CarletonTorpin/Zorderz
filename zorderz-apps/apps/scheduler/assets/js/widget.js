@@ -67,7 +67,7 @@
 	// a 6h keepalive (below) and a one-shot 403 retry with a fresh nonce.
 	function freshNonce() {
 		var fd = new FormData();
-		fd.append('action', 'ts_fresh_nonce');
+		fd.append('action', 'zdz_fresh_nonce');
 		return fetch(D.restUrl.replace(/wp-json.*$/, 'wp-admin/admin-ajax.php'), {
 			method: 'POST', body: fd, credentials: 'same-origin'
 		})
@@ -529,7 +529,7 @@
 			// Snapshot the current slots for this day so we can re-save it whole.
 			var d = parseYmd(key);
 			var cur = dayHourState(d, state.me);
-			// v1.4.0 (D3): keep the PRE-gesture model too — it powers the
+			// v1.4.0: keep the PRE-gesture model too — it powers the
 			// overwrite-confirm chip and the 5s Undo toast (SC 2.5.2 abort/undo).
 			availDrag.dirty[key] = { d: d, slots: cur, orig: cur.slice() };
 		}
@@ -563,11 +563,11 @@
 	}
 
 	// ═════════════════════════════════════════════════════════════════
-	// v1.4.0 (D3) — availability interaction support module
+	// v1.4.0 — availability interaction support module
 	// ═════════════════════════════════════════════════════════════════
 
-	// Deliberate multi-day painting is RETIRED for now (owner directive Jul 2);
-	// kept behind this constant so a future release can re-enable it as an
+	// Deliberate multi-day painting is RETIRED for now (a drag across days could
+	// overwrite other days); kept behind this constant so a future release can re-enable it as an
 	// explicit mode. Do not flip without an on-screen mode toggle.
 	var MULTIDAY_PAINT = false;
 
@@ -851,18 +851,17 @@
 	// setPointerCapture, once a drag begins on a cell, every move/up routes to
 	// that cell regardless of overlays.
 	//
-	// v1.4.0 (D3): ONE DAY PER GESTURE + LONG-PRESS DAY EDITOR + OVERWRITE GUARD.
-	// Owner directive (Jul 2 mobile review): "if I just drag my finger across,
-	// it does tons of selections that might be overwriting other ones… For now,
-	// it's one press per day, and you have to … pick up your thumb to get the
-	// next day." The v1.2.2 cross-day rectangle is RETIRED behind MULTIDAY_PAINT
+	// v1.4.0: ONE DAY PER GESTURE + LONG-PRESS DAY EDITOR + OVERWRITE GUARD.
+	// A finger dragged across the grid would select many days and could overwrite
+	// other ones, so it is one press per day: lift the thumb to get the next day.
+	// The cross-day rectangle is RETIRED behind MULTIDAY_PAINT
 	// (default OFF) — a gesture affects ONLY the day it started on; vertical
 	// drag still sets the hour range within that day. NEW: press-and-hold
-	// (500ms, 10px slop) opens the full-width DAY EDITOR ("press on 2 and hold
-	// it, it should bring up 2 as a big box where I can drag more granularly");
+	// (500ms, 10px slop) opens the full-width DAY EDITOR (the pressed day as a big
+	// box to drag in more finely);
 	// a ✎ Edit-hours chip after any paint is the always-visible route to the
 	// same editor (long-press is never the only path — discoverability). iOS
-	// playbook: implicit capture on the pressed cell only (never transferred to
+	// practice: implicit capture on the pressed cell only (never transferred to
 	// a container — WebKit retargeting is unreliable); -webkit-touch-callout +
 	// user-select suppressed in CSS; a visual press-progress ring stands in for
 	// haptics (no Vibration API in iOS Safari); pointercancel = Safari claimed
@@ -925,8 +924,7 @@
 				}
 				if (MULTIDAY_PAINT) {
 					// Deliberate multi-day mode (flagged OFF; a future release may
-					// re-enable behind an explicit user toggle per the owner note
-					// "later, when we do click-to-drag, maybe we'll do other things").
+					// re-enable it behind an explicit user toggle).
 					var over = cellUnderPoint(e.clientX, e.clientY) || availDrag.startCell;
 					if (over !== availDrag.startCell && over.dataset.date) {
 						var curSlot = slotFromPointer(over, e.clientY);
@@ -992,7 +990,7 @@
 		var work = availDrag.dirty;
 		availDrag.dirty = {};
 
-		// v1.4.0 (D3): the per-day delete+create wire logic lives in
+		// v1.4.0: the per-day delete+create wire logic lives in
 		// saveDayModel() (shared with the Day Editor's Save and with Undo).
 		var ops = keys.map(function (key) {
 			var entry = work[key];
@@ -1003,7 +1001,7 @@
 			.then(function () { return loadAvailabilityMine(); })
 			.then(renderAvailability)
 			.then(function () {
-				// v1.4.0 (D3): saved-toast gains UNDO (restores the pre-gesture
+				// v1.4.0: saved-toast gains UNDO (restores the pre-gesture
 				// hours — SC 2.5.2 abort/undo, and the owner's overwrite worry)
 				// and ✎ EDIT HOURS (the always-visible route to the Day Editor,
 				// so long-press is never the only path).
@@ -1090,8 +1088,25 @@
 				if (hasOpen || hasBusy) {
 					var glyph = (hasOpen && hasBusy) ? '◐' : (hasOpen ? '✓' : '✕');
 					cell.appendChild(el('span', 'zsch-w-teamglyph', glyph));
-					cell.setAttribute('aria-label', member.name + ' ' + (hasBusy && !hasOpen ? 'busy' : (hasOpen && !hasBusy ? 'open' : 'partly available')) + ' ' + MONTHS[dd.getMonth()] + ' ' + day);
-					cell.title = member.name + ' — ' + (hasBusy && !hasOpen ? 'Busy' : (hasOpen && !hasBusy ? 'Open' : 'Open & busy')) + ' · ' + MONTHS[dd.getMonth()] + ' ' + day;
+					var stateWord = hasBusy && !hasOpen ? 'busy' : (hasOpen && !hasBusy ? 'open' : 'partly available');
+					var stateCap  = hasBusy && !hasOpen ? 'Busy' : (hasOpen && !hasBusy ? 'Open' : 'Open & busy');
+					var when      = MONTHS[dd.getMonth()] + ' ' + day;
+
+					/* WHAT, not just WHEN, for work calendars. The server decides
+					 * disclosure; this only renders what it was given. A personal
+					 * account's blocks arrive with no title at all, so this list is
+					 * empty for them and the tooltip is unchanged. Deduped because
+					 * two feeds on one account can mirror the same meeting twice.
+					 * Set as attribute text only, never parsed as HTML. */
+					var titles = [];
+					blocks.forEach(function (b) {
+						var t = String(b.title || '').trim();
+						if (t && titles.indexOf(t) === -1) { titles.push(t); }
+					});
+
+					cell.setAttribute('aria-label', member.name + ' ' + stateWord + ' ' + when + (titles.length ? ': ' + titles.join(', ') : ''));
+					cell.title = member.name + ' — ' + stateCap + ' · ' + when
+						+ (titles.length ? '\n• ' + titles.join('\n• ') : '');
 				}
 				tr.appendChild(cell);
 			}
@@ -1101,9 +1116,178 @@
 	}
 
 	// ── event editor modal ─────────────────────────────────────────
+
+	/* Idempotency key for a create. Minted when the editor OPENS, not when Save
+	 * is pressed, and NOT cleared on a failed save: every attempt at the same
+	 * intended appointment — the first tap, an impatient second tap, a retry
+	 * after the phone came back from the background — carries the same key, so
+	 * the server resolves them to one appointment. Cleared once a save SUCCEEDS
+	 * or a new editor opens. crypto.randomUUID() is missing on older mobile
+	 * browsers, hence the fallbacks; uniqueness is all that is required — it is
+	 * never a secret and never a token. */
+	function newRequestId() {
+		try {
+			if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+				return window.crypto.randomUUID();
+			}
+			if (window.crypto && window.crypto.getRandomValues) {
+				var b = new Uint8Array(16);
+				window.crypto.getRandomValues(b);
+				return Array.prototype.map.call(b, function (x) {
+					return ('0' + x.toString(16)).slice(-2);
+				}).join('');
+			}
+		} catch (e) {}
+		return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+	}
+
+	/* ── Repeats ──────────────────────────────────────────────────────
+	 * The dropdown's VALUE is the RRULE itself, so what the browser sends is
+	 * exactly what the server validates. The presets are rebuilt whenever the
+	 * start date changes, because "the second Tuesday of the month" has no
+	 * meaning until there is a date. */
+	var RRULE_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+	var DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+	var ORDINALS = ['', 'first', 'second', 'third', 'fourth'];
+
+	/** The editor's start field as a local Date (datetime-local or date), or null. */
+	function editorStartDate() {
+		var f = $('#zsch-f-start');
+		var v = f ? String(f.value || '') : '';
+		var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(v);
+		if (!m) { return null; }
+		return new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0, 0, 0);
+	}
+
+	function repeatPresets(d) {
+		if (!d || isNaN(d.getTime())) { return [{ v: '', t: 'Does not repeat' }]; }
+		var dow = d.getDay();
+		var dom = d.getDate();
+		var tok = RRULE_DAYS[dow];
+		var nth = Math.ceil(dom / 7);
+		var out = [
+			{ v: '', t: 'Does not repeat' },
+			{ v: 'FREQ=DAILY', t: 'Every day' },
+			{ v: 'FREQ=WEEKLY;BYDAY=' + tok, t: 'Every week on ' + DAY_NAMES[dow] },
+			{ v: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=' + tok, t: 'Every 2 weeks on ' + DAY_NAMES[dow] },
+			{ v: 'FREQ=MONTHLY;BYMONTHDAY=' + dom, t: 'Every month on day ' + dom }
+		];
+		/* The "nth weekday" preset only exists for the first four weeks: a fifth
+		 * occurrence does not happen every month, so offering it would make a
+		 * series that skips months without anybody being told. */
+		if (nth <= 4) {
+			out.push({ v: 'FREQ=MONTHLY;BYDAY=' + nth + tok, t: 'Every month on the ' + ORDINALS[nth] + ' ' + DAY_NAMES[dow] });
+		}
+		out.push({ v: 'FREQ=MONTHLY;BYMONTHDAY=-1', t: 'Every month on the last day' });
+		out.push({ v: 'FREQ=YEARLY', t: 'Every year on this date' });
+		return out;
+	}
+
+	function buildRepeatOptions(keepRule) {
+		var sel = $('#zsch-f-repeat');
+		if (!sel) { return; }
+		var want = (typeof keepRule === 'string') ? keepRule : sel.value;
+		var opts = repeatPresets(editorStartDate());
+		var matched = false;
+		while (sel.firstChild) { sel.removeChild(sel.firstChild); }
+		opts.forEach(function (o) {
+			if (o.v === want) { matched = true; }
+			var opt = document.createElement('option');
+			opt.value = o.v;
+			opt.textContent = o.t;
+			sel.appendChild(opt);
+		});
+		/* A rule none of the presets match — written by another client — is
+		 * kept verbatim rather than snapped to the nearest preset, which would
+		 * silently change when the job happens. */
+		if (want && !matched) {
+			var custom = document.createElement('option');
+			custom.value = want;
+			custom.textContent = 'Custom: ' + want;
+			sel.appendChild(custom);
+		}
+		sel.value = want || '';
+		repeatNote();
+	}
+
+	function repeatNote() {
+		var note = $('#zsch-f-repeat-note');
+		var sel = $('#zsch-f-repeat');
+		if (!note || !sel) { return; }
+		var ev = state.editingEvent;
+		if (ev && ev.is_instance) {
+			note.hidden = false;
+			note.textContent = 'This is one occurrence of a repeating appointment. Saving will ask what it should apply to.';
+			return;
+		}
+		if (sel.value && !state.editingId) {
+			note.hidden = false;
+			note.textContent = 'Creates a repeating appointment. You can change or cancel single occurrences afterwards.';
+			return;
+		}
+		note.hidden = true;
+	}
+
+	/* Rebuilt on every start change so moving the date moves the presets with
+	 * it; the chosen rule is carried across rather than reset. Wired once. */
+	function wireRepeatRebuild() {
+		var f = $('#zsch-f-start');
+		if (!f || f.dataset.zschRepeatWired) { return; }
+		f.dataset.zschRepeatWired = '1';
+		f.addEventListener('change', function () { buildRepeatOptions(); });
+		var sel = $('#zsch-f-repeat');
+		if (sel) { sel.addEventListener('change', repeatNote); }
+	}
+
+	/**
+	 * Which occurrences does this apply to? Asked rather than assumed, with the
+	 * SMALLEST scope first and focused: guessing "all" is how somebody moves a
+	 * year of a job by accident. A delete asks in its own words. Built with DOM
+	 * text only, inside the widget so it inherits the widget's colours.
+	 */
+	function askScope(cb, words) {
+		words = words || {};
+		var prompt = words.prompt || 'Apply your change to:';
+		var lbl = words.labels || {};
+		var wrap = el('div', 'zsch-scope-ask');
+		var card = el('div', 'zsch-scope-card');
+		card.setAttribute('role', 'dialog');
+		card.setAttribute('aria-modal', 'true');
+		card.setAttribute('aria-label', prompt);
+		card.appendChild(el('h3', null, 'This appointment repeats'));
+		card.appendChild(el('p', null, prompt));
+		[['instance', lbl.instance || 'Just this one'],
+			['following', lbl.following || 'This and all following'],
+			['series', lbl.series || 'Every one'],
+			['', 'Cancel']].forEach(function (pair) {
+			var b = el('button', pair[0] ? null : 'zsch-scope-cancel', pair[1]);
+			b.type = 'button';
+			b.setAttribute('data-scope', pair[0]);
+			card.appendChild(b);
+		});
+		wrap.appendChild(card);
+		(root || document.body).appendChild(wrap);
+		function done(scope) {
+			document.removeEventListener('keydown', onKey);
+			if (wrap.parentNode) { wrap.parentNode.removeChild(wrap); }
+			cb(scope);
+		}
+		function onKey(e) { if (e.key === 'Escape') { done(''); } }
+		document.addEventListener('keydown', onKey);
+		wrap.addEventListener('click', function (e) {
+			var b = e.target.closest ? e.target.closest('button[data-scope]') : null;
+			if (!b && e.target !== wrap) { return; }
+			done(b ? b.getAttribute('data-scope') : '');
+		});
+		var first = card.querySelector('button[data-scope="instance"]');
+		if (first) { first.focus(); }
+	}
+
 	function openEditorNew(day, hour) {
 		if (!D.canWrite) return;
 		state.editingId = null;
+		state.editingEvent = null;
+		state.requestId = newRequestId();
 		$('#zsch-modal-title').textContent = 'New appointment';
 		$('#zsch-delete').hidden = true;
 		$('#zsch-f-title').value = '';
@@ -1119,6 +1303,9 @@
 		$('#zsch-f-busy').value = 'busy';
 		$('#zsch-f-body').value = '';
 		$('#zsch-f-attendees').value = '';
+		buildRepeatOptions('');
+		wireRepeatRebuild();
+		setEditorDisabled(false);
 		syncNote();
 		showModal('#zsch-modal');
 	}
@@ -1138,6 +1325,11 @@
 		$('#zsch-f-busy').value = ev.busy_status || 'busy';
 		$('#zsch-f-body').value = ev.body || '';
 		$('#zsch-f-attendees').value = (ev.attendees || []).join(', ');
+		/* Remembered so saveEditor knows whether it is holding ONE occurrence of
+		 * a series — which changes what the save means, not just where it goes. */
+		state.editingEvent = ev;
+		buildRepeatOptions(ev.rrule || '');
+		wireRepeatRebuild();
 		setEditorDisabled(!D.canWrite);
 		syncNote();
 		showModal('#zsch-modal');
@@ -1145,8 +1337,9 @@
 
 	function setEditorDisabled(disabled) {
 		['#zsch-f-title', '#zsch-f-start', '#zsch-f-end', '#zsch-f-allday', '#zsch-f-location',
-			'#zsch-f-scope', '#zsch-f-busy', '#zsch-f-body', '#zsch-f-attendees'].forEach(function (id) {
-			$(id).disabled = disabled;
+			'#zsch-f-scope', '#zsch-f-busy', '#zsch-f-body', '#zsch-f-attendees', '#zsch-f-repeat'].forEach(function (id) {
+			var node = $(id);
+			if (node) { node.disabled = disabled; }
 		});
 		$('#zsch-save').hidden = disabled;
 	}
@@ -1175,7 +1368,10 @@
 			calendar_scope: $('#zsch-f-scope').value,
 			busy_status: $('#zsch-f-busy').value,
 			attendees: attendees,
-			time_zone: D.tz
+			time_zone: D.tz,
+			// The rule as chosen in the dropdown. A rule the server refuses comes
+			// back with the parser's own reason; it is never stored half-valid.
+			rrule: ($('#zsch-f-repeat') ? $('#zsch-f-repeat').value : '')
 		};
 	}
 
@@ -1184,14 +1380,80 @@
 		if (!data.title) { toast('Give it a title', true); return; }
 		if (!data.start_local || !data.end_local) { toast('Set a start and end', true); return; }
 
-		var p = state.editingId
-			? api('/events/' + state.editingId, { method: 'PATCH', body: data })
-			: api('/events', { method: 'POST', body: data });
+		// Only a CREATE needs the key: a PATCH already names the row it changes.
+		if (!state.editingId) {
+			data.client_request_id = state.requestId || (state.requestId = newRequestId());
+		}
+
+		/* ONE OCCURRENCE OR THE SERIES? Asked, never inferred, before the request
+		 * goes out; the smallest scope is the default. */
+		var ev = state.editingEvent;
+		if (state.editingId && ev && ev.is_instance) {
+			askScope(function (scope) {
+				if (!scope) { return; }              // cancelled; nothing sent
+				sendEditorSave(data, scope, ev);
+			});
+			return;
+		}
+		sendEditorSave(data, 'series', ev);
+	}
+
+	/**
+	 * Did a write land? ONE answer, used by every write path in this file. The
+	 * server answers every scoped write in one envelope carrying both `success`
+	 * and `ok`; a bare appointment row (`id`) is accepted too, so the editor
+	 * tells the truth about a write whatever shape the server it talks to uses.
+	 */
+	function wroteOk(res) {
+		if (!res) { return false; }
+		return !!(res.success || res.ok || res.id);
+	}
+
+	/**
+	 * Send the save at the chosen scope. Three scopes are three different
+	 * WRITES on three endpoints: "just this one" writes an override row, "this
+	 * and following" splits the series, "every one" edits the master.
+	 */
+	function sendEditorSave(data, scope, ev) {
+		var p;
+		if (scope === 'instance') {
+			p = api('/events/' + state.editingId + '/instance', {
+				method: 'POST',
+				/* recurrence_id is the occurrence's ORIGINAL start and is sent back
+				 * UNCHANGED; sending the new time would leave a ghost at the old
+				 * slot plus a duplicate at the new one. */
+				body: {
+					recurrence_id: ev.recurrence_id,
+					start_local: data.start_local,
+					end_local: data.end_local,
+					title: data.title,
+					body: data.body,
+					location: data.location
+				}
+			});
+		} else if (scope === 'following') {
+			p = api('/events/' + state.editingId + '/split', {
+				method: 'POST',
+				body: {
+					recurrence_id: ev.recurrence_id,
+					start_local: data.start_local,
+					title: data.title,
+					body: data.body,
+					location: data.location
+				}
+			});
+		} else {
+			p = state.editingId
+				? api('/events/' + state.editingId, { method: 'PATCH', body: data })
+				: api('/events', { method: 'POST', body: data });
+		}
 
 		$('#zsch-save').disabled = true;
 		p.then(function (res) {
 			$('#zsch-save').disabled = false;
-			if (res && res.success) {
+			if (wroteOk(res)) {
+				// The intent landed — the next save is a different appointment.
+				state.requestId = null;
 				hideModal('#zsch-modal');
 				var synced = res.graph && res.graph.success && !res.graph.skipped;
 				/* v1.5.3: confirmation carries the WHAT and WHEN, not a bare
@@ -1215,16 +1477,82 @@
 		});
 	}
 
+	/**
+	 * A DELETE ASKS WHICH, EXACTLY AS AN EDIT DOES. An expanded occurrence
+	 * carries its series' id, so a plain delete from one occurrence would
+	 * remove the whole series. The scope prompt replaces the confirm for a
+	 * repeating appointment; a one-off still gets the plain confirm.
+	 */
 	function deleteEditor() {
 		if (!state.editingId) return;
+		var ev = state.editingEvent;
+		if (ev && ev.is_instance) {
+			askScope(function (scope) {
+				if (!scope) { return; }          // cancelled; nothing sent
+				sendEditorDelete(scope, ev);
+			}, {
+				prompt: 'Delete:',
+				labels: {
+					instance: 'Just this one',
+					following: 'This and all following',
+					series: 'Every one in the series'
+				}
+			});
+			return;
+		}
 		if (!window.confirm('Delete this appointment?')) return;
-		api('/events/' + state.editingId, { method: 'DELETE' }).then(function (res) {
-			if (res && res.success) {
+		sendEditorDelete('series', ev);
+	}
+
+	/**
+	 * The sentence for `kept_split_off` on a delete answer. Built from a NUMBER:
+	 * anything that is not a positive whole number says nothing, so a stray or
+	 * hostile value can never reach the page. Mirrors
+	 * ZSCH_Appointments::split_off_notice().
+	 */
+	function splitOffNote(n) {
+		if (typeof n !== 'number' && typeof n !== 'string') { return ''; }
+		if (typeof n === 'string' && !/^[0-9]+$/.test(n)) { return ''; }
+		n = Number(n);
+		if (!isFinite(n) || n < 1 || Math.floor(n) !== n) { return ''; }
+		return n === 1
+			? '1 split-off appointment from this series was kept.'
+			: n + ' split-off appointments from this series were kept.';
+	}
+
+	/**
+	 * Three scopes, three writes — the same rule the save path follows. Removing
+	 * ONE occurrence is a cancellation (an EXDATE plus a cancelled override row),
+	 * not a row delete, because the row it would delete belongs to the series.
+	 */
+	function sendEditorDelete(scope, ev) {
+		var p;
+		if (scope === 'instance') {
+			p = api('/events/' + state.editingId + '/instance', {
+				method: 'POST',
+				// A REST body field of the /instance route (not an admin-ajax action).
+				body: { 'action': 'cancel', recurrence_id: ev.recurrence_id }
+			});
+		} else if (scope === 'following') {
+			p = api('/events/' + state.editingId + '/following', {
+				method: 'DELETE',
+				body: { recurrence_id: ev.recurrence_id }
+			});
+		} else {
+			p = api('/events/' + state.editingId, { method: 'DELETE' });
+		}
+		p.then(function (res) {
+			if (wroteOk(res)) {
 				hideModal('#zsch-modal');
-				toast('Deleted');
+				/* A visit a "for all" edit split off this series is its own
+				 * appointment now and survives the delete; say so, with the
+				 * server's exact count. toast() sets text, never HTML. */
+				var note = splitOffNote(res && res.kept_split_off);
+				var done = scope === 'series' ? 'Deleted' : 'Removed';
+				toast(note ? done + ' \u00b7 ' + note : done, false, note ? 8000 : undefined);
 				refreshActiveView();
 			} else {
-				toast((res && res.error) || 'Could not delete', true);
+				toast((res && res.error) || (res && res.message) || 'Could not delete', true);
 			}
 		});
 	}
@@ -1513,7 +1841,7 @@
 
 
 	// ═════════════════════════════════════════════════════════════════
-	// D2 CASCADE CALENDAR (v1.5.0) — owner design, plan v2 §D2.
+	// CASCADE CALENDAR (v1.5.0).
 	//   Line 1: month strip — 6 week-span buttons of day ticks. Tap a week
 	//           → it loads into line 2. ‹ › step months.
 	//   Line 2: the selected week as a 7-day row. Tap a day → line 3.
@@ -1892,7 +2220,7 @@
 	// ── v1.5.2: CROSS-APP AUTO-REFRESH ─────────────────────────────
 	// A booking made in CHAT (the [ZSCH_BOOK] bridge) lands server-side with
 	// no client signal, so the widget kept re-projecting its in-memory window
-	// until a manual Today-tap/chevron (live finding, Jul 3 round-1 test).
+	// until a manual Today-tap/chevron.
 	// Fix: reload the active view's data when it's STALE (>60s) and the user
 	// plausibly just came back to it — (a) the widget re-enters the viewport,
 	// (b) the PWA returns to the foreground, (c) a gentle 5-minute tick while
