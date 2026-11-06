@@ -8,7 +8,7 @@
  *
  *     apply_filters( 'zdz_compose_context', array $bundle, array $context )
  *
- *   $context (from the HOOK PAYLOAD only — never the request body; INV-1):
+ *   $context (from the HOOK PAYLOAD only — never the request body; the server is the boundary):
  *     { ns:'project', ref_id:'<project work_item id>', actor:<user id>, origin?:{...} }
  *   returned $bundle (this contributor, when ns === 'project'):
  *     { origin:{ns,ref_id},
@@ -31,7 +31,7 @@
  * token, never from the submitted body.
  *
  * The single-user TTL token vault, the intake route, and the `data-zdz-schedule` launch button live on
- * the SCHEDULER side (Zsch_Intake / Zsch_Suggest, the Wave-C Scheduler port). This class owns the
+ * the SCHEDULER side (Zsch_Intake / Zsch_Suggest). This class owns the
  * contract and the jobs-side contributor + save-subscriber; it defines the Core-default token TTL the
  * intake reads.
  *
@@ -52,8 +52,8 @@ if ( ! class_exists( 'Zjob_Schedule_Context' ) ) {
 		const NS = 'project';
 
 		/**
-		 * The Core-default token TTL (seconds). Raised to 2h from the original 15 min (S4-06 slow-save
-		 * fix): a token must outlive a slow save. The Scheduler intake reads this; a tenant tunes the
+		 * The Core-default token TTL (seconds): 2h, because a token must outlive a slow save (15
+		 * minutes was too short). The Scheduler intake reads this; a tenant tunes the
 		 * `zdz_compose_context_token_ttl` filter.
 		 */
 		const TOKEN_TTL_DEFAULT = 7200;

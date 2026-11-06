@@ -1,6 +1,6 @@
-/* Zorderz Camera — Widget Styles v1.7.2 */
+/* Zorderz Camera — Widget Styles */
 
-/* Defensive surface lock (v1.2.2). The camera widget is NOT resizable and must
+/* Defensive surface lock. The camera widget is NOT resizable and must
    not shift horizontally. The widget itself carries no `resize:` and no drag
    handles — but lock it explicitly so it can never be dragged bigger/smaller or
    pushed left/right, and so nothing inside can overflow the dashboard column.
@@ -46,7 +46,7 @@
 .zcam-w-btn-primary:hover:not(:disabled) { background:#0284C7; }
 .zcam-w-btn-sm { min-height:32px; padding:4px 12px; font-size:11px; border-radius:6px; }
 
-/* Stray-line fix (v1.2.2). The theme paints `button:focus-visible{box-shadow}`,
+/* Stray-line fix. The theme paints `button:focus-visible{box-shadow}`,
    and after the native-camera round-trip the Take Photo button can keep focus,
    leaving that ring drawn as a "line on the button." We blur it in JS on return;
    this is the CSS belt: clear any box-shadow that lingers from plain :focus (NOT
@@ -58,7 +58,7 @@
 @keyframes zcam-spin { to { transform:rotate(360deg); } }
 
 /* Async upload queue strip (non-blocking).
-   CLS fix (v1.2.0): the strip ALWAYS occupies a reserved region rather than
+   CLS fix: the strip ALWAYS occupies a reserved region rather than
    appearing/growing. min-height keeps the widget's height constant whether the
    queue is empty or full; max-height + overflow-y caps growth so a 15-photo
    burst scrolls WITHIN the strip instead of pushing the dashboard down. This
@@ -79,24 +79,24 @@
 .zcam-w-q-item-failed { border-color:rgba(220,38,38,0.35); background:rgba(220,38,38,0.06); }
 .zcam-w-q-retry { margin-left:auto; min-height:28px; padding:3px 12px; font-size:12px; font-weight:600; color:#FFF; background:#0EA5E9; border:none; border-radius:6px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .zcam-w-q-retry:hover { background:#0284C7; }
-/* v1.2.10: discard control on failed items. Neutral by default; first tap arms
+/* discard control on failed items. Neutral by default; first tap arms
    an explicit red "Discard?" confirm (two-tap — this deletes the only copy of
    a never-uploaded photo), auto-disarms after 4s. */
 .zcam-w-q-discard { min-height:28px; min-width:28px; padding:3px 8px; font-size:14px; font-weight:600; line-height:1; color:var(--sys-text-sec,#64748B); background:transparent; border:1px solid var(--sys-border,#CBD5E1); border-radius:6px; cursor:pointer; flex:none; -webkit-tap-highlight-color:transparent; }
 .zcam-w-q-discard:hover { color:#DC2626; border-color:#DC2626; }
 .zcam-w-q-discard-armed, .zcam-w-q-discard-armed:hover { color:#FFF; background:#DC2626; border-color:#DC2626; font-size:11px; white-space:nowrap; }
 
-/* v1.4.0: Live in-page camera — the viewfinder STAYS on screen between shots.
+/* Live in-page camera — the viewfinder STAYS on screen between shots.
    Camera-app chrome: black surface, round shutter, translucent pills. Theme-
    independent on purpose (photography context). Safe-area aware. */
 .zcam-live { position:fixed; inset:0; z-index:2147483000; display:none; background:#000; overflow:hidden; touch-action:none; }
-/* v1.6.1: the AE/AF press-and-hold was triggering iOS TEXT SELECTION (blue
+/* the AE/AF press-and-hold was triggering iOS TEXT SELECTION (blue
    tint over everything + magnifier loupe). Kill selection and the long-press
    callout for the entire live view — nothing in it is selectable text. */
 .zcam-live, .zcam-live * { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 .zcam-live-open { display:block; }
 .zcam-live video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; transform-origin:50% 50%; }
-/* v1.5.1: shared cover-canvas styling (freeze frame + captured still). */
+/* shared cover-canvas styling (freeze frame + captured still). */
 .zcam-live-cover { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform-origin:50% 50%; pointer-events:none; opacity:0; }
 /* Freeze frame: shown instantly (no transition in), fades out quickly once
    the new lens is painting — hides the stream-swap gap completely. */
@@ -105,24 +105,32 @@
 /* Captured still: the photo just taken, full screen — holds, then shrinks
    toward the corner thumbnail. Unmissable per-shot confirmation. */
 #zcam-live-still { transform-origin:14% 86%; }
-.zcam-live-still-on { animation:tscamStill 700ms cubic-bezier(.3,.7,.35,1) forwards; }
-@keyframes tscamStill {
+.zcam-live-still-on { animation:zcamStill 700ms cubic-bezier(.3,.7,.35,1) forwards; }
+@keyframes zcamStill {
   0%   { opacity:1; transform:none; }
   55%  { opacity:1; transform:none; }
   100% { opacity:0; transform:scale(.14); }
 }
 /* v1.5.0/1.5.1: shutter blink — a hair longer so the cut to the still reads
    as a real shutter, not a flicker. */
-.zcam-live-blink { position:absolute; inset:0; background:#000; opacity:0; pointer-events:none; }
-.zcam-live-blink-on { animation:tscamBlink 180ms ease-out; }
-@keyframes tscamBlink { 0%{opacity:0;} 18%{opacity:1;} 60%{opacity:1;} 100%{opacity:0;} }
-/* v1.6.0: iOS-style focus square + sun exposure slider + AE/AF LOCK pill. */
+/* a 70 ms WHITE flash, on and off by a timer in widget.js
+   (no animation, so Reduce Motion cannot swallow it). */
+.zcam-live-blink { position:absolute; inset:0; background:#FFF; opacity:0; pointer-events:none; z-index:4; }
+.zcam-live-blink-on { opacity:.9; }
+/* The hidden switch that gives the iPhone its shutter tap (see shutterHaptic). */
+.zcam-haptic { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); opacity:0; pointer-events:none; }
+/* A close button at the top left, clear of the notch and the status line. */
+.zcam-live-close { position:absolute; z-index:5; top:calc(10px + env(safe-area-inset-top,0px)); left:calc(12px + env(safe-area-inset-left,0px));
+  width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.35); background:rgba(15,23,42,.55); color:#FFF;
+  font-size:26px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.zcam-live-close:active { background:rgba(15,23,42,.8); }
+/* iOS-style focus square + sun exposure slider + AE/AF LOCK pill. */
 .zcam-live-focus { position:absolute; width:74px; height:74px; transform:translate(-50%,-50%); opacity:0; pointer-events:none; transition:opacity 220ms; }
 .zcam-live-focus-on { opacity:1; transition:opacity 90ms; }
-.zcam-live-focus-box { position:absolute; inset:0; border:1.5px solid #FFD60A; border-radius:2px; box-shadow:0 0 4px rgba(0,0,0,.35); animation:tscamFocusPop 260ms ease-out; }
-@keyframes tscamFocusPop { 0%{transform:scale(1.45);opacity:.4;} 100%{transform:scale(1);opacity:1;} }
-.zcam-live-focus-pulse .zcam-live-focus-box { animation:tscamFocusPulse 700ms ease-out; }
-@keyframes tscamFocusPulse { 0%{transform:scale(1.45);} 30%{transform:scale(1);} 50%{transform:scale(1.12);} 70%{transform:scale(1);} 85%{transform:scale(1.08);} 100%{transform:scale(1);} }
+.zcam-live-focus-box { position:absolute; inset:0; border:1.5px solid #FFD60A; border-radius:2px; box-shadow:0 0 4px rgba(0,0,0,.35); animation:zcamFocusPop 260ms ease-out; }
+@keyframes zcamFocusPop { 0%{transform:scale(1.45);opacity:.4;} 100%{transform:scale(1);opacity:1;} }
+.zcam-live-focus-pulse .zcam-live-focus-box { animation:zcamFocusPulse 700ms ease-out; }
+@keyframes zcamFocusPulse { 0%{transform:scale(1.45);} 30%{transform:scale(1);} 50%{transform:scale(1.12);} 70%{transform:scale(1);} 85%{transform:scale(1.08);} 100%{transform:scale(1);} }
 .zcam-live-ev { position:absolute; left:88px; top:-18px; width:26px; height:110px; }
 .zcam-live-focus-flip .zcam-live-ev { left:auto; right:88px; }
 .zcam-live-ev-track { position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(255,214,10,.65); transform:translateX(-50%); }
@@ -130,7 +138,7 @@
 .zcam-live-lock { position:absolute; top:calc(44px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); padding:4px 12px; border-radius:4px; background:#FFD60A; color:#000; font-size:12px; font-weight:700; letter-spacing:.4px; opacity:0; pointer-events:none; transition:opacity 160ms; }
 .zcam-live-lock-on { opacity:1; }
 
-/* v1.5.0: zoom factor chip — appears while pinching, fades out after. */
+/* zoom factor chip — appears while pinching, fades out after. */
 .zcam-live-zoom { position:absolute; top:calc(72px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); padding:5px 14px; border-radius:999px; background:rgba(0,0,0,.55); color:#FFD60A; font-size:15px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 160ms; }
 .zcam-live-zoom-on { opacity:1; }
 
@@ -147,7 +155,7 @@
    (e.g. .5 / 1× / 3×) or digital steps on single-lens devices. */
 .zcam-live-zoombar {
   position:absolute; left:50%; transform:translateX(-50%);
-  bottom:calc(132px + env(safe-area-inset-bottom,0px));
+  bottom:calc(176px + env(safe-area-inset-bottom,0px));   /* raised to clear the mode toggle (was 132) */
   display:flex; align-items:center; gap:6px;
   padding:5px 6px; border-radius:999px;
   background:rgba(0,0,0,.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
@@ -204,14 +212,14 @@
 /* One-time discoverability hint near the pill. */
 .zcam-live-zoomhint {
   position:absolute; left:50%; transform:translateX(-50%);
-  bottom:calc(182px + env(safe-area-inset-bottom,0px));
+  bottom:calc(236px + env(safe-area-inset-bottom,0px));   /* follows the raised zoom bar (was 182) */
   padding:6px 14px; border-radius:999px;
   background:rgba(0,0,0,.6); color:#FFF; font-size:13px; font-weight:600;
   white-space:nowrap; z-index:4; pointer-events:none;
   opacity:0; transition:opacity 260ms;
 }
 .zcam-live-zoomhint-on { opacity:1; }
-/* v1.5.0: captured-frame thumbnail pop (roll-style confirmation). */
+/* captured-frame thumbnail pop (roll-style confirmation). */
 .zcam-live-thumb { position:absolute; left:18px; bottom:calc(132px + env(safe-area-inset-bottom,0px)); width:62px; height:62px; border-radius:10px; border:2px solid rgba(255,255,255,.9); overflow:hidden; background:#000; opacity:0; transform:scale(.55); transition:opacity 160ms, transform 200ms cubic-bezier(.2,.9,.3,1.2); pointer-events:none; }
 .zcam-live-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 .zcam-live-thumb-on { opacity:1; transform:scale(1); }
@@ -225,6 +233,121 @@
 .zcam-live-shutter:active { transform:scale(.92); }
 .zcam-live-btn { min-height:48px; min-width:74px; padding:10px 14px; border-radius:12px; font-size:16px; font-weight:600; color:#FFF; background:rgba(15,23,42,.55); border:1px solid rgba(255,255,255,.35); cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .zcam-live-btn:active { background:rgba(15,23,42,.8); }
+.zcam-live-btn:disabled { opacity:.4; }
+
+/* ── Video mode ─────────────────────────────────────────────────── */
+/* Mode toggle — a centered segmented pill just above the shutter controls. */
+.zcam-live-modebar { position:absolute; left:0; right:0; bottom:calc(122px + env(safe-area-inset-bottom,0px)); display:flex; justify-content:center; gap:2px; pointer-events:none; z-index:3; }
+.zcam-live-modebar[hidden] { display:none; }
+.zcam-live-mode { pointer-events:auto; min-height:34px; padding:6px 18px; border:0; font-size:14px; font-weight:700; letter-spacing:.02em; color:rgba(255,255,255,.7); background:rgba(15,23,42,.5); cursor:pointer; -webkit-tap-highlight-color:transparent; text-shadow:0 1px 2px rgba(0,0,0,.6); }
+.zcam-live-mode:first-child { border-radius:16px 0 0 16px; }
+.zcam-live-mode:last-child  { border-radius:0 16px 16px 0; }
+.zcam-live-mode[hidden] { display:none; }
+.zcam-live-mode-active { color:#FDE047; background:rgba(15,23,42,.72); }
+.zcam-live-modebar-lock { opacity:.35; }
+.zcam-live-modebar-lock .zcam-live-mode { pointer-events:none; }
+
+/* Shutter → record button. Idle video = white ring with a red dot; recording =
+   red rounded square (the native iOS video idiom). */
+.zcam-live-shutter { position:relative; }
+.zcam-live-shutter-video::after { content:''; position:absolute; inset:0; margin:auto; width:58px; height:58px; border-radius:50%; background:#EF4444; transition:width .18s ease, height .18s ease, border-radius .18s ease; }
+.zcam-live-shutter-rec::after { width:32px; height:32px; border-radius:9px; }
+
+/* Recording HUD — red dot + running timer / 2:00, inside the top gradient. */
+.zcam-live-rec { display:flex; align-items:center; gap:7px; font-size:15px; font-weight:700; color:#FFF; text-shadow:0 1px 2px rgba(0,0,0,.6); font-variant-numeric:tabular-nums; }
+.zcam-live-rec[hidden] { display:none; }
+.zcam-live-rec-dot { width:11px; height:11px; border-radius:50%; background:#EF4444; animation:zcam-rec-pulse 1.1s ease-in-out infinite; }
+.zcam-live-rec-max { color:rgba(255,255,255,.7); font-weight:600; }
+.zcam-live-rec-warn { color:#FDBA74; }
+.zcam-live-rec-warn .zcam-live-rec-dot { background:#F59E0B; }
+@keyframes zcam-rec-pulse { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+
+/* "30s left" countdown chip. */
+.zcam-live-warn { font-size:13px; font-weight:700; color:#111; background:#FDBA74; border-radius:9px; padding:3px 12px; box-shadow:0 1px 4px rgba(0,0,0,.4); animation:zcam-warn-pulse 1s ease-in-out infinite; }
+.zcam-live-warn[hidden] { display:none; }
+@keyframes zcam-warn-pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.06); } }
+
+/* ── Orientation ───────────────────────────────────────
+   Only the SAVED photo/video is rotated upright (in JS, grabFrameCanvas). The
+   live preview is left alone. By design the controls DO NOT
+   move when the orientation changes — the shutter stays bottom/side-centered,
+   under the thumb — we only rotate the glyphs so text stays readable. Landscape
+   (90°/270°) is handled by iOS's own DOM reflow, so there's nothing to re-place. */
+
+/* Debug toggle lives on the top counter (triple-tap). */
+.zcam-live-status { pointer-events:auto; }
+
+/* Orientation read-out: off by default (ORI_DEBUG_DEFAULT / oriDebugOn), a calibration
+   aid in the field so a screenshot carries the raw signals; ?zcamori=1 or a triple-tap
+   on the counter shows it, ?zcamori=0 hides it. */
+.zcam-ori-dbg { position:absolute; left:calc(8px + env(safe-area-inset-left,0px));
+  top:calc(78px + env(safe-area-inset-top,0px)); z-index:6;
+  padding:6px 8px; border-radius:6px; background:rgba(0,0,0,.72); color:#4ADE80;
+  font:11px/1.45 ui-monospace,Menlo,Consolas,monospace; white-space:pre;
+  pointer-events:none; max-width:72%; }
+
+/* Build badge: brief, auto-fading version confirm shown on each
+   camera open. Fixed + centered so it reads the same in any orientation;
+   pointer-events:none so it never blocks a tap. Remove with showBuildBadge()
+   once the running build is confirmed in the field. */
+.zcam-build-badge { position:fixed; top:calc(12px + env(safe-area-inset-top,0px));
+  left:50%; transform:translateX(-50%) translateY(-6px); z-index:60;
+  pointer-events:none; white-space:nowrap;
+  padding:7px 13px; border-radius:999px;
+  background:rgba(0,0,0,.62); color:#fff;
+  -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
+  font:600 13px/1 -apple-system,system-ui,Segoe UI,sans-serif; letter-spacing:.02em;
+  opacity:0; transition:opacity .28s ease, transform .28s ease; }
+.zcam-build-badge-in  { opacity:1; transform:translateX(-50%) translateY(0); }
+.zcam-build-badge-out { opacity:0; transform:translateX(-50%) translateY(-6px); }
+
+/* INVERTED PORTRAIT (180°): the phone is physically upside-down but iOS keeps the
+   interface in portrait (it won't reflow to inverted portrait). Keep the shutter
+   UNDER THE THUMB — the physical-bottom edge is now the device-frame TOP — so the
+   controls move to the top, held clear of the Dynamic Island by
+   env(safe-area-inset-top); the status/counter moves to the device-frame bottom.
+   Each cluster is rotated 180° so its text reads right-side up to the inverted
+   user (offsets mirror the portrait layout to the opposite edge). The live
+   preview is NOT rotated — the screen-flip already corrects it. This layout only
+   appears in the brief window where iOS holds portrait while the phone is past
+   vertical; once you pass ~180° iOS flips to landscape (handled above). */
+.zcam-live-ori180 .zcam-live-controls {
+  bottom:auto; top:calc(env(safe-area-inset-top,0px) + 6px);
+  padding:16px 22px; transform:rotate(180deg);
+  background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,0)); }
+.zcam-live-ori180 .zcam-live-top {
+  top:auto; bottom:0;
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px)); transform:rotate(180deg); }
+.zcam-live-ori180 .zcam-live-modebar {
+  bottom:auto; top:calc(env(safe-area-inset-top,0px) + 130px); transform:rotate(180deg); }
+.zcam-live-ori180 .zcam-live-zoombar {
+  bottom:auto; top:calc(env(safe-area-inset-top,0px) + 184px); transform:translateX(-50%) rotate(180deg); }  /* gap below the mode toggle (was 140) */
+.zcam-live-ori180 .zcam-live-zoomhint {
+  bottom:auto; top:calc(env(safe-area-inset-top,0px) + 238px); transform:translateX(-50%) rotate(180deg); }  /* follows the zoom bar (was 190) */
+.zcam-live-ori180 .zcam-live-thumb {
+  left:auto; right:18px; bottom:auto; top:calc(env(safe-area-inset-top,0px) + 130px); }
+.zcam-live-ori180 .zcam-live-zoomslider {
+  right:auto; left:calc(14px + env(safe-area-inset-left,0px)); }
+
+/* LANDSCAPE:
+   move ONLY the big shutter to the device's physical-bottom SHORT edge (under the
+   thumb), vertically centered; Flip + Done stay in the bottom bar at the corners. The
+   physical-bottom edge depends on the interface angle — screen=90 → RIGHT, screen=270 →
+   LEFT (JS toggles .zcam-live-land90 / -land270 from screenAngle()). The shutter is
+   position:fixed so it centers on the viewport edge instead of the bottom bar; the
+   vertical zoom slider is sent to the OPPOSITE edge so it never sits under the shutter.
+   Rotation-locked landscape keeps the portrait interface (screen=0), so these never
+   apply there — its layout is unchanged. */
+.zcam-live-land90 .zcam-live-shutter,
+.zcam-live-land270 .zcam-live-shutter {
+  position:fixed; top:50%; bottom:auto; transform:translateY(-50%); z-index:5; margin:0; }
+.zcam-live-land90 .zcam-live-shutter:active,
+.zcam-live-land270 .zcam-live-shutter:active { transform:translateY(-50%) scale(.92); }
+.zcam-live-land90  .zcam-live-shutter { right:calc(24px + env(safe-area-inset-right,0px)); left:auto; }
+.zcam-live-land270 .zcam-live-shutter { left:calc(24px + env(safe-area-inset-left,0px));  right:auto; }
+.zcam-live-land90  .zcam-live-zoomslider { right:auto; left:calc(14px + env(safe-area-inset-left,0px)); }
+.zcam-live-land270 .zcam-live-zoomslider { left:auto; right:calc(14px + env(safe-area-inset-right,0px)); }
 
 /* Gallery */
 .zcam-w-gallery { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
@@ -255,3 +378,42 @@
 [data-theme="sunlight"] .zcam-w-q-discard-armed, [data-theme="sunlight"] .zcam-w-q-discard-armed:hover { background:#000; border-color:#000; color:#FFF; }
 [data-theme="sunlight"] .zcam-w-note { border:2px solid #000; background:#FFF; color:#000; }
 [data-theme="sunlight"] .zcam-w-note:focus { border-color:#000; }
+
+
+/* ==========================================================================
+   "Location off" chip
+   Shown only to someone who has denied location. Once a browser records a hard
+   deny it will not raise the prompt again, so this is the app's only remaining
+   way to say where the switch is. Amber, not red: nothing is broken, photos
+   still upload -- they just save without a place.
+   ========================================================================== */
+.zcam-w-geo-chip { display:flex; align-items:center; flex-wrap:wrap; gap:8px;
+  margin:0 0 10px; padding:10px 12px; border-radius:10px;
+  background:var(--sys-tint-warn-bg,rgba(217,119,6,0.12));
+  color:var(--sys-tint-warn-fg,#92400E);
+  border:1px solid var(--sys-tint-warn-bg,rgba(217,119,6,0.28));
+  font-size:13px; line-height:1.4; }
+.zcam-w-geo-chip-txt { flex:1; min-width:170px; }
+.zcam-w-geo-chip-how { appearance:none; -webkit-appearance:none; cursor:pointer;
+  border:1px solid currentColor; background:transparent; color:inherit;
+  font:inherit; font-size:12px; font-weight:600; padding:6px 10px; border-radius:8px;
+  min-height:36px; -webkit-tap-highlight-color:transparent; }
+.zcam-w-geo-chip-how:hover { background:rgba(0,0,0,0.06); }
+.zcam-w-geo-chip-x { appearance:none; -webkit-appearance:none; cursor:pointer;
+  border:none; background:transparent; color:inherit; font:inherit; font-size:19px;
+  line-height:1; padding:0 4px; min-width:36px; min-height:36px;
+  -webkit-tap-highlight-color:transparent; }
+.zcam-w-geo-chip-help { flex-basis:100%; margin:2px 0 0; font-size:12px; line-height:1.5;
+  opacity:0.95; }
+.zcam-w-geo-chip-help strong { font-weight:700; }
+
+/* one line for several failed uploads. */
+.zcam-w-q-summary { display:flex; align-items:center; gap:8px; padding:8px 10px; margin-bottom:8px; border:1px solid rgba(220,38,38,0.35); border-radius:var(--radius-sm,10px); background:rgba(220,38,38,0.06); font-size:13px; }
+.zcam-w-q-summary-text { color:#DC2626; font-weight:600; min-width:0; flex:1 1 auto; }
+.zcam-w-q-summary .zcam-w-q-retry { margin-left:0; }
+[data-theme="dark"] .zcam-w-q-summary { background:rgba(220,38,38,0.12); }
+[data-theme="sunlight"] .zcam-w-q-summary { border:2px solid #000; background:#FFF; }
+[data-theme="sunlight"] .zcam-w-q-summary-text { color:#000; }
+/* upside-down, the controls take the top edge, so the close button takes the
+   mirrored corner (the person's top left). */
+.zcam-live-ori180 .zcam-live-close { top:auto; left:auto; bottom:calc(10px + env(safe-area-inset-bottom,0px)); right:calc(12px + env(safe-area-inset-right,0px)); }

@@ -7,16 +7,7 @@
     --------------------------------------------------------------- */
 
     // ── Constants ──────────────────────────────────────────────────
-    var ROLE_COLORS = {
-        administrator: '#7c3aed',
-        zdz_owner:      '#dc2626',
-        zdz_admin:      '#7c3aed',
-        zdz_sales:      '#2563eb',
-        zdz_operator:   '#15803d',
-        zdz_mfg:        '#d97706',
-        zdz_tech:       '#b45309',
-        subscriber:    '#64748b'
-    };
+    /* A role is shown by its shape (ROLE_SHAPES below), in neutral gray: a role has no colour of its own. */
 
     var ACTION_COLORS = {
         login:          '#15803d',
@@ -157,25 +148,32 @@
         return (zdzAdminData.roles && zdzAdminData.roles[slug]) ? zdzAdminData.roles[slug] : slug;
     }
 
-    /** Generate avatar circle HTML */
+    /* Person badges: the shape says the privilege (triangle Sales/Field Tech/Shop Foreman, square
+       Operator, pentagon Administrator, hexagon Owner, circle WordPress Administrator, plain gray the kiosk),
+       the tone is the person's own (ZDZ_Person_Color). Drawn by the kit (ZDZ.ui.badge). */
+    var ROLE_SHAPES = { administrator: 'circle', zdz_owner: 'hexagon', zdz_admin: 'pentagon', zdz_operator: 'square',
+        zdz_sales: 'triangle', zdz_tech: 'triangle', zdz_mfg: 'triangle', zdz_general: 'kiosk' };
+    function shapeOf(user) { return user.shape || ROLE_SHAPES[user.role] || 'triangle'; }
+    function kit() { return window.ZDZ && window.ZDZ.ui && window.ZDZ.ui.badge ? window.ZDZ.ui : null; }
+
+    /** The person's badge (their initials, or the first letter of their name before they have initials). */
     function avatarHtml(user, size) {
-        size = size || 36;
-        var initial = '';
-        if (user.initials) {
-            initial = user.initials.charAt(0).toUpperCase();
-        } else if (user.display_name) {
-            initial = user.display_name.charAt(0).toUpperCase();
-        } else if (user.email) {
-            initial = user.email.charAt(0).toUpperCase();
+        var text = user.initials ? String(user.initials).toUpperCase()
+            : (user.display_name || user.email || '?').charAt(0).toUpperCase();
+        var K = kit();
+        if (!K) {
+            return '<span style="font-weight:700;">' + esc(text) + '</span>';
         }
-        var color = ROLE_COLORS[user.role] || '#64748b';
-        return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:' + Math.round(size * 0.42) + 'px;flex-shrink:0;">' + esc(initial) + '</div>';
+        return K.badge(shapeOf(user), { color: user.color || '#E1E5EA', ink: user.color_ink || '#1F2933',
+            edge: user.color_edge || '#5E6976', text: text, size: size && size >= 40 ? 'lg' : '',
+            label: text + ' · ' + roleLabel(user.role) });
     }
 
-    /** Role badge HTML */
+    /** Role badge HTML: the role's shape and its name, in neutral gray (no more color per role). */
     function roleBadgeHtml(role) {
-        var color = ROLE_COLORS[role] || '#64748b';
-        return '<span style="display:inline-block;padding:2px 10px;border-radius:9999px;font-size:12px;font-weight:500;background:' + color + '18;color:' + color + ';border:1px solid ' + color + '30;">' + esc(roleLabel(role)) + '</span>';
+        var K = kit();
+        return '<span class="zdz-role-badge">' + (K ? K.badge(ROLE_SHAPES[role] || 'triangle', { size: 'sm' }) : '') +
+            '<span>' + esc(roleLabel(role)) + '</span></span>';
     }
 
     /** Action badge HTML */
@@ -263,7 +261,7 @@
                 /* Panel */
                 '.zdz-panel-overlay { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:99999; opacity:0; transition:opacity .3s; pointer-events:none; }' +
                 '.zdz-panel-overlay.open { opacity:1; pointer-events:auto; }' +
-                /* v2.17.1: top:32px accounts for WP admin bar; 46px on mobile admin */
+                /* top:32px accounts for WP admin bar; 46px on mobile admin */
                 '.zdz-panel { position:fixed; top:32px; right:0; bottom:0; width:540px; max-width:100vw; background:#fff; z-index:100000; box-shadow:-8px 0 30px rgba(0,0,0,.12); transform:translateX(100%); transition:transform .3s ease; display:flex; flex-direction:column; }' +
                 '@media(max-width:782px){ .zdz-panel { top:46px; } }' +
                 '.zdz-panel.open { transform:translateX(0); }' +
@@ -276,7 +274,7 @@
                 '.zdz-panel-tab:hover { color:#1e293b; }' +
                 '.zdz-panel-tab.active { color:#2563eb; border-bottom-color:#2563eb; }' +
                 '.zdz-panel-body { flex:1 1 auto; min-height:0; overflow-y:auto !important; padding:24px; -webkit-overflow-scrolling:touch; }' +
-                /* v2.21.2: #zdz-panel-content is the render target that sits between .zdz-panel
+                /* #zdz-panel-content is the render target that sits between .zdz-panel
                    (the fixed, height-constrained flex column) and the header/body/footer.
                    Without these rules it was a plain block with no height and no flex, which
                    BROKE the flex chain — so .zdz-panel-body's flex:1/overflow never applied and
@@ -327,6 +325,28 @@
                 '@keyframes zdz-spin { to { transform:rotate(360deg); } }' +
                 /* Safe mode badge */
                 '.zdz-safe-badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; background:#dc262614; color:#dc2626; border:1px solid #dc262628; }' +
+                /* The Usage tab */
+                '.zdz-usage-note { font-size:13px; color:#475569; margin:0 0 12px; max-width:960px; }' +
+                '.zdz-usage-note.is-warn { color:#92400e; background:#fffbeb; border:1px solid #f59e0b; border-radius:8px; padding:8px 12px; }' +
+                '.zdz-usage-h { font-size:15px; font-weight:700; margin:24px 0 8px; color:#1e293b; }' +
+                '.zdz-usage-block { margin-bottom:16px; overflow-x:auto; position:relative; }' +   /* relative: wp-admin's absolute .screen-reader-text labels stay inside the scroll box */
+                '.zdz-usage-table tbody tr { cursor:default; }' +
+                '.zdz-usage-table tbody tr[data-usage-app], .zdz-usage-table tbody tr[data-usage-user] { cursor:pointer; }' +
+                '.zdz-usage-table tbody th { text-align:left; padding:12px 16px; font-size:13px; font-weight:600; color:#1e293b; text-transform:none; letter-spacing:0; background:none; border-bottom:1px solid #f1f5f9; }' +
+                '.zdz-usage-empty { text-align:center; color:#64748b; padding:24px; }' +
+                '.zdz-usage-grid-wrap { padding:12px 16px; }' +
+                '.zdz-usage-grid { border-collapse:separate; border-spacing:2px; font-size:11px; color:#475569; }' +
+                '.zdz-usage-grid caption { text-align:left; font-size:13px; font-weight:600; color:#1e293b; padding-bottom:8px; }' +
+                '.zdz-usage-grid th { font-weight:500; padding:0 4px; text-align:left; white-space:nowrap; }' +
+                '.zdz-usage-grid td { width:22px; height:18px; border-radius:3px; background:#f1f5f9; }' +
+                '.zdz-usage-grid td.lv1, .zdz-usage-legend .lv1 { background:#bfdbfe; } .zdz-usage-grid td.lv2, .zdz-usage-legend .lv2 { background:#60a5fa; }' +
+                '.zdz-usage-grid td.lv3, .zdz-usage-legend .lv3 { background:#2563eb; } .zdz-usage-grid td.lv4, .zdz-usage-legend .lv4 { background:#1e3a8a; }' +
+                '.zdz-usage-legend { font-size:11px; color:#64748b; margin-top:6px; display:flex; align-items:center; gap:3px; }' +
+                '.zdz-usage-legend i { display:inline-block; width:14px; height:12px; border-radius:2px; }' +
+                '.zdz-usage-unused { margin:0 0 16px; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:8px; }' +
+                '.zdz-usage-unused li { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px; font-size:13px; }' +
+                '.zdz-usage-unused li span { color:#64748b; }' +
+                '.zdz-usage-stream { margin:16px 0; } .zdz-usage-stream summary { cursor:pointer; font-weight:600; font-size:13px; padding:6px 0; }' +
                 /* Responsive */
                 '@media(max-width:900px){ .zdz-stats-row{grid-template-columns:repeat(2,1fr);} .zdz-perm-grid{grid-template-columns:1fr;} .zdz-panel{width:100vw;} }' +
                 '@media(max-width:600px){ .zdz-stats-row{grid-template-columns:1fr;} .zdz-toolbar{flex-direction:column;align-items:stretch;} .zdz-toolbar .zdz-search{width:100%;} .zdz-panel-header{padding:12px 16px;gap:10px;} .zdz-panel-body{padding:16px;} .zdz-perm-card{padding:10px;gap:8px;} .zdz-perm-toggle button{padding:3px 7px;font-size:10px;} }' +
@@ -337,9 +357,11 @@
                 '<div class="zdz-tab-bar">' +
                     '<button class="zdz-tab-btn active" data-tab="users" onclick="window.zdzSwitchTab(\'users\')"><i data-lucide="users" style="width:15px;height:15px;margin-right:4px;vertical-align:-2px;"></i> Users</button>' +
                     '<button class="zdz-tab-btn" data-tab="audit" onclick="window.zdzSwitchTab(\'audit\')"><i data-lucide="scroll-text" style="width:15px;height:15px;margin-right:4px;vertical-align:-2px;"></i> Audit Log</button>' +
+                    '<button class="zdz-tab-btn" data-tab="usage" onclick="window.zdzSwitchTab(\'usage\')"><i data-lucide="bar-chart-3" style="width:15px;height:15px;margin-right:4px;vertical-align:-2px;"></i> Usage</button>' +
                 '</div>' +
                 '<div id="zdz-tab-users"></div>' +
                 '<div id="zdz-tab-audit" style="display:none;"></div>' +
+                '<div id="zdz-tab-usage" style="display:none;"></div>' +
             '</div>' +
             '<!-- Panel Overlay -->' +
             '<div class="zdz-panel-overlay" id="zdz-panel-overlay" onclick="window.zdzClosePanel()"></div>' +
@@ -359,9 +381,12 @@
         });
         document.getElementById('zdz-tab-users').style.display = (tab === 'users') ? '' : 'none';
         document.getElementById('zdz-tab-audit').style.display = (tab === 'audit') ? '' : 'none';
+        document.getElementById('zdz-tab-usage').style.display = (tab === 'usage') ? '' : 'none';
 
         if (tab === 'users') {
             loadUsers();
+        } else if (tab === 'usage') {
+            loadUsage();
         } else {
             loadAuditFilters();
             loadAuditLog();
@@ -469,7 +494,9 @@
             '<td>' + avatarHtml(u) + '</td>' +
             '<td><div style="font-weight:600;font-size:13px;">' + esc(u.display_name) + '</div><div style="font-size:12px;color:#64748b;">' + esc(u.email) + '</div></td>' +
             '<td>' + roleBadgeHtml(u.role) + '</td>' +
-            '<td><span style="font-weight:600;font-family:monospace;font-size:14px;">' + esc(u.initials || '--') + '</span></td>' +
+            '<td>' + (u.initials
+                ? '<span style="font-weight:600;font-family:monospace;font-size:14px;">' + esc(u.initials) + '</span>'
+                : '<span style="color:#94a3b8;">--</span>') + '</td>' +
             '<td><div style="display:flex;flex-wrap:wrap;gap:4px;max-width:260px;">' + appPillsHtml(u) + '</div></td>' +
             '<td>' + safeModeHtml + '</td>' +
             '<td style="white-space:nowrap;font-size:12px;color:#64748b;">' + esc(timeAgo(u.last_login)) + '</td>' +
@@ -612,7 +639,7 @@
 
         html += '</div>'; // close .zdz-panel-body
 
-        // v2.21.2: Save lives in a pinned footer (outside the now-correctly-scrolling
+        // Save lives in a pinned footer (outside the now-correctly-scrolling
         // body) so it's always visible. Details/Permissions get their Save here;
         // Activity gets none (empty footer auto-hides via :empty).
         html += '<div class="zdz-panel-footer">';
@@ -643,6 +670,7 @@
                 '<label>Initials <span style="font-weight:400;color:#94a3b8;">(max 5 characters)</span></label>' +
                 '<input type="text" id="zdz-panel-initials" value="' + esc(user.initials || '') + '" maxlength="5">' +
             '</div>' +
+            personColorFieldHtml(user) +
             '<div class="zdz-field">' +
                 '<label>Notes</label>' +
                 '<textarea id="zdz-panel-notes">' + esc(user.notes || '') + '</textarea>' +
@@ -657,6 +685,31 @@
                     '<input type="checkbox" id="zdz-panel-safemode" style="display:none;"' + safeChecked + '>' +
                 '</label>' +
             '</div>';
+    }
+
+    /* One tone per person, shown with their initials everywhere (photos, jobs, charts). "Automatic" hands out the
+       next free tone; picking one keeps it. Each tone is shown as this person's own badge shape, so the choice is
+       seen as it will look. Names come from the server (ZDZ_Person_Color::names()). */
+    function personColorFieldHtml(user) {
+        var tones = user.color_tones || [];
+        if (!tones.length || shapeOf(user) === 'kiosk') return '';
+        var K = kit();
+        var cur = user.color_chosen ? String(user.color || '').toUpperCase() : '';
+        var ini = user.initials ? String(user.initials).toUpperCase() : '';
+        var preview = function (t) {
+            return K ? K.badge(shapeOf(user), { color: t.color, ink: t.ink, edge: t.edge, text: ini, label: t.name })
+                : '<span class="zdz-swatch" style="background:' + esc(t.color) + '"></span>';
+        };
+        var opts = '<label class="zdz-swatch-opt"><input type="radio" name="zdz-panel-color" value=""' + (cur === '' ? ' checked' : '') + '> Automatic' +
+            (user.color && !user.color_chosen ? ' ' + avatarHtml(user) : '') + '</label>';
+        tones.forEach(function (t) {
+            var c = String(t.color).toUpperCase(), nm = t.name || c;   // a spoken name, never a hex
+            opts += '<label class="zdz-swatch-opt" title="' + esc(nm) + '"><input type="radio" name="zdz-panel-color" aria-label="' + esc(nm) + '" value="' + esc(c) + '"' +
+                (cur === c ? ' checked' : '') + '> ' + preview(t) + '</label>';
+        });
+        return '<div class="zdz-field"><label>Badge tone <span style="font-weight:400;color:#94a3b8;">(the shape comes from the role' +
+            (ini ? '; shown with ' + esc(ini) + ' on photos, jobs and charts' : '') + ')</span></label>' +
+            '<div class="zdz-swatches">' + opts + '</div></div>';
     }
 
     window.zdzToggleSafeMode = function () {
@@ -678,6 +731,7 @@
         var initialsEl = document.getElementById('zdz-panel-initials');
         var notesEl = document.getElementById('zdz-panel-notes');
         var safeModeEl = document.getElementById('zdz-panel-safemode');
+        var colorEl = document.querySelector('input[name="zdz-panel-color"]:checked');
 
         var payload = {
             display_name: nameEl ? nameEl.value.trim() : user.display_name,
@@ -686,6 +740,7 @@
             notes:        notesEl ? notesEl.value : user.notes,
             safe_mode:    safeModeEl ? safeModeEl.checked : user.safe_mode
         };
+        if (colorEl) { payload.color = colorEl.value; }   // '' = automatic
 
         showLoading();
         api('admin/users/' + user.id, {
@@ -1142,6 +1197,226 @@
         loadAuditFilters();
         loadAuditLog();
     };
+
+    // ── Usage Tab ──────────────────────────────────────────────────
+    // Per app and per person: opens, people, time open, the device class, last use; opens by hour of day x weekday (the
+    // site's zone); apps nobody opened in 30 days; each app's registered actions; searches and palette results (the
+    // kind only, never the words); every usage kind's count; pruning's last run; the usage-records card's state. The
+    // shared account is "Shared device", never a person. GET zorderz/v1/admin/usage.
+    var USAGE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var USAGE_DEVICES = { phone: 'Phone or tablet', desktop_app: 'Desktop app', browser: 'Browser', unknown: 'Not known' };
+    var USAGE_KIND_WORDS = {
+        app_open: 'Opened an app', app_close: 'Closed an app (time open)', app_action: "An app's own action",
+        view_switch: 'Changed screen', dashboard_load: 'Started the app', heartbeat: 'Still here (every 4 min)',
+        widget_interact: 'Used a card', search: 'Searched', command_palette: 'Opened a search result',
+        page_view: 'Loaded the page', login: 'Signed in', logout: 'Signed out'
+    };
+    var USAGE_PALETTE = { app: 'An app', ask: 'Ask the chat', action: 'A shortcut', answer: 'An inline answer', quick_answer: 'A quick answer' };
+    state.usage = null;
+    state.usageDays = 30;
+    state.usageUser = '';
+    state.usageApp = '';
+
+    function usageDur(secs) {
+        var s = Math.max(0, parseInt(secs, 10) || 0);
+        if (!s) return '-';
+        if (s < 60) return '<1 min';
+        var m = Math.round(s / 60);
+        if (m < 60) return m + ' min';
+        var h = Math.floor(m / 60), r = m % 60;
+        return h + ' h' + (r ? ' ' + r + ' min' : '');
+    }
+    // In the site's zone, like the hour grid (the admin's own computer may be elsewhere).
+    function usageWhen(iso) {
+        if (!iso) return '-';
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return '-';
+        var tz = (state.usage && state.usage.tz) || undefined;
+        try {
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+        } catch (e) {
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        }
+    }
+    function usageDay(ymd) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+        if (!m) return '-';
+        return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(m[2], 10) - 1] + ' ' + parseInt(m[3], 10) + ', ' + m[1];
+    }
+    function usageNum(n) { return (parseInt(n, 10) || 0).toLocaleString('en-US'); }
+    // esc() leaves quotes as they are, so nothing from the server goes into an attribute through it here. Attributes use usageAttr(), and the tab draws no inline handlers (listeners are bound after drawing).
+    function usageAttr(v) {
+        return String(v == null ? '' : v).replace(/[&<>"'`]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]; });
+    }
+
+    function loadUsage(fresh) {
+        var p = ['days=' + state.usageDays];
+        if (fresh) p.push('fresh=1');
+        if (state.usageUser) p.push('user=' + encodeURIComponent(state.usageUser));
+        if (state.usageApp) p.push('app=' + encodeURIComponent(state.usageApp));
+        showLoading();
+        return api('admin/usage?' + p.join('&')).then(function (r) {
+            hideLoading();
+            state.usage = r && r.success ? r.data : null;
+            renderUsageTab();
+        }).catch(function (err) {
+            hideLoading();
+            console.error('Failed to load usage', err);
+            var el = document.getElementById('zdz-tab-usage');
+            if (el) el.innerHTML = '<div class="zdz-usage-note is-warn" role="alert">The usage records could not be loaded. Try Refresh.</div>';
+        });
+    }
+    window.zdzRefreshUsage = function () { loadUsage(true); };
+    window.zdzUsageFilter = function (k, v) {
+        if (k === 'days') state.usageDays = parseInt(v, 10) || 30;
+        if (k === 'user') state.usageUser = v || '';
+        if (k === 'app') state.usageApp = v || '';
+        loadUsage();
+    };
+
+    function usageGridHtml(grid) {
+        var max = 0;
+        (grid || []).forEach(function (row) { (row || []).forEach(function (n) { if (n > max) max = n; }); });
+        var html = '<div class="zdz-usage-grid-wrap"><table class="zdz-usage-grid"><caption>Apps opened by hour of day and weekday (site time)</caption><thead><tr><th scope="col"><span class="screen-reader-text">Day</span></th>';
+        for (var h = 0; h < 24; h++) html += '<th scope="col">' + (h % 3 === 0 ? (h === 0 ? '12a' : (h < 12 ? h + 'a' : (h === 12 ? '12p' : (h - 12) + 'p'))) : '<span class="screen-reader-text">' + h + ':00</span>') + '</th>';
+        html += '</tr></thead><tbody>';
+        (grid || []).forEach(function (row, d) {
+            html += '<tr><th scope="row">' + USAGE_DAYS[d] + '</th>';
+            (row || []).forEach(function (n, h) {
+                var lvl = !n ? 0 : Math.min(4, 1 + Math.floor(3.999 * n / Math.max(1, max)));
+                html += '<td class="lv' + lvl + '" title="' + USAGE_DAYS[d] + ' ' + h + ':00-' + (h + 1) + ':00: ' + n + ' opens">' + (n ? '<span class="screen-reader-text">' + n + '</span>' : '') + '</td>';
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table><div class="zdz-usage-legend" aria-hidden="true">Fewer <i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> More</div></div>';
+        return html;
+    }
+
+    function usageDevicesHtml(dev) {
+        var tot = 0, parts = [];
+        Object.keys(dev || {}).forEach(function (k) { tot += dev[k] || 0; });
+        if (!tot) return '-';
+        ['phone', 'desktop_app', 'browser', 'unknown'].forEach(function (k) {
+            if (dev[k]) parts.push(esc((USAGE_DEVICES[k] || k)) + ' ' + Math.round(100 * dev[k] / tot) + '%');
+        });
+        return parts.join(', ');
+    }
+
+    function usagePhonePct(dev) {
+        var tot = 0;
+        Object.keys(dev || {}).forEach(function (k) { if (k !== 'unknown') tot += dev[k] || 0; });
+        return tot ? Math.round(100 * (dev.phone || 0) / tot) + '%' : '-';
+    }
+
+    function renderUsageTab() {
+        var el = document.getElementById('zdz-tab-usage');
+        if (!el) return;
+        var u = state.usage;
+        if (!u) { el.innerHTML = '<div class="zdz-usage-note">Loading...</div>'; return; }
+        var apps = zdzAdminData.apps || [];
+        var appName = {};
+        apps.forEach(function (a) { appName[a.id] = a.name; });
+        (u.apps || []).forEach(function (a) { if (!appName[a.id]) appName[a.id] = a.name; });
+
+        var people = '<option value="">Everyone</option><option value="shared"' + (state.usageUser === 'shared' ? ' selected' : '') + '>Shared device</option>';
+        (state.users || []).filter(function (x) { return x.role !== 'zdz_general'; }).forEach(function (x) {
+            people += '<option value="' + usageAttr(String(x.id)) + '"' + (String(state.usageUser) === String(x.id) ? ' selected' : '') + '>' + esc(x.display_name || ('User #' + x.id)) + '</option>';
+        });
+        var appOpts = '<option value="">All apps</option>';
+        Object.keys(appName).sort(function (a, b) { return String(appName[a]).localeCompare(String(appName[b])); }).forEach(function (id) {
+            appOpts += '<option value="' + usageAttr(id) + '"' + (state.usageApp === id ? ' selected' : '') + '>' + esc(appName[id]) + '</option>';
+        });
+        var dayOpts = '';
+        [7, 30, 90, 180].forEach(function (d) { dayOpts += '<option value="' + d + '"' + (u.days === d ? ' selected' : '') + '>Last ' + d + ' days</option>'; });
+
+        var pr = u.prune || {};
+        var pruneMsg = pr.error
+            ? 'Clearing old records stopped on its last run (' + esc(usageWhen(pr.at)) + '): ' + esc(pr.error) + '. Nothing was lost; it tries again daily.'
+            : (pr.late
+                ? (pr.at ? 'Old records were last cleared ' + esc(usageWhen(pr.at)) + ', more than two days ago: WP-Cron may not be running.' : 'Old records have not been cleared yet (the first run is about an hour after the theme is updated).')
+                : 'Old records were last cleared ' + esc(usageWhen(pr.at)) + ': ' + usageNum(pr.deleted) + ' rows older than ' + esc(String(u.raw_days)) + ' days counted into daily totals.');
+        var t = u.totals || {};
+
+        var html = '' +
+            '<div class="zdz-toolbar">' +
+                '<label class="screen-reader-text" for="zdz-usage-days">Period</label><select id="zdz-usage-days" data-usage-filter="days">' + dayOpts + '</select>' +
+                '<label class="screen-reader-text" for="zdz-usage-user">Person</label><select id="zdz-usage-user" data-usage-filter="user">' + people + '</select>' +
+                '<label class="screen-reader-text" for="zdz-usage-app">App</label><select id="zdz-usage-app" data-usage-filter="app">' + appOpts + '</select>' +
+                '<button class="zdz-btn" id="zdz-usage-refresh" type="button"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Refresh</button>' +
+            '</div>' +
+            '<p class="zdz-usage-note">What the app records, to see what is used and what needs improving. It is never for grading people. ' + esc((u.consent || {}).rule || '') + '</p>' +
+            '<p class="zdz-usage-note' + (pr.error || pr.late ? ' is-warn' : '') + '"' + (pr.error ? ' role="alert"' : '') + '>' + pruneMsg + '</p>' +
+            '<div class="zdz-stats-row">' +
+                statCardHtml('mouse-pointer-click', '#2563eb', usageNum(t.opens), 'Apps opened') +
+                statCardHtml('users', '#7c3aed', usageNum(t.people), 'People') +
+                statCardHtml('timer', '#0e7490', usageDur(t.secs), 'Time open') +
+                statCardHtml('smartphone', '#15803d', usagePhonePct(t.devices), 'Opened on a phone or tablet') +
+            '</div>' +
+            '<div class="zdz-table-wrap zdz-usage-block">' + usageGridHtml(u.grid) + '</div>';
+
+        // Apps
+        html += '<h2 class="zdz-usage-h">Apps, last ' + esc(String(u.days)) + ' days</h2><div class="zdz-table-wrap zdz-usage-block"><table class="zdz-table zdz-usage-table"><thead><tr>' +
+            '<th scope="col">App</th><th scope="col">Opens</th><th scope="col">People</th><th scope="col">Time open</th><th scope="col">Per open</th><th scope="col">Devices</th><th scope="col">Last opened</th><th scope="col">Before ' + esc(String(u.raw_days)) + ' days</th></tr></thead><tbody>';
+        if (!(u.apps || []).length) html += '<tr><td colspan="8" class="zdz-usage-empty">No app was opened in this period.</td></tr>';
+        (u.apps || []).forEach(function (a) {
+            var per = a.per_open ? usageDur(a.per_open) : '-';
+            html += '<tr data-usage-app="' + usageAttr(a.id) + '"><th scope="row">' + esc(a.name) + '</th><td>' + usageNum(a.opens) + '</td><td>' + usageNum(a.people) + '</td><td>' + usageDur(a.secs) + '</td><td>' + per + '</td><td>' + usageDevicesHtml(a.devices) + '</td><td>' + esc(usageWhen(a.last)) + '</td><td>' + (a.older && a.older.opens ? usageNum(a.older.opens) + ' opens' : '-') + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+
+        // Unused
+        html += '<h2 class="zdz-usage-h">Not opened by anyone in 30 days</h2>';
+        if (!(u.unused || []).length) {
+            html += '<p class="zdz-usage-note">Every app was opened at least once in the last 30 days.</p>';
+        } else {
+            html += '<ul class="zdz-usage-unused">' + (u.unused || []).map(function (a) {
+                return '<li><strong>' + esc(a.name) + '</strong> <span>' + (a.last ? 'last opened ' + esc(usageWhen(a.last)) : (a.last_day ? 'last opened ' + esc(usageDay(a.last_day)) : 'never opened in the records kept')) + '</span></li>';
+            }).join('') + '</ul>';
+        }
+
+        // People
+        html += '<h2 class="zdz-usage-h">People</h2><div class="zdz-table-wrap zdz-usage-block"><table class="zdz-table zdz-usage-table"><thead><tr>' +
+            '<th scope="col">Person</th><th scope="col">Opens</th><th scope="col">Days used</th><th scope="col">Time open</th><th scope="col">Uses most</th><th scope="col">Last seen</th></tr></thead><tbody>';
+        if (!(u.people || []).length) html += '<tr><td colspan="6" class="zdz-usage-empty">Nobody used the app in this period.</td></tr>';
+        (u.people || []).forEach(function (p) {
+            html += '<tr data-usage-user="' + usageAttr(p.id) + '"><th scope="row">' + esc(p.name) + '</th><td>' + usageNum(p.opens) + '</td><td>' + usageNum(p.days) + '</td><td>' + usageDur(p.secs) + '</td><td>' + esc((p.top || []).map(function (id) { return appName[id] || id; }).join(', ') || '-') + '</td><td>' + esc(usageWhen(p.last)) + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+
+        // Actions, searches
+        html += '<h2 class="zdz-usage-h">What people do inside the apps</h2><div class="zdz-table-wrap zdz-usage-block"><table class="zdz-table zdz-usage-table"><thead><tr>' +
+            '<th scope="col">App</th><th scope="col">Action</th><th scope="col">Times</th><th scope="col">People</th></tr></thead><tbody>';
+        if (!(u.actions || []).length) html += '<tr><td colspan="4" class="zdz-usage-empty">No app has registered its actions yet. Each app adds its main ones in its next release.</td></tr>';
+        (u.actions || []).forEach(function (a) {
+            html += '<tr><th scope="row">' + esc(a.app_name) + '</th><td>' + esc(a.label) + '</td><td>' + usageNum(a.n) + '</td><td>' + usageNum(a.people) + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        var s = u.search || {}, pl = u.palette || {};
+        html += '<p class="zdz-usage-note">Searches: ' + usageNum(s.ask) + ' in the ask bar, ' + usageNum(s.apps) + ' in the app search. Results opened: ' +
+            Object.keys(USAGE_PALETTE).map(function (k) { return esc(USAGE_PALETTE[k]) + ' ' + usageNum(pl[k]); }).join(', ') + '. The words people type are never recorded.</p>';
+
+        // The stream
+        html += '<details class="zdz-usage-stream"><summary>Everything recorded in this period, by kind</summary><div class="zdz-table-wrap zdz-usage-block"><table class="zdz-table zdz-usage-table"><thead><tr><th scope="col">Kind</th><th scope="col">Recorded as</th><th scope="col">Rows</th></tr></thead><tbody>';
+        Object.keys(u.stream || {}).forEach(function (k) {
+            html += '<tr><th scope="row">' + esc(USAGE_KIND_WORDS[k] || k) + '</th><td><code>' + esc(k) + '</code></td><td>' + usageNum(u.stream[k]) + '</td></tr>';
+        });
+        html += '</tbody></table></div></details>';
+
+        el.innerHTML = html;
+        // Listeners, not inline handlers: an id read from the log never becomes code.
+        el.querySelectorAll('[data-usage-filter]').forEach(function (sel) {
+            sel.addEventListener('change', function () { window.zdzUsageFilter(sel.getAttribute('data-usage-filter'), sel.value); });
+        });
+        var rf = el.querySelector('#zdz-usage-refresh');
+        if (rf) rf.addEventListener('click', window.zdzRefreshUsage);
+        el.querySelectorAll('tr[data-usage-app], tr[data-usage-user]').forEach(function (tr) {
+            tr.addEventListener('click', function () {
+                if (tr.hasAttribute('data-usage-app')) window.zdzUsageFilter('app', tr.getAttribute('data-usage-app'));
+                else window.zdzUsageFilter('user', tr.getAttribute('data-usage-user'));
+            });
+        });
+        refreshIcons();
+    }
 
     // ── Initialization ─────────────────────────────────────────────
     function init() {

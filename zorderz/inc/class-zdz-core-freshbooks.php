@@ -39,13 +39,13 @@ class ZDZ_Core_FreshBooks {
 	/**
 	 * Refresh the FreshBooks access token.
 	 *
-	 * v2.26.0 (Token-race fix — authoritative service): when the ZDZ_Token_Service
+	 * (Token-race fix — authoritative service): when the ZDZ_Token_Service
 	 * mu-plugin is present, delegate the refresh to it. The service takes a REAL
 	 * MySQL advisory lock (GET_LOCK) and guarantees AT MOST ONE network refresh
 	 * per token rotation across every concurrent worker (theme + all plugin
 	 * refreshers), which the previous per-client refreshers could not — FreshBooks
 	 * refresh tokens are single-use, so two simultaneous refreshers revoke each
-	 * other (Interop contract §1.2). The service also projects the new token to
+	 * other. The service also projects the new token to
 	 * every legacy option-key family, so the fan-out below is preserved centrally.
 	 *
 	 * When the service is absent (older platform / standalone), this falls back to
@@ -72,8 +72,11 @@ class ZDZ_Core_FreshBooks {
 				}
 				return true;
 			}
-			// Service returned '' (hard failure). Fall through to the legacy path as
-			// a last resort so a transient service issue never bricks a refresh.
+			// The service is the ONE refresher: it serialises every refresh, adopts any reconnect and retries a
+			// dead token with the copies it knows. A refresh here, outside its lock, would revoke the token every other
+			// app holds, so a failure from the service is final.
+			error_log( 'Zorderz Core billing: token refresh via ZDZ_Token_Service failed; not refreshing outside the service.' );
+			return false;
 		}
 
 		// Fallback path: original self-contained refresh (pre-2.26.0).
@@ -97,18 +100,11 @@ class ZDZ_Core_FreshBooks {
 			$this->access_token  = $body['access_token'];
 			$this->refresh_token = $body['refresh_token'];
 
-			// Save to theme's own prefix
+			// The kernel's own copy only. Copying the pair onto every app's options would write one billing app's tokens
+			// over another's (a refresh token never redeems under another app's client id); projecting a new pair to the
+			// apps that share this billing app is the token service's job.
 			update_option( 'zdz_core_fb_access_token', $body['access_token'] );
 			update_option( 'zdz_core_fb_refresh_token', $body['refresh_token'] );
-
-			// v2.14.3.1: Sync to ALL plugin prefixes. FreshBooks refresh tokens
-			// are single-use — if the theme refreshes and doesn't sync back,
-			// every plugin's stored refresh token becomes revoked. This caused
-			// "token expired and auto-refresh failed" errors even after re-auth.
-			foreach ( [ 'tscc_', 'tsec_', 'tsl_', 'tsa_', 'zdz_surveys_' ] as $prefix ) {
-				update_option( $prefix . 'fb_access_token',  $body['access_token'] );
-				update_option( $prefix . 'fb_refresh_token', $body['refresh_token'] );
-			}
 
 			return true;
 		}
@@ -117,7 +113,7 @@ class ZDZ_Core_FreshBooks {
 	}
 
 	public function api_request( string $method, string $endpoint, array $data = [] ) {
-		// v2.25.3: Bulletproof base/endpoint join. Exactly ONE slash between
+		// Bulletproof base/endpoint join. Exactly ONE slash between
 		// the (slash-trimmed) base and the (slash-trimmed) endpoint, regardless
 		// of whether either side carries one. This permanently closes the old
 		// "https://api.freshbooks.comaccounting/..." concatenation bug (a pre-2.14
@@ -253,8 +249,8 @@ class ZDZ_Core_FreshBooks {
 		$page      = 1;
 		$max_pages = 20; // safety cap; dynamic cap from API metadata below usually ends sooner
 
-		// INV-2: FreshBooks sometimes IGNORES search[customerid] and returns other
-		// customers' invoices (the "68 estimates for a 1-estimate client" leak). NEVER
+		// FreshBooks sometimes IGNORES search[customerid] and returns other
+		// customers' invoices (dozens of documents for a one-estimate client). NEVER
 		// trust the server filter — keep only rows whose customerid matches the one we
 		// asked for. $want_cid is the effective filter (a caller may override it via
 		// $extra); if no customerid filter is in effect we keep everything (unchanged).
@@ -307,5 +303,227 @@ class ZDZ_Core_FreshBooks {
 		}
 
 		return $all;
+	}
+
+	/* ─────────────────────────── strict reads (budgeted callers) ───────────────────────────
+	 *
+	 * A caller that works to a time budget (the analytics app's stored-data ledger, the chat's invoice view) must tell
+	 * "nothing there" from "the billing system did not answer": api_request() returns null for both. These reads throw
+	 * on a failure instead, name the HTTP code in the message ("(HTTP 404)"), take a per-call timeout, and are GETs
+	 * only: nothing here writes to the billing system.
+	 */
+
+	/** The account these reads use (the invoice view matches the business header to it). */
+	public function account(): string {
+		return (string) ( $this->account_id ?? '' );
+	}
+
+	/**
+	 * A query string with the billing system's bracketed keys left as they are ("search[date_min]=…", "include[]=lines").
+	 * Values are encoded; keys are the fixed names below. A list value repeats its key.
+	 */
+	public static function query_string( array $params ): string {
+		$out = array();
+		foreach ( $params as $k => $v ) {
+			$k = (string) $k;
+			if ( ! preg_match( '/^[a-z_]+(?:\[[a-z_]*\])?$/', $k ) ) {
+				continue;
+			}
+			foreach ( is_array( $v ) ? $v : array( $v ) as $one ) {
+				if ( null === $one || '' === (string) $one ) {
+					continue;
+				}
+				$out[] = $k . '=' . rawurlencode( (string) $one );
+			}
+		}
+		return implode( '&', $out );
+	}
+
+	/** One page of a list answer: { items, pages, total }, read from the billing system's result envelope. */
+	public static function page_of( $data, string $list_key ): array {
+		$result = is_array( $data ) ? ( $data['response']['result'] ?? array() ) : array();
+		$items  = is_array( $result[ $list_key ] ?? null ) ? array_values( $result[ $list_key ] ) : array();
+		return array(
+			'items' => $items,
+			'pages' => max( 1, (int) ( $result['pages'] ?? 1 ) ),
+			'total' => (int) ( $result['total'] ?? count( $items ) ),
+		);
+	}
+
+	/**
+	 * One GET, strict. Returns the decoded body; throws RuntimeException on a transport failure, an HTTP error (after
+	 * one token refresh on a 401) or a body that is not JSON.
+	 */
+	public function read_strict( string $path, array $query = array(), int $timeout = 30 ): array {
+		if ( '' === $this->account() ) {
+			throw new RuntimeException( 'The billing system is not connected.' );
+		}
+		$url = rtrim( $this->api_base, '/' ) . '/' . ltrim( $path, '/' );
+		$qs  = self::query_string( $query );
+		if ( '' !== $qs ) {
+			$url .= ( false === strpos( $url, '?' ) ? '?' : '&' ) . $qs;
+		}
+		$args = array(
+			'method'  => 'GET',
+			'headers' => $this->get_auth_headers(),
+			'timeout' => max( 5, $timeout ),
+		);
+		$response = wp_remote_request( $url, $args );
+		if ( is_wp_error( $response ) ) {
+			throw new RuntimeException( 'Billing read failed: ' . esc_html( $response->get_error_message() ) );
+		}
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 401 === $code && $this->refresh_token() ) {
+			$args['headers'] = $this->get_auth_headers();
+			$response        = wp_remote_request( $url, $args );
+			if ( is_wp_error( $response ) ) {
+				throw new RuntimeException( 'Billing read failed: ' . esc_html( $response->get_error_message() ) );
+			}
+			$code = (int) wp_remote_retrieve_response_code( $response );
+		}
+		if ( $code < 200 || $code >= 300 ) {
+			throw new RuntimeException( 'Billing read failed (HTTP ' . (int) $code . ')' );
+		}
+		$data = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $data ) ) {
+			throw new RuntimeException( 'Billing read failed: the answer was not readable.' );
+		}
+		return $data;
+	}
+
+	/**
+	 * One page of invoices, estimates or payments, for a reader that syncs page by page inside a time budget.
+	 *
+	 * @param string $resource 'invoices' | 'estimates' | 'payments'
+	 * @param array  $search   any of date_min, date_max, updated_min (Y-m-d), vis_state (1 = deleted only, 2 = archived only;
+	 *                         absent = the billing system's default list)
+	 * @param int    $page     1-based
+	 * @param int    $timeout  seconds for this request
+	 * @return array { items, pages, total }
+	 */
+	public function list_page( string $resource, array $search, int $page = 1, int $timeout = 30 ): array {
+		$paths = array(
+			'invoices'  => 'invoices/invoices',
+			'estimates' => 'estimates/estimates',
+			'payments'  => 'payments/payments',
+		);
+		$resource = isset( $paths[ $resource ] ) ? $resource : 'invoices';
+		$q        = array(
+			'page'     => max( 1, $page ),
+			'per_page' => 100, // the billing system's own cap
+		);
+		foreach ( array( 'date_min', 'date_max', 'updated_min' ) as $k ) {
+			if ( ! empty( $search[ $k ] ) && preg_match( '/^\d{4}-\d{2}-\d{2}/', (string) $search[ $k ] ) ) {
+				$q[ 'search[' . $k . ']' ] = substr( (string) $search[ $k ], 0, 10 );
+			}
+		}
+		if ( isset( $search['vis_state'] ) && in_array( (int) $search['vis_state'], array( 1, 2 ), true ) ) {
+			$q['search[vis_state]'] = (int) $search['vis_state'];
+		}
+		if ( 'payments' !== $resource ) {
+			$q['include[]'] = 'lines';
+		}
+		$data = $this->read_strict( '/accounting/account/' . rawurlencode( $this->account() ) . '/' . $paths[ $resource ], $q, $timeout );
+		return self::page_of( $data, $resource );
+	}
+
+	/**
+	 * Does this invoice still exist? One GET by id. 'active' | 'archived' | 'deleted' | 'missing' (the billing system says
+	 * there is no such invoice), or '' when it could not say (timeout, sign-in, server error).
+	 */
+	public function invoice_vis( $invoice_id, int $timeout = 8 ): string {
+		$id = preg_replace( '/\D+/', '', (string) $invoice_id );
+		if ( '' === $id || '' === $this->account() ) {
+			return '';
+		}
+		try {
+			$data = $this->read_strict( '/accounting/account/' . rawurlencode( $this->account() ) . '/invoices/invoices/' . $id, array(), $timeout );
+		} catch ( \Throwable $e ) {
+			return false !== strpos( $e->getMessage(), '(HTTP 404)' ) ? 'missing' : '';
+		}
+		$err = $data['response']['errors'][0] ?? null;
+		if ( is_array( $err ) ) {
+			$msg = strtolower( (string) ( $err['message'] ?? '' ) );
+			return ( 1012 === (int) ( $err['errno'] ?? 0 ) || false !== strpos( $msg, 'not found' ) ) ? 'missing' : '';
+		}
+		$inv = $data['response']['result']['invoice'] ?? null;
+		if ( ! is_array( $inv ) ) {
+			return '';
+		}
+		$vis = (int) ( $inv['vis_state'] ?? 0 );
+		return 1 === $vis ? 'deleted' : ( 2 === $vis ? 'archived' : 'active' );
+	}
+
+	/**
+	 * One invoice or estimate by its number, lines included. Exact only: the number as written and its zero-padded form
+	 * ("1234" / "0001234"); a deleted document is never returned, and there is no "like" search, so a near match never
+	 * opens someone else's document. With $all: every exact live match, one per billing id (an array, maybe empty), so a
+	 * caller can refuse a number the billing system holds twice.
+	 *
+	 * @return array|null The document, or null when there is none (with $all: a list).
+	 * @throws RuntimeException When the billing system can't be reached.
+	 */
+	public function get_document_by_number( string $kind, string $number, int $timeout = 8, bool $all = false ) {
+		$kind   = 'estimate' === $kind ? 'estimate' : 'invoice';
+		$number = trim( $number );
+		if ( '' === $number || ! preg_match( '/^[A-Za-z0-9-]{1,20}$/D', $number ) || '' === $this->account() ) {
+			return $all ? array() : null;
+		}
+		$res      = 'estimate' === $kind ? 'estimates/estimates' : 'invoices/invoices';
+		$field    = 'estimate' === $kind ? 'estimate_number' : 'invoice_number';
+		$list     = 'estimate' === $kind ? 'estimates' : 'invoices';
+		$id_key   = 'estimate' === $kind ? 'estimateid' : 'invoiceid';
+		$variants = array( $number );
+		if ( ctype_digit( $number ) && strlen( $number ) < 7 ) {
+			$variants[] = str_pad( $number, 7, '0', STR_PAD_LEFT );
+		}
+		$want  = ltrim( $number, '0' );
+		$found = array();
+		foreach ( array_unique( $variants ) as $v ) {
+			$data = $this->read_strict(
+				'/accounting/account/' . rawurlencode( $this->account() ) . '/' . $res,
+				array( 'per_page' => 5, 'search[' . $field . ']' => $v, 'include[]' => 'lines' ),
+				$timeout
+			);
+			foreach ( self::page_of( $data, $list )['items'] as $doc ) {
+				if ( ! is_array( $doc ) || 1 === (int) ( $doc['vis_state'] ?? 0 ) ) {
+					continue;
+				}
+				if ( ltrim( (string) ( $doc[ $field ] ?? '' ), '0' ) === $want ) {
+					if ( ! $all ) {
+						return $doc;
+					}
+					$found[ (string) ( $doc[ $id_key ] ?? ( $doc['id'] ?? count( $found ) ) ) ] = $doc;
+				}
+			}
+		}
+		return $all ? array_values( $found ) : null;
+	}
+
+	/**
+	 * The billing system's answer to the invoice share-link request (the link a customer opens without signing in).
+	 * The caller asks only for an invoice that has been sent: the billing system may mark a draft sent to make its link.
+	 *
+	 * @throws RuntimeException When the billing system refuses or can't be reached ("(HTTP 422)" for a draft).
+	 */
+	public function get_invoice_share_link( $invoice_id, int $timeout = 8 ) {
+		$invoice_id = (int) $invoice_id;
+		if ( $invoice_id <= 0 || '' === $this->account() ) {
+			return null;
+		}
+		return $this->read_strict(
+			'/accounting/account/' . rawurlencode( $this->account() ) . '/invoices/invoices/' . $invoice_id . '/share_link',
+			array( 'share_method' => 'share_link' ),
+			$timeout
+		);
+	}
+
+	/**
+	 * The signed-in billing user and their businesses (an invoice view's company header).
+	 *
+	 * @throws RuntimeException When the billing system can't be reached.
+	 */
+	public function get_me( int $timeout = 8 ): array {
+		return $this->read_strict( '/auth/api/v1/users/me', array(), $timeout );
 	}
 }

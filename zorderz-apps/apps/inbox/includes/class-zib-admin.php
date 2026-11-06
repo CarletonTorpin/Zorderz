@@ -25,6 +25,20 @@ class ZIB_Admin {
 		add_action( 'admin_post_zib_toggle_read', array( __CLASS__, 'handle_toggle_read' ) );
 	}
 
+	/** Is $svc managed on Zorderz → Credentials? */
+	public static function cred_managed( string $svc ): bool {
+		return class_exists( 'ZDZ_Core_Credentials' )
+			&& is_callable( array( 'ZDZ_Core_Credentials', 'is_app' ) )
+			&& is_callable( array( 'ZDZ_Core_Credentials', 'engaged' ) )
+			&& ZDZ_Core_Credentials::engaged( $svc );
+	}
+
+	/** A form that hid $svc's fields says so; its submit must not write them (a stale form never overwrites managed credentials). */
+	public static function managed_posted( string $svc ): bool {
+		return isset( $_POST['zdz_cred_managed'] ) && is_array( $_POST['zdz_cred_managed'] ) // phpcs:ignore WordPress.Security.NonceVerification.Missing -- only save() calls this, after check_admin_referer( 'zib_save_settings' ); it can only hold a write back
+			&& ! empty( $_POST['zdz_cred_managed'][ $svc ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- only save() calls this, after check_admin_referer( 'zib_save_settings' ); it can only hold a write back
+	}
+
 	public static function menu(): void {
 		add_options_page( 'Zorderz Inbox', 'Zorderz Inbox', 'manage_options', 'zib-settings', array( __CLASS__, 'render' ) );
 	}
@@ -107,10 +121,16 @@ class ZIB_Admin {
 		}
 		check_admin_referer( 'zib_save_settings' );
 
-		ZIB_Settings::update_config( array(
-			'tenant_id' => sanitize_text_field( wp_unslash( $_POST['tenant_id'] ?? '' ) ),
-			'client_id' => sanitize_text_field( wp_unslash( $_POST['client_id'] ?? '' ) ),
-		) );
+		// While the Inbox app is managed on Zorderz → Credentials
+		// (or this form said it hid those fields) tenant id / client id / secret are not written.
+		$cred_locked = self::cred_managed( 'ms_inbox' ) || self::managed_posted( 'ms_inbox' );
+
+		if ( ! $cred_locked ) {
+			ZIB_Settings::update_config( array(
+				'tenant_id' => sanitize_text_field( wp_unslash( $_POST['tenant_id'] ?? '' ) ),
+				'client_id' => sanitize_text_field( wp_unslash( $_POST['client_id'] ?? '' ) ),
+			) );
+		}
 
 		if ( isset( $_POST['internal_domains'] ) ) {
 			ZIB_Settings::set_internal_domains( sanitize_textarea_field( wp_unslash( $_POST['internal_domains'] ) ) );
@@ -118,7 +138,7 @@ class ZIB_Admin {
 
 		// Secret: only overwrite when a non-empty value is submitted (blank =
 		// leave unchanged). A literal "-" clears it.
-		$secret = sanitize_text_field( wp_unslash( $_POST['client_secret'] ?? '' ) );
+		$secret = $cred_locked ? '' : sanitize_text_field( wp_unslash( $_POST['client_secret'] ?? '' ) );
 		if ( '-' === trim( $secret ) ) {
 			ZIB_Settings::set_secret( '' );
 		} elseif ( '' !== trim( $secret ) ) {
@@ -148,6 +168,7 @@ class ZIB_Admin {
 		$redir   = ZIB_OAuth::redirect_uri();
 		$domains = implode( ', ', ZIB_Settings::internal_domains() );
 		$roster  = ZIB_Connections::roster();
+		$managed = self::cred_managed( 'ms_inbox' );
 		?>
 		<div class="wrap">
 			<h1>Zorderz Inbox — Connected Email (per-user M365)</h1>
@@ -168,6 +189,15 @@ class ZIB_Admin {
 				<input type="hidden" name="action" value="zib_save_settings" />
 				<?php wp_nonce_field( 'zib_save_settings' ); ?>
 				<table class="form-table" role="presentation">
+					<?php if ( $managed ) : ?>
+					<tr>
+						<th scope="row">App credentials</th>
+						<td>
+							<input type="hidden" name="zdz_cred_managed[ms_inbox]" value="1" />
+							<p>Managed in <a href="<?php echo esc_url( is_callable( array( 'ZDZ_Core_Credentials', 'page_url' ) ) ? ZDZ_Core_Credentials::page_url() : admin_url( 'admin.php?page=zdz-core-credentials' ) ); ?>">Zorderz → Credentials</a> — one set for every app.</p>
+						</td>
+					</tr>
+					<?php else : ?>
 					<tr>
 						<th scope="row"><label for="zib_tenant">Tenant ID</label></th>
 						<td><input name="tenant_id" id="zib_tenant" type="text" class="regular-text" value="<?php echo esc_attr( $cfg['tenant_id'] ); ?>" placeholder="00000000-0000-0000-0000-000000000000" /></td>
@@ -183,6 +213,7 @@ class ZIB_Admin {
 							<p class="description">Leave blank to keep the current secret. Enter <code>-</code> to clear it. Paste the secret <strong>Value</strong>, never the Secret <strong>ID</strong> (AADSTS7000215 is the wrong-one error).</p>
 						</td>
 					</tr>
+					<?php endif; ?>
 					<tr>
 						<th scope="row"><label for="zib_domains">Internal domains</label></th>
 						<td><input name="internal_domains" id="zib_domains" type="text" class="regular-text" value="<?php echo esc_attr( $domains ); ?>" placeholder="example.com" />

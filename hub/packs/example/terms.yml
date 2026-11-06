@@ -1,0 +1,15 @@
+# Extra words people use for the pack's names.
+charts:
+  terms:
+    - {words: [window film, films], products: [Solar window film, Privacy window film, Window film (type not stated)]}
+    - {words: [tint, tinting], products: [Window film (type not stated)]}
+    - {words: [sun sail, sun sails], products: [Shade sails]}
+  sources:
+    Google Ads: [google ad, google ads, adwords]
+    Existing Customer: [past customer, repeat customer]
+  regions_undefined: []
+  area_short:
+    mid: Midvale
+  product_detail_split:
+    Window film (type not stated): brand
+  company_names: [Example Co, Example Company]

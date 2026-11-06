@@ -21,11 +21,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ZJOB_DB {
 
 	const DB_VERSION_OPTION = 'zjob_db_version';
+	// 1.8.0: + sp_code (the salesperson initials a job carries, for visibility).
 	// 1.7.0: + assurance_level / attestation columns (solo-operator single-party
 	//         recorded attestation, safety floor). 1.6.0: worker inbox
 	//         (started_at + ETA). 1.5.0: close-out deadline/extension.
 	//         1.4.0: two-party completion. 1.3.0: estimate pointers.
-	const DB_VERSION = '1.7.0';
+	const DB_VERSION = '1.8.0';
 
 	/** Fully-qualified table name. */
 	public static function table(): string {
@@ -51,6 +52,9 @@ class ZJOB_DB {
 		//   crm_contact_id    - the CRM person/company the child lead is on.
 		//   assigned_user_id - the specialist (resolved via ZDZ_Party).
 		//   created_by       - the person who created / handed off the job.
+		//   sp_code          - the salesperson initials the work carries (the estimate's
+		//                      salesperson, else the creator's own code; '' when none) so
+		//                      the seller keeps sight of it after hand-off (ZJOB_Scope).
 		//   brand, qty, notes - job detail (internal only; never billed).
 		//   customer_business/customer_address/customer_phone/access_notes - worker-card fields.
 		//   scheduled_appt_id - the linked scheduler appointment row (0 = unscheduled).
@@ -84,6 +88,7 @@ class ZJOB_DB {
 			crm_contact_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
 			assigned_user_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
 			created_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			sp_code VARCHAR(8) NOT NULL DEFAULT '',
 			brand VARCHAR(96) NOT NULL DEFAULT '',
 			qty SMALLINT UNSIGNED NOT NULL DEFAULT 0,
 			notes TEXT NULL,
@@ -126,6 +131,7 @@ class ZJOB_DB {
 			PRIMARY KEY  (id),
 			KEY assigned_user_id (assigned_user_id),
 			KEY created_by (created_by),
+			KEY sp_code (sp_code),
 			KEY status (status),
 			KEY parent_lead_id (parent_lead_id),
 			KEY scheduled_start (scheduled_start_utc),

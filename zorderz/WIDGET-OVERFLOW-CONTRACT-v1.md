@@ -1,8 +1,6 @@
 # Widget Overflow Contract (v1)
 
 > **Status:** Stable (plugins depend on this contract)
-> **Since:** Theme v2.20.1
-> **Formalized:** Theme v2.20.3
 > **Depends on:** None
 > **Depended on by:** All inline_widget plugins
 
@@ -39,7 +37,7 @@ When a plugin places `position: sticky` on an element inside `.dash-widget-body`
 
 ## Plugins That Depend on This
 
-### zdz-satisfaction-surveys v2.9.3
+### zdz-satisfaction-surveys
 ```css
 .dash-widget-body .zdz-sw-section-header {
   position: sticky;
@@ -66,7 +64,7 @@ Any plugin registered with `bridge_type: 'inline_widget'` renders inside `.dash-
 
 1. **Do NOT change `overflow: clip` to `overflow: hidden`** on `.dash-widget-body`. It looks the same but breaks sticky positioning in all plugins.
 
-2. **Do NOT add `overflow-y: auto` or `max-height`** to `.dash-widget-body`. This was the original pre-v2.20.1 behavior (`max-height: 65vh; overflow-y: auto`) that created double-scroll traps and broke sticky elements. It was removed in v2.20.1 for exactly this reason.
+2. **Do NOT add `overflow-y: auto` or `max-height`** to `.dash-widget-body`. This was the original behavior (`max-height: 65vh; overflow-y: auto`) that created double-scroll traps and broke sticky elements. It was removed for exactly this reason.
 
 3. **Do NOT add `contain: layout`** to `.dash-widget-body` or its parent. CSS containment creates a new formatting context that traps sticky positioning.
 

@@ -25,13 +25,15 @@ class ZSTOCK_Engine {
 	 * ================================================================ */
 
 	/**
-	 * Insert a ledger entry and update the cached current_stock. The ledger is append-only.
+	 * Insert a ledger entry and set the cached current_stock from the ledger. The ledger is append-only, and every
+	 * write goes through ZSTOCK_Orders::ledger_add() — this is kept as the engine's entry point for the consumption
+	 * sweep and older callers.
 	 *
 	 * @param string $item_id   Item Engine item id.
 	 * @param float  $quantity  Positive = stock in, negative = stock out.
 	 * @param string $type      SUPPLIER_ORDER | JOB_CONSUMPTION | MANUAL_ADJUST | CYCLE_COUNT |
 	 *                          WASTE | DAMAGE | RETURN | TRANSFER.
-	 * @param string $ref_type  Reference kind (e.g. 'order', 'invoice').
+	 * @param string $ref_type  Reference kind (e.g. 'supplier_order', 'invoice').
 	 * @param string $ref_id    Reference id.
 	 * @param string $ref_label Human label.
 	 * @param string $notes     Optional notes.
@@ -39,48 +41,7 @@ class ZSTOCK_Engine {
 	 * @return int|false Insert id, or false.
 	 */
 	public static function add_ledger_entry( $item_id, $quantity, $type, $ref_type = '', $ref_id = '', $ref_label = '', $notes = '', $user_id = 0 ) {
-		global $wpdb;
-		$item_id = (string) $item_id;
-		if ( '' === $item_id ) {
-			return false;
-		}
-		$user_id  = $user_id ? (int) $user_id : get_current_user_id();
-		$inserted = $wpdb->insert(
-			ZSTOCK_DB::ledger_table(),
-			array(
-				'item_id'          => $item_id,
-				'quantity_change'  => (float) $quantity,
-				'transaction_type' => (string) $type,
-				'reference_type'   => (string) $ref_type,
-				'reference_id'     => (string) $ref_id,
-				'reference_label'  => (string) $ref_label,
-				'user_id'          => $user_id,
-				'notes'            => (string) $notes,
-				'created_at'       => current_time( 'mysql' ),
-			),
-			array( '%s', '%f', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
-		);
-		if ( ! $inserted ) {
-			return false;
-		}
-		self::bump_stock( $item_id, (float) $quantity );
-		return (int) $wpdb->insert_id;
-	}
-
-	/** Increment the cached stock state for an item (upsert). */
-	private static function bump_stock( $item_id, $delta ) {
-		global $wpdb;
-		$tbl = ZSTOCK_DB::stock_table();
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifier from constant; values prepared.
-		$wpdb->query(
-			$wpdb->prepare(
-				"INSERT INTO `{$tbl}` (item_id, current_stock, updated_at) VALUES (%s, %f, %s)
-				 ON DUPLICATE KEY UPDATE current_stock = current_stock + VALUES(current_stock), updated_at = VALUES(updated_at)",
-				(string) $item_id,
-				(float) $delta,
-				current_time( 'mysql' )
-			)
-		);
+		return ZSTOCK_Orders::ledger_add( (string) $item_id, (float) $quantity, (string) $type, (string) $ref_type, (string) $ref_id, (string) $ref_label, (string) $notes, (int) $user_id );
 	}
 
 	/** Recompute current_stock for an item from its full ledger history (ledger = truth). */
@@ -159,8 +120,14 @@ class ZSTOCK_Engine {
 	 * SUMMARY / REORDER / FORECAST
 	 * ================================================================ */
 
-	/** Status bucket for an item view. */
-	private static function status_of( array $item ) {
+	/**
+	 * Status bucket for an item view. An item nobody has counted is `uncounted`: Stock does not know how many are
+	 * there, so it never calls it low or out. PURE.
+	 */
+	public static function status_of( array $item ) {
+		if ( empty( $item['counted'] ) ) {
+			return 'uncounted';
+		}
 		$stock   = (float) $item['current_stock'];
 		$reorder = (float) $item['reorder_point'];
 		$par     = (float) $item['par_level'];
@@ -184,11 +151,17 @@ class ZSTOCK_Engine {
 		$items           = self::items();
 		$low_stock_items = array();
 		$low_count       = 0;
+		$uncounted       = 0;
 		$total_value     = 0.0;
 
 		foreach ( $items as $item ) {
 			$total_value += (float) $item['current_stock'] * (float) $item['unit_cost'];
-			if ( 'good' !== self::status_of( $item ) ) {
+			$status       = self::status_of( $item );
+			if ( 'uncounted' === $status ) {
+				$uncounted++;
+				continue;
+			}
+			if ( 'good' !== $status ) {
 				$low_count++;
 				if ( count( $low_stock_items ) < 5 ) {
 					$low_stock_items[] = $item;
@@ -200,13 +173,15 @@ class ZSTOCK_Engine {
 		$orders_tbl     = ZSTOCK_DB::orders_table();
 		$pending_orders = 0;
 		$recent_orders  = array();
+		$incoming       = array();
+		// The shared device never sees orders that came from someone's mailbox.
+		$with_email = ! ZSTOCK_Orders::is_kiosk( (int) get_current_user_id() );
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $orders_tbl ) ) === $orders_tbl ) {
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifier from constant.
-			$pending_orders = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$orders_tbl}` WHERE status = 'draft'" );
+			$pending_orders = ZSTOCK_Orders::open_count( $with_email );
+			$incoming       = ZSTOCK_Orders::incoming( 10, $with_email );
 			$recent_orders  = $wpdb->get_results(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifier from constant.
 				"SELECT id, supplier_name, invoice_number, status, total_amount AS total, created_at
-				 FROM `{$orders_tbl}` ORDER BY created_at DESC LIMIT 5",
+				 FROM `{$orders_tbl}`" . ( $with_email ? '' : " WHERE source <> 'email'" ) . ' ORDER BY created_at DESC LIMIT 5', // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix plus a fixed name; the optional WHERE is a literal; no input.
 				ARRAY_A
 			);
 			if ( ! is_array( $recent_orders ) ) {
@@ -217,7 +192,9 @@ class ZSTOCK_Engine {
 		return array(
 			'total_items'     => count( $items ),
 			'low_stock_count' => $low_count,
+			'uncounted_count' => $uncounted,
 			'pending_orders'  => $pending_orders,
+			'incoming'        => $incoming,
 			'low_stock_items' => $low_stock_items,
 			'recent_orders'   => $recent_orders,
 			'all_items'       => $items,
@@ -230,8 +207,8 @@ class ZSTOCK_Engine {
 	public static function calculate_reorder_needs() {
 		$needs = array();
 		foreach ( self::items() as $item ) {
-			if ( (float) $item['current_stock'] > (float) $item['reorder_point'] ) {
-				continue;
+			if ( 'uncounted' === self::status_of( $item ) || (float) $item['current_stock'] > (float) $item['reorder_point'] ) {
+				continue; // an item nobody has counted is never called low
 			}
 			$order_qty     = max( 0, (float) $item['par_level'] - (float) $item['current_stock'] );
 			$item['order_qty']      = $order_qty;
@@ -457,8 +434,13 @@ class ZSTOCK_Engine {
 		if ( '' === $key ) {
 			return null;
 		}
-		// Always pass an explicit model so the client never has to resolve a default itself.
-		return new ZDZ_Core_Poe( $key, zstock_default_model() );
+		// Always pass an explicit model so the client never has to resolve a default itself; no model
+		// configured anywhere means no client (the caller says the Ai is not set up).
+		$model = zstock_default_model();
+		if ( '' === $model && '' === zstock_assistant() ) {
+			return null;
+		}
+		return new ZDZ_Core_Poe( $key, $model );
 	}
 
 	/**

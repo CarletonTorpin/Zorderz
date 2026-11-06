@@ -30,7 +30,7 @@ if ( ! class_exists( 'ZDP_App' ) ) {
 				'roles'       => (array) apply_filters( 'zdz_dotplot_roles', array( 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_operator' ) ),
 				'bridge_type' => 'inline_widget',
 				'admin_url'   => '',
-				// AC3 boot fail-loud: the hot-path classes that MUST be defined once this app has
+				// Boot fail-loud: the hot-path classes that MUST be defined once this app has
 				// loaded. On a partial-zip install where one is missing, ZDZ_Plugin_API declines the
 				// tile (logged disposition + admin notice) instead of fataling at wp_head.
 				'classes'     => array( 'ZDP_App', 'ZDP_Rest', 'ZDP_Ai' ),

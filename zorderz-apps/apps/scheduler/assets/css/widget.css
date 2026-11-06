@@ -1,5 +1,5 @@
 /* Zorderz Scheduler — calendar widget styles.
- * Uses the theme's design tokens (--sys-*, --ts-*) where available, with
+ * Uses the theme's design tokens (--sys-*) where available, with
  * sensible fallbacks so the widget looks right even standalone.
  */
 
@@ -26,7 +26,7 @@
 	--zsch-text: var(--sys-text, #e7edf6);
 	--zsch-muted: var(--sys-text-muted, #94a3b8);
 	--zsch-border: var(--sys-border, #283549);
-	--zsch-accent: var(--ts-accent, #0ea5e9);
+	--zsch-accent: var(--sys-brand, #0ea5e9);
 	/* v1.5.3: filled controls need a darker step — white on sky-500 is 2.8:1 */
 	--zsch-accent-strong: #0369A1;
 	--zsch-personal: #0ea5e9;
@@ -314,8 +314,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   v1.4.0 (D3) — availability: one-tap-per-day, long-press Day Editor,
-   overwrite confirm + undo. iOS playbook: callout/select suppression,
+   v1.4.0 — availability: one-tap-per-day, long-press Day Editor,
+   overwrite confirm + undo. iOS practice: callout/select suppression,
    press-progress ring instead of haptics, 44px targets throughout.
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -544,4 +544,57 @@
 	.zsch-casc-chev { flex-basis: 32px; }
 	.zsch-cw-day { min-height: 58px; }
 	.zsch-cd-hlabel { flex-basis: 42px; }
+}
+
+/* ── Repeating appointments: "just this one / this and following / every one" ──
+ *
+ * A blocking card rather than a toast or an inline row: the question has to be
+ * answered before anything is sent, because the three answers are three
+ * different writes and two of them are hard to undo by hand. The smallest scope
+ * is first and takes focus. */
+.zsch-scope-ask {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, .55);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;            /* above .zsch-w-modal (9998) and the toast (9999) */
+	padding: 16px;
+}
+.zsch-scope-card {
+	background: var(--zsch-surface);
+	color: var(--zsch-text);
+	border: 1px solid var(--zsch-border);
+	border-radius: var(--zsch-radius);
+	padding: 20px;
+	max-width: 360px;
+	width: 100%;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, .35);
+}
+.zsch-scope-card h3 { margin: 0 0 4px; font-size: 16px; }
+.zsch-scope-card p { margin: 0 0 14px; color: var(--zsch-muted); font-size: 13px; }
+.zsch-scope-card button {
+	display: block;
+	width: 100%;
+	margin: 0 0 8px;
+	padding: 11px 14px;
+	min-height: 44px;          /* WCAG 2.2 SC 2.5.8 — a comfortable target */
+	border: 1px solid var(--zsch-border);
+	border-radius: 8px;
+	background: var(--zsch-bg);
+	color: var(--zsch-text);
+	font-size: 14px;
+	text-align: left;
+	cursor: pointer;
+}
+.zsch-scope-card button:hover { border-color: var(--zsch-accent); }
+.zsch-scope-card button:focus-visible { outline: 2px solid var(--zsch-accent); outline-offset: 2px; }
+.zsch-scope-card .zsch-scope-cancel {
+	margin-top: 4px;
+	margin-bottom: 0;
+	background: transparent;
+	border-color: transparent;
+	color: var(--zsch-muted);
+	text-align: center;
 }

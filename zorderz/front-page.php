@@ -28,12 +28,12 @@ get_header(); ?>
 
 	<!-- === SUB-VIEW: DASHBOARD (unified — apps + widgets) === -->
 	<div id="sv-dash" class="sub-view active" role="main">
-		<!-- v2.16.0 T15: Sticky dash-top wrapper (greeting + search) -->
+		<!-- Sticky dash-top wrapper (greeting + search) -->
 		<div id="dash-top" class="dash-top">
 			<!-- Greeting + Refresh -->
 			<div class="greeting-row" id="greeting-row"></div>
 
-			<!-- v2.23.0: Inline ask field — type directly here; results drop down
+			<!-- Inline ask field — type directly here; results drop down
 			     beneath it (no pop-up overlay). -->
 			<div class="dash-ask" id="dash-ask">
 				<div class="dash-ask-field">
@@ -52,13 +52,13 @@ get_header(); ?>
 			</div>
 		</div>
 
-		<!-- v2.16.0 T4: Sticky compact app bar (visible when dock scrolls out) -->
+		<!-- Sticky compact app bar (visible when dock scrolls out) -->
 		<div id="dash-sticky" class="dash-sticky"></div>
 
-		<!-- v2.14.4 A4: App Dock — icon buttons for all permitted apps -->
+		<!-- App Dock — icon buttons for all permitted apps -->
 		<div id="app-dock" class="app-dock" aria-label="<?php esc_attr_e( 'Your apps', 'zorderz' ); ?>"></div>
 
-		<!-- v2.21.3: Leads action tile — "you have N new leads today" for the
+		<!-- Leads action tile — "you have N new leads today" for the
 		     signed-in salesperson. Populated by renderLeadsTile() from the
 		     unified /zorderz/v1/dashboard-items feed; hidden when there's nothing
 		     pending or for roles that don't carry assigned leads. -->
@@ -67,7 +67,7 @@ get_header(); ?>
 		<!-- Quick Stats -->
 		<div class="quick-stats" id="quick-stats" aria-label="<?php esc_attr_e( 'Quick statistics', 'zorderz' ); ?>"></div>
 
-		<!-- Widget Zone (v2.0): Inline plugin widgets render here -->
+		<!-- Widget Zone: Inline plugin widgets render here -->
 		<div id="dash-widget-zone" class="dash-widget-zone"></div>
 
 		<!-- Recently Used -->
@@ -82,7 +82,7 @@ get_header(); ?>
 		<!-- Hidden App Bridge Container -->
 		<div id="app-container" style="display:none;"></div>
 
-		<!-- v2.24.2: tiny build stamp so the running theme build is verifiable at a
+		<!-- tiny build stamp so the running theme build is verifiable at a
 		     glance (stale-PWA-shell diagnosis). Populated by JS from zdzData.themeVersion. -->
 		<div class="zdz-build-stamp" id="zdz-build-stamp" aria-hidden="true"></div>
 	</div>
@@ -96,6 +96,12 @@ get_header(); ?>
 			<h4><?php esc_html_e( 'Appearance', 'zorderz' ); ?></h4>
 			<div class="theme-grid" id="theme-grid"></div>
 		</div>
+		<?php // Notifications, right under Appearance. Drawn by assets/js/zdz-push.js; stays hidden on a shared device and in Demo Mode. ?>
+		<div class="settings-section zdz-push-section" id="settings-notify" hidden></div>
+		<?php // Usage records: agree or withdraw. Drawn by assets/js/zdz-consent.js only while the card is switched on; never on a shared device. ?>
+		<div class="settings-section zdz-consent-section" id="settings-consent" hidden></div>
+		<?php // Your app use: what is recorded about this person, and "Reset my order" where home learns from use. Drawn by assets/js/zdz-usage.js; never on a shared device or in Demo Mode. ?>
+		<div class="settings-section zdz-consent-section zdz-usage-section" id="settings-usage" hidden></div>
 		<div class="settings-section" id="settings-info"></div>
 	</div>
 
@@ -109,7 +115,7 @@ get_header(); ?>
 	// light-ink artwork back. The slot is small and roughly square, hence 'square'.
 	$bnav_logo_dark     = get_theme_mod( 'zdz_logo_dark', '' );
 	$bnav_logo_light    = get_theme_mod( 'zdz_logo_light', '' );
-	$bnav_logo_vertical = get_theme_mod( 'zdz_logo_vertical', '' ); // v2.14.4 A5
+	$bnav_logo_vertical = get_theme_mod( 'zdz_logo_vertical', '' );
 	$bnav_logo_src      = '';
 	$bnav_name          = get_bloginfo( 'name' );
 	$bnav_monogram      = '';
@@ -150,7 +156,7 @@ get_header(); ?>
 				<span class="bnav-logo-text"><?php echo esc_html( $bnav_monogram ); ?></span>
 			<?php endif; ?>
 		</button>
-		<!-- Bug Report trigger — ladybug icon (v2.8.0), positioned via CSS order -->
+		<!-- Bug Report trigger — ladybug icon, positioned via CSS order -->
 		<button class="bnav-bug" id="bug-report-trigger" aria-label="<?php esc_attr_e( 'Report a bug', 'zorderz' ); ?>">
 			<svg class="zdz-ladybug-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5.5L7.5 2"/><path d="M14 5.5L16.5 2"/><circle cx="12" cy="6.5" r="2.5"/><ellipse cx="12" cy="15" rx="6" ry="7"/><line x1="12" y1="9" x2="12" y2="22"/><line x1="6" y1="14" x2="18" y2="14"/><circle cx="9.5" cy="11.5" r=".9" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11.5" r=".9" fill="currentColor" stroke="none"/><circle cx="9" cy="17.5" r=".9" fill="currentColor" stroke="none"/><circle cx="15" cy="17.5" r=".9" fill="currentColor" stroke="none"/></svg>
 		</button>
@@ -176,11 +182,11 @@ get_header(); ?>
 	<div class="app-body" id="app-body"></div>
 </div>
 
-<!-- v2.23.0: command-palette overlay removed — the ask field is now inline in
+<!-- command-palette overlay removed — the ask field is now inline in
      #dash-top (#dash-ask) and its results drop down beneath it. -->
 
 <!-- ============================================================
-     BUG REPORT OVERLAY (v2.0)
+     BUG REPORT OVERLAY
      ============================================================ -->
 <div id="zdz-bug-overlay" class="zdz-bug-overlay" aria-hidden="true">
 	<div class="zdz-bug-modal" role="dialog" aria-modal="true" aria-labelledby="zdz-bug-title">
@@ -250,7 +256,7 @@ get_header(); ?>
 	</div>
 </div>
 
-<!-- v2.14.4 D1: Add-to-Home-Screen prompt (hidden in standalone mode) -->
+<!-- Add-to-Home-Screen prompt (hidden in standalone mode) -->
 <div id="zdz-install-banner" class="zdz-install-banner" style="display:none;" aria-label="<?php esc_attr_e( 'Install app', 'zorderz' ); ?>">
 	<span class="zdz-install-text"><?php esc_html_e( 'For the best experience, add to your home screen', 'zorderz' ); ?></span>
 	<button id="zdz-install-how" class="zdz-install-how-btn" type="button"><?php esc_html_e( 'How', 'zorderz' ); ?></button>
@@ -259,10 +265,10 @@ get_header(); ?>
 	</button>
 </div>
 
-<!-- v2.18.0: iOS Add-to-Home-Screen step-by-step guide overlay
+<!-- iOS Add-to-Home-Screen step-by-step guide overlay
      Positioned at TOP of screen so it doesn't cover the Safari toolbar at the bottom.
      Steps match iOS 26 Compact Safari layout (⋯ → Share → Add to Home Screen → Add).
-     v2.20.0: JS detects iPad vs iPhone and shows the correct steps. -->
+     JS detects iPad vs iPhone and shows the correct steps. -->
 <div id="zdz-ios-install-guide" class="zdz-ios-guide" style="display:none;" role="dialog" aria-label="Add to Home Screen Guide">
 	<div class="zdz-ios-guide-backdrop"></div>
 	<div class="zdz-ios-guide-card">
@@ -310,7 +316,7 @@ get_header(); ?>
 				</div>
 			</div>
 		</div>
-		<!-- iPad steps (v2.20.0) -->
+		<!-- iPad steps -->
 		<div id="zdz-guide-ipad" style="display:none;">
 			<p class="zdz-ios-guide-sub">Get the full-screen app in 3 taps:</p>
 			<div class="zdz-ios-guide-steps">
@@ -349,7 +355,7 @@ get_header(); ?>
 	</div>
 </div>
 <script>
-// v2.20.0: Detect iPad and show correct install steps
+// Detect iPad and show correct install steps
 (function(){
 	var isIPad = /iPad/.test(navigator.userAgent) ||
 		(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -365,7 +371,7 @@ get_header(); ?>
 })();
 </script>
 
-<!-- v2.18.0: Non-Safari iOS browser guide (Chrome, Firefox, Edge, etc.) -->
+<!-- Non-Safari iOS browser guide (Chrome, Firefox, Edge, etc.) -->
 <div id="zdz-nonsafari-guide" class="zdz-ios-guide" style="display:none;" role="dialog" aria-label="Open in Safari Guide">
 	<div class="zdz-ios-guide-backdrop" id="zdz-nonsafari-backdrop"></div>
 	<div class="zdz-ios-guide-card">

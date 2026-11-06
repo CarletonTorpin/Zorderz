@@ -1,0 +1,552 @@
+/* Charts. Colours for data come from the hub; these are UI tokens only. */
+.zch { --zch-ink: #1d2327; --zch-muted: #646970; --zch-line: #dcdcde; --zch-surface: #fff;
+       --zch-accent: #2271b1; --zch-bad: #b32d2e; --zch-good: #00a32a; color: var(--zch-ink); }
+@media (prefers-color-scheme: dark) {
+  .zch.zch-dark-ok { --zch-ink: #f0f0f1; --zch-muted: #a7aaad; --zch-line: #3c434a; --zch-surface: #1d2327; }
+}
+.zch-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 24px; }
+@media (max-width: 900px) { .zch-layout { grid-template-columns: 1fr; } }
+.zch-main { min-width: 0; }
+.zch-ask { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+.zch-ask-input { flex: 1; font-size: 16px; padding: 8px 12px; min-height: 40px; }
+.zch-dot { width: 10px; height: 10px; border-radius: 50%; background: #c3c4c7; flex: none; }
+.zch-dot.is-ok { background: var(--zch-good); }
+.zch-dot.is-down { background: var(--zch-bad); }
+.zch-banner { padding: 8px 12px; border-left: 4px solid var(--zch-accent); background: #f0f6fc; margin: 8px 0; }
+.zch-banner.is-error { border-color: var(--zch-bad); background: #fcf0f1; }
+.zch-banner.is-local { border-color: var(--zch-muted); background: #f6f7f7; }
+.zch-title { margin: 16px 0 8px; font-size: 20px; }
+.zch-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.zch-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--zch-line);
+            border-radius: 16px; padding: 2px 4px 2px 10px; background: var(--zch-surface); font-size: 13px; }
+.zch-chip select, .zch-chip input[type=date] { border: 0; background: transparent; font-size: 13px; min-height: 28px; }
+.zch-chip-k { color: var(--zch-muted); }
+.zch-filter { background: #f0f6fc; border-color: #c5d9ed; padding-right: 2px; }
+.zch-x { border: 0; background: transparent; cursor: pointer; font-size: 16px; line-height: 1; padding: 4px 8px; }
+.zch-add { border-style: dashed; }
+.zch-reading { margin: 4px 0 8px; }
+.zch-muted { color: var(--zch-muted); font-size: 13px; }
+.zch-clarify { font-weight: 600; margin: 4px 0; }
+.zch-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 8px 0; }
+.zch-types, .zch-measure-toggle { display: inline-flex; border: 1px solid var(--zch-line); border-radius: 6px; overflow: hidden; }
+.zch-seg { border: 0; background: var(--zch-surface); padding: 6px 10px; cursor: pointer; font-size: 13px; min-height: 32px; }
+.zch-seg + .zch-seg { border-left: 1px solid var(--zch-line); }
+.zch-seg.is-on { background: var(--zch-accent); color: #fff; }
+.zch-canvas { position: relative; height: 420px; }
+.zch-canvas.is-compact { height: 220px; }
+.zch-number { padding: 24px 0; }
+.zch-number-v { font-size: 48px; font-weight: 700; line-height: 1.1; }
+.zch-caption { font-size: 15px; max-width: 70ch; }
+.zch-notes, .zch-footer { color: var(--zch-muted); font-size: 12px; }
+.zch-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0; }
+.zch-save-title { min-width: 220px; }
+.zch-table-wrap { overflow-x: auto; }
+.zch-table td.num, .zch-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.zch-total { font-weight: 600; }
+.zch-lines { border-top: 1px solid var(--zch-line); padding-top: 12px; }
+.zch-lines-form { display: flex; gap: 6px; }
+.zch-lines-form input { flex: 1; }
+.zch-side h3 { margin-top: 12px; }
+.zch-saved-list { margin: 0; padding: 0; list-style: none; }
+.zch-saved-list li { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--zch-line); }
+.zch-link { flex: 1; text-align: left; border: 0; background: transparent; color: var(--zch-accent); cursor: pointer; padding: 8px 0; }
+.zch-icon { border: 0; background: transparent; cursor: pointer; min-width: 32px; min-height: 32px; }
+.zch-icon.is-on { color: #dba617; }
+.zch-empty { padding: 32px 0; color: var(--zch-muted); }
+.zch-widget { margin-bottom: 16px; }
+.zch.is-busy { opacity: .7; cursor: progress; }
+.zch-scope { background: #fcf9e8; border-color: #dba617; padding-right: 10px; }
+.zch-share-row { display: block; padding: 6px 0; }
+
+/* chart looks */
+.zch-types { flex-wrap: wrap; }
+.zch-seg[disabled] { opacity: .45; cursor: not-allowed; }
+.zch-style { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; }
+.zch-style:empty { display: none; }
+.zch-seg-group { display: inline-flex; border: 1px solid var(--zch-line); border-radius: 6px; overflow: hidden; }
+.zch-waffle-wrap { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.zch-waffle { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; width: min(100%, 360px); }
+.zch-waffle.is-compact { width: min(100%, 200px); gap: 2px; }
+.zch-waffle-cell { display: block; aspect-ratio: 1; border-radius: 3px; }
+.zch-waffle-legend { list-style: none; margin: 0; padding: 0; font-size: 13px; min-width: 200px; }
+.zch-waffle-legend li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.zch-swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.zch-waffle-name { flex: 1; }
+.zch-waffle-v { font-variant-numeric: tabular-nums; color: var(--zch-muted); }
+.zch-venn-wrap { max-width: 520px; }
+.zch-venn { width: 100%; height: auto; display: block; }
+.zch-venn.is-compact { max-height: 220px; }
+.zch-venn-name { font: 600 14px system-ui, sans-serif; }
+.zch-venn-n { font: 700 18px system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) {
+  .zch-seg { padding: 6px 8px; font-size: 12px; }
+}
+.zch-waffle-cell.is-pale, .zch-swatch.is-pale { box-shadow: inset 0 0 0 1px #8c8f94; }
+.zch-venn-key { margin-top: 8px; }
+.zch-options { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.zch-option { white-space: normal; text-align: left; line-height: 1.3; padding: 6px 10px; height: auto; }
+.zch-facets { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.zch-facets.is-compact { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.zch-facet { border: 1px solid var(--zch-line); border-radius: 8px; padding: 8px 10px; background: var(--zch-surface); min-width: 0; }
+.zch-facet-h { margin: 0 0 6px; font-size: 14px; }
+.zch-facet .zch-canvas.is-compact { height: 260px; }
+
+/* dashboard widget: follows the app theme's tokens (light, dark, sunlight). */
+.zch-w [hidden] { display: none !important; }
+.zch.zch-w { --zch-ink: var(--sys-text, #1d2327); --zch-muted: var(--sys-text-sec, #646970);
+  --zch-line: var(--sys-border, #dcdcde); --zch-surface: var(--sys-surface, #fff);
+  --zch-accent: var(--sys-brand, #2271b1); color: var(--zch-ink); min-height: 398px; }
+.zch-w-ask { display: flex; gap: 6px; }
+.zch-w-input { flex: 1; min-width: 0; min-height: 42px; padding: 0 12px; font-size: 16px; color: inherit;
+  background: var(--zch-surface); border: 1px solid var(--zch-line); border-radius: 10px; }
+.zch-w-input:focus { outline: 2px solid var(--zch-accent); outline-offset: 1px; }
+.zch-w-go { min-height: 42px; padding: 0 16px; border: 0; border-radius: 10px; font-weight: 600; font-size: 15px;
+  background: var(--zch-accent); color: #fff; cursor: pointer; }
+.zch-w-go[disabled] { opacity: .6; }
+.zch-w-bar { display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; }
+.zch-w-title { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; line-height: 1.25; }
+.zch-w-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; min-height: 38px;
+  padding: 0 6px; border: 1px solid var(--zch-line); border-radius: 9px; background: var(--zch-surface);
+  color: var(--zch-ink); cursor: pointer; }
+.zch-w-btn[aria-expanded="true"] { border-color: var(--zch-accent); }
+.zch-ico { display: inline-flex; }
+.zch-ico svg { width: 22px; height: 22px; display: block; }
+.zch-w-look .zch-ico:first-child svg { color: var(--zch-accent); }
+.zch-w-look .zch-ico:last-child svg { width: 16px; height: 16px; }
+.zch-w-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; padding: 8px;
+  margin: 0 0 8px; border: 1px solid var(--zch-line); border-radius: 12px;
+  background: var(--sys-surface-raised, var(--zch-surface)); }
+.zch-w-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; font-size: 12px;
+  border: 1.5px solid transparent; border-radius: 9px; background: transparent; color: var(--zch-ink); cursor: pointer; }
+.zch-w-tile .zch-ico svg { width: 34px; height: 34px; color: var(--zch-accent); }
+.zch-w-tile.is-on { border-color: var(--zch-accent); background: var(--sys-surface-subtle, rgba(0,0,0,.04)); }
+.zch-w-tile[disabled] { opacity: .3; cursor: not-allowed; }
+.zch-w-nums .zch-ico svg { width: 28px; height: 28px; margin: 3px 0; }
+.zch-w-clarify { margin: 10px 0 0; }
+.zch-w-q { margin: 0 0 6px; font-weight: 600; font-size: 14px; }
+.zch-w-opt { display: block; width: 100%; margin: 0 0 6px; padding: 9px 12px; text-align: left; font-size: 14px;
+  line-height: 1.3; color: var(--zch-ink); background: var(--zch-surface); border: 1px solid var(--zch-line);
+  border-radius: 9px; cursor: pointer; }
+.zch-w-opt:hover, .zch-w-opt:focus { border-color: var(--zch-accent); }
+.zch-w-details { margin: 0 0 8px; padding: 2px 10px; font-size: 13px; color: var(--zch-muted);
+  border-left: 3px solid var(--zch-line); }
+.zch-w-details p { margin: 4px 0; }
+.zch-w-chart { position: relative; min-height: 300px; transition: opacity .15s; }
+.zch-w.is-busy .zch-w-chart { opacity: .45; }
+.zch-w .zch-canvas { height: 300px; }
+.zch-w .zch-facets { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.zch-w .zch-facet .zch-canvas.is-compact { height: 210px; }
+.zch-w .zch-table-wrap { overflow: visible; }     /* no scroll areas inside dashboard widgets */
+.zch-w .zch-table { font-size: 13px; }
+.zch-w-msg { padding: 48px 8px; text-align: center; color: var(--zch-muted); }
+.zch-w-skel { display: grid; gap: 14px; padding: 18px 0; }
+.zch-w-skel i { display: block; height: 44px; border-radius: 6px; background: var(--sys-surface-subtle, rgba(0,0,0,.06));
+  animation: zch-pulse 1.4s ease-in-out infinite; }
+.zch-w-skel i:nth-child(1) { width: 82%; } .zch-w-skel i:nth-child(2) { width: 64%; }
+.zch-w-skel i:nth-child(3) { width: 92%; } .zch-w-skel i:nth-child(4) { width: 48%; }
+@keyframes zch-pulse { 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .zch-w-skel i { animation: none; } }
+
+/* the full screen opens over the dashboard, inside the same app. */
+html.zch-full-open, html.zch-full-open body { overflow: hidden; }
+.zch-full { position: fixed; inset: 0; z-index: 100000; display: flex; flex-direction: column;
+  background: var(--sys-bg, #fff); color: var(--sys-text, #1d2327);
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0); }
+.zch-full-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  height: 52px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--sys-border, #dcdcde);
+  background: var(--sys-surface, #fff); }
+.zch-full-title { font-weight: 600; font-size: 17px; }
+.zch-full-x { width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent;
+  color: inherit; font-size: 28px; line-height: 1; cursor: pointer; }
+.zch-full-x:hover, .zch-full-x:focus-visible { background: var(--sys-surface-subtle, #f0f0f1); }
+.zch-full-frame { flex: 1 1 auto; width: 100%; border: 0; display: block; background: #fff; }
+.zch-w-chatrow { margin: 2px 0 8px; }
+
+/* "Not right?" under an answer: one tap */
+.zch-nr-btn[disabled] { opacity: .6; cursor: default; }
+.zch-nr { margin: 6px 0 2px; font-size: 14px; }
+.zch-nr[hidden] { display: none; }
+.zch-nr-btn { min-height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--zch-muted, #646970); font: inherit; text-decoration: underline; cursor: pointer; }
+.zch-nr-btn:hover, .zch-nr-btn:focus-visible {
+  background: var(--sys-surface-subtle, #f0f0f1); color: inherit; }
+.zch-nr-done { margin: 0; padding: 8px 10px; color: var(--zch-muted, #646970); }
+
+/* drill-down: a clicked bar opens underneath as one 100% bar, then its jobs */
+.zch-drill { margin: 10px 0 4px; padding: 10px 12px 12px; border: 1px solid var(--sys-border, #dcdcde);
+  border-radius: 12px; background: var(--sys-surface-subtle, rgba(128,128,128,.06)); }
+.zch-drill[hidden], .zch-drill-tip[hidden] { display: none; }
+.zch-drill-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.zch-drill-title { flex: 1 1 auto; font-weight: 600; font-size: 15px; }
+.zch-drill-x { width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: inherit;
+  font-size: 22px; line-height: 1; cursor: pointer; }
+.zch-drill-x:hover, .zch-drill-x:focus-visible { background: var(--sys-surface, rgba(128,128,128,.12)); }
+.zch-drill-chart .zch-canvas { height: 170px; }
+/* round 2: the tapped period, a widened window when it is thin, and the whole range */
+.zch-drill-bar { margin: 6px 0 10px; }
+.zch-drill-barlabel { margin: 0 0 2px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.zch-drill-bar-all .zch-drill-barlabel { color: var(--zch-muted, #646970); }
+.zch-drill-chart .zch-drill-bar .zch-canvas { height: 76px; }
+/* one key for all the panel's bars (per-bar legends are off) */
+.zch-drill-legend { list-style: none; margin: 2px 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.zch-drill-legend li { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.zch-drill-bar .zch-drill-all { margin: 2px 0 0; }
+.zch-drill-thin { margin: 0 0 8px; font-size: 13px; }
+.zch-drill-hint, .zch-drill-tip { margin: 4px 0 0; font-size: 13px; color: var(--zch-muted, #646970); }
+.zch-drill-all { margin-left: 4px; padding: 4px 10px; border: 1px solid var(--sys-border, #c3c4c7); border-radius: 8px;
+  background: transparent; color: inherit; font: inherit; font-size: 13px; line-height: 1.35; cursor: pointer; }
+/* in the app the button took the app's large button text */
+.zch .zch-drill-all { font-size: 13px; font-weight: 500; text-align: left; max-width: 100%; white-space: normal; }
+.zch-drill-count { margin: 10px 0 6px; font-weight: 600; }
+.zch-drill-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.zch-drill-table { width: auto; min-width: 100%; border-collapse: collapse; font-size: 13px; }
+.zch-drill-table th, .zch-drill-table td { padding: 6px 8px; border-bottom: 1px solid var(--sys-border, #e0e0e0); text-align: left; white-space: nowrap; }
+.zch-drill-table td.num { text-align: right; }
+.zch-drill-table a { color: var(--sys-brand, #2271b1); }
+.zch-drill-table td.wrap { white-space: normal; min-width: 180px; }
+/* the theme makes every table in an app card display:block (app.css ".dash-widget-body table"), which
+   shrank Charts' job lists to their content, and with them the invoice opened under a row (593 px, not the sheet's 780).
+   Charts' lists sit in their own scroller (.zch-drill-scroll), so they are real tables again, at least the full width. */
+.zch .zch-drill-table { display: table; }
+@media (min-width: 601px) { .zch .zch-card-lines { display: table; } }
+
+/* invoice cards and floors. A tapped invoice number opens its card under its
+   row; a tapped part of the card offers questions; each question is a new floor below. */
+.zch-inv { padding: 4px 8px; margin: -4px 0; border: 1px solid transparent; border-radius: 8px; background: transparent;
+  color: var(--sys-brand, #2271b1); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; min-height: 32px; }
+.zch-inv:hover, .zch-inv:focus-visible, .zch-inv[aria-expanded="true"] { border-color: var(--sys-border, #c3c4c7);
+  background: var(--sys-surface, rgba(128,128,128,.08)); }
+.zch-drill-table td.zch-card-cell { white-space: normal; padding: 0 0 10px; border-bottom: 2px solid var(--sys-border, #c3c4c7); }
+.zch-card { position: sticky; left: 0; box-sizing: border-box; max-width: min(100%, calc(100vw - 48px));
+  margin: 4px 0 0; padding: 10px 12px; border: 1px solid var(--sys-border, #dcdcde); border-radius: 12px;
+  background: var(--sys-surface, #fff); font-size: 14px; }
+.zch-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; }
+.zch-card-head strong { font-size: 15px; }
+.zch-card-link { margin-left: auto; color: var(--sys-brand, #2271b1); font-size: 13px; }
+.zch-badge { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--sys-border, #c3c4c7); font-size: 12px;
+  text-transform: capitalize; }
+.zch-badge.is-soft { text-transform: none; color: var(--zch-muted, #646970); }
+.zch-card-who { margin: 2px 0 6px; overflow-wrap: anywhere; }
+.zch-card-name { font-weight: 600; font-size: 15px; }
+.zch-card-note { margin: 0 0 6px; font-size: 12px; }
+.zch-card-facts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: 13px; }
+.zch-tap { padding: 2px 6px; margin: -2px 0; border: 0; border-bottom: 1px dashed currentColor; border-radius: 4px;
+  background: transparent; color: var(--sys-brand, #2271b1); font: inherit; text-align: left; cursor: pointer;
+  min-height: 28px; overflow-wrap: anywhere; }
+.zch-tap:hover, .zch-tap:focus-visible { background: var(--sys-surface-subtle, rgba(128,128,128,.12)); }
+.zch-card-lines { width: 100%; border-collapse: collapse; font-size: 13px; }
+.zch-card-lines th, .zch-card-lines td { padding: 5px 6px; border-bottom: 1px solid var(--sys-border, #e0e0e0);
+  text-align: left; vertical-align: top; }
+.zch-card-lines td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.zch-card-lines td.wrap { white-space: normal; min-width: 120px; }
+.zch-card-lines tr.is-info td { color: var(--zch-muted, #646970); }
+.zch-line-text span:first-child { white-space: pre-line; }
+.zch-line-tags { display: block; margin-top: 2px; font-size: 12px; color: var(--zch-muted, #646970); }
+.zch-card-totals { margin: 8px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.zch-pivots { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--sys-surface-subtle, rgba(128,128,128,.08)); }
+.zch-pivots[hidden], .zch-pivot-list[hidden], .zch-pivot-msg[hidden], .zch-trail[hidden] { display: none; }
+.zch-pivots-title { margin: 0 0 6px; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.zch-pivot-list { display: flex; flex-direction: column; gap: 6px; max-width: 560px; }
+.zch-pivot { min-height: 40px; padding: 6px 10px; border: 1px solid var(--sys-border, #c3c4c7); border-radius: 8px;
+  background: var(--sys-surface, #fff); color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.zch-pivot:hover, .zch-pivot:focus-visible { border-color: var(--sys-brand, #2271b1); }
+.zch-pivot.is-visited { border-style: dashed; color: var(--zch-muted, #646970); }
+.zch-pivot-more { margin: 6px 0; padding: 0; border: 0; background: transparent; color: var(--sys-brand, #2271b1);
+  font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; min-height: 32px; }
+.zch-pivot-msg, .zch-floor-back { margin: 8px 0 0; font-size: 13px; }
+.zch-floors { margin: 0; }
+.zch-trail { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px;
+  margin: 10px 0 0; padding: 6px 8px; border-radius: 10px; background: var(--sys-surface, #fff);
+  border: 1px solid var(--sys-border, #dcdcde); font-size: 12px; }
+.zch-trail-step { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 6px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--sys-brand, #2271b1); font: inherit; cursor: pointer; }
+.zch-trail-step:hover, .zch-trail-step:focus-visible { background: var(--sys-surface-subtle, rgba(128,128,128,.12)); }
+.zch-trail-sep { color: var(--zch-muted, #646970); }
+.zch-floor { margin: 10px 0 4px; padding: 10px 12px 12px; border: 1px solid var(--sys-border, #dcdcde);
+  border-left: 4px solid var(--sys-brand, #2271b1); border-radius: 12px; background: var(--sys-surface-subtle, rgba(128,128,128,.06)); }
+.zch-floor-n { padding: 1px 8px; border-radius: 999px; background: var(--sys-brand, #2271b1); color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.zch-floor .zch-chart .zch-canvas { height: 240px; }
+.zch-floor-fresh { margin: 0 0 6px; font-size: 13px; color: var(--zch-muted, #646970); }
+.zch-flash { animation: zch-flash 1.6s ease-out; }
+@keyframes zch-flash { 0% { box-shadow: 0 0 0 3px var(--sys-brand, #2271b1); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .zch-flash { animation: none; outline: 2px solid var(--sys-brand, #2271b1); } }
+/* a phone: one block per invoice line, the numbers on one row under it */
+@media (max-width: 600px) {
+  .zch-card-lines thead { display: none; }
+  .zch-card-lines, .zch-card-lines tbody { display: block; width: 100%; }
+  .zch-card-lines tr { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 6px 0;
+    border-bottom: 1px solid var(--sys-border, #e0e0e0); }
+  .zch-card-lines td { display: block; padding: 0; border: 0; }
+  .zch-card-lines td.wrap { flex: 1 1 100%; min-width: 0; }
+  .zch-card-lines td.num { text-align: left; font-size: 12px; }
+  .zch-card-lines td.num:empty { display: none; }
+  .zch-card-lines td.num[data-label]::before { content: attr(data-label) " "; color: var(--zch-muted, #646970); }
+  .zch-card-lines td.zch-line-amount { margin-left: auto; font-weight: 600; font-size: 13px; }
+  .zch-card-lines td.num.zch-line-amount[data-label]::before { content: none; }
+}
+
+/* the town map. isolation keeps Leaflet's panes (z-index 400+) under the admin bar and menus. */
+.zch-map-wrap { margin: 4px 0; }
+.zch-map { height: 420px; border: 1px solid var(--zch-line); border-radius: 8px; overflow: hidden;
+           position: relative; z-index: 0; isolation: isolate; background: #e9eef2; }
+.zch-map.is-compact { height: 260px; }
+.zch-map-periods { display: flex; flex-wrap: wrap; border: 1px solid var(--zch-line); border-radius: 6px;
+                   overflow: hidden; margin: 0 0 8px; width: max-content; max-width: 100%; }
+.zch-map-key, .zch-map-missing { margin: 6px 0 0; }
+.zch .leaflet-tooltip.zch-map-label { background: transparent; border: 0; box-shadow: none; padding: 0;
+           font: 700 11px system-ui, sans-serif; color: #1d2327; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.zch .leaflet-tooltip.zch-map-label::before { display: none; }
+.zch .leaflet-container { font: 12px system-ui, sans-serif; }
+/* the app gives every box
+   max-width: 100%; Leaflet's tooltip sits in a zero-width pane, so its white box shrank to 14 px and
+   its dark text spilled over the dark ZIPs. The tooltip sizes to its text again. */
+.zch .leaflet-tooltip { max-width: min(80vw, 340px); width: max-content; white-space: normal; }
+.zch .leaflet-tooltip:not(.zch-map-label) { background: #fff; color: #1d2327; border-color: #c3c4c7;
+  font: 12px/1.35 system-ui, sans-serif; padding: 4px 8px; }
+/* Play, its speeds, and what the ZIP shading means */
+.zch-map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 8px; }
+.zch-map-tools[hidden] { display: none; }
+.zch-map-tools .zch-player { margin: 0; }
+.zch-map-shade-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.zch-player { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+.zch-play-btn { min-height: 32px; padding: 4px 12px; border: 1px solid var(--zch-accent); border-radius: 6px;
+  background: var(--zch-accent); color: #fff; font: 600 13px/1.2 system-ui, sans-serif; cursor: pointer; }
+.zch-play-btn[aria-pressed="true"] { background: transparent; color: var(--zch-accent); }
+.zch-play-btn:focus-visible, .zch-seg:focus-visible { outline: 2px solid var(--zch-accent); outline-offset: 1px; }
+.zch-play-now { min-width: 4.5em; font: 600 15px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--zch-ink); }
+.zch .zch-play-all, .zch .zch-map-more { flex: none; padding: 2px 4px; font-size: 13px; }
+.zch .zch-seg { color: var(--zch-ink); }
+.zch .zch-seg.is-on { color: #fff; }
+@media (max-width: 600px) { .zch-map { height: 320px; } }
+
+/* the ZIP map's legend: six steps of one blue, light (less) to dark (more) */
+.zch-map-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 0; font-size: 12px; color: var(--zch-muted); }
+.zch-map-legend:empty { display: none; }
+.zch-map-step { display: inline-flex; align-items: center; gap: 4px; }
+.zch-map-step i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* an opened invoice looks like the one the customer got (the billing system's layout): it should feel
+   like the real invoice without being an embed of it. The sheet stays white in dark mode, like paper.
+   Measured off the billing system's own invoice PDF (a browser draws it at 96 px to the inch, so its points
+   are CSS px): Arial only, never bold; 14 px text on 18 px lines, 12 px descriptions on 16 px, a 36 px amount
+   due; a 780 px card, 10 px corners, 50 px sides; a 300 px logo; four columns 380 / 100 / 100 / 100, figures
+   flush right; a 340 px totals block. The same numbers as the Commission app's sheet. */
+.zch-card-outer { position: sticky; left: 0; box-sizing: border-box; max-width: min(100%, calc(100vw - 48px)); }
+.zch-paper-wrap { margin: 8px 0 4px; }
+.zch-paper-bar { max-width: 780px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 6px; font-size: 13px; }
+.zch-paper-bar button:disabled { opacity: .5; cursor: default; }
+.zch-paper, .zch-paper-ghost { --paper-label: var(--zch-paper-label, #4f697a); --paper-rule: var(--zch-paper-rule, #ccd1d9);
+  box-sizing: border-box; max-width: 780px; background: var(--zch-paper-bg, #fff); color: var(--zch-paper-ink, #000);
+  font-family: Arial, Helvetica, sans-serif; font-feature-settings: normal; font-variant-numeric: normal; font-weight: normal;
+  font-size: 14px; line-height: 18px; letter-spacing: normal; text-transform: none; padding: 29px 49px 52px;
+  border: 1px solid var(--zch-paper-edge, #dcdcde); border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); white-space: normal; }
+.zch-paper :where(div, span, table, th, td, p) { font-family: inherit; font-weight: normal; letter-spacing: normal; }
+/* While the billing system answers: a blank sheet the size of an invoice, so nothing jumps when the invoice arrives. */
+.zch-paper-ghost { min-height: 640px; display: flex; align-items: center; justify-content: center; }
+.zch-paper-ghost .zch-muted { margin: 0; font-size: 14px; color: var(--paper-label); }
+.zch-paper-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 56px; }
+.zch-paper-logo { width: 300px; max-width: 48%; height: auto; display: block; }   /* its size is kept before it loads (width/height set) */
+.zch-paper-biz { text-align: right; margin-top: 2px; }
+.zch-paper-biz > div, .zch-paper-value { white-space: pre-wrap; overflow-wrap: anywhere; }
+.zch-paper-label { color: var(--paper-label); }
+.zch-paper-meta { display: grid; grid-template-columns: minmax(0, 210fr) minmax(0, 150fr) minmax(0, 150fr) minmax(min-content, 170fr); gap: 0; margin-bottom: 49px; }
+.zch-paper-col .zch-paper-field + .zch-paper-field { margin-top: 15px; }
+.zch-paper-due { text-align: right; }
+.zch-paper-big { font-size: 36px; line-height: 40px; white-space: nowrap; overflow-wrap: normal; }
+.zch-paper .zch-paper-lines { width: 100%; border-collapse: collapse; border-top: 3px solid var(--paper-label); }
+/* The theme makes every table in an app card display:block (app.css ".dash-widget-body table"), which shrank the
+   lines to their content, half-way across the sheet. A real table again, full width, the invoice's columns; auto layout
+   so a long figure widens its column on a narrower sheet instead of running into the next one. */
+@media (min-width: 641px) {
+  .zch-paper .zch-paper-lines { display: table; table-layout: auto; }
+  .zch-paper .zch-paper-lines th:nth-child(n+2), .zch-paper .zch-paper-lines td:nth-child(n+2) { width: 14.706%; }
+}
+.zch-paper .zch-paper-lines th { color: var(--paper-label); font-size: 14px; line-height: 18px; background: none; font-weight: normal; text-align: left; padding: 12px 0 8px; border: 0; }
+.zch-paper .zch-paper-lines td { color: var(--zch-paper-ink, #000); font-size: 14px; line-height: 18px; background: none; white-space: normal; text-align: left; vertical-align: top; padding: 12px 0 9px; border: 0; border-bottom: 1px solid var(--paper-rule); }
+.zch-paper .zch-paper-lines .num { text-align: right; white-space: nowrap; padding-left: 8px; }
+.zch-paper-item { white-space: pre-line; overflow-wrap: anywhere; }
+.zch-paper-item-desc { font-size: 12px; line-height: 16px; white-space: pre-line; overflow-wrap: anywhere; }
+.zch-paper-totals { margin: 35px 0 0 auto; width: min(100%, 340px); }
+.zch-paper-trow { display: flex; justify-content: flex-end; gap: 0; padding: 2px 0; }
+.zch-paper-trow span:first-child { flex: 1; text-align: right; padding-right: 0; }
+.zch-paper-trow span.num { width: 41.5%; text-align: right; }
+.zch-paper-trow.is-rule { border-top: 1px solid var(--paper-rule); margin-top: 6px; padding-top: 12px; }
+.zch-paper-trow.is-due { border-top: 3px double var(--paper-rule); margin-top: 4px; padding-top: 12px; color: var(--paper-label); }
+.zch-paper-trow.is-due span.num { color: var(--zch-paper-ink, #000); }
+.zch-paper-notes { margin-top: 24px; }   /* measured off the billing system's PDFs, as the Commission app's sheet */
+/* The invoice widens "Billed To" for a long address (its own column, at least 210 px, the text plus 44 px;
+   the date column follows), as the Commission app's sheet does. On the full sheet only: a narrow one keeps the two columns below. */
+.zch-paper-wrap { container-type: inline-size; }
+@container (min-width: 760px) {
+  .zch-paper-meta { grid-template-columns: fit-content(330px) minmax(0, 150px) minmax(0, 150px) minmax(min-content, 1fr); }
+  .zch-paper-billed { min-width: 210px; padding-right: 44px; box-sizing: border-box; }
+}
+/* Copy customer link -- the note says what happened; the box appears only where copying isn't allowed. */
+.zch-paper-copy-note { font-size: 13px; color: var(--zch-muted, #646970); }
+.zch-paper-copy-box { box-sizing: border-box; display: block; width: 100%; max-width: 780px; margin: 0 0 6px; font-size: 13px; }
+.zch-strip-title { margin: 12px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--zch-muted, #646970); }
+.zch-card.is-strip { position: static; max-width: 780px; }   /* as wide as the invoice above it */
+.zch-card-lines-fold { margin: 6px 0 0; }
+.zch-card-lines-fold summary { cursor: pointer; font-size: 13px; color: var(--sys-brand, #2271b1); }
+.zch-line-open { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--sys-brand, #2271b1);
+  text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.zch-line-open:hover, .zch-line-open:focus-visible { text-decoration: underline; }
+@media (max-width: 640px) {
+  .zch-paper { padding: 20px 16px 24px; }
+  .zch-paper-ghost { padding: 20px 16px 24px; min-height: 380px; }
+  .zch-paper-top { margin-bottom: 24px; }
+  .zch-paper-logo { width: 160px; }
+  .zch-paper-biz { font-size: 12px; line-height: 16px; }
+  .zch-paper-meta { grid-template-columns: 1fr 1fr; gap: 14px 14px; margin-bottom: 24px; }
+  .zch-paper-due { grid-column: 1 / -1; text-align: left; order: -1; }
+  .zch-paper-big { font-size: 28px; line-height: 32px; }
+  .zch-paper .zch-paper-lines thead { display: none; }
+  .zch-paper .zch-paper-lines, .zch-paper .zch-paper-lines tbody { display: block; }
+  .zch-paper .zch-paper-lines tr { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 12px; padding: 10px 0;
+    border-bottom: 1px solid var(--paper-rule); }
+  .zch-paper .zch-paper-lines td { border: 0; padding: 0; width: auto !important; }
+  .zch-paper .zch-paper-lines td.zch-paper-desc { grid-column: 1 / -1; }
+  .zch-paper .zch-paper-lines td.num { padding: 0; font-size: 12px; text-align: left; }
+  .zch-paper .zch-paper-lines td.num::before { content: attr(data-label) " "; color: var(--paper-label); }
+  .zch-paper .zch-paper-lines td:last-child { text-align: right; }
+}
+@media print {
+  body.zch-printing * { visibility: hidden !important; }
+  body.zch-printing .zch-paper.is-printing, body.zch-printing .zch-paper.is-printing * { visibility: visible !important; }
+  body.zch-printing .zch-paper.is-printing { position: absolute; left: 0; top: 0; width: 100%; max-width: none;
+    border: 0; box-shadow: none; padding: 0.4in 0.5in; }
+}
+
+/* which chart, by the box it gets. The page sets
+   zch-fit-narrow (<480 px) / -medium (480-899) / -wide (900+) on the chart's own box. */
+.zch-chart.zch-fit-narrow > .zch-canvas:not(.is-compact) { height: 260px; }
+.zch-chart.zch-fit-medium > .zch-canvas:not(.is-compact) { height: 320px; }
+.zch-chart.zch-fit-wide > .zch-canvas:not(.is-compact) { height: 420px; }
+.zch-w-chart.zch-fit-narrow > .zch-canvas:not(.is-compact) { height: 260px; }
+.zch-fit-narrow > .zch-facets { grid-template-columns: minmax(0, 1fr); }
+.zch-fit-medium > .zch-facets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.zch-fit-wide > .zch-facets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.zch-fit-narrow .zch-map:not(.is-compact) { height: 320px; }
+.zch-fit-note { margin: 6px 0 0; font-size: 13px; color: var(--zch-muted); }
+.zch-fit-note .zch-link { flex: none; display: inline; padding: 0; font-size: 13px; text-decoration: underline; }
+.zch-legend-more { margin: 2px 0 0; font-size: 12px; }
+.zch-facets-more { margin: 8px 0 0; }
+.zch-why { font-size: 12px; margin: 4px 0 0; }
+.zch-why:empty { display: none; }
+.zch-seg.is-drawn { box-shadow: inset 0 -2px 0 var(--sys-brand, #2271b1); }
+.zch-w-auto .zch-ico { transform: rotate(180deg); }
+
+/* the weather under a chart (the hub's NOAA numbers and its r) */
+.zch-wx { margin: 10px 0 2px; padding: 10px 12px; border: 1px solid var(--sys-border, #dcdcde); border-radius: 12px;
+  background: var(--sys-surface-subtle, rgba(128,128,128,.06)); }
+.zch-wx:empty { display: none; }
+.zch-wx > .zch-muted { margin: 0; }
+.zch-wx-head { margin: 0 0 6px; font-size: 13px; line-height: 1.45; }
+.zch-wx-key { display: inline-block; width: 18px; height: 3px; margin: 0 8px 3px 0; border-radius: 2px; vertical-align: middle; }
+.zch-wx-groups { margin: 0 0 8px; padding-left: 0; list-style: none; font-size: 13px; line-height: 1.5; }   /* one line per group */
+.zch-wx-groups li { margin: 0 0 2px; }
+.zch-wx-toggle { margin: 2px 0 0; }
+.zch-wx-dots:empty { display: none; }
+.zch-wx .zch-canvas { height: 300px; margin-top: 8px; }
+.zch-fit-narrow .zch-wx .zch-canvas { height: 240px; }
+.zch-wx-note { margin: 6px 0 0; font-size: 12px; }
+.zch-wx-cell { color: var(--zch-muted); }
+/* what each ZIP is like (Census ACS, fire history) */
+.zch-zp-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 0 0 10px; }
+.zch-zp { padding: 10px 12px; border: 1px solid var(--sys-border, var(--zch-line, #dcdcde)); border-radius: 12px; }
+.zch-zp-head { margin: 0 0 6px; font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.zch-zp-list { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; margin: 0; font-size: 13px; }
+.zch-zp-list dt { color: var(--zch-muted, #646970); margin: 0; }
+.zch-zp-list dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.zch-zp-wrap > .zch-zp-src { grid-column: 1 / -1; margin: 0; font-size: 12px; }
+.zch-zp > .zch-muted { margin: 6px 0 0; font-size: 12px; }
+.zch-zf-pick { margin-left: 8px; max-width: 100%; font-size: 13px; min-height: 30px; }
+.zch-zf-pick.is-on { border-color: var(--zch-accent, #2271b1); box-shadow: 0 0 0 1px var(--zch-accent, #2271b1); }
+.zch-zf-dots { height: 380px; }
+.zch-fit-narrow .zch-zf-dots, .zch-w .zch-zf-dots { height: 260px; }
+.zch-drill-chart .zch-zp-wrap { margin-top: 4px; }
+
+/* sideways bars as a list on narrow screens (charts.js barList): name, full-width bar, value */
+.zch-barlist { display: flex; flex-direction: column; gap: 7px; padding: 4px 0 2px; }
+.zch-bl-row { display: block; width: 100%; border: 0; background: none; padding: 0; margin: 0; text-align: left; font: inherit; color: inherit; }
+button.zch-bl-row { cursor: pointer; }
+button.zch-bl-row:focus-visible { outline: 2px solid var(--zch-accent); outline-offset: 2px; border-radius: 4px; }
+.zch-bl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.3; }
+.zch-bl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zch-bl-val { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.zch-bl-track { height: 10px; margin-top: 3px; border-radius: 5px; background: var(--sys-surface-subtle); overflow: hidden; }
+.zch-bl-bar { height: 100%; border-radius: 5px; }
+.zch-bl-row.is-other .zch-bl-name, .zch-bl-row.is-other .zch-bl-val { color: var(--zch-muted); font-weight: 400; }
+.zch-bl-row.is-other .zch-bl-bar { opacity: .45; }
+
+/* upright columns scroll sideways on a narrow screen (charts.js draw) */
+.zch-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
+.zch-scroll .zch-canvas.is-scrolled { width: max-content; }
+.zch-scroll-hint { margin: 2px 0 6px; font-size: 12px; }
+
+/* where to hang door hangers (the prospecting view). Phone width first: one column, nothing scrolls sideways. */
+.zch-prospect { margin: 0 0 16px; }
+.zch-prospect-open { margin: 0 0 8px; }
+.zch-prospect-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.zch-prospect-pick { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 8px 0; }
+.zch-prospect-pick select, .zch-prospect-pick input, .zch-prospect-save input { width: 100%; max-width: 100%; box-sizing: border-box; }
+.zch-prospect-mix summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
+.zch-prospect-sliders { display: grid; gap: 6px; }
+.zch-prospect-row { display: grid; grid-template-columns: 1fr 2.4em; grid-template-areas: "name w" "range range"; align-items: center; gap: 2px 8px; }
+.zch-prospect-row .zch-prospect-name { grid-area: name; }
+.zch-prospect-row input[type=range] { grid-area: range; width: 100%; accent-color: var(--zch-accent); }
+.zch-prospect-row .zch-prospect-w { grid-area: w; text-align: right; font-variant-numeric: tabular-nums; }
+.zch-prospect-row.is-off .zch-prospect-name { color: var(--zch-muted); }
+.zch-prospect-save { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 12px 0; }
+.zch-prospect-read { margin: 4px 0 8px 18px; padding: 0; }
+.zch-prospect-map { height: 300px; margin: 8px 0; border: 1px solid var(--zch-line); border-radius: var(--ref-radius-md, 8px); overflow: hidden; }
+.zch-prospect-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.zch-prospect-card { border: 1px solid var(--zch-line); border-radius: var(--ref-radius-md, 8px); padding: 10px 12px; background: var(--zch-surface); overflow-wrap: anywhere; }
+.zch-prospect-card.is-hit { outline: 2px solid var(--zch-accent); }
+.zch-prospect-card p { margin: 4px 0; }
+.zch-prospect-row-title { margin: 0 0 2px; font-size: 1em; }
+.zch-prospect-streets { font-size: 0.92em; }
+.zch-prospect-compact { gap: 6px; margin: 0 0 8px; }                 /* a recipe on a card */
+.zch-prospect-compact .zch-prospect-card { padding: 6px 8px; }
+.zch-prospect-pin { display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--zch-surface);
+  color: var(--zch-ink); border: 2px solid var(--zch-ink); font-weight: 700; font-size: 12px; line-height: 1; }
+.app-body .zch-prospect-map .leaflet-pane, .app-body .zch-prospect-map .leaflet-pane * { max-width: none; }
+@media (min-width: 640px) {
+  .zch-prospect-pick { grid-template-columns: 1fr 2fr 1fr 1.6fr; }
+  .zch-prospect-sliders { grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .zch-prospect-save { grid-template-columns: 1fr auto; }
+  .zch-prospect-map { height: 380px; }
+}
+/* while the prospecting view is open, the chart below it steps aside (Back to charts brings it back) */
+.is-prospect .zch-main > :not(.zch-ask):not(.zch-prospect):not(.zch-banner):not(.zch-prospect-open):not(.zch-views) { display: none; }
+.is-prospect .zch-prospect-open { display: none; }
+/* territories -- the view, its map and list, the tapped ZIP's card, the layer's key */
+.zch-views { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.zch-views .zch-prospect-open { margin: 0; }
+.zch-terr { margin: 0 0 16px; }
+.zch-terr-body { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+@media (min-width: 900px) { .zch-terr-body { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); } }
+.zch-terr-mapbox { min-width: 0; }
+.zch-terr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.zch-terr-person { border: 1px solid var(--zch-line); border-radius: var(--ref-radius-md, 8px); padding: 8px 10px; background: var(--zch-surface); overflow-wrap: anywhere; }
+.zch-terr-who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.zch-terr-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 2.2em; height: 1.6em; padding: 0 6px;
+  border-radius: 6px; font-weight: 700; font-size: 0.85em; letter-spacing: 0.02em; box-sizing: border-box;
+  outline: 1px solid rgba(0, 0, 0, 0.15); outline-offset: -1px; }
+.zch-terr-more summary { cursor: pointer; margin: 6px 0 4px; color: var(--zch-muted); }
+.zch-terr-zips { display: flex; flex-wrap: wrap; gap: 4px; }
+.zch-terr-zip { font-variant-numeric: tabular-nums; cursor: default; }
+button.zch-terr-zip { cursor: pointer; font: inherit; }
+.zch-terr-card { border: 1px solid var(--zch-line); border-radius: var(--ref-radius-md, 8px); padding: 10px 12px; margin: 8px 0;
+  background: var(--zch-surface); }
+.zch-terr-card[hidden] { display: none; }
+.zch-terr-card-title { margin: 0 0 6px; font-size: 1em; }
+.zch-terr-card p { margin: 6px 0; }
+.zch-terr-rules { margin: 4px 0 0 18px; padding: 0; }
+.zch-terr-msg { margin: 8px 0; }
+.zch .leaflet-tooltip.zch-terr-label span { font-weight: 700; }
+.zch-terr-layer-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.zch-terr-layer-key[hidden] { display: none; }
+/* while the territory view is open, the chart below it steps aside (Back to charts brings it back) */
+.is-terr .zch-main > :not(.zch-ask):not(.zch-terr):not(.zch-banner):not(.zch-views) { display: none; }
+.is-terr .zch-terr-open { display: none; }   /* the view's own Mine / Everyone switch replaces it */

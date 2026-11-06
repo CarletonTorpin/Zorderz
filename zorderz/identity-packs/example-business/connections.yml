@@ -1,0 +1,41 @@
+# Identity Pack · connections.yml — EXAMPLE, entirely fictional.
+#
+# The non-secret half of the business's connections. A credential is NEVER
+# written here: a key that needs one names its Credentials row with a
+# secret:// reference, and the preview says whether that row is filled. A pack
+# that carries a credential value is refused whole. Enter the values themselves
+# on Zorderz → Credentials.
+
+pack:
+  schema: 1
+  tenant_key: example-business
+
+ai:
+  # The Ai router's three models, exactly as the provider spells them.
+  models:
+    primary: example-model-large       # every kind of call
+    quick: example-model-small         # when a call has little time left
+    fallback: example-model-small      # after the primary fails
+  # USD per million tokens: in, cache write 5 min, cache write 1 h, cache read,
+  # out. A model with no prices is never called. Only models a slot names.
+  prices:
+    example-model-large: [3.00, 3.75, 6.00, 0.30, 15.00]
+    example-model-small: [1.00, 1.25, 2.00, 0.10, 5.00]
+  anthropic:
+    inference_geo: ""                  # a region word, or empty for the provider's default
+    geo_price_factor: 1.0              # what that region costs over the list price (1 to 3)
+    api_key: "secret://anthropic_api_key"
+    # workspace_id: the workspace the key must belong to. It is set on
+    # Zorderz → Credentials next to the key; a pack only checks it matches.
+  # Per kind of call: model (one the slots name), effort (medium or high) and a
+  # cap per call in US dollars (at most 5). Which provider gets a kind of call
+  # is chosen on this site, not in a pack.
+  roles:
+    reason: { effort: high, cap_usd: 2 }
+  # Code words of outside tools whose Ai spending is reported here: it counts
+  # toward the account's line only. An app of this site is never "outside".
+  external_callers: [example-reporting]
+
+vulnerability_feed:
+  # The security monitor's optional vulnerability feed key.
+  key: "secret://wordfence_feed_key"

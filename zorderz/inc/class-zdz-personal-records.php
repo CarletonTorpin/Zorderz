@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Theme — Personal Records (v2.13.0)
+ * Zorderz Theme — Personal Records
  *
  * Backend infrastructure for tracking all-time bests per user:
  *   most_jobs_in_week, most_estimates_in_month,
@@ -34,7 +34,7 @@ class ZDZ_Personal_Records {
 	);
 
 	public static function init(): void {
-		// v2.20.0: Updated hooks for work-achievement records (not financial)
+		// Updated hooks for work-achievement records (not financial)
 		add_action( 'zdz_estimate_created', array( __CLASS__, 'on_estimate_created' ), 10, 2 );
 		add_action( 'zdz_job_completed', array( __CLASS__, 'on_job_completed' ), 10, 2 );
 		add_action( 'zdz_client_created', array( __CLASS__, 'on_client_created' ), 10, 2 );
@@ -85,7 +85,7 @@ class ZDZ_Personal_Records {
 		return $by_type;
 	}
 
-	/* ── Event listeners (v2.20.0 r4) ────────────────────────── */
+	/* ── Event listeners (r4) ────────────────────────── */
 	/* These methods are called when plugins fire the corresponding
 	   do_action() hooks. Each counts the user's records for the
 	   current period and calls try_record() if the count might be
@@ -193,7 +193,7 @@ class ZDZ_Personal_Records {
 	/* ── Streak cron (daily, not per-event) ──────────────────── */
 
 	public static function recompute_all_streaks(): void {
-		// v2.20.3: Paginate through all users instead of capping at 500.
+		// Paginate through all users instead of capping at 500.
 		// Previous hard cap silently dropped users beyond the limit.
 		$page = 1;
 		do {

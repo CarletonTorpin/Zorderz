@@ -9,9 +9,8 @@
  *   - Forward history and completion tracking
  *   - Stale batch cleanup cron
  *
- * Modeled after ts-satisfaction-surveys/includes/class-ts-dashboard.php
- * forward handlers and ts-satisfaction-surveys/assets/js/widget.js
- * interaction patterns.
+ * Modeled after the Surveys app's forward handlers and widget interaction
+ * patterns.
  *
  * @since 2.0.0
  */
@@ -22,7 +21,47 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZL_Lead_Interaction {
 
+	/** The alert type a forward is sent as. Registered here, not in the theme. */
+	const ALERT_TYPE = 'lead_forward';
+
 	private static $instance = null;
+
+	/**
+	 * register `lead_forward` with the theme's Alert Router (the zdz_register_alert_types hook, as Jobs and
+	 * Territories do). Category `sales`, so techs and the shop hear it through the router's sales grant. Bell and push:
+	 * the push shows only the title "Lead forwarded" (never the customer: a push can show on a locked screen); the name is on the bell.
+	 */
+	public static function register_alert_types( $router ) {
+		if ( ! is_object( $router ) || ! method_exists( $router, 'register_type' ) ) {
+			return;
+		}
+		$router->register_type( self::ALERT_TYPE, array(
+			'label'            => 'Lead forwarded to you',
+			'description'      => 'Someone forwarded you a sales lead, with a note or as a task.',
+			'default_channels' => array( 'in_app', 'push' ),
+			'source_plugin'    => 'leads',
+			'category'         => 'sales',
+		) );
+	}
+
+	/**
+	 * the words of a forward notice (pure). The title goes to the push too, so it never names the customer;
+	 * the message is the bell's body, which names the lead like the bell's other notices (Surveys' forwards, Jobs).
+	 *
+	 * @return array{title:string,message:string}
+	 */
+	public static function forward_alert_words( array $lead, string $sender_name, string $note, bool $is_task ): array {
+		$name = trim( preg_replace( '/\s+/', ' ', ( $lead['first_name'] ?? '' ) . ' ' . ( $lead['last_name'] ?? '' ) ) );
+		$city = trim( (string) ( $lead['city'] ?? '' ) );
+		$who  = '' !== $name ? $name . ( '' !== $city ? ' (' . $city . ')' : '' ) : ( '' !== $city ? 'a lead in ' . $city : 'a lead' );
+		$from = trim( $sender_name );
+		$lead_line = ( '' !== $from ? $from . ' forwarded you ' : 'You were forwarded ' ) . $who . '.';
+		$note = trim( $note );
+		return array(
+			'title'   => 'Lead forwarded',
+			'message' => ( $is_task ? 'Task: ' : '' ) . $lead_line . ( '' !== $note ? "\n\nNote: " . $note : '' ),
+		);
+	}
 
 	public static function get_instance() {
 		if ( null === self::$instance ) {
@@ -38,6 +77,9 @@ class ZL_Lead_Interaction {
 		add_action( 'wp_ajax_zl_get_forwards',          array( $this, 'ajax_get_forwards' ) );
 		add_action( 'wp_ajax_zl_mark_forward_complete', array( $this, 'ajax_mark_forward_complete' ) );
 		add_action( 'wp_ajax_zl_get_team_members',      array( $this, 'ajax_get_team_members' ) );
+
+		// the alert type a forward is sent as (theme ZDZ_Alert_Router collects types on init:25).
+		add_action( 'zdz_register_alert_types', array( __CLASS__, 'register_alert_types' ) );
 
 		// Stale batch cleanup cron.
 		//
@@ -240,7 +282,7 @@ class ZL_Lead_Interaction {
 		$batch_id = (int) ( $lead['batch_id'] ?? 0 );
 
 		// Insert forward record
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$wpdb->prefix . 'zl_lead_forwards',
 			array(
 				'lead_id'      => $lead_id,
@@ -253,8 +295,15 @@ class ZL_Lead_Interaction {
 			),
 			array( '%d', '%d', '%d', '%d', '%s', '%d', '%s' )
 		);
+		// a forward that was not saved is an error. wpdb keeps the last insert_id on a failure, so
+		// carrying on would tell the person about a forward that does not exist, under another forward's id.
+		if ( false === $inserted ) {
+			error_log( '[ZL] lead forward for lead #' . $lead_id . ' was not saved (database error); nobody was told.' );
+			wp_send_json_error( 'The forward could not be saved. Try again.' );
+		}
 
 		$forward_id = $wpdb->insert_id;
+		function_exists( 'zl_usage' ) && zl_usage( 'lead_forwarded', $lead_id, array( 'uid' => (int) $sender_id ) );
 
 		// Dispatch notification via Alert Router if available
 		$recipient_name = '';
@@ -263,46 +312,52 @@ class ZL_Lead_Interaction {
 			$recipient_name = $recipient_user->display_name;
 		}
 
-		// Deliver via the theme's ZDZ_Alert_Router::send(). If the router is unavailable the
-		// forward is still recorded in the DB above and returned to the caller — never a
-		// silent loss (the record persists; only the push/notify hop is skipped).
-		if ( class_exists( 'ZDZ_Alert_Router' ) && method_exists( 'ZDZ_Alert_Router', 'send' ) ) {
-			$lead_name = trim( ( $lead['first_name'] ?? '' ) . ' ' . ( $lead['last_name'] ?? '' ) );
-
-			ZDZ_Alert_Router::send(
-				'lead_forward',
-				(int) $recipient_id,
-				'Lead forwarded: ' . $lead_name,
-				$note_text,
-				array(
-					'sender_id'    => $sender_id,
-					'source'       => 'leads',
-					'reference_id' => $lead_id,
-					'is_task'      => (bool) $is_task,
-					'meta'         => array(
-						'lead_id'    => $lead_id,
-						'batch_id'   => $batch_id,
-						'forward_id' => $forward_id,
-						'lead_name'  => $lead_name,
-						'lead_city'  => $lead['city'] ?? '',
-					),
-				)
-			);
+		// Tell the person through the theme's Alert Router (send() is its one entry point). The forward was saved
+		// above, so a failure here never fails it: only the notice is skipped, and the response says so.
+		$told = array();
+		// Only a real account: the router keeps a type's default channels for a user id it cannot find.
+		if ( $recipient_user && class_exists( 'ZDZ_Alert_Router' ) && method_exists( 'ZDZ_Alert_Router', 'send' ) ) {
+			try {
+				$sender = get_userdata( $sender_id );
+				$words  = self::forward_alert_words( $lead, $sender ? (string) $sender->display_name : '', $note_text, (bool) $is_task );
+				$told   = (array) ZDZ_Alert_Router::send( self::ALERT_TYPE, (int) $recipient_id, $words['title'], $words['message'], array(
+					// ids only: this is stored with the bell row and copied into the audit log.
+					'sender_id'  => $sender_id,
+					'plugin'     => 'leads',
+					'source_id'  => (int) $forward_id,
+					'lead_id'    => $lead_id,
+					'batch_id'   => $batch_id,
+					'forward_id' => (int) $forward_id,
+					'is_task'    => (int) $is_task,
+					'push_body'  => 'Open Leads to see it.',   // the push opens the home screen: no lead link exists
+				) );
+			} catch ( \Throwable $e ) {
+				$told = array();
+				error_log( '[ZL] lead forward #' . (int) $forward_id . ' saved, but the notice failed (' . get_class( $e ) . ').' );
+			}
 		}
 
-		// Audit log
+		// Audit log, for the sender: log_action( $user_id, $action_type, $detail, $app_id, $meta ). No customer name here.
 		if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
-			$lead_name = trim( ( $lead['first_name'] ?? '' ) . ' ' . ( $lead['last_name'] ?? '' ) );
 			ZDZ_Admin_Dashboard::log_action(
+				$sender_id,
 				'lead_forward',
-				"Forwarded lead #{$lead_id} ({$lead_name}) to {$recipient_name}",
-				'zorderz'
+				sprintf( 'Forwarded lead #%d to %s', $lead_id, '' !== $recipient_name ? $recipient_name : 'user #' . $recipient_id ),
+				'leads',
+				array(
+					'lead_id'      => $lead_id,
+					'forward_id'   => (int) $forward_id,
+					'recipient_id' => $recipient_id,
+					'is_task'      => (int) $is_task,
+					'notified_via' => $told,
+				)
 			);
 		}
 
 		wp_send_json_success( array(
 			'forward_id'     => $forward_id,
 			'recipient_name' => $recipient_name,
+			'notified'       => ! empty( $told ),   // did the router reach them on any channel
 		) );
 	}
 
@@ -351,7 +406,8 @@ class ZL_Lead_Interaction {
 		}
 
 		global $wpdb;
-		$wpdb->update(
+		$zl_was_open = 'completed' !== (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$wpdb->prefix}zl_lead_forwards WHERE id = %d", $forward_id ) );
+		$done = $wpdb->update(
 			$wpdb->prefix . 'zl_lead_forwards',
 			array(
 				'status'       => 'completed',
@@ -361,6 +417,11 @@ class ZL_Lead_Interaction {
 			array( '%s', '%s' ),
 			array( '%d' )
 		);
+		// Counted once, when this press finished a task that was not finished (completed_at changes on
+		// every press, so the update alone always says a row changed).
+		if ( $done && ! empty( $zl_was_open ) ) {
+			function_exists( 'zl_usage' ) && zl_usage( 'forward_completed', $forward_id );
+		}
 
 		wp_send_json_success( array( 'completed' => true ) );
 	}

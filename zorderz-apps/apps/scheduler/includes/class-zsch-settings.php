@@ -35,6 +35,45 @@ class ZSCH_Settings {
 	const OPT_GOOGLE_SECRET     = 'zsch_google_secret';       // Google OAuth client secret (isolated)
 	const OPT_MS_DELEG_SECRET   = 'zsch_ms_delegated_secret'; // Microsoft delegated-app secret (isolated)
 
+	// Which connected accounts count as WORK calendars (comma/space list of domains).
+	const OPT_WORK_DOMAINS      = 'zsch_work_domains';
+
+	/* ── App credentials managed centrally ─────────────────────────────────
+	 * Three services, judged independently:
+	 *   ms_calendar_sync  zsch_graph_config[tenant_id|client_id], zsch_graph_secret
+	 *   google_calendar   zsch_conncal_config[google_client_id], zsch_google_secret
+	 *   ms_calendars      zsch_conncal_config[ms_client_id], zsch_ms_delegated_secret
+	 * While a service is engaged on the platform's Credentials screen, this app's
+	 * settings form shows one line in place of its inputs and never writes them.
+	 * Without that screen (an older theme, or none) nothing changes. */
+
+	/** Is $svc managed on the platform's Credentials screen? */
+	public static function cred_managed( string $svc ): bool {
+		return class_exists( 'ZDZ_Core_Credentials' )
+			&& is_callable( array( 'ZDZ_Core_Credentials', 'is_app' ) )
+			&& is_callable( array( 'ZDZ_Core_Credentials', 'engaged' ) )
+			&& ZDZ_Core_Credentials::engaged( $svc );
+	}
+
+	/** A form that hid $svc's fields says so; its submit must not write them (a stale form). */
+	public static function managed_posted( string $svc ): bool {
+		return isset( $_POST['zdz_cred_managed'] ) && is_array( $_POST['zdz_cred_managed'] ) // phpcs:ignore WordPress.Security.NonceVerification -- read inside the caller's nonce-checked save
+			&& ! empty( $_POST['zdz_cred_managed'][ $svc ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- read only by the admin saves, after check_admin_referer(); it can only stop a write.
+	}
+
+	/** Engaged now OR the submitted form had hidden this service's fields: do not write them. */
+	public static function cred_locked( string $svc ): bool {
+		return self::cred_managed( $svc ) || self::managed_posted( $svc );
+	}
+
+	/** Admin URL of the platform's Credentials screen. */
+	public static function credentials_url(): string {
+		$page = ( class_exists( 'ZDZ_Core_Credentials' ) && defined( 'ZDZ_Core_Credentials::PAGE' ) )
+			? (string) constant( 'ZDZ_Core_Credentials::PAGE' )
+			: 'zdz-core-credentials';
+		return admin_url( 'admin.php?page=' . rawurlencode( $page ) );
+	}
+
 	/**
 	 * Get the full config array (secret excluded).
 	 *
@@ -188,7 +227,7 @@ class ZSCH_Settings {
 		return wp_parse_args( $cfg, array(
 			'google_client_id' => '',
 			'ms_client_id'     => '',
-			'conflict_policy'  => 'warn', // warn | block (enforced from Phase 1)
+			'conflict_policy'  => 'warn', // warn | block (enforced by the busy overlay)
 		) );
 	}
 
@@ -243,5 +282,81 @@ class ZSCH_Settings {
 
 	public static function has_ms_delegated_secret() {
 		return '' !== self::ms_delegated_secret();
+	}
+
+	// ── Which connected calendars are WORK calendars ───────────────
+
+	/**
+	 * The e-mail domains whose connected calendars count as WORK calendars.
+	 *
+	 * The MECHANISM (match an account's domain) is Core; the VALUE is the
+	 * business's own, so it lives in an option. Core default: none, which
+	 * discloses no event titles at all. Same shape as the inbox app's internal
+	 * domains — two apps asking "is this one of ours?" should answer it the
+	 * same way.
+	 *
+	 * Accepts a comma/space/semicolon separated list. Each entry is lowercased,
+	 * stripped of a trailing root dot, and REQUIRED TO CONTAIN A DOT, so a stray
+	 * token ('com', a typo, an empty field left by a save) cannot become a
+	 * matchable domain.
+	 *
+	 * @return string[] lowercased bare domains; empty array = disclose nothing.
+	 */
+	public static function work_domains() {
+		$raw = (string) get_option( self::OPT_WORK_DOMAINS, '' );
+		$out = array();
+		foreach ( preg_split( '/[\s,;]+/', strtolower( $raw ) ) as $d ) {
+			$d = trim( $d, " \t\n\r\0\x0B." );
+			if ( '' !== $d && false !== strpos( $d, '.' ) ) {
+				$out[] = $d;
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Is this connected account a WORK account?
+	 *
+	 * The one question that decides whether a colleague may see WHAT somebody is
+	 * busy with, or only THAT they are busy. It is asked of the ACCOUNT's address
+	 * (`wp_zsch_calendar_accounts.email_label`), never of the event.
+	 *
+	 * FAIL CLOSED, because the two errors are not symmetric. A work calendar
+	 * mistaken for a personal one costs a tooltip; a personal calendar mistaken
+	 * for a work one publishes somebody's private life to everyone they work
+	 * with, and it cannot be un-seen. So every uncertain case answers false:
+	 * no '@', nothing after the '@', a non-string, an empty domain list.
+	 *
+	 * Matching is EXACT equality against a configured domain, after lowercasing
+	 * and dropping a trailing root dot. Not a substring test, which would accept
+	 * `x@notexample.com` for `example.com`; not a prefix or suffix test, which
+	 * would accept `x@example.com.attacker.net`. Subdomains do NOT match either —
+	 * `x@sub.example.com` is a different mail domain and this function is not
+	 * the place to guess that it is ours.
+	 *
+	 * The domain is taken from the LAST '@', which is what RFC 5321 means by the
+	 * domain part: a quoted local part may legally contain one.
+	 *
+	 * @param string $email Account address as stored on the account row.
+	 * @return bool
+	 */
+	public static function is_work_email( $email ) {
+		if ( ! is_string( $email ) ) {
+			return false;
+		}
+		$email = strtolower( trim( $email ) );
+		$at    = strrpos( $email, '@' );
+		if ( false === $at ) {
+			return false;
+		}
+		$domain = trim( rtrim( substr( $email, $at + 1 ), '.' ) );
+		if ( '' === $domain ) {
+			return false;
+		}
+		$domains = self::work_domains();
+		if ( empty( $domains ) ) {
+			return false;
+		}
+		return in_array( $domain, $domains, true );
 	}
 }

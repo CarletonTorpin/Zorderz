@@ -1,0 +1,81 @@
+/* The bell (zdz-bell.js). Tokens only, so light / dark / system / sunlight all follow the theme. The badge is the
+   kit's "needs you" colour pair (zdz-kit.css), checked there for contrast. */
+
+/* ---------------------------------------------------------------- the buttons */
+.zdz-bell{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;font:inherit}
+.zdz-bell:focus-visible{outline:3px solid var(--sys-brand,#2563EB);outline-offset:2px}
+.zdz-bell:active{transform:scale(.94)}
+.zdz-bell-icon{width:20px;height:20px;stroke-width:var(--sys-icon-wt,2);flex:0 0 auto}
+
+/* home screen: beside Refresh, the same square */
+.zdz-bell-home-wrap{display:flex;margin-left:auto;margin-right:var(--ref-space-2,8px)}
+.zdz-bell--home{width:40px;height:40px;min-height:40px;padding:0;border-radius:var(--ref-radius-md,12px);
+  color:var(--sys-text-sec);background:var(--sys-surface);border:1px solid var(--sys-border);
+  transition:color var(--ref-dur-fast,150ms) var(--ref-ease,ease),border-color var(--ref-dur-fast,150ms) var(--ref-ease,ease)}
+.zdz-bell--home:hover{color:var(--sys-brand);border-color:var(--sys-brand);background:var(--sys-brand-light)}
+
+/* bottom navigation (the dock bar): a nav item like Apps and Chat, before the bug and the logo */
+.bnav .zdz-bell--nav{order:7;flex:1;flex-direction:column;gap:2px;min-height:44px;padding:4px 0;border:0;background:none;
+  color:var(--sys-text-ter)}
+.bnav .zdz-bell--nav .zdz-bell-icon{width:22px;height:22px}
+.bnav .zdz-bell--nav .ni-label{font-size:var(--ref-font-xs);font-weight:var(--sys-font-wt-md);line-height:1.1}
+.bnav .zdz-bell--nav:hover{color:var(--sys-text-sec)}
+@media(min-width:820px){
+  .bnav .zdz-bell--nav{flex:none;width:100%;min-height:76px}
+  .bnav .zdz-bell--nav .zdz-bell-icon{width:32px;height:32px}
+  .bnav .zdz-bell--nav .ni-label{font-size:16px}
+}
+
+/* the badge: on the bell's corner, never over a neighbour's label */
+.zdz-bell-badge{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;
+  border-radius:10px;background:var(--zdz-needs-you,#D55E00);color:var(--zdz-needs-you-ink,#FFFFFF);
+  border:2px solid var(--sys-surface,#FFFFFF);font:700 12px/16px system-ui,-apple-system,sans-serif;text-align:center;
+  pointer-events:none;z-index:1}
+.bnav .zdz-bell--nav .zdz-bell-badge{top:0;right:auto;left:calc(50% + 4px)}
+
+/* ---------------------------------------------------------------- the sheet */
+.zdz-bell-sheet{min-height:120px}
+.zdz-bell-head{display:flex;align-items:center;justify-content:space-between;gap:var(--ref-space-2,8px);
+  margin:0 0 var(--ref-space-2,8px);min-height:44px}
+.zdz-bell-sum{font-size:var(--ref-font-sm,15px);color:var(--sys-text-sec)}
+.zdz-bell-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--sys-border)}
+.zdz-bell-item{border-bottom:1px solid var(--sys-border)}
+.zdz-bell-row{display:flex;gap:var(--ref-space-3,12px);align-items:flex-start;width:100%;min-height:56px;
+  padding:var(--ref-space-3,12px) var(--ref-space-1,4px);text-align:left;background:none;border:0;color:var(--sys-text);
+  font:inherit;cursor:pointer;box-sizing:border-box}
+.zdz-bell-row:hover{background:var(--sys-surface-subtle,rgba(0,0,0,.04))}
+.zdz-bell-row:focus-visible{outline:3px solid var(--sys-brand,#2563EB);outline-offset:-3px}
+.zdz-bell-dot{flex:0 0 10px;width:10px;height:10px;margin-top:6px;border-radius:50%;background:transparent}
+.zdz-bell-item.is-unread .zdz-bell-dot{background:var(--sys-brand)}
+.zdz-bell-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.zdz-bell-title{font-size:var(--ref-font-md,16px);font-weight:var(--sys-font-wt-md,500);color:var(--sys-text);
+  overflow-wrap:anywhere}
+.zdz-bell-item.is-unread .zdz-bell-title{font-weight:var(--sys-font-wt-b,700)}
+.zdz-bell-msg{font-size:var(--ref-font-sm,15px);color:var(--sys-text-sec);overflow-wrap:anywhere}
+.zdz-bell-age{font-size:var(--ref-font-xs,13px);color:var(--sys-text-ter)}
+.zdz-bell-status{min-height:0;margin:var(--ref-space-2,8px) 0 0;font-size:var(--ref-font-sm,15px);color:var(--sys-text-sec)}
+.zdz-bell-status:empty{margin:0}
+.zdz-bell-status.is-error{color:var(--sys-error,var(--sys-text))}
+.zdz-bell-empty{margin:var(--ref-space-4,16px) 0;color:var(--sys-text-sec);font-size:var(--ref-font-sm,15px)}
+.zdz-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);border:0;white-space:nowrap}
+
+/* "Notices you get": one switch per kind */
+.zdz-bell-prefs{margin-top:var(--ref-space-4,16px);border-top:1px solid var(--sys-border);padding-top:var(--ref-space-2,8px)}
+.zdz-bell-prefs summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--sys-text);
+  font-weight:var(--sys-font-wt-md,500)}
+.zdz-bell-prefs-hint{margin:0 0 var(--ref-space-2,8px);font-size:var(--ref-font-xs,13px);color:var(--sys-text-sec)}
+.zdz-bell-prefs-list{list-style:none;margin:0;padding:0}
+.zdz-bell-prefs-list label{display:flex;align-items:center;justify-content:space-between;gap:var(--ref-space-3,12px);
+  min-height:44px;color:var(--sys-text);cursor:pointer}
+.zdz-bell-prefs-list input{width:22px;height:22px;flex:0 0 auto;accent-color:var(--sys-brand)}
+.zdz-bell-prefs-msg{min-height:1.2em;margin:var(--ref-space-1,4px) 0 0;font-size:var(--ref-font-xs,13px);color:var(--sys-text-sec)}
+
+/* ---------------------------------------------------------------- Sunlight: monochrome edges */
+[data-theme="sunlight"] .zdz-bell--home{border:2px solid #000;color:#000}
+[data-theme="sunlight"] .bnav .zdz-bell--nav{color:#000}
+[data-theme="sunlight"] .zdz-bell-badge{border-color:#000}
+[data-theme="sunlight"] .zdz-bell-item.is-unread .zdz-bell-dot{background:#000}
+[data-theme="sunlight"] .zdz-bell-list,[data-theme="sunlight"] .zdz-bell-item{border-color:#000}
+
+@media (prefers-reduced-motion: reduce){ .zdz-bell:active{transform:none} }

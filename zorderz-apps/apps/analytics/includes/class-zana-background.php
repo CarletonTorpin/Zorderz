@@ -2,10 +2,10 @@
 /**
  * ZANA_Background — run a slow chat turn off the browser request (loopback relay).
  *
- * WHY: a chat turn is fully synchronous. ZANA_Chat::send() calls the model through
- * ZDZ_Core_Poe with a 90-180s blocking wp_remote_post, and the REST route holds the
- * browser request open for the whole call. On a managed host a slow (vault-augmented /
- * thinking) turn can exceed the ~60s gateway timeout and return a 502.
+ * WHY: a chat turn is fully synchronous. ZANA_Chat::send() waits on the Ai router for up
+ * to its time budget, and the REST route holds the browser request open for the whole
+ * call. On a managed host a slow (thinking) turn can exceed the ~60s gateway timeout and
+ * return a 502.
  *
  * HOW (the proven ZEST_Background pattern): the client enqueues a turn (a row in
  * wp_zana_turn_jobs), the enqueue fires a NON-BLOCKING loopback (wp_remote_post with
@@ -14,7 +14,7 @@
  *
  * NO REGRESSION — this class is ADDITIVE. run_job() calls the exact same
  * ZANA_Chat::send() the synchronous REST route calls, so the prompt assembly, the
- * model gateway, the SINGLE outbound gate (ZDZ_Answer_Authority) and the transcript
+ * Ai router call, the SINGLE outbound gate (ZDZ_Answer_Authority) and the transcript
  * persistence are byte-for-byte identical. Async only changes WHERE the turn runs,
  * never WHAT it does. If anything about async is unavailable the surface falls back to
  * the synchronous path (see ZANA_REST + assets/js/chat.js).
@@ -61,10 +61,9 @@ class ZANA_Background {
 			return array( 'ok' => false, 'error' => __( 'Empty message.', 'zorderz' ) );
 		}
 
-		// Shared-device (kiosk) turns are NEVER persisted (INV-10 / memory-privacy).
-		// A job row would be a transient transcript, so we refuse to queue them; the
-		// client uses the synchronous route on kiosk (and this ok=false makes any async
-		// caller fall back to it too). Kiosk uses the fast slot, so 502 risk is low.
+		// The shared device keeps no transcript: a job row would be one, so nothing is
+		// queued for it (and the turn itself refuses the shared device, which the Ai
+		// router does not serve).
 		if ( class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_kiosk( $user_id ) ) {
 			return array( 'ok' => false, 'error' => __( 'Async is not available on this device.', 'zorderz' ) );
 		}
@@ -147,8 +146,13 @@ class ZANA_Background {
 			array( '%d' )
 		);
 
+		// The turn runs as its owner (the job's signature binds the job to that person): the Ai router and the
+		// registry read the signed-in person, so an app's lookup in this turn is asked as them and nobody else.
+		if ( function_exists( 'wp_set_current_user' ) && (int) get_current_user_id() !== (int) $row['user_id'] ) {
+			wp_set_current_user( (int) $row['user_id'] );
+		}
 		try {
-			// IDENTICAL to the synchronous REST path: same prompt, same model gateway,
+			// IDENTICAL to the synchronous REST path: same prompt, same Ai router call,
 			// same ZDZ_Answer_Authority gate, same transcript persistence.
 			$result = ZANA_Chat::send(
 				(int) $row['user_id'],
@@ -187,6 +191,10 @@ class ZANA_Background {
 			array( '%s', '%s', '%s', '%s' ),
 			array( '%d' )
 		);
+		// The person may have asked to be told when it is ready (they left the page while it ran).
+		if ( $ok && class_exists( 'ZANA_REST_More' ) ) {
+			ZANA_REST_More::turn_done( $job_id, (int) $row['user_id'], (int) ( $result['session_id'] ?? $row['session_id'] ) );
+		}
 	}
 
 	/**

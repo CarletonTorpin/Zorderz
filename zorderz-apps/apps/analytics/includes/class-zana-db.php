@@ -11,10 +11,10 @@
  *     request open past a managed host's gateway timeout. The row carries no company
  *     data — only the user's own message and the same result the sync turn returns.
  *
- * The store is deliberately small: the ported core keeps a durable transcript so a
- * user can reopen a conversation and the digest deep-link can resolve a session id.
- * The memory table, the response cache and the company-facts table from the source
- * are DEFERRED surfaces and are NOT created here (memory + facts must ship empty and
+ * The store is deliberately small: it keeps a durable transcript so a user can
+ * reopen a conversation and the digest deep-link can resolve a session id. A memory
+ * table, a response cache and a company-facts table are DEFERRED surfaces and are
+ * NOT created here (memory + facts must ship empty and
  * are gated behind consent; the cache is a performance concern, not correctness).
  *
  * @package Zorderz\Analytics

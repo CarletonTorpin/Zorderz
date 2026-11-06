@@ -67,3 +67,22 @@
 	color: #a01919;
 	font-size: 0.85rem;
 }
+
+/* Invoice rows, the in-app invoice sheet and the month lock. */
+.zcc-who { font-size: 0.85em; opacity: 0.8; margin-bottom: 4px; }
+.zcc-rows { margin-top: 10px; }
+.zcc-row { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--sys-outline-variant, rgba(127,127,127,0.25)); }
+.zcc-inv-num { background: none; border: 0; padding: 0; color: var(--sys-primary, inherit); text-decoration: underline; cursor: pointer; font: inherit; }
+.zcc-row-amt { margin-left: auto; font-variant-numeric: tabular-nums; }
+.zcc-row-lock { font-size: 0.8em; opacity: 0.75; }
+.zcc-sheet { background: #fff; color: #111; border-radius: var(--sys-radius-md, 8px); padding: 14px; margin: 6px 0 10px; font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 18px; }
+.zcc-sheet * { color: #111; }
+.zcc-sheet-num { font-weight: 600; margin-bottom: 6px; }
+.zcc-sheet-lines { display: table; width: 100%; border-collapse: collapse; margin: 8px 0; }
+.zcc-sheet-lines td { padding: 4px 0; border-top: 1px solid #e3e3e3; font-size: 12px; }
+.zcc-num { text-align: right; white-space: nowrap; padding-left: 10px; }
+.zcc-sheet-total { font-weight: 600; text-align: right; }
+.zcc-sheet-notes { margin-top: 24px; white-space: pre-wrap; font-size: 12px; }
+.zcc-link-box { width: 100%; margin-top: 6px; }
+.zcc-lock { margin-top: 12px; padding: 10px; border-radius: var(--sys-radius-md, 8px); border: 1px solid var(--sys-outline-variant, rgba(127,127,127,0.35)); }
+.zcc-lock-note, .zcc-lock-done { margin-bottom: 6px; }

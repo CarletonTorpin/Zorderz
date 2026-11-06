@@ -1,6 +1,6 @@
 <?php
 /**
- * Inbox schema migration — v1.8.0 (Phase 0.2c — immutable-message-id readiness).
+ * Inbox schema migration — v1.8.0 (immutable-message-id readiness).
  *
  * Adds a message-id HASH to both id-bearing tables so dedup no longer depends on the raw id fitting
  * a column or an index:

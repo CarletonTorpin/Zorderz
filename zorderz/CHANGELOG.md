@@ -174,7 +174,7 @@ Upgrade both. Install the theme first, then the plugin; that order still matters
 
 **The photo upload was not broken. Nothing was reaching the server at all.**
 
-The rename from the old identifiers moved every route registration to the `zorderz/v1` namespace, but missed the four places that hand the base URL to the browser. Those still said `ts/v1`. So the server was publishing routes at one address while the app asked at another, and every single request (uploads, dashboard data, preferences, KPI figures, the orchestrator) returned a clean 404.
+Every route registration had moved to the `zorderz/v1` namespace, but the four places that hand the base URL to the browser still named the old namespace. So the server was publishing routes at one address while the app asked at another, and every single request (uploads, dashboard data, preferences, KPI figures, the orchestrator) returned a clean 404.
 
 The reason nothing appeared in the debug log is that **nothing went wrong server-side**. WordPress was asked for a route that does not exist, answered correctly, and had nothing to report. The failure lived entirely in the gap between what the browser asked for and what the server publishes, which is exactly the kind of fault a log cannot show you.
 
@@ -226,7 +226,7 @@ An example pack ships inside the theme. Apply it on a throwaway install to watch
 
 **The nav and login logos ignored the Business Profile.** They read only the old theme mods, so the artwork system was not actually wired to the two places a logo appears. Both now read the profile first, with the theme mods kept as an upgrade fallback.
 
-**The login screen hardcoded one company's tagline.** Now reads the profile.
+**The login screen did not read its tagline from the Business Profile.** Now it does.
 
 **Setting a palette did nothing.** The brand CSS printed *before* the stylesheet. Both target `:root`, so equal specificity means the last one wins, and the last one was `style.css`. Silently, with no error. Now attached to the stylesheet's own handle, which WordPress prints immediately after it.
 
@@ -236,11 +236,9 @@ An example pack ships inside the theme. Apply it on a throwaway install to watch
 
 **The pack reader did not understand `{ all: true }`**, which is exactly how a pack says "this role gets every app". Inline maps were unsupported and the grant was dropped. It looked correct because the default for an owner is also *every app*; only a test that asserted on the preview rather than the outcome caught it.
 
-**Nine employee first names were shipping in the public files.** They were worked examples in code comments, and one was in a *visible* admin string on the user-profile screen. The 1.0.0 gate scanned for the company name, the address and the phone numbers; it did not scan for the roster. All replaced with neutral placeholders, the visible string rewritten, and the gate widened.
-
 **Four duplicate module files were shipping in the plugin.** The bundle renames each module's entry file to `app.php`, so a plain recursive copy dropped the original in beside it and the loader kept reading the stale one. Two copies of the same classes on disk is one careless include away from a fatal. Removed, and the packaging is now a script that does the rename explicitly rather than a hand-run copy.
 
-**The static `manifest.json` was still shipping** with one company's name and colours, and icon paths pointing at a theme folder that no longer existed. Removed: the manifest is generated from the profile at `/zdz-manifest.json`.
+**A stale static `manifest.json` was still shipping**, with a fixed name and colours that ignored the profile, and icon paths pointing at a theme folder that no longer existed. Removed: the manifest is generated from the profile at `/zdz-manifest.json`.
 
 ---
 

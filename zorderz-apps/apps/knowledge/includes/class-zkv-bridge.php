@@ -57,6 +57,7 @@ class ZKV_Bridge {
 			 JOIN {$wpdb->prefix}zkv_index i ON i.document_id = d.id AND i.is_current = 1
 			 WHERE d.is_pricing_authority = 1
 			   AND d.status = 'indexed'
+			   AND d.is_private = 0
 			 ORDER BY d.updated_at DESC",
 			ARRAY_A
 		);

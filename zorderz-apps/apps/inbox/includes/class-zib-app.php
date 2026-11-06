@@ -33,13 +33,18 @@ class ZIB_App implements \Zorderz\Widget_App_Interface {
 	}
 
 	public function render_mobile_view( int $user_id ): void {
-		echo '<div class="zib-mobile" style="padding:16px;">' . ZIB_Widget::render_card_shell() . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput
+		$card = ZIB_Widget::should_render() ? ZIB_Widget::render_card_shell() : ZIB_Widget::render_off_card();
+		echo '<div class="zib-mobile" style="padding:16px;">' . $card . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput
 	}
 
 	public function render_dashboard_widget( int $user_id ): ?string {
-		if ( ! ZIB_Widget::should_render() ) {
+		if ( ZIB_Widget::should_render() ) {
+			return ZIB_Widget::render_card_shell();
+		}
+		// Not turned on for this site: the tile still opens and says so, instead of doing nothing when tapped.
+		if ( ! is_user_logged_in() || ! zib_user_has_access() ) {
 			return null;
 		}
-		return ZIB_Widget::render_card_shell();
+		return ZIB_Widget::render_off_card();
 	}
 }

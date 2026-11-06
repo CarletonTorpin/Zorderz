@@ -38,7 +38,7 @@
  * option on a sensitive artifact SHOULD gate the route with rate_ok().
  *
  * @package Zorderz
- * @since   v2.35.0 (theme pass item #3)
+ * @since (theme pass item #3)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

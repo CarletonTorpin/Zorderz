@@ -11,6 +11,76 @@ class ZDZ_Plugin_API {
 	/** App ids declined at boot (a declared hot-path class was undefined) => missing[]. */
 	private static $unavailable = [];
 
+	/**
+	 * An app's short name, for the launcher tile, the dock and the sticky strip. Its full name (`nm`) stays everywhere
+	 * else: the app's page header, search, the large cards, the ask bar, the audit row, and the tile's title and spoken
+	 * label.
+	 *
+	 * An app registers its own with `'short_name' => 'Doors'` (or the compact `'snm'`) in its config: plain text,
+	 * SHORT_NAME_MAX characters at most, else ignored. Until an app does, the list below answers for the platform's
+	 * own apps whose names do not fit a launcher column; `zdz_app_short_name` (string $short, string $app_id,
+	 * array $config) has the last word. With no short name the tile draws the full name, ending in "…" if it does not
+	 * fit. An app that registers its own short_name wins over this list; an app id here that is not installed does
+	 * nothing.
+	 */
+	const SHORT_NAME_MAX = 10;
+	const SHORT_NAMES    = [
+		'doorhangers'   => 'Hangers',    // Doorhangers
+		'team-roles'    => 'Roles',      // Team Roles
+		'route-planner' => 'Routes',     // Route Planner
+		'territories'   => 'Territory',  // Territories
+	];
+
+	/**
+	 * The short name to send for one app ('' when it has none).
+	 *
+	 * @param string $app_id
+	 * @param array  $config The app's config, after the full-name mapping.
+	 * @return string
+	 */
+	public static function short_name_for( string $app_id, array $config ): string {
+		$clean = static function ( $v ): string {
+			if ( ! is_string( $v ) ) {
+				return '';
+			}
+			// Text, not markup: entities decoded, then tags stripped (so "&lt;b&gt;" cannot become a tag; the page
+			// escapes it anyway), spaces squeezed. An invalid UTF-8 string makes preg_replace() return null, which is ''.
+			$v   = trim( (string) preg_replace( '/\s+/u', ' ', wp_strip_all_tags( html_entity_decode( $v, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) ) );
+			$len = function_exists( 'mb_strlen' ) ? mb_strlen( $v, 'UTF-8' ) : strlen( $v );
+			return ( '' !== $v && $len <= self::SHORT_NAME_MAX ) ? $v : '';
+		};
+		$short = $clean( $config['short_name'] ?? '' );
+		if ( '' === $short ) {
+			$short = $clean( $config['snm'] ?? '' );
+		}
+		if ( '' === $short ) {
+			$short = $clean( self::SHORT_NAMES[ $app_id ] ?? '' );
+		}
+		return $clean( apply_filters( 'zdz_app_short_name', $short, $app_id, $config ) );
+	}
+
+	/**
+	 * The launcher fields an app config gets from the theme: its short name (`snm`, sent only when it differs from
+	 * `nm`) and its group (`grp`, with the group's label, colour and ink from ZDZ_App_Groups; the app's own colour and
+	 * category are kept as `cc_plugin` / `cat_plugin`). The theme, not the app, decides an app's colour: a colour
+	 * means a group.
+	 *
+	 * @param array  $config The app's config, after the full-name mapping.
+	 * @param string $app_id
+	 * @return array
+	 */
+	public static function launcher_fields( array $config, string $app_id ): array {
+		$short = self::short_name_for( $app_id, $config );
+		unset( $config['short_name'], $config['snm'] );
+		if ( '' !== $short && $short !== ( $config['nm'] ?? '' ) ) {
+			$config['snm'] = $short;
+		}
+		if ( class_exists( 'ZDZ_App_Groups' ) ) {
+			$config = ZDZ_App_Groups::apply( $config, $app_id );
+		}
+		return $config;
+	}
+
 	public static function get_instance() {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -31,7 +101,7 @@ class ZDZ_Plugin_API {
 			$this->apps = [];
 			foreach ( $raw as $app ) {
 				if ( $app instanceof \Zorderz\App_Interface ) {
-					// v2.14.3: Index by the app's config 'id' instead of the
+					// Index by the app's config 'id' instead of the
 					// numeric array position. This ensures zdz_allowed_apps user
 					// meta stores stable string IDs ('estimate-creator',
 					// 'internal-messaging', etc.) rather than fragile numeric
@@ -42,8 +112,8 @@ class ZDZ_Plugin_API {
 					if ( ! $app_id ) {
 						continue;
 					}
-					// AC3 boot fail-loud: an app that registered its tile but whose
-					// declared hot-path class never loaded (the §74 "partial zip") must
+					// Boot fail-loud: an app that registered its tile but whose
+					// declared hot-path class never loaded (a partly uploaded zip) must
 					// NOT render — it would fatal on the first call at wp_head. Decline
 					// it gracefully: log a disposition + admin notice and skip, so no
 					// half-wired tile appears. A complete install is unaffected (no app
@@ -176,7 +246,7 @@ class ZDZ_Plugin_API {
 		$emulating = class_exists( 'ZDZ_View_As' ) && ZDZ_View_As::is_emulating();
 
 		if ( $emulating ) {
-			// v2.12.3: per-user View-As uses REAL user meta.
+			// per-user View-As uses REAL user meta.
 			$emulated_uid = method_exists( 'ZDZ_View_As', 'get_emulated_user_id' ) ? ZDZ_View_As::get_emulated_user_id() : null;
 			if ( $emulated_uid ) {
 				$emu_user     = get_userdata( $emulated_uid );
@@ -204,16 +274,33 @@ class ZDZ_Plugin_API {
 			$allowed_apps = [];
 		}
 
+		// Additive per-person grants contributed by apps (`zdz_extra_allowed_apps`, ADD-only): applied
+		// after Safe Mode and merged into the allow list, which the loop below still checks against
+		// the deny list, so neither can be overridden here. Skipped for the admin tier (they already
+		// see every app) and for a role-only View-As preview (no person to ask about).
+		$extras_uid = $emulating ? (int) ( $emulated_uid ?? 0 ) : $user_id;
+		if ( ! $is_admin && $extras_uid > 0 ) {
+			$extra = apply_filters( 'zdz_extra_allowed_apps', [], $extras_uid );
+			if ( is_array( $extra ) && $extra ) {
+				$allowed_apps = array_values( array_unique( array_merge( $allowed_apps, array_filter( $extra, 'is_string' ) ) ) );
+			}
+		}
+		// An account in Privacy View sees only the apps made safe for it, whatever else it may do.
+		$privacy = class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on( $user_id );
+
 		foreach ( $all_apps as $app_id => $app ) {
 			// Denied apps are ALWAYS blocked — even for admins/owners
 			if ( in_array( $app_id, $denied_apps, true ) ) {
+				continue;
+			}
+			if ( $privacy && ! in_array( (string) $app_id, ZDZ_Privacy_View::ALLOWED_APPS, true ) ) {
 				continue;
 			}
 
 			if ( $is_admin || in_array( $app_id, $allowed_apps, true ) ) {
 				$config = $app->get_config();
 
-				// v2.17.1: Normalize config keys — some plugins use compact keys
+				// Normalize config keys — some plugins use compact keys
 				// (nm, cat, cc) and some use full keys (name, category, color).
 				// The frontend JS reads compact keys, so map full → compact.
 				if ( ! isset( $config['nm'] ) && isset( $config['name'] ) ) {
@@ -229,11 +316,11 @@ class ZDZ_Plugin_API {
 					$config['desc'] = $config['description'];
 				}
 
-				// v2.17.1: Display name overrides — shorter names for mobile dock/bar
+				// Display name overrides — shorter names for mobile dock/bar
 				$name_overrides = [
 					'prep'                  => 'Prep',
 					'receipts'              => 'Receipts',
-					// v2.21.0: "Commissions" wraps to two lines on phones at
+					// "Commissions" wraps to two lines on phones at
 					// --ref-font-lg, inflating its dock tile. The shorter
 					// "Commission" reads cleanly on one line next to the
 					// calculator icon. (Plugin registers as 'commission-calculator',
@@ -243,6 +330,9 @@ class ZDZ_Plugin_API {
 				if ( isset( $name_overrides[ $app_id ] ) ) {
 					$config['nm'] = $name_overrides[ $app_id ];
 				}
+
+				// The short name and the group (colour, label, ink) the launcher draws.
+				$config = self::launcher_fields( $config, (string) $app_id );
 
 				// Pre-render widget HTML for inline_widget apps
 				if (
@@ -268,10 +358,12 @@ class ZDZ_Plugin_API {
 	 * user sees, plus the role-default fallback the per-plugin gates carried:
 	 *
 	 *   1. no user / logged out            → false
+	 *   1b. Privacy View account           → only ZDZ_Privacy_View::ALLOWED_APPS
 	 *   2. WP super-admin (manage_options) → true
 	 *   3. Safe Mode on                    → false (user sees NO apps)
 	 *   4. app in zdz_denied_apps           → false (ALWAYS blocked, even admins)
 	 *   5. admin-tier role                 → true  (owner/admin get all non-denied)
+	 *   5b. an app's additive grant         → true  (zdz_extra_allowed_apps; ADD-only)
 	 *   6. explicit zdz_allowed_apps set    → in_array($app_id, allowed)
 	 *   7. no explicit list                → this role's DEFAULT app set
 	 *                                         (ADD-only: never widens past the role)
@@ -292,6 +384,11 @@ class ZDZ_Plugin_API {
 		$user_id = $user_id ?: get_current_user_id();
 		if ( ! $user_id || '' === $app_id ) {
 			return false;
+		}
+
+		// 1b. Privacy View reaches only the apps made safe for it, whatever else the account may do.
+		if ( class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on( $user_id ) ) {
+			return in_array( $app_id, ZDZ_Privacy_View::ALLOWED_APPS, true );
 		}
 
 		// 2. WP super-admins / manage-the-whole-site.
@@ -319,6 +416,13 @@ class ZDZ_Plugin_API {
 
 		// 5. Owner/Admin-tier roles get all apps (except denied, handled above).
 		if ( class_exists( 'ZDZ_User_Roles' ) && ZDZ_User_Roles::is_admin_role( $role ) ) {
+			return true;
+		}
+
+		// 5b. Additive per-person grants contributed by apps (ADD-only), placed AFTER Safe Mode (3)
+		//     and the deny list (4) so neither can be overridden here.
+		$extra_apps = apply_filters( 'zdz_extra_allowed_apps', [], $user_id );
+		if ( is_array( $extra_apps ) && in_array( $app_id, $extra_apps, true ) ) {
 			return true;
 		}
 

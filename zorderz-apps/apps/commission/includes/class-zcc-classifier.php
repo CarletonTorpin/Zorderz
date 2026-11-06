@@ -2,10 +2,9 @@
 /**
  * ZCC_Classifier — invoice line classifier.
  *
- * The old plugin carried a 1,400-line keyword cascade full of product brands,
- * model numbers and real transaction examples. Per the crosswalk (IC-02, CN-08,
- * CP-13, CP-14) that entire taxonomy moves to the Item Engine and the real
- * examples are deleted. What remains here is Core mechanism only:
+ * The product taxonomy (names, brands, model numbers) lives in the Item Engine,
+ * filled by each business; this class carries no product words. What remains
+ * here is Core mechanism only:
  *
  *   1. LEDGER KINDS first. A line that is money-but-not-a-sale (discount, card
  *      fee, refund, gratuity, pass-through) is a Ledger Entry, classified by
@@ -17,13 +16,23 @@
  *      hardcoded category. An empty catalog returns '' ⇒ 'unknown', which the
  *      calc engine books at $0 COGS and (for a priced line) flags for review.
  *
- *   3. QUANTITY comes from the line text ("(4) …") when the invoice qty field is
+ *   3. A line the Item Engine cannot place may carry a PERSON-CONFIRMED mapping
+ *      (ZCC_Line_Map): an administrator confirmed which item it is, often from an
+ *      Ai proposal (ZCC_Ai). Only a confirmed mapping is read here; a proposal
+ *      never is.
+ *
+ *   4. QUANTITY comes from the line text ("(4) …") when the invoice qty field is
  *      1 — a Core count-extraction step with a unit-word rejection list so
  *      "(14x6)" / "(50%)" / "($600)" never read as a count.
  *
- * Deterministic: same description ⇒ same classification, cached by
- * description + Item Engine version so editing the catalog self-invalidates.
- * ZERO LLM in this path.
+ * Before any of it, the business's place names are taken out of the line's
+ * sub-text (ZCC_Places), so a town is never read as a product, and a priced
+ * line whose billing item is the location marker is booked as a location:
+ * billed, never a product, never a cost.
+ *
+ * Deterministic: same description ⇒ same classification, cached by the
+ * classified text + Item Engine version + mapping version, so editing the
+ * catalog or confirming a mapping self-invalidates. ZERO LLM in this path.
  *
  * @package Zorderz\Commission
  */
@@ -39,6 +48,11 @@ class ZCC_Classifier {
 
 	/** Tokens inside "(…)" that mean the parenthetical is NOT a unit count. */
 	const UNIT_WORD_REJECTS = [ 'in', 'inch', 'inches', 'ft', 'foot', 'feet', 'cm', 'mm', 'by', 'gauge', 'x' ];
+
+	/** Forget the request-level cache (after a catalog or mapping change; between tests). */
+	public static function flush(): void {
+		self::$cache = [];
+	}
 
 	/**
 	 * Classify an array of lines. Returns classifications indexed by position.
@@ -62,15 +76,37 @@ class ZCC_Classifier {
 		$desc = trim( (string) ( $line['description'] ?? '' ) );
 		$qty  = max( 1, (int) ( $line['qty'] ?? 1 ) );
 
-		$key = md5( strtolower( $desc ) ) . '|' . zcc_item_engine_version();
+		// A priced line whose billing item is the location marker: billed, no product, no cost.
+		if ( ! empty( $line['is_location'] ) ) {
+			return [
+				'item_id'               => '',
+				'subtype'               => '',
+				'category'              => 'location',
+				'ledger_kind'           => '',
+				'quantity'              => 1,
+				'confidence'            => 1.0,
+				'non_commissionable'    => false,
+				'counts_toward_revenue' => true,
+				'sign'                  => 'positive',
+				'unit_noun_singular'    => '',
+				'unit_noun_plural'      => '',
+				'notes'                 => 'Location line (non-product).',
+				'classified_by'         => 'location',
+				'is_location'           => true,
+			];
+		}
+
+		$text = class_exists( 'ZCC_Places' ) ? ZCC_Places::line_text( $line ) : $desc;
+		$key  = md5( strtolower( $text ) ) . '|' . zcc_item_engine_version() . '|' . ( class_exists( 'ZCC_Line_Map' ) ? ZCC_Line_Map::version() : 0 );
 		if ( isset( self::$cache[ $key ] ) ) {
 			$c = self::$cache[ $key ];
 			$c['quantity'] = self::effective_quantity( $desc, $qty );
 			return $c;
 		}
+		$desc_for_match = $text;
 
 		// ── 1. Ledger kind (non-sale money) ──
-		$ledger = class_exists( 'ZDZ_Compensation' ) ? ZDZ_Compensation::classify_ledger_kind( $desc ) : null;
+		$ledger = class_exists( 'ZDZ_Compensation' ) ? ZDZ_Compensation::classify_ledger_kind( $desc_for_match ) : null;
 		if ( $ledger !== null ) {
 			$def    = $ledger['def'];
 			$result = [
@@ -93,10 +129,24 @@ class ZCC_Classifier {
 		}
 
 		// ── 2. Product line via the Item Engine ──
-		$item_id = zcc_item_classify( $desc );
-		$item    = $item_id !== '' ? zcc_item_get( $item_id ) : zcc_item_match( $desc );
+		$item_id = zcc_item_classify( $desc_for_match );
+		$item    = $item_id !== '' ? zcc_item_get( $item_id ) : zcc_item_match( $desc_for_match );
 		if ( is_array( $item ) && $item_id === '' ) {
 			$item_id = (string) ( $item['id'] ?? '' );
+		}
+		$by = 'item_engine';
+
+		// ── 2b. A mapping a person confirmed for exactly this line text ──
+		if ( ( $item_id === '' || ! is_array( $item ) ) && class_exists( 'ZCC_Line_Map' ) ) {
+			$mapped = ZCC_Line_Map::get( $desc_for_match );
+			if ( $mapped !== '' ) {
+				$m = zcc_item_get( $mapped );
+				if ( is_array( $m ) ) {
+					$item_id = $mapped;
+					$item    = $m;
+					$by      = 'confirmed_mapping';
+				}
+			}
 		}
 
 		if ( $item_id !== '' && is_array( $item ) ) {
@@ -114,7 +164,7 @@ class ZCC_Classifier {
 				'unit_noun_singular'       => (string) ( $item['unit_noun_singular'] ?? '' ),
 				'unit_noun_plural'         => (string) ( $item['unit_noun_plural'] ?? '' ),
 				'notes'                    => '',
-				'classified_by'            => 'item_engine',
+				'classified_by'            => $by,
 			];
 			self::$cache[ $key ] = $result;
 			$result['quantity'] = self::effective_quantity( $desc, $qty );

@@ -20,8 +20,7 @@
  * route:'chat' rather than guess — the bot handles anything we don't catch.
  *
  * @package ZorderzTheme
- * @version 1.1.0 (v2.28.11 — closest-match contact guard + secondary-intent chip)
- * @since   theme v2.22.0
+ * @since   theme
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -44,7 +43,10 @@ class ZDZ_Orchestrator {
 	 * }
 	 */
 	public static function classify( string $query, int $requesting_user_id = 0 ): array {
-		$raw = trim( $query );
+		// One plain space for any run of spaces, including a no-break space (U+00A0), which
+		// JavaScript's \s matches and PCRE's (without /u) does not; client and server then read the same words.
+		$raw = trim( (string) str_replace( "\xC2\xA0", ' ', $query ) );
+		$raw = trim( (string) preg_replace( '/\s+/', ' ', $raw ) );
 		$uid = $requesting_user_id > 0 ? $requesting_user_id : get_current_user_id();
 
 		$fallback = array( 'verb' => 'chat', 'route' => 'chat' );
@@ -65,24 +67,62 @@ class ZDZ_Orchestrator {
 			if ( class_exists( 'ZCC_ZANA_Bridge' )
 				&& method_exists( 'ZCC_ZANA_Bridge', 'commission_calc_for_zana' )
 				&& ZCC_ZANA_Bridge::is_available() ) {
-				$res = ZCC_ZANA_Bridge::commission_calc_for_zana( array(
-					'subject'            => $comm['subject'],
-					'period'             => $comm['period'],
-					'tier'               => '',
-					'is_kiosk'           => false,
-					'requesting_user_id' => $uid,
-				) );
+				$args = array( 'subject' => $comm['subject'], 'period' => $comm['period'] );
+				// Through the registry when Commission registers its verb, so the ladder, the kiosk rule and the
+				// identity overwrite apply; else the bridge directly.
+				$res = self::run( 'commission.calc', $args, $uid, function ( $a ) {
+					return ZCC_ZANA_Bridge::commission_calc_for_zana( $a );
+				} );
+				$launch = array();
+				if ( ! empty( $res['success'] ) && empty( $res['denied'] ) && ! empty( $res['subject_uid'] ) ) {
+					// "Open in Commission" opens on exactly this person and these dates.
+					$launch = array( 'user_id' => (int) $res['subject_uid'], 'date_start' => (string) ( $res['date_start'] ?? '' ), 'date_end' => (string) ( $res['date_end'] ?? '' ) );
+				}
 				return array(
-					'verb'      => 'commission',
-					'route'     => 'inline',
-					'render'    => self::commission_render_hint( $res ),
-					'query'     => $comm['subject'],
-					'focus'     => $comm['focus'] ?? '',
-					'result'    => $res,
-					'secondary' => self::detect_secondary( $raw, 'commission' ),
+					'verb'           => 'commission',
+					'route'          => 'inline',
+					'render'         => self::commission_render_hint( $res ),
+					'query'          => $comm['subject'],
+					'focus'          => $comm['focus'] ?? '',
+					'args'           => $args,
+					'app'            => 'commission-calculator',
+					'launch_options' => $launch,
+					'result'         => $res,
+					'secondary'      => self::detect_secondary( $raw, 'commission' ),
 				);
 			}
 			return $fallback;
+		}
+
+		// ── 0b. STOCK for an item: "<item> available", "how much <item> do we have". Before
+		// the aggregate guard, which would send "how much ..." to chat (and chat cannot read Stock). Quantities only.
+		$item = ( class_exists( 'ZDZ_Ask_Phrases' ) && method_exists( 'ZDZ_Ask_Phrases', 'match_stock' ) ) ? ZDZ_Ask_Phrases::match_stock( $raw ) : '';
+		if ( '' !== $item && class_exists( 'ZDZ_Capabilities' ) && ZDZ_Capabilities::get( 'stock.lookup' ) ) {
+			$res = ZDZ_Capabilities::invoke( 'stock.lookup', array( 'query' => $item ) );
+			// Only a list of items is a stock answer. A refusal (the shared device, no rights) or nothing matching goes
+			// on as before: the shared device still reaches chat.
+			if ( empty( $res['denied'] ) && ! empty( $res['items'] ) ) {
+				return array(
+					'verb'           => 'stock',
+					'route'          => 'inline',
+					'render'         => 'list',
+					'query'          => $item,
+					'args'           => array( 'query' => $item ),
+					'app'            => 'stock',
+					'launch_options' => array( 'query' => $item ),
+					'result'         => $res,
+				);
+			}
+			// Nothing in the stock list matches: not a stock question after all; it goes on as before.
+		}
+
+		// ── 0c. A QUICK ANSWER from stored data, shown under the ask bar as soon as it is known. Before the aggregate
+		// guard, because these ARE the aggregates ("Alex's sales last 3 months", "how many leads in 2026"): the Analytics
+		// app answers them by code from its ledger through the registry verb ask.quick. Anything it does not take goes
+		// on as before.
+		$quick = self::quick( $raw );
+		if ( null !== $quick ) {
+			return $quick;
 		}
 
 		// ── Analytics / aggregate framing ALWAYS goes to chat (never a card). ──
@@ -102,25 +142,25 @@ class ZDZ_Orchestrator {
 		$contact_name = self::detect_contact( $raw );
 		if ( $contact_name !== '' ) {
 			if ( class_exists( 'ZDZ_Contact_Bridge' ) && ZDZ_Contact_Bridge::is_available() ) {
-				// v2.28.8 FAST CACHE — contact lookups are a live FreshBooks hit (~2-3s)
+				// FAST CACHE — contact lookups are a live FreshBooks hit (~2-3s)
 				// and employees look up the same customers repeatedly. Cache the bridge
 				// result for 10 min, keyed on the normalized name + requesting user
 				// (so per-user disclosure scope is never shared). A hit returns instantly.
 				$c_key = 'zdz_contact_' . md5( strtolower( $contact_name ) . '|' . $uid );
 				$res   = get_transient( $c_key );
 				if ( ! is_array( $res ) || empty( $res['success'] ) ) {
-					$res = ZDZ_Contact_Bridge::lookup_for_zana( array(
-						'query'              => $contact_name,
-						'tier'               => '',
-						'is_kiosk'           => false,
-						'requesting_user_id' => $uid,
-					) );
-					if ( is_array( $res ) && ! empty( $res['success'] ) ) {
+					$res = self::run( 'contact.lookup', array( 'query' => $contact_name ), $uid, function ( $a ) {
+						return ZDZ_Contact_Bridge::lookup_for_zana( $a );
+					} );
+					// A refusal is never cached; only an answer is.
+					if ( is_array( $res ) && ! empty( $res['success'] ) && empty( $res['denied'] ) ) {
 						set_transient( $c_key, $res, 10 * MINUTE_IN_SECONDS );
 					}
 				}
 				return array(
 					'verb'      => 'contact',
+					'args'      => array( 'query' => $contact_name ),
+					'app'       => '',
 					'route'     => 'inline',
 					'render'    => self::contact_render_hint( $res ),
 					'query'     => $contact_name,
@@ -138,13 +178,10 @@ class ZDZ_Orchestrator {
 			if ( class_exists( 'ZEST_ZANA_Bridge' )
 				&& method_exists( 'ZEST_ZANA_Bridge', 'lookup_for_zana' )
 				&& ZEST_ZANA_Bridge::is_available() ) {
-				$res = ZEST_ZANA_Bridge::lookup_for_zana( array(
-					'customer'    => $doc_name,
-					'window_days' => 90,
-					'tier'        => '',
-					'is_kiosk'    => false,
-				) );
-				// v2.28.7 — honour an explicit doc-type in the query. If the user asked
+				$res = self::run( 'estimate.lookup', array( 'customer' => $doc_name, 'window_days' => 90 ), $uid, function ( $a ) {
+					return ZEST_ZANA_Bridge::lookup_for_zana( $a );
+				} );
+				// honour an explicit doc-type in the query. If the user asked
 				// for "estimate(s)" or "invoice(s)" (but not both), filter the returned
 				// documents to that doc_type so "estimate for X" doesn't dump every doc.
 				$want_est = (bool) preg_match( '/\b(estimate|estimates|quote|quotes|bid|bids|proposal)\b/i', $raw );
@@ -166,6 +203,8 @@ class ZDZ_Orchestrator {
 				}
 				return array(
 					'verb'   => 'lookup',
+					'args'   => array( 'customer' => $doc_name ),
+					'app'    => 'estimate-creator',
 					'route'  => 'inline',
 					'render' => self::doc_render_hint( $res ),
 					'query'  => $doc_name,
@@ -177,6 +216,97 @@ class ZDZ_Orchestrator {
 
 		// ── Everything else → the bot. ──
 		return $fallback;
+	}
+
+	/**
+	 * The quick answer for a question, or null. The Analytics app's `ask.quick` decides who may and what it can
+	 * answer; the registry names the signed-in person and refuses the shared device. Only an answer comes
+	 * back as an inline card -- a refusal or "not one of mine" is null, so the ask bar goes on as before.
+	 */
+	public static function quick( string $raw ): ?array {
+		$raw = trim( $raw );
+		if ( '' === $raw || strlen( $raw ) > 400 || ! class_exists( 'ZDZ_Capabilities' ) || ! ZDZ_Capabilities::get( 'ask.quick' ) ) {
+			return null;
+		}
+		// A customer's documents or contact ("estimates for Robin", "invoices for Casey") stay the lookup's: a
+		// customer's first name is often a salesperson's, and a town's name a customer's
+		$doc = self::detect_doc_lookup( $raw );
+		$is_period = (bool) preg_match( '/^(?:the\s+)?(?:this|last|past|previous|next)\s+(?:\d+\s+)?(?:days?|weeks?|months?|quarters?|years?)$|^(?:today|yesterday|ytd|20\d\d)$/i', trim( $doc ) );
+		if ( ( '' !== $doc && ! $is_period ) || '' !== self::detect_contact( $raw ) ) {
+			return null;
+		}
+		$res = ZDZ_Capabilities::invoke( 'ask.quick', array( 'question' => $raw ) );
+		if ( ! is_array( $res ) || ! empty( $res['denied'] ) || empty( $res['answered'] ) || '' === trim( (string) ( $res['html'] ?? '' ) ) ) {
+			return null;
+		}
+		return array(
+			'verb'   => 'answer',
+			'route'  => 'inline',
+			'render' => 'answer',
+			'query'  => $raw,
+			'args'   => array( 'question' => $raw ),
+			'app'    => 'sales-analytics',
+			'result' => array(
+				'kind' => (string) ( $res['kind'] ?? '' ),
+				'html' => (string) $res['html'],
+				'ms'   => (int) ( $res['ms'] ?? 0 ),
+			),
+		);
+	}
+
+	/** The most trade words the ask bar takes, and the longest one. */
+	const QUICK_WORDS_MAX    = 50;
+	const QUICK_WORD_MAX_LEN = 40;
+
+	/**
+	 * The business's own words that mark a typed question as one the quick answers may take (its trade's items,
+	 * e.g. "panel", "panels"), as one pattern for the page (zdzData.askHint), or '' when it has none. Core adds no
+	 * words: the page's own list covers sales, documents, customers, leads and hours. A business lists its words on
+	 * the 'zdz_ask_quick_words' filter. Only plain words survive (letters, digits, spaces, hyphens, apostrophes),
+	 * so the result is a word list, never a pattern someone typed; each form is listed as it is said.
+	 */
+	public static function quick_hint_pattern(): string {
+		$words = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_ask_quick_words', array() ) : array();
+		if ( ! is_array( $words ) ) {
+			return '';
+		}
+		$clean = array();
+		foreach ( $words as $w ) {
+			if ( ! is_string( $w ) ) {
+				continue;
+			}
+			$w = mb_strtolower( trim( (string) preg_replace( '/\s+/u', ' ', $w ) ) );
+			if ( mb_strlen( $w ) < 2 || mb_strlen( $w ) > self::QUICK_WORD_MAX_LEN || ! preg_match( "/^[\\p{L}\\p{N}][\\p{L}\\p{N} '\\-]*$/u", $w ) ) {
+				continue;
+			}
+			$clean[ $w ] = true;
+			if ( count( $clean ) >= self::QUICK_WORDS_MAX ) {
+				break;
+			}
+		}
+		if ( ! $clean ) {
+			return '';
+		}
+		// Longest first, so "roof tile" is tried before "tile". The edges are spaces and punctuation rather than \b,
+		// which in JavaScript only sees ASCII letters (a word ending in "é" would never match).
+		$list = array_keys( $clean );
+		usort( $list, function ( $a, $b ) { return mb_strlen( $b ) - mb_strlen( $a ); } );
+		return '(?:^|[\\s"\'(,.;:!?])(' . implode( '|', $list ) . ')(?=$|[\\s"\'),.;:!?])';
+	}
+
+	/**
+	 * One way to run a read verb. Through ZDZ_Capabilities when the verb is registered (the ladder, the
+	 * kiosk rule, the signed-in person as the asker); else the bridge directly, with the same identity keys the
+	 * registry would set, so a mixed deploy (new theme, an older plugin) still answers.
+	 */
+	private static function run( string $verb, array $args, int $uid, callable $direct ): array {
+		if ( class_exists( 'ZDZ_Capabilities' ) && ZDZ_Capabilities::get( $verb ) ) {
+			return ZDZ_Capabilities::invoke( $verb, $args );
+		}
+		$kiosk = class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_kiosk( $uid );
+		$args += array( 'tier' => '', 'is_kiosk' => $kiosk, 'requesting_user_id' => $uid );
+		$out = $direct( $args );
+		return is_array( $out ) ? $out : array( 'success' => false, 'error' => 'No answer.' );
 	}
 
 	// ───────────────────────── intent detection ─────────────────────────
@@ -304,14 +434,19 @@ class ZDZ_Orchestrator {
 	 * did we pay") are NOT captured — they fall through to chat. The bridge does
 	 * the real tier/kiosk gating; this only routes.
 	 *
-	 * @since theme v2.28.0
+	 * @since theme
 	 * @param string $s
 	 * @return array|null { @type string $subject; @type string $period }
 	 */
 	public static function detect_commission( string $s ) {
+		// The rule is data in ZDZ_Ask_Phrases when that service is installed, run by the same steps app.js runs, so the
+		// client and the server cannot drift. Without it, the rule below (the same phrasings, written out).
+		if ( class_exists( 'ZDZ_Ask_Phrases' ) && method_exists( 'ZDZ_Ask_Phrases', 'match_commission' ) ) {
+			return ZDZ_Ask_Phrases::match_commission( $s );
+		}
 		$lo = strtolower( trim( $s ) );
 		$has_comm = ( strpos( $lo, 'commission' ) !== false );
-		// EARNINGS SHORTHAND (v2.28.6) — mirror of client earnFrame. On this sales
+		// EARNINGS SHORTHAND — mirror of client earnFrame. On this sales
 		// dashboard an unambiguous personal-earnings question with NO other app
 		// keyword means commission even without the word: "how much did Jordan earn",
 		// "what did Sam make", "how much does Alex take home". Require a
@@ -321,7 +456,7 @@ class ZDZ_Orchestrator {
 		if ( ! $has_comm && ! $earn_frame ) {
 			return null;
 		}
-		// PERSON-SPECIFIC override (v2.28.6): a possessive-name query like
+		// PERSON-SPECIFIC override: a possessive-name query like
 		// "Jordan's commission rate" / "what's Sam's May commission" is about ONE
 		// person and must NOT be swept into the company-wide rollup skip below.
 		$person_specific = (bool) preg_match( '/\b[A-Za-z][\w.\-]*(?:\'s|’s)\s+(?:(?:this|last|next)\s+(?:month|quarter|year|week)\s+|(?:january|february|march|april|may|june|july|august|september|october|november|december|q[1-4]|mtd|ytd|\d{4})\s+)?commissions?\b/i', $s );
@@ -331,7 +466,7 @@ class ZDZ_Orchestrator {
 			return null;
 		}
 
-		// Mirror of the client zdzDetectCommissionInline (v2.28.0). The server is
+		// Mirror of the client zdzDetectCommissionInline. The server is
 		// authoritative, so it must recognize the SAME phrasings the client routes
 		// to inline — including "<Name> commission" (name before the word) — or the
 		// client shows a card but the server re-classifies to chat (the period/
@@ -342,7 +477,7 @@ class ZDZ_Orchestrator {
 		$subject = '';
 
 		// "my commission" / "commission for me" → self (empty subject = self in bridge).
-		// v2.28.7 — self also matches first-person EARNINGS phrasing (mirror of client).
+		// self also matches first-person EARNINGS phrasing (mirror of client).
 		$is_self = (bool) preg_match( '/\b(my|me|mine)\b/i', $lo )
 			|| (bool) preg_match( '/\b(?:did|do|have|has|how much (?:have|did))?\s*i\s+(?:have\s+)?(?:earn|earned|make|made|get|got|take home|took home|bring in|brought in|pull|pulled)\b/i', $s )
 			|| (bool) preg_match( '/\bmy\s+(?:total\s+)?(?:pay|earnings|take)\b/i', $lo );
@@ -350,9 +485,9 @@ class ZDZ_Orchestrator {
 		$take = function ( $cand ) use ( $stop_re ) {
 			$n = self::clean_name( (string) $cand );
 			// Strip an orphaned leading "s " left when "what's"/"that's" backtracks the
-			// possessive regex onto the bare "s" (v2.28.6) — no real name is a lone "s".
+			// possessive regex onto the bare "s" — no real name is a lone "s".
 			$n = preg_replace( '/^s\s+/i', '', $n );
-			// v2.28.7 — first-person/auxiliary fragments are self-references, not names.
+			// first-person/auxiliary fragments are self-references, not names.
 			if ( preg_match( '/^(?:i|have i|has i|had i|did i|do i|i have|i did)$/i', trim( $n ) ) ) { return ''; }
 			// Strip leading prepositions/verbs/fillers the regex may sweep in
 			// ("on Alex", "is Alex", "did Alex"). Repeat until none remain —
@@ -382,7 +517,7 @@ class ZDZ_Orchestrator {
 		if ( preg_match( '/\b' . $pname . '(?:\'s|’s)\s+' . $periodw . 'commissions?\b/i', $s, $m ) ) {
 			$subject = $take( $m[1] );
 		}
-		// v2.28.7 — MULTI-PERSON: take the FIRST valid name (the authoritative
+		// MULTI-PERSON: take the FIRST valid name (the authoritative
 		// path returns one subject; the client notes the others in the label).
 		if ( $subject === '' ) {
 			if ( preg_match( '/\b' . $pname . '\s+(?:and|&|,|or|vs|versus)\s+' . $pname . '(?:\s+[a-z]+)?\s+commissions?\b/i', $s, $mm ) ) {
@@ -499,7 +634,7 @@ class ZDZ_Orchestrator {
 	 *   card    — a real figure to show (with the expandable breakdown)
 	 *   message — fallback text
 	 *
-	 * @since theme v2.28.0
+	 * @since theme
 	 * @param array $res ZCC_ZANA_Bridge::commission_calc_for_zana result.
 	 * @return string
 	 */
@@ -517,7 +652,7 @@ class ZDZ_Orchestrator {
 	}
 
 	/**
-	 * v2.28.11: Detect a SECOND read-intent in a compound ask so the dashboard
+	 * Detect a SECOND read-intent in a compound ask so the dashboard
 	 * can surface it instead of silently dropping it. classify() resolves only
 	 * the FIRST matching intent; a query like "Devin's phone and Jordan's
 	 * commission" rendered the commission card and lost the contact half. This

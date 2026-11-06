@@ -64,8 +64,8 @@
 	 * Mount a single .zdz-exif anchor.
 	 */
 	function mount(root) {
-		if (!root || root.__tsExifMounted) return;
-		root.__tsExifMounted = true;
+		if (!root || root.__zdzExifMounted) return;
+		root.__zdzExifMounted = true;
 
 		var mediaId = root.getAttribute('data-media-id');
 		if (!mediaId) return;

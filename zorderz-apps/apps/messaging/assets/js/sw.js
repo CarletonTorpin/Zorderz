@@ -81,7 +81,10 @@ self.addEventListener('notificationclick', (event) => {
 // in the SW, so the best we can do is notify the page to re-subscribe.
 self.addEventListener('pushsubscriptionchange', (event) => {
   event.waitUntil((async () => {
-    const clients = await self.clients.matchAll({ type: 'window' });
+    // includeUncontrolled: this worker's scope is the app's assets/js/ folder, so it controls no page; without it
+    // matchAll() finds no window and the message never reaches anyone. The theme's shared routine (ZDZPush)
+    // listens and re-subscribes without a prompt.
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of clients) {
       c.postMessage({ type: 'zim-push-resubscribe' });
     }

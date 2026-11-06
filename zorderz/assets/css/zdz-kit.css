@@ -1,0 +1,329 @@
+/* Kit of parts. The look of ZDZ.ui (assets/js/zdz-kit.js) and the
+   shared button. Contract: KIT-OF-PARTS-v1.md. Every token has a fallback, because this file also loads on
+   wp-admin pages opened inside the app, where style.css's tokens are not present.
+   The group colors (--zdz-grp-*) and the "needs you" color are printed inline from ZDZ_App_Groups, the one
+   place they are defined. [CORE] */
+
+:root{
+  --zdz-kit-radius:var(--ref-radius-md,12px);   /* buttons, inputs, cards: rounded corners, never ovals */
+  --zdz-kit-radius-sheet:var(--ref-radius-xl,20px);
+  --zdz-kit-tap:44px;                           /* minimum touch target */
+  --zdz-kit-danger:#B91C1C;                     /* white on it is 6.5:1 */
+  --zdz-kit-danger-ink:#FFFFFF;
+}
+
+/* ---------------------------------------------------------------- button */
+.zdz-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--ref-space-2,8px);
+  min-height:var(--zdz-kit-tap);padding:var(--ref-space-2,8px) var(--ref-space-4,16px);
+  border-radius:var(--zdz-kit-radius);border:1.5px solid transparent;
+  font:inherit;font-size:var(--ref-font-sm,18px);font-weight:var(--sys-font-wt-sb,600);line-height:1.2;
+  cursor:pointer;text-decoration:none;white-space:nowrap;-webkit-tap-highlight-color:transparent;
+  transition:background-color var(--ref-dur-fast,150ms),border-color var(--ref-dur-fast,150ms),transform 80ms}
+.zdz-btn:active{transform:scale(.98)}
+.zdz-btn:focus-visible{outline:3px solid var(--sys-brand,#2563EB);outline-offset:2px}
+.zdz-btn[disabled],.zdz-btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed;transform:none}
+.zdz-btn--primary{background:var(--sys-brand,#2563EB);color:var(--sys-text-brand,#FFFFFF)}
+.zdz-btn--primary:hover{background:var(--sys-brand-hover,#1D4ED8)}
+.zdz-btn--secondary{background:var(--sys-surface,#FFFFFF);color:var(--sys-text,#0F172A);border-color:var(--sys-border-strong,#CBD5E1)}
+.zdz-btn--secondary:hover{border-color:var(--sys-brand,#2563EB)}
+.zdz-btn--danger{background:var(--zdz-kit-danger);color:var(--zdz-kit-danger-ink)}
+.zdz-btn--quiet{background:transparent;color:var(--sys-brand,#2563EB);padding-left:var(--ref-space-3,12px);padding-right:var(--ref-space-3,12px)}
+.zdz-btn--quiet:hover{background:var(--sys-surface-subtle,rgba(0,0,0,.04))}
+.zdz-btn--block{display:flex;width:100%}
+/* a full-width button wraps its label instead of running out of its box (nowrap + width:100% overflows). */
+.zdz-btn--block{white-space:normal;text-align:center;overflow-wrap:anywhere;min-width:0}
+.zdz-btn--sm{font-size:var(--ref-font-xs,16px);padding:var(--ref-space-1,4px) var(--ref-space-3,12px)}
+@media (min-width:820px){ .zdz-btn--sm{min-height:36px} } /* a mouse can be precise; a thumb cannot */
+.zdz-btn--secondary.zdz-btn-busy::after,.zdz-btn--quiet.zdz-btn-busy::after{color:var(--zdz-busy-ink, var(--sys-text,#0F172A))}
+.zdz-btn--danger.zdz-btn-busy::after{color:var(--zdz-busy-ink, var(--zdz-kit-danger-ink))}
+/* Busy, complete here too: on an app's full view (wp-admin) app.css is not loaded. Same look as
+   app.css's .zdz-btn-busy; under Reduce Motion app.css (and the rule below) make it breathe instead. */
+.zdz-btn.zdz-btn-busy{position:relative;pointer-events:none;color:transparent!important}
+.zdz-btn.zdz-btn-busy>*{visibility:hidden}
+.zdz-btn.zdz-btn-busy::after{content:'';position:absolute;top:50%;left:50%;width:1.1em;height:1.1em;margin:-.55em 0 0 -.55em;
+  border:2px solid currentColor;border-top-color:transparent;border-radius:50%;visibility:visible;
+  color:var(--zdz-busy-ink, var(--sys-text-brand,#FFFFFF));animation:zdz-kit-turn .7s linear infinite}
+@keyframes zdz-kit-turn{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){ .zdz-btn.zdz-btn-busy::after{animation:zdz-breathe 1.4s ease-in-out infinite;border-top-color:currentColor} }
+.zdz-btn-row{display:flex;flex-wrap:wrap;gap:var(--ref-space-2,8px);align-items:center}
+
+/* ---------------------------------------------------------------- loading: three dots that breathe.
+   Opacity only — no movement — so it is the same with Reduce Motion on and still says "working". */
+.zdz-loading{display:flex;align-items:center;justify-content:center;gap:var(--ref-space-3,12px);
+  padding:var(--ref-space-6,24px) var(--ref-space-4,16px);color:var(--sys-text-sec,#475569);
+  font-size:var(--ref-font-sm,18px)}
+.zdz-loading-dots{display:inline-flex;gap:6px}
+.zdz-loading-dots i{width:9px;height:9px;border-radius:50%;background:currentColor;display:block;
+  animation:zdz-breathe 1.2s ease-in-out infinite}
+.zdz-loading-dots i:nth-child(2){animation-delay:.2s}
+.zdz-loading-dots i:nth-child(3){animation-delay:.4s}
+@keyframes zdz-breathe{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ---------------------------------------------------------------- toast: complete here (app.css's .toast looks the same) */
+.zdz-toast{display:flex;align-items:center;justify-content:space-between;gap:var(--ref-space-2,8px);pointer-events:auto;
+  background:var(--sys-surface-raised,#F8FAFC);color:var(--sys-text,#0F172A);border:1px solid var(--sys-border,#E2E8F0);
+  border-radius:var(--ref-radius-md,12px);box-shadow:var(--sys-shadow-lg,0 12px 32px rgba(0,0,0,.12));
+  padding:var(--ref-space-3,12px) var(--ref-space-4,16px);font-size:var(--ref-font-sm,18px);font-weight:var(--sys-font-wt-md,500);
+  animation:zdz-toast-in var(--ref-dur-norm,250ms) ease forwards}
+.zdz-toast.out{animation:zdz-toast-out var(--ref-dur-norm,250ms) ease forwards}
+@keyframes zdz-toast-in{from{transform:translateY(-20px);opacity:0}to{transform:none;opacity:1}}
+@keyframes zdz-toast-out{to{transform:translateY(-20px);opacity:0}}
+@media (prefers-reduced-motion:reduce){ .zdz-toast,.zdz-toast.out{animation-name:none} .zdz-toast.out{opacity:0} }
+.zdz-toast-text{flex:1 1 auto;min-width:0}
+.zdz-toast-action{flex:0 0 auto;min-height:var(--zdz-kit-tap);padding:0 var(--ref-space-3,12px);margin:-8px -8px -8px 0;
+  background:transparent;border:0;border-radius:var(--ref-radius-sm,8px);font:inherit;font-weight:var(--sys-font-wt-b,700);
+  color:var(--sys-brand,#2563EB);cursor:pointer}
+.zdz-toast--error{border-left:4px solid var(--zdz-kit-danger)}
+.zdz-toast--success{border-left:4px solid var(--sys-success,#10B981)}
+#toast-container.zdz-toast-host{position:fixed;left:50%;transform:translateX(-50%);z-index:300;
+  top:calc(env(safe-area-inset-top,0px) + 16px);display:flex;flex-direction:column;gap:8px;
+  width:calc(100% - 32px);max-width:400px;pointer-events:none}
+
+/* ---------------------------------------------------------------- sheet: bottom on a phone, centered at 820+ */
+html.zdz-sheet-open,html.zdz-sheet-open body{overflow:hidden}
+html.zdz-sheet-open #toast-container{z-index:1300} /* an Undo raised from a sheet must be reachable (review L7) */
+/* a message from the marks (Saved, someone else saved first, a limit, a photo still loading) shows above the photo
+   viewers (Projects 100060) and the drawing bar (100090), not under them; zdz-kit.js lifts it only while one is showing. */
+/* the id twice outranks Media's own lift (html body.zml-lb-open #toast-container, 100090) */
+html.zdz-marking #toast-container#toast-container,html.zdz-marks-said #toast-container#toast-container{z-index:100100}
+/* ... but never in the way: a lifted message lets taps through to the bar and the viewer's own buttons under it, and
+   when the bar has been moved to the top the messages show at the bottom instead. */
+html.zdz-marking #toast-container .zdz-toast,html.zdz-marks-said #toast-container .zdz-toast,
+html.zdz-marking #toast-container .toast,html.zdz-marks-said #toast-container .toast{pointer-events:none}
+html.zdz-marks-bar-top #toast-container{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+.zdz-sheet-root{position:fixed;inset:0;z-index:1200;display:flex;align-items:flex-end;justify-content:center}
+.zdz-sheet-backdrop{position:absolute;inset:0;background:var(--sys-overlay,rgba(0,0,0,.45));opacity:0;
+  transition:opacity var(--ref-dur-norm,250ms)}
+.zdz-sheet{position:relative;display:flex;flex-direction:column;width:100%;max-height:min(88vh,88dvh);
+  background:var(--sys-surface,#FFFFFF);color:var(--sys-text,#0F172A);
+  border-radius:var(--zdz-kit-radius-sheet) var(--zdz-kit-radius-sheet) 0 0;box-shadow:var(--sys-shadow-xl,0 24px 48px rgba(0,0,0,.16));
+  padding-bottom:env(safe-area-inset-bottom,0px);transform:translateY(100%);
+  transition:transform var(--ref-dur-slow,350ms) var(--ref-ease-spring,cubic-bezier(.32,.72,0,1));outline:none}
+.zdz-sheet-root.is-open .zdz-sheet-backdrop{opacity:1}
+.zdz-sheet-root.is-open .zdz-sheet{transform:none}
+.zdz-sheet-root.is-closing .zdz-sheet-backdrop{opacity:0}
+.zdz-sheet-root.is-closing .zdz-sheet{transform:translateY(100%)}
+.zdz-sheet-head{position:relative;display:flex;align-items:center;gap:var(--ref-space-2,8px);
+  padding:var(--ref-space-5,20px) var(--ref-space-4,16px) var(--ref-space-2,8px)}
+.zdz-sheet-grab{position:absolute;top:8px;left:50%;width:40px;height:5px;margin-left:-20px;border-radius:3px;
+  background:var(--sys-border-strong,#CBD5E1)}
+.zdz-sheet-title{flex:1 1 auto;margin:0;font-size:var(--ref-font-md,22px);font-weight:var(--sys-font-wt-b,700);line-height:1.25}
+.zdz-sheet-x{flex:0 0 auto;width:var(--zdz-kit-tap);height:var(--zdz-kit-tap);margin:-6px -6px -6px auto;border:0;
+  border-radius:var(--ref-radius-sm,8px);background:transparent;color:var(--sys-text-sec,#475569);
+  font-size:28px;line-height:1;cursor:pointer}
+.zdz-sheet-x:hover{background:var(--sys-surface-subtle,rgba(0,0,0,.04))}
+.zdz-sheet-body{flex:1 1 auto;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding:var(--ref-space-2,8px) var(--ref-space-4,16px) var(--ref-space-4,16px)}
+.zdz-sheet-foot{flex:0 0 auto;border-top:1px solid var(--sys-border,#E2E8F0);padding:var(--ref-space-2,8px) var(--ref-space-4,16px) var(--ref-space-3,12px)}
+.zdz-sheet-status{box-sizing:border-box;min-height:calc(1.4em + 2 * var(--ref-space-2,8px));line-height:1.4;padding:var(--ref-space-2,8px) 2px;font-size:var(--ref-font-xs,16px)}
+.zdz-sheet-status.is-error{color:var(--sys-tint-error-fg,#991B1B)} /* --sys-error is 3.8:1 on white: too faint for words */
+.zdz-sheet-actions{display:flex;flex-direction:column-reverse;gap:var(--ref-space-2,8px)}
+.zdz-sheet-actions .zdz-btn{width:100%}
+@media (min-width:820px){
+  .zdz-sheet-root{align-items:center;padding:var(--ref-space-6,24px)}
+  .zdz-sheet{max-width:560px;max-height:min(80vh,720px);border-radius:var(--zdz-kit-radius-sheet);
+    transform:translateY(12px) scale(.98);opacity:0;transition:transform var(--ref-dur-norm,250ms),opacity var(--ref-dur-norm,250ms)}
+  .zdz-sheet-root.is-open .zdz-sheet{opacity:1}
+  .zdz-sheet-root.is-closing .zdz-sheet{transform:translateY(12px) scale(.98);opacity:0}
+  .zdz-sheet-grab{display:none}
+  .zdz-sheet-head{padding-top:var(--ref-space-4,16px)}
+  .zdz-sheet-actions{flex-direction:row;justify-content:flex-end}
+  .zdz-sheet-actions .zdz-btn{width:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  .zdz-sheet,.zdz-sheet-backdrop{transition:opacity 120ms!important}
+  .zdz-sheet,.zdz-sheet-root.is-closing .zdz-sheet{transform:none!important}
+  .zdz-sheet-root:not(.is-open) .zdz-sheet{opacity:0}
+  .zdz-sheet-root.is-open .zdz-sheet{opacity:1}
+}
+
+/* ---------------------------------------------------------------- the "needs you" badge, on any [data-zdz-app] plate */
+[data-zdz-app].zdz-has-needs{position:relative}
+.zdz-needs-you{position:absolute;top:-6px;right:-6px;min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;
+  border-radius:11px;background:var(--zdz-needs-you,#D55E00);color:var(--zdz-needs-you-ink,#FFFFFF);border:2px solid var(--sys-surface,#FFFFFF);
+  font:700 13px/18px system-ui,-apple-system,sans-serif;text-align:center;pointer-events:none;z-index:1}
+
+/* ---------------------------------------------------------------- the person badge */
+.zdz-person{display:inline-block;width:30px;height:30px;flex:0 0 auto;vertical-align:middle;line-height:0}
+.zdz-person svg{display:block;width:100%;height:100%;overflow:visible}
+.zdz-person text{font-family:system-ui,-apple-system,sans-serif;font-weight:700;letter-spacing:.02em}
+.zdz-person--sm{width:22px;height:22px}
+.zdz-person--lg{width:44px;height:44px}
+
+/* ---------------------------------------------------------------- Sunlight: monochrome edges, color kept on plates */
+[data-theme="sunlight"] .zdz-btn--secondary{border:2px solid #000}
+[data-theme="sunlight"] .zdz-btn--quiet{text-decoration:underline}
+[data-theme="sunlight"] .zdz-sheet{border:2px solid #000;box-shadow:none}
+[data-theme="sunlight"] .zdz-needs-you{border-color:#000}
+[data-theme="sunlight"] .zdz-person .zdz-person-shape{stroke:#000;stroke-width:2}
+[data-theme="sunlight"] [data-zdz-app]{box-shadow:inset 0 0 0 2px #000}
+
+/* ---------------------------------------------------------------- paper: ZDZ.ui.paper — an estimate or
+   invoice laid out like the billing system's own PDF. Paper stays paper: white with black ink in dark mode too, as a
+   printed document would. It reflows by the width of the box it sits in (a container query), so it fits a Messages
+   panel as well as a full page. Measurements (1 pt = 1 CSS px, the card's top-left the origin): Arial only, never
+   bold; 14 px on 18 px lines, 12 px descriptions on 16 px, a 36 px amount due; a 780 px card, 10 px corners, 50 px
+   sides; a 300 px logo at (50, 30); "Billed To" / "Prepared For" 256 down; four columns ending 530 / 630 / 730; a
+   340 px totals block at 390-730 (labels ending 589 on an invoice, 594 on an estimate); Notes 24 px under an
+   invoice's totals, 44 px under an estimate's. Never a link out; a "Copy customer link" for callers that can give one. */
+.zdz-paper-wrap{container-type:inline-size;margin:var(--ref-space-2,8px) 0 var(--ref-space-1,4px)}
+.zdz-paper-bar{max-width:780px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 6px;
+  font-size:var(--ref-font-xs,16px);color:var(--sys-text-sec,#475569)}
+.zdz-paper-bar button:disabled{opacity:.5;cursor:default}
+.zdz-paper-note{flex:1 1 100%}
+.zdz-paper-copy-note{font-size:13px;color:var(--sys-text-sec,#475569)}
+.zdz-paper-copy-box{box-sizing:border-box;display:block;width:100%;max-width:780px;margin:0 0 6px;font-size:13px}
+.zdz-paper,.zdz-paper-ghost{--zdz-paper-label:var(--zdz-paper-label-ink,#4f697a);--zdz-paper-rule:var(--zdz-paper-rule-ink,#ccd1d9);
+  box-sizing:border-box;max-width:780px;background:var(--zdz-paper-bg,#FFFFFF);color:var(--zdz-paper-ink,#000000);
+  font-family:Arial,Helvetica,sans-serif;font-feature-settings:normal;font-variant-numeric:normal;font-weight:normal;
+  font-size:14px;line-height:18px;letter-spacing:normal;text-transform:none;padding:29px 49px 52px;
+  border:1px solid var(--zdz-paper-edge,#dcdcde);border-radius:10px;box-shadow:0 1px 3px var(--zdz-paper-shadow,rgba(0,0,0,.08));
+  white-space:normal;text-align:left}
+.zdz-paper :where(div,span,table,th,td,p){font-family:inherit;font-weight:normal;letter-spacing:normal}
+/* While the document is read: a blank sheet the size of one (ZDZ.ui.paperGhost), so nothing jumps when it arrives. */
+.zdz-paper-ghost{min-height:640px;display:flex;align-items:center;justify-content:center}
+.zdz-paper-ghost .zdz-paper-ghost-msg{margin:0;font-size:14px;color:var(--zdz-paper-label)}
+.zdz-paper-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:56px}
+.zdz-paper-logo{width:300px;max-width:48%;height:auto;display:block}
+.zdz-paper-biz{text-align:right;margin-top:2px}
+.zdz-paper-biz>div,.zdz-paper-value{white-space:pre-line;overflow-wrap:anywhere}
+.zdz-paper-label{color:var(--zdz-paper-label)}
+.zdz-paper-meta{display:grid;grid-template-columns:minmax(0,210fr) minmax(0,150fr) minmax(0,150fr) minmax(min-content,170fr);gap:0;margin-bottom:49px}
+.zdz-paper-col .zdz-paper-field+.zdz-paper-field{margin-top:15px}
+.zdz-paper-due{text-align:right}
+.zdz-paper-big{font-size:36px;line-height:40px;white-space:nowrap;overflow-wrap:normal}
+.zdz-paper .zdz-paper-lines{display:table;table-layout:auto;width:100%;border-collapse:collapse;border-top:3px solid var(--zdz-paper-label)}
+.zdz-paper .zdz-paper-lines th:nth-child(n+2),.zdz-paper .zdz-paper-lines td:nth-child(n+2){width:14.706%}
+.zdz-paper .zdz-paper-lines th{color:var(--zdz-paper-label);font-size:14px;line-height:18px;background:none;font-weight:normal;
+  text-align:left;padding:12px 0 8px;border:0}
+.zdz-paper .zdz-paper-lines td{color:var(--zdz-paper-ink,#000000);font-size:14px;line-height:18px;background:none;white-space:normal;
+  text-align:left;vertical-align:top;padding:12px 0 9px;border:0;border-bottom:1px solid var(--zdz-paper-rule)}
+.zdz-paper .zdz-paper-lines .num{text-align:right;white-space:nowrap;padding-left:8px}
+.zdz-paper-item{white-space:pre-line;overflow-wrap:anywhere}
+.zdz-paper-item-desc{font-size:12px;line-height:16px;white-space:pre-line;overflow-wrap:anywhere}
+.zdz-paper-totals{margin:35px 0 0 auto;width:min(100%,340px)}
+.zdz-paper-trow{display:flex;justify-content:flex-end;gap:0;padding:2px 0}
+.zdz-paper-trow span:first-child{flex:1;text-align:right;padding-right:0}
+.zdz-paper-trow span.num{width:41.5%;text-align:right}
+.zdz-paper.is-estimate .zdz-paper-trow span.num{width:40%}
+.zdz-paper-trow.is-rule{border-top:1px solid var(--zdz-paper-rule);margin-top:6px;padding-top:12px}
+.zdz-paper-trow.is-due{border-top:3px double var(--zdz-paper-rule);margin-top:4px;padding-top:12px;color:var(--zdz-paper-label)}
+.zdz-paper-trow.is-due span.num{color:var(--zdz-paper-ink,#000000)}
+.zdz-paper-notes{margin-top:24px}
+.zdz-paper.is-estimate .zdz-paper-totals+.zdz-paper-notes{margin-top:44px}
+/* FreshBooks widens "Billed To" for a long address (its own column, at least 210 px, the text plus 44 px; the date
+   column follows), as Commission 2.15.4 and Charts 0.35.0. On the full sheet only. */
+@container (min-width:760px){
+  .zdz-paper-meta{grid-template-columns:fit-content(330px) minmax(0,150px) minmax(0,150px) minmax(min-content,1fr)}
+  .zdz-paper-billed{min-width:210px;padding-right:44px;box-sizing:border-box}
+}
+@container (max-width:640px){
+  .zdz-paper{padding:20px 16px 24px}
+  .zdz-paper-ghost{padding:20px 16px 24px;min-height:380px}
+  .zdz-paper-top{margin-bottom:24px}
+  .zdz-paper-logo{width:160px}
+  .zdz-paper-biz{font-size:12px}
+  .zdz-paper-meta{grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}
+  .zdz-paper-due{grid-column:1/-1;text-align:left;order:-1}
+  .zdz-paper-big{font-size:28px;line-height:32px}
+  .zdz-paper .zdz-paper-lines thead{display:none}
+  .zdz-paper .zdz-paper-lines,.zdz-paper .zdz-paper-lines tbody{display:block}
+  .zdz-paper .zdz-paper-lines tr{display:grid;grid-template-columns:1fr auto auto;gap:2px 12px;padding:10px 0;
+    border-bottom:1px solid var(--zdz-paper-rule)}
+  .zdz-paper .zdz-paper-lines td{border:0;padding:0;width:auto!important}
+  .zdz-paper .zdz-paper-lines td.zdz-paper-desc{grid-column:1/-1}
+  .zdz-paper .zdz-paper-lines td.num{padding:0;font-size:12px;text-align:left}
+  .zdz-paper .zdz-paper-lines td.num::before{content:attr(data-label) " ";color:var(--zdz-paper-label)}
+  .zdz-paper .zdz-paper-lines td:last-child{text-align:right}
+}
+.zdz-paper-print-copy{display:none}
+@media print{
+  body.zdz-paper-printing .zdz-paper-print-copy{display:block}
+  body.zdz-paper-printing *{visibility:hidden!important}
+  body.zdz-paper-printing .zdz-paper.is-printing,body.zdz-paper-printing .zdz-paper.is-printing *{visibility:visible!important}
+  body.zdz-paper-printing .zdz-paper.is-printing{position:absolute;left:0;top:0;width:100%;max-width:none;border:0;box-shadow:none;
+    padding:.4in .5in}
+}
+
+/* ---------------------------------------------------------------- marks: lines drawn on a photo
+   The layer sits exactly over the viewer's <img> (zdz-kit.js sets its box and copies the image's transform), so it needs
+   no rule from the viewer. It never takes a tap except while someone is drawing. */
+.zdz-marks{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:1;-webkit-user-select:none;user-select:none}
+.zdz-marks.is-editing{pointer-events:auto;touch-action:none;cursor:crosshair}
+.zdz-marks-bar{position:fixed;left:50%;bottom:calc(12px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  z-index:100090;display:flex;flex-direction:column;align-items:center;gap:8px;
+  width:max-content;max-width:calc(100vw - 24px);box-sizing:border-box;padding:10px 12px;
+  border-radius:var(--zdz-kit-radius);background:rgba(17,17,20,.94);color:#fff;
+  box-shadow:0 8px 28px rgba(0,0,0,.45);font-size:var(--ref-font-xs,16px)}
+.zdz-marks-bar.is-top{bottom:auto;top:calc(12px + env(safe-area-inset-top,0px))}
+.zdz-marks-bar.is-saving .zdz-marks-pen,.zdz-marks-bar.is-saving .zdz-marks-size{opacity:.5}
+.zdz-marks-hint{text-align:center;line-height:1.3;opacity:.85}
+.zdz-marks-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 14px}
+.zdz-marks-group{display:flex;align-items:center;gap:6px}
+.zdz-marks-pen,.zdz-marks-size{width:var(--zdz-kit-tap);height:var(--zdz-kit-tap);display:inline-flex;align-items:center;justify-content:center;
+  padding:0;border:2px solid rgba(255,255,255,.25);border-radius:10px;background:transparent;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
+.zdz-marks-swatch{display:block;width:22px;height:22px;border-radius:5px;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
+.zdz-marks-pen[aria-pressed="true"],.zdz-marks-size[aria-pressed="true"]{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.zdz-marks-pen:focus-visible,.zdz-marks-size:focus-visible{outline:3px solid var(--sys-brand,#2563EB);outline-offset:2px}
+.zdz-marks-dot{display:block;background:#fff;border-radius:2px}
+.zdz-marks-dot--1{width:14px;height:3px}
+.zdz-marks-dot--2{width:16px;height:6px}
+.zdz-marks-dot--3{width:18px;height:10px}
+.zdz-marks-acts .zdz-btn--secondary{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.35)}
+.zdz-marks-acts .zdz-btn--quiet{color:#fff}
+@media (max-width:520px){ .zdz-marks-row{gap:8px} .zdz-marks-acts{flex:1 1 100%;justify-content:center} }
+/* ---- each person's drawing, notes on Post-its, the Drawings list, the outline on a tile */
+/* six buttons now (Who sees it joined): they wrap on a phone instead of running off its right edge (found by the Jobs suite at 390 px) */
+.zdz-marks-acts{flex-wrap:wrap;justify-content:center}
+.zdz-marks .zdz-marks-note{pointer-events:auto;cursor:pointer}
+.zdz-marks.is-editing .zdz-marks-note{cursor:crosshair}
+.zdz-marks-tool{min-height:var(--zdz-kit-tap);padding:0 12px;border:2px solid rgba(255,255,255,.25);border-radius:var(--zdz-kit-radius);
+  background:transparent;color:#fff;font:inherit;font-size:var(--ref-font-xs,16px);font-weight:var(--sys-font-wt-sb,600);cursor:pointer}
+.zdz-marks-tool[aria-pressed="true"]{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.zdz-marks-tool:focus-visible{outline:3px solid var(--sys-brand,#2563EB);outline-offset:2px}
+.zdz-marks-notebox{display:flex;flex-direction:column;gap:6px;width:min(560px,100%);margin:0 auto}
+.zdz-marks-notelabel{font-size:var(--ref-font-xs,16px);opacity:.9}
+.zdz-marks-notetext{width:100%;box-sizing:border-box;min-height:72px;resize:vertical;padding:8px 10px;border-radius:var(--zdz-kit-radius);
+  border:1px solid rgba(255,255,255,.4);background:#FFF8DC;color:#1f2933;font:inherit;font-size:var(--ref-font-sm,18px)}
+.zdz-marks-sharebox{width:min(560px,100%);margin:0 auto}
+.zdz-marks-shareline{text-align:center;font-size:var(--ref-font-xs,16px);opacity:.85}
+.zdz-marks-share-opts{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.zdz-marks-share-opt{min-height:var(--zdz-kit-tap);padding:0 12px;border-radius:var(--zdz-kit-radius);border:2px solid currentColor;
+  background:transparent;color:inherit;font:inherit;font-size:var(--ref-font-xs,16px);cursor:pointer;opacity:.8}
+.zdz-marks-share-opt[aria-checked="true"]{opacity:1;box-shadow:0 0 0 2px currentColor inset;font-weight:var(--sys-font-wt-sb,600)}
+.zdz-marks-share-people{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px;max-height:30vh;overflow:auto}
+.zdz-marks-person{display:inline-flex;align-items:center;gap:8px;min-height:var(--zdz-kit-tap);padding:0 12px;border-radius:var(--zdz-kit-radius);
+  border:1px solid currentColor;background:transparent;color:inherit;font:inherit;font-size:var(--ref-font-xs,16px);cursor:pointer;opacity:.75}
+.zdz-marks-person[aria-pressed="true"]{opacity:1;box-shadow:0 0 0 2px currentColor inset;font-weight:var(--sys-font-wt-sb,600)}
+.zdz-marks-person-ini{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 4px;border-radius:8px;
+  background:var(--sys-brand,#2563EB);color:#fff;font-size:13px;font-weight:700}
+.zdz-marks-share-empty{opacity:.8}
+.zdz-marks-card,.zdz-marks-panel{position:fixed;z-index:100095;width:min(340px,calc(100vw - 16px));max-height:min(70vh,560px);overflow:auto;
+  box-sizing:border-box;padding:12px 14px;border-radius:var(--zdz-kit-radius);background:var(--sys-surface,#fff);color:var(--sys-text,#0f172a);
+  box-shadow:var(--sys-shadow-lg,0 12px 32px rgba(0,0,0,.25));font-size:var(--ref-font-sm,18px);left:8px;top:8px}
+.zdz-marks-card{background:#FFF8DC;color:#1f2933;border-top:6px solid #FFD54F}
+.zdz-marks-panel{right:8px;left:auto}
+.zdz-marks-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;font-weight:var(--sys-font-wt-sb,600)}
+.zdz-marks-card-x{min-width:var(--zdz-kit-tap);min-height:var(--zdz-kit-tap);border:0;background:transparent;color:inherit;font-size:24px;cursor:pointer;border-radius:8px}
+.zdz-marks-card-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.4}
+.zdz-marks-card-when,.zdz-marks-panel-meta,.zdz-marks-panel-share{font-size:var(--ref-font-xs,16px);opacity:.75;margin-top:4px}
+.zdz-marks-panel-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--sys-border,rgba(0,0,0,.08))}
+.zdz-marks-panel-txt{flex:1 1 auto;min-width:0}
+.zdz-marks-panel-name{font-weight:var(--sys-font-wt-sb,600)}
+.zdz-marks-eye{min-height:var(--zdz-kit-tap);padding:0 10px;border-radius:var(--zdz-kit-radius);border:1px solid currentColor;background:transparent;
+  color:inherit;font:inherit;font-size:var(--ref-font-xs,16px);cursor:pointer}
+.zdz-marks-eye[aria-pressed="false"]{opacity:.6}
+.zdz-marks-panel-change,.zdz-marks-panel-draw{margin-top:6px}
+.zdz-marks-panel-chooser{margin:8px 0}
+.zdz-marks-panel-empty{opacity:.8;padding:6px 0}
+.zdz-marks-admin{display:block;width:100%;margin-top:10px;min-height:var(--zdz-kit-tap);border-radius:var(--zdz-kit-radius);border:1px dashed currentColor;
+  background:transparent;color:inherit;font:inherit;font-size:var(--ref-font-xs,16px);cursor:pointer}
+.zdz-marks-admin[aria-pressed="true"]{border-style:solid;font-weight:var(--sys-font-wt-sb,600)}
+.zdz-has-marks{outline:3px solid #FFB300;outline-offset:-3px;position:relative}
+.zdz-marks-badge{position:absolute;right:4px;bottom:4px;z-index:2;padding:1px 6px;border-radius:6px;background:#FFB300;color:#1f2933;
+  font-size:12px;font-weight:700;line-height:1.5;pointer-events:none;white-space:nowrap}
+html.zdz-marking .zdz-marks-card,html.zdz-marking .zdz-marks-panel{display:none}
+
+.zdz-marks-panel-notes{margin:4px 0 0;padding:0 0 0 16px;font-size:var(--ref-font-xs,16px);white-space:pre-line;overflow-wrap:anywhere}
+.zdz-marks-panel-notes li{margin:2px 0}

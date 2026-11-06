@@ -81,13 +81,13 @@ class ZDZ_Magic_Link_Bridge {
 		add_action( 'rest_api_init', [ $this, 'register_routes' ] );
 		add_filter( 'login_redirect', [ $this, 'filter_login_redirect' ], 20, 3 );
 
-		// v2.20.0: Fallback — catch Magic Login Pro's wp_redirect() in case it
+		// Fallback — catch Magic Login Pro's wp_redirect() in case it
 		// bypasses the login_redirect filter entirely. This fires at priority 5
 		// (before our OAuth bounce at priority 1) to intercept the redirect URL
 		// when it contains a zdz_bridge_request_id.
 		add_filter( 'wp_redirect', [ $this, 'filter_wp_redirect_bridge' ], 5, 2 );
 
-		// v2.20.3: Inject an OTP code into Magic Login's magic link email so the
+		// Inject an OTP code into Magic Login's magic link email so the
 		// user receives ONE email containing both the clickable link and a 6-digit
 		// code. This eliminates the separate "Send me a code" step entirely.
 		add_filter( 'wp_mail', [ $this, 'inject_otp_into_magic_login_email' ], 99 );
@@ -159,7 +159,7 @@ class ZDZ_Magic_Link_Bridge {
 			],
 		] );
 
-		// v2.19.0: Short-code claim endpoint for cold-start logins.
+		// Short-code claim endpoint for cold-start logins.
 		register_rest_route( 'zorderz/v1', '/magic-link-code-claim', [
 			'methods'             => 'POST',
 			'callback'            => [ $this, 'handle_code_claim' ],
@@ -176,7 +176,7 @@ class ZDZ_Magic_Link_Bridge {
 			],
 		] );
 
-		// v2.20.0: OTP email — sends a 6-digit code directly in the email.
+		// OTP email — sends a 6-digit code directly in the email.
 		// Eliminates Safari from the login flow entirely for PWA users.
 		register_rest_route( 'zorderz/v1', '/magic-link-send-code', [
 			'methods'             => 'POST',
@@ -328,7 +328,7 @@ class ZDZ_Magic_Link_Bridge {
 
 		return new WP_REST_Response( [
 			'success'  => true,
-			'redirect' => home_url( '/' ),
+			'redirect' => class_exists( 'ZDZ_Login_Next' ) ? ZDZ_Login_Next::url_or( home_url( '/' ) ) : home_url( '/' ),
 		], 200 );
 	}
 
@@ -429,7 +429,7 @@ class ZDZ_Magic_Link_Bridge {
 
 		return new WP_REST_Response( [
 			'success'  => true,
-			'redirect' => home_url( '/' ),
+			'redirect' => class_exists( 'ZDZ_Login_Next' ) ? ZDZ_Login_Next::url_or( home_url( '/' ) ) : home_url( '/' ),
 		], 200 );
 	}
 
@@ -438,8 +438,8 @@ class ZDZ_Magic_Link_Bridge {
 	 *
 	 * This fires after Magic Login validates the token and sets the cookie.
 	 *
-	 * v2.18.0: Warm-start flow — redirect to interstitial when request_id present.
-	 * v2.19.0: Cold-start flow — on iOS devices without a request_id, still
+	 * Warm-start flow — redirect to interstitial when request_id present.
+	 * Cold-start flow — on iOS devices without a request_id, still
 	 *          redirect to interstitial with a 6-digit code so the user can
 	 *          transfer the session into the PWA manually.
 	 *
@@ -454,7 +454,7 @@ class ZDZ_Magic_Link_Bridge {
 			return $redirect_to;
 		}
 
-		// v2.20.0: Diagnostic logging — track every invocation to debug
+		// Diagnostic logging — track every invocation to debug
 		// Magic Login Pro redirect issues. Safe to leave in production
 		// (fires at most once per login).
 		error_log( sprintf(
@@ -472,7 +472,7 @@ class ZDZ_Magic_Link_Bridge {
 		// passes it through the query string directly.
 		$request_id = '';
 
-		// v2.20.0: Also check $_GET directly — some Magic Login Pro versions
+		// Also check $_GET directly — some Magic Login Pro versions
 		// pass the redirect_to params through the query string on the callback
 		// page rather than in the login_redirect filter arguments.
 		if ( ! empty( $_GET['zdz_bridge_request_id'] ) ) {
@@ -490,7 +490,7 @@ class ZDZ_Magic_Link_Bridge {
 			}
 		}
 
-		// v2.20.0: Also try URL-decoded redirect_to within the redirect_to
+		// Also try URL-decoded redirect_to within the redirect_to
 		// (Magic Login Pro sometimes double-wraps the URL)
 		if ( ! $request_id ) {
 			foreach ( [ $redirect_to, $requested ] as $url ) {
@@ -502,6 +502,9 @@ class ZDZ_Magic_Link_Bridge {
 		}
 
 		error_log( 'ZDZ_Magic_Link_Bridge: Resolved request_id=' . ( $request_id ?: '(none)' ) );
+
+		// The page this sign-in started from (ZDZ_Login_Next), if any.
+		$next = class_exists( 'ZDZ_Login_Next' ) ? ZDZ_Login_Next::from_request( array( (string) $redirect_to, (string) $requested ) ) : '';
 
 		// ── Always generate a short code + bridge token (used by both flows) ──
 		$short_code   = self::generate_short_code();
@@ -533,15 +536,16 @@ class ZDZ_Magic_Link_Bridge {
 				set_transient( self::TRANSIENT_PREFIX . 'req_' . $request_id, $req_data, self::REQUEST_TTL );
 			}
 
-			return add_query_arg(
-				[
-					'magic-login-bridge' => '1',
-					'request_id'         => $request_id,
-					'bridge_token'       => $bridge_token,
-					'bridge_code'        => $short_code,
-				],
-				home_url( '/login/' )
-			);
+			$args = [
+				'magic-login-bridge' => '1',
+				'request_id'         => $request_id,
+				'bridge_token'       => $bridge_token,
+				'bridge_code'        => $short_code,
+			];
+			if ( '' !== $next ) {
+				$args['zdz_next'] = rawurlencode( $next );
+			}
+			return add_query_arg( $args, home_url( '/login/' ) );
 		}
 
 		// ── Cold start: no request_id, but iOS device ──
@@ -550,16 +554,22 @@ class ZDZ_Magic_Link_Bridge {
 		if ( self::is_ios_device() ) {
 			error_log( 'ZDZ_Magic_Link_Bridge: Cold-start login for ' . $user->user_login . ' — code generated' );
 
-			return add_query_arg(
-				[
-					'magic-login-bridge' => '1',
-					'bridge_code'        => $short_code,
-				],
-				home_url( '/login/' )
-			);
+			$args = [
+				'magic-login-bridge' => '1',
+				'bridge_code'        => $short_code,
+			];
+			if ( '' !== $next ) {
+				$args['zdz_next'] = rawurlencode( $next );
+			}
+			return add_query_arg( $args, home_url( '/login/' ) );
 		}
 
 		// ── Desktop / non-iOS: normal redirect (no interstitial needed) ──
+		// Straight to the page that asked for the sign-in, when there is one.
+		if ( '' !== $next ) {
+			ZDZ_Login_Next::forget();
+			return home_url( $next );
+		}
 		return $redirect_to;
 	}
 
@@ -603,35 +613,25 @@ class ZDZ_Magic_Link_Bridge {
 	}
 
 	/**
-	 * Get client IP address (for logging/display only — never for a security decision; use
-	 * rate_limit_ip() for anything that gates access).
+	 * The client IP kept with a sign-in request (a record, never a security decision; rate_limit_ip() gates access):
+	 * the connection's address (ZDZ_Client_IP::get()), never a forwarded header the client writes itself.
 	 *
 	 * @return string
 	 */
 	private static function get_client_ip() {
-		$headers = [
-			'HTTP_CF_CONNECTING_IP', // Cloudflare
-			'HTTP_X_FORWARDED_FOR',
-			'HTTP_X_REAL_IP',
-			'REMOTE_ADDR',
-		];
-		foreach ( $headers as $header ) {
-			if ( ! empty( $_SERVER[ $header ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
-				// X-Forwarded-For may contain multiple IPs
-				if ( strpos( $ip, ',' ) !== false ) {
-					$ip = trim( explode( ',', $ip )[0] );
-				}
-				return $ip;
-			}
+		if ( class_exists( 'ZDZ_Client_IP' ) ) {
+			$ip = ZDZ_Client_IP::get();
+		} else {
+			$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( (string) $_SERVER['REMOTE_ADDR'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- validated by FILTER_VALIDATE_IP on the next line; anything else becomes ''
+			$ip = filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
 		}
-		return '0.0.0.0';
+		return '' !== $ip ? $ip : '0.0.0.0';
 	}
 
 	/**
 	 * POST /zorderz/v1/magic-link-send-code
 	 *
-	 * v2.20.0: OTP-style login — generates a 6-digit code and emails it
+	 * OTP-style login — generates a 6-digit code and emails it
 	 * directly to the user. The user enters the code in the PWA login
 	 * screen and it's claimed via /magic-link-code-claim.
 	 *
@@ -735,8 +735,8 @@ class ZDZ_Magic_Link_Bridge {
 	/**
 	 * wp_mail filter: Replace Magic Login's magic-link email with a code-only email.
 	 *
-	 * v2.20.3: appended a 6-digit code to Magic Login's email (link + code).
-	 * v2.21.0: REPLACE the email entirely. The clickable magic link is the
+	 * appended a 6-digit code to Magic Login's email (link + code).
+	 * REPLACE the email entirely. The clickable magic link is the
 	 *   problem on iOS — tapping a link in Mail opens Safari (a separate context
 	 *   from the installed standalone PWA), so the session never lands in the
 	 *   app. We keep Magic Login installed as the *sender/engine* (it still
@@ -867,7 +867,7 @@ class ZDZ_Magic_Link_Bridge {
 	/**
 	 * wp_redirect filter fallback for Magic Login Pro.
 	 *
-	 * v2.20.0: Some versions of Magic Login Pro call wp_redirect() directly
+	 * Some versions of Magic Login Pro call wp_redirect() directly
 	 * after authenticating, bypassing the login_redirect filter entirely.
 	 * This filter catches those redirects when they contain a
 	 * zdz_bridge_request_id in the URL and rewrites them to the bridge

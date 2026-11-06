@@ -1,8 +1,8 @@
 <?php
 /**
- * ZSCH_Sync — Connected Calendars Phase 1 sync engine + busy-overlay reads.
+ * ZSCH_Sync — Connected Calendars sync engine + busy-overlay reads.
  *
- * Phase 0 connected accounts and stored encrypted tokens; Phase 1 (this class)
+ * The foundations connect accounts and store encrypted tokens; this class
  * is the missing "last mile": it PULLS each enabled conflict feed's busy times
  * into the wp_zsch_external_events mirror on the existing 5-minute cron, and
  * exposes a single read helper the availability grid, the chat availability
@@ -20,15 +20,22 @@
  * refresh; invalid_grant → the account is flipped to reauth_needed there, and
  * this engine simply skips it next tick until the user reconnects).
  *
- * PRIVACY (read side): external calendars are PERSONAL. read_busy() returns
- * BUSY-ONLY blocks (no titles) for team / cross-user views, and callers MUST
- * NOT invoke it for the shared kiosk. Titles live in the mirror only for a
- * future owner-eyes-only surface; they are never emitted by read_busy().
+ * PRIVACY (read side): external calendars are PERSONAL by default. read_busy()
+ * returns busy blocks and callers MUST NOT invoke it for the shared kiosk.
+ *
+ * One exception to "no titles": a block from a WORK account
+ * (ZSCH_Settings::is_work_email(), configured by the `zsch_work_domains`
+ * option) carries its subject, because a mailbox on the business's own domain
+ * is a work calendar read by colleagues. A personal account — and people often
+ * have both connected at once — still emits no title at all. The decision is
+ * made per ROW against the account's own address, and it fails closed on every
+ * uncertain input. With no work domains configured (the default), no title is
+ * ever emitted.
  *
  * SAFE NO-OP: every entry point is gated by ZSCH_OAuth::feature_enabled(); with
  * the flag down (or no feeds) nothing runs and no rows are written or read.
  *
- * @since 1.7.0 (Connected Calendars Phase 1)
+ * @since 1.7.0 (Connected Calendars sync)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -85,7 +92,9 @@ class ZSCH_Sync {
 		if ( get_transient( 'zsch_sync_running' ) ) {
 			return;
 		}
-		set_transient( 'zsch_sync_running', 1, 3 * MINUTE_IN_SECONDS );
+		/* The guard must outlast the sweep it guards: a shorter one expires
+		 * mid-run and the next tick starts a second sweep over the same feeds. */
+		set_transient( 'zsch_sync_running', 1, 20 * MINUTE_IN_SECONDS );
 		try {
 			foreach ( self::ok_feed_rows() as $f ) {
 				self::sync_feed_row( $f );
@@ -286,7 +295,12 @@ class ZSCH_Sync {
 			return array();
 		}
 		$ph  = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-		$sql = 'SELECT a.owner_user_id, e.start_utc, e.end_utc, e.is_all_day, e.busy_status
+		/* `e.title` and `a.email_label` are selected, but the title is NOT
+		 * disclosed by selecting it: the loop below decides, per row,
+		 * whether this account is allowed to say what it is busy with. Selecting
+		 * it here and gating there keeps ONE decision in ONE place, instead of a
+		 * second, subtler copy of the rule written in SQL. */
+		$sql = 'SELECT a.owner_user_id, a.email_label, e.start_utc, e.end_utc, e.is_all_day, e.busy_status, e.title
 			FROM ' . self::t_events() . ' e
 			INNER JOIN ' . self::t_feeds() . ' f ON f.id = e.feed_id
 			INNER JOIN ' . self::t_accounts() . " a ON a.id = f.account_id
@@ -302,6 +316,30 @@ class ZSCH_Sync {
 		$out = array();
 		foreach ( (array) $rows as $r ) {
 			$uid = (int) $r['owner_user_id'];
+
+			/* WHAT, or only WHEN.
+			 *
+			 * A colleague may read the subject of a WORK calendar's event and may
+			 * not read the subject of a personal one. The question is asked of the
+			 * ACCOUNT, because that is the thing that is or is not work: the same
+			 * person may have a work mailbox and a personal account connected side
+			 * by side, and only one of them is any of the team's business.
+			 *
+			 * This is the THIRD and last of three protections. Upstream of it, a
+			 * private-marked event
+			 * already arrives with title '' (sensitivity/visibility, handled in
+			 * the provider clients), and a feed set to `privacy = busy_only`
+			 * already stored no title at all. So an empty title here can mean any
+			 * of three different "no", and all three end in the same place.
+			 *
+			 * Fail closed: if the settings class is somehow unavailable, nothing
+			 * is disclosed. A missing dependency must not become a disclosure. */
+			$title = '';
+			if ( class_exists( 'ZSCH_Settings' )
+				&& ZSCH_Settings::is_work_email( (string) ( $r['email_label'] ?? '' ) ) ) {
+				$title = trim( (string) ( $r['title'] ?? '' ) );
+			}
+
 			$out[ $uid ][] = array(
 				'kind'        => 'busy',
 				'start_utc'   => str_replace( ' ', 'T', $r['start_utc'] ) . 'Z',
@@ -309,6 +347,7 @@ class ZSCH_Sync {
 				'is_all_day'  => (bool) $r['is_all_day'],
 				'busy_status' => (string) $r['busy_status'],
 				'source'      => 'external',
+				'title'       => $title,
 				'note'        => '',
 			);
 		}

@@ -128,6 +128,27 @@ class ZSCH_REST {
 			'permission_callback' => array( __CLASS__, 'can_write' ),
 		) );
 
+		// ── Repeating appointments: the three scopes of an edit or delete ──
+		// Separate routes rather than a `scope` parameter on PATCH /events/{id},
+		// because "move one occurrence" writes a different ROW from "move the
+		// series", and a mistyped parameter must not turn one into the other.
+		// Permission is re-checked per object inside ZSCH_Series_Write.
+		register_rest_route( ZDZ_REST_NS . self::ROUTE_BASE, '/events/(?P<id>\d+)/instance', array(
+			'methods'             => $write,
+			'callback'            => array( __CLASS__, 'instance_write' ),
+			'permission_callback' => array( __CLASS__, 'can_write' ),
+		) );
+		register_rest_route( ZDZ_REST_NS . self::ROUTE_BASE, '/events/(?P<id>\d+)/split', array(
+			'methods'             => $write,
+			'callback'            => array( __CLASS__, 'instance_split' ),
+			'permission_callback' => array( __CLASS__, 'can_write' ),
+		) );
+		register_rest_route( ZDZ_REST_NS . self::ROUTE_BASE, '/events/(?P<id>\d+)/following', array(
+			'methods'             => 'DELETE',
+			'callback'            => array( __CLASS__, 'instance_truncate' ),
+			'permission_callback' => array( __CLASS__, 'can_write' ),
+		) );
+
 		// ── v1.9.0 Participants (real ZDZ_Party on an event) ───────────
 		// GET current participants; POST {user_ids:[…]} to add (gated as an edit);
 		// DELETE a participant. Its own rate bucket on the write paths.
@@ -298,7 +319,7 @@ class ZSCH_REST {
 		if ( self::hidden() ) { return self::not_available(); }
 		$uid = (int) get_current_user_id();
 		// The handoff ORIGIN rides ONLY the signed intake token — never the request
-		// body (INV-1). Claim it here (single-use, single-user); a body-supplied
+		// body. Claim it here (single-use, single-user); a body-supplied
 		// origin is ignored by construction (event_input() reads no ns/ref/origin).
 		// The receiver still re-derives its own gate: the born-linked write re-runs
 		// Jobs' two fail-closed gates (on_created → attach()).
@@ -548,14 +569,41 @@ class ZSCH_REST {
 		if ( '' === $mailbox ) {
 			return rest_ensure_response( array( 'success' => false, 'error' => 'No Microsoft mailbox on file for your account.' ) );
 		}
-		$start = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-1 day' ) );
-		$end   = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '+60 days' ) );
-		$res   = ZSCH_Graph::calendar_view( $mailbox, $start, $end );
-		if ( empty( $res['success'] ) ) {
-			return rest_ensure_response( array( 'success' => false, 'error' => $res['error'] ?? 'Sync failed.' ) );
+		/* The same lock as the cron sweep, so a click can never reconcile a
+		 * mailbox at the same moment as the sweep (a duplicate appointment with
+		 * no map row). A click must not hang behind a sweep: it is told one is
+		 * running, in the reply shape the widget reads (`error`). */
+		if ( ! ZSCH_Graph::sync_lock_acquire() ) {
+			return new WP_REST_Response( array(
+				'success' => false,
+				'code'    => 'zsch_sync_busy',
+				'error'   => 'A sync is already running. Try again in a minute.',
+			), 409 );
 		}
-		ZSCH_Appointments::reconcile_from_graph( $uid, $mailbox, $res['events'] );
-		return rest_ensure_response( array( 'success' => true, 'pulled' => count( $res['events'] ) ) );
+		try {
+			$start = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-1 day' ) );
+			$end   = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '+60 days' ) );
+			// A click holds the lock the sweep needs, so it gets the sweep's own per-mailbox budget.
+			$res = ZSCH_Graph::calendar_view( $mailbox, $start, $end, ZSCH_Graph::PER_USER_CEILING_S );
+			if ( empty( $res['success'] ) ) {
+				return rest_ensure_response( array( 'success' => false, 'error' => $res['error'] ?? 'Sync failed.' ) );
+			}
+			$rec = ZSCH_Appointments::reconcile_from_graph( $uid, $mailbox, $res['events'] );
+			/* Say what was NOT pulled: events deferred because one of your own
+			 * saves was still being pushed to Outlook arrive on the next sync. */
+			$deferred = is_array( $rec ) ? (int) ( $rec['deferred'] ?? 0 ) : 0;
+			$out      = array(
+				'success'  => true,
+				'pulled'   => max( 0, count( $res['events'] ) - $deferred ),
+				'deferred' => $deferred,
+			);
+			if ( $deferred > 0 ) {
+				$out['message'] = sprintf( '%d event(s) will be picked up on the next sync — a change you just saved is still being sent to Outlook.', $deferred );
+			}
+			return rest_ensure_response( $out );
+		} finally {
+			ZSCH_Graph::sync_lock_release();
+		}
 	}
 
 	// ── Connected Calendars (v1.6.0) ───────────────────────────────
@@ -685,6 +733,17 @@ class ZSCH_REST {
 			'color'          => $req->get_param( 'color' ),
 			'owner_id'       => $req->get_param( 'owner_id' ),
 			'attendees'      => $req->get_param( 'attendees' ),
+			/* Recurrence. A rule the engine refuses is REFUSED at the write (400
+			 * with the parser's own reason), never stored. `exdate`/`rdate` are
+			 * local wall-clock lists; an EXDATE only cancels an instance it
+			 * matches EXACTLY (RFC 5545 section 3.8.5.1). */
+			'rrule'          => $req->get_param( 'rrule' ),
+			'exdate'         => $req->get_param( 'exdate' ),
+			'rdate'          => $req->get_param( 'rdate' ),
+			/* The client's idempotency key: minted ONCE per save intent and resent
+			 * on every retry. Validated in ZSCH_Appointments::sanitize_request_id();
+			 * absent is always legal. */
+			'client_request_id' => $req->get_param( 'client_request_id' ),
 		);
 	}
 
@@ -775,10 +834,129 @@ class ZSCH_REST {
 		return sprintf( 'hsl(%d 70%% 50%%)', $hue );
 	}
 
+	/**
+	 * Refusals that answer with their own HTTP status rather than the app's
+	 * "200 with success:false" convention. Only these codes: every other refusal
+	 * keeps the 200 it has always had, because clients (the widget's toast, the
+	 * assistant) read those as 200s.
+	 */
+	const HTTP_STATUS_CODES = array( 'zsch_series_edit_ambiguous' );
+
 	private static function respond( $res ) {
+		if ( is_wp_error( $res ) ) {
+			return $res; // carries its own status (a refused recurrence rule is a 400)
+		}
+		if ( is_array( $res ) && empty( $res['success'] )
+			&& in_array( (string) ( $res['code'] ?? '' ), self::HTTP_STATUS_CODES, true )
+			&& (int) ( $res['status'] ?? 0 ) >= 400 ) {
+			return new WP_REST_Response( $res, (int) $res['status'] );
+		}
 		if ( is_array( $res ) && empty( $res['success'] ) ) {
 			return rest_ensure_response( $res ); // 200 with success:false (UI shows the message)
 		}
 		return rest_ensure_response( $res );
+	}
+
+	// ── Repeating appointments: scoped writes ───────────────────────
+
+	/**
+	 * Move or cancel ONE occurrence of a repeating appointment.
+	 *
+	 * `recurrence_id` is the occurrence's ORIGINAL local start and is how it is
+	 * identified — never the time it is being moved TO. Keying on the new time
+	 * would detach the override and leave a ghost at the old slot plus a
+	 * duplicate at the new one (RFC 5545 section 3.8.4.4).
+	 *
+	 * @param WP_REST_Request $req
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function instance_write( WP_REST_Request $req ) {
+		if ( self::hidden() ) { return self::not_available(); }
+		if ( ! class_exists( 'ZSCH_Series_Write' ) ) {
+			return new WP_Error( 'zsch_no_engine', 'Recurrence is not available on this install.', array( 'status' => 500 ) );
+		}
+		$id  = (int) $req->get_param( 'id' );
+		$rid = (string) $req->get_param( 'recurrence_id' );
+		if ( '' === trim( $rid ) ) {
+			return new WP_Error(
+				'zsch_missing_recurrence_id',
+				'Which occurrence? Send recurrence_id as the occurrence\'s original local start.',
+				array( 'status' => 400 )
+			);
+		}
+		// Permission is checked inside ZSCH_Series_Write, which loads the master:
+		// one place decides who may change a series.
+		$actor = get_current_user_id();
+
+		if ( 'cancel' === (string) $req->get_param( 'action' ) ) {
+			$r = ZSCH_Series_Write::cancel_instance( $actor, $id, $rid );
+		} else {
+			$changes = array();
+			foreach ( array( 'title', 'body', 'location' ) as $f ) {
+				if ( $req->has_param( $f ) ) { $changes[ $f ] = $req->get_param( $f ); }
+			}
+			// Local wall clock is forwarded as-is; the write layer converts using
+			// the SERIES' own zone rather than one the client supplied.
+			foreach ( array( 'start_local', 'end_local' ) as $f ) {
+				if ( $req->has_param( $f ) ) { $changes[ $f ] = (string) $req->get_param( $f ); }
+			}
+			$r = ZSCH_Series_Write::move_instance( $actor, $id, $rid, $changes );
+		}
+		return is_wp_error( $r ) ? $r : rest_ensure_response( $r );
+	}
+
+	/**
+	 * "This and all following" — truncate the series and start a new one.
+	 *
+	 * @param WP_REST_Request $req
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function instance_split( WP_REST_Request $req ) {
+		if ( self::hidden() ) { return self::not_available(); }
+		if ( ! class_exists( 'ZSCH_Series_Write' ) ) {
+			return new WP_Error( 'zsch_no_engine', 'Recurrence is not available on this install.', array( 'status' => 500 ) );
+		}
+		$id  = (int) $req->get_param( 'id' );
+		$rid = (string) $req->get_param( 'recurrence_id' );
+		if ( '' === trim( $rid ) ) {
+			return new WP_Error(
+				'zsch_missing_recurrence_id',
+				'Which occurrence does the new series start at? Send recurrence_id.',
+				array( 'status' => 400 )
+			);
+		}
+		$actor   = get_current_user_id();   // permission checked in ZSCH_Series_Write
+		$changes = array();
+		foreach ( array( 'title', 'body', 'location', 'start_local' ) as $f ) {
+			if ( $req->has_param( $f ) ) { $changes[ $f ] = (string) $req->get_param( $f ); }
+		}
+		$r = ZSCH_Series_Write::split_following( $actor, $id, $rid, $changes );
+		return is_wp_error( $r ) ? $r : rest_ensure_response( $r );
+	}
+
+	/**
+	 * Remove this occurrence and every one after it. It truncates the rule
+	 * rather than deleting rows, because the occurrences before the cut are
+	 * still real appointments that people have been to.
+	 *
+	 * @param WP_REST_Request $req
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function instance_truncate( WP_REST_Request $req ) {
+		if ( self::hidden() ) { return self::not_available(); }
+		if ( ! class_exists( 'ZSCH_Series_Write' ) ) {
+			return new WP_Error( 'zsch_no_engine', 'Recurrence is not available on this install.', array( 'status' => 500 ) );
+		}
+		$id  = (int) $req->get_param( 'id' );
+		$rid = (string) $req->get_param( 'recurrence_id' );
+		if ( '' === trim( $rid ) ) {
+			return new WP_Error(
+				'zsch_missing_recurrence_id',
+				'From which occurrence? Send recurrence_id as the occurrence\'s original local start.',
+				array( 'status' => 400 )
+			);
+		}
+		$r = ZSCH_Series_Write::truncate_following( get_current_user_id(), $id, $rid );
+		return is_wp_error( $r ) ? $r : rest_ensure_response( $r );
 	}
 }

@@ -306,7 +306,7 @@ class ZL_Permissions {
 		if ( user_can( $user_id, 'manage_options' ) ) {
 			return true;
 		}
-		// v1.6.0 — zdz_owner role has full access (theme v2.3.0 super-admin role)
+		// v1.6.0 — zdz_owner role has full access (the super-admin role)
 		if ( in_array( 'zdz_owner', (array) $user->roles, true ) ) {
 			return true;
 		}

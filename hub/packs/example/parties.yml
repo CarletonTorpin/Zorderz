@@ -1,0 +1,9 @@
+# The salespeople, by the initials invoices carry, and the first names people type for them.
+charts:
+  salespeople: [AM, JB, SR]
+  salesperson_names:
+    AM: [Alex]
+    JB: [Jordan]
+    SR: [Sam]
+  not_recorded: (not recorded)
+  note: Salespeople are written by their initials.

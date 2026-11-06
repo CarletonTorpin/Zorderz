@@ -30,6 +30,8 @@ class ZJOB_AJAX {
 		add_action( 'wp_ajax_zjob_close_job',           [ __CLASS__, 'close_job' ] );
 		add_action( 'wp_ajax_zjob_self_attest_close',   [ __CLASS__, 'self_attest_close' ] ); // solo single-party attestation
 		add_action( 'wp_ajax_zjob_extend_close',        [ __CLASS__, 'extend_close' ] );
+		add_action( 'wp_ajax_zjob_test_jobs',           [ __CLASS__, 'test_jobs' ] );
+		add_action( 'wp_ajax_zjob_clear_test_jobs',     [ __CLASS__, 'clear_test_jobs' ] );
 	}
 
 	/** Shared preamble: verify nonce, return the true current user id, block kiosk. */
@@ -241,16 +243,43 @@ class ZJOB_AJAX {
 		wp_send_json_success( [ 'id' => $id, 'assigned_user_id' => $new_assignee ] );
 	}
 
-	/** Set a job status (actor must be able to manage it). */
+	/**
+	 * Set a job status (actor must be able to manage it). `expected` is the status the
+	 * person's screen showed: when the job has moved on since (another device), the
+	 * change is refused with 'moved' and the status it is in now.
+	 */
 	public static function set_status(): void {
-		$uid    = self::gate();
-		$id     = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
-		$status = isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : '';
-		$ok = ZJOB_Jobs::set_status( $id, $status, $uid );
-		if ( ! $ok ) {
+		$uid      = self::gate();
+		$id       = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+		$status   = isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : '';
+		$expected = isset( $_POST['expected'] ) ? sanitize_key( wp_unslash( $_POST['expected'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce checked in self::gate() above.
+		$res      = ZJOB_Jobs::change_status( $id, $status, $uid, $expected );
+		if ( empty( $res['ok'] ) ) {
+			if ( 'moved' === ( $res['error'] ?? '' ) ) {
+				wp_send_json_error( [ 'message' => 'moved', 'current' => (string) $res['current'] ], 409 );
+			}
 			wp_send_json_error( [ 'message' => 'status_failed' ], 403 );
 		}
 		wp_send_json_success( [ 'id' => $id, 'status' => $status ] );
+	}
+
+	/** How many test jobs "Clear test jobs" would clear, with a few names (administrators only). */
+	public static function test_jobs(): void {
+		$uid = self::gate();
+		if ( ! ( class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_admin( $uid ) ) ) {
+			wp_send_json_error( [ 'message' => 'not_permitted' ], 403 );
+		}
+		wp_send_json_success( ZJOB_Jobs::test_jobs_summary() );
+	}
+
+	/** Clear the test jobs: cancelled if still active, hidden from the list, never deleted. */
+	public static function clear_test_jobs(): void {
+		$uid = self::gate();
+		$res = ZJOB_Jobs::clear_test_jobs( $uid );
+		if ( empty( $res['ok'] ) ) {
+			wp_send_json_error( [ 'message' => (string) $res['error'] ], 403 );
+		}
+		wp_send_json_success( [ 'count' => (int) $res['count'] ] );
 	}
 
 	/** Worker inbox: record an ETA signal on the worker's own job. */

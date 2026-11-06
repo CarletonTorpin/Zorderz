@@ -268,4 +268,95 @@ class ZDZ_Core_Nutshell {
 	public function is_configured(): bool {
 		return ! empty( $this->email ) && ! empty( $this->api_key );
 	}
+
+	/* ─────────────────────────── strict reads (budgeted callers) ───────────────────────────
+	 *
+	 * rpc_call() answers null for a transport failure, an HTTP error and a CRM error alike. A caller that keeps a copy of
+	 * the CRM page by page (the analytics app's stored-data ledger) must tell them apart: a lead the CRM says it cannot
+	 * read is skipped, a CRM that is down stops the pass. These calls throw, and only ever READ.
+	 */
+
+	/** Seconds the next strict call may take (a caller with a time budget sets it); null = 30. */
+	public $request_timeout = null;
+
+	/** The CRM methods the strict road may call: reads only. */
+	const READ_METHODS = array( 'findLeads', 'getLead', 'findContacts', 'getContact', 'findAccounts', 'getAccount', 'findActivities', 'findTimeline' );
+
+	/**
+	 * One read, strict. Returns the result; throws RuntimeException on a transport failure or HTTP error, and on a CRM
+	 * error with a message that starts "CRM RPC error" (the CRM answered: this record cannot be read).
+	 */
+	public function rpc_strict( string $method, array $params = array() ) {
+		if ( ! in_array( $method, self::READ_METHODS, true ) ) {
+			throw new RuntimeException( 'Only CRM reads are made here.' );
+		}
+		if ( ! $this->is_configured() ) {
+			throw new RuntimeException( 'The CRM is not connected.' );
+		}
+		$response = wp_remote_post( $this->endpoint, array(
+			'headers' => array(
+				'Authorization' => 'Basic ' . base64_encode( $this->email . ':' . $this->api_key ),
+				'Content-Type'  => 'application/json',
+			),
+			'body'    => wp_json_encode( array(
+				'jsonrpc' => '2.0',
+				'method'  => $method,
+				'params'  => empty( $params ) ? new \stdClass() : $params,
+				'id'      => uniqid( 'ns_', true ),
+			) ),
+			'timeout' => null !== $this->request_timeout ? max( 3, (int) $this->request_timeout ) : 30,
+		) );
+		if ( is_wp_error( $response ) ) {
+			throw new RuntimeException( 'CRM read failed: ' . esc_html( $response->get_error_message() ) );
+		}
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( $code < 200 || $code >= 300 ) {
+			throw new RuntimeException( 'CRM read failed (HTTP ' . (int) $code . ') calling ' . esc_html( $method ) );
+		}
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $body ) ) {
+			throw new RuntimeException( 'CRM read failed: the answer was not readable.' );
+		}
+		if ( isset( $body['error'] ) ) {
+			$msg = is_array( $body['error'] ) ? (string) ( $body['error']['message'] ?? '' ) : (string) $body['error'];
+			throw new RuntimeException( 'CRM RPC error calling ' . esc_html( $method ) . ( '' !== $msg ? ': ' . esc_html( substr( $msg, 0, 200 ) ) : '' ) );
+		}
+		return $body['result'] ?? null;
+	}
+
+	/**
+	 * One page of FULL lead objects (stub responses off): full objects carry createdTime, closedTime, sources, channels,
+	 * assignee and (on most accounts) notes; a stub carries none of them. findLeads has no created-date filter, so a
+	 * reader orders by id or createdTime and stops paging instead.
+	 *
+	 * @param array  $query     e.g. array( 'filter' => 2 ) (every lead), array( 'status' => 0 ) (open)
+	 * @param int    $page      1-based
+	 * @param int    $limit     1-100
+	 * @param string $order_by  'id' | 'createdTime'
+	 * @param string $direction 'ASC' | 'DESC'
+	 * @return array lead objects (possibly empty)
+	 */
+	public function find_leads_page( array $query, int $page = 1, int $limit = 100, string $order_by = 'id', string $direction = 'ASC' ): array {
+		$res = $this->rpc_strict( 'findLeads', array(
+			'query'          => empty( $query ) ? new \stdClass() : $query,
+			'orderBy'        => in_array( $order_by, array( 'id', 'createdTime' ), true ) ? $order_by : 'id',
+			'orderDirection' => 'DESC' === strtoupper( $direction ) ? 'DESC' : 'ASC',
+			'limit'          => max( 1, min( 100, $limit ) ),
+			'page'           => max( 1, $page ),
+			'stubResponses'  => false,
+		) );
+		return is_array( $res ) ? array_values( $res ) : array();
+	}
+
+	/**
+	 * One lead in full (its notes included), strict: the lead, or null when the CRM returned nothing. Throws as
+	 * rpc_strict() does ("CRM RPC error" when the CRM answered that it cannot read this lead).
+	 */
+	public function read_lead( int $lead_id ) {
+		if ( $lead_id <= 0 ) {
+			return null;
+		}
+		$res = $this->rpc_strict( 'getLead', array( 'leadId' => $lead_id ) );
+		return is_array( $res ) ? $res : null;
+	}
 }

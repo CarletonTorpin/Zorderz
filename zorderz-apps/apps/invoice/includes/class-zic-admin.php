@@ -10,6 +10,13 @@
  *   - Thank-you / return URL — blank shows the built-in on-site thank-you page.
  *     Replaces the old hardcoded production URL.
  *
+ * Secrets (Stripe secret key and webhook signing secret, the FreshBooks client
+ * secret, the legacy static token) are write-only: their inputs render empty,
+ * a "Currently set" note says one is stored, and a blank submit keeps the stored
+ * value. A secret is never printed into the page. When Stripe is managed on
+ * Zorderz → Credentials the Stripe boxes are replaced by a pointer there, and a
+ * missing field keeps its stored value.
+ *
  * @package Zorderz
  */
 
@@ -30,6 +37,22 @@ class ZIC_Admin {
 		add_submenu_page( self::SLUG, 'Webhook Events', 'Webhook Events', self::CAP, 'zic_webhook_events', array( __CLASS__, 'render_events' ) );
 	}
 
+	/** Options that hold a secret: write-only on this screen. */
+	const SECRET_OPTIONS = array(
+		'zic_stripe_secret',
+		'zic_stripe_webhook_secret',
+		'zic_fb_client_secret',
+		'zic_freshbooks_token',
+	);
+
+	/** The Stripe options Zorderz → Credentials can manage. */
+	const STRIPE_OPTIONS = array(
+		'zic_stripe_publishable',
+		'zic_stripe_secret',
+		'zic_stripe_webhook_secret',
+		'zic_stripe_connected_account',
+	);
+
 	public static function register_settings() {
 		$opts = array(
 			'zic_stripe_secret',
@@ -44,7 +67,23 @@ class ZIC_Admin {
 			'zic_notify_email',
 		);
 		foreach ( $opts as $o ) {
-			register_setting( 'zic_settings_group', $o );
+			if ( in_array( $o, self::SECRET_OPTIONS, true ) ) {
+				register_setting( 'zic_settings_group', $o, array(
+					'type'              => 'string',
+					'sanitize_callback' => function ( $value ) use ( $o ) {
+						return self::sanitize_secret( $value, $o );
+					},
+				) );
+			} elseif ( in_array( $o, self::STRIPE_OPTIONS, true ) ) {
+				register_setting( 'zic_settings_group', $o, array(
+					'type'              => 'string',
+					'sanitize_callback' => function ( $value ) use ( $o ) {
+						return self::sanitize_kept_when_absent( $value, $o );
+					},
+				) );
+			} else {
+				register_setting( 'zic_settings_group', $o );
+			}
 		}
 
 		// Configurable, disclosed options with explicit sanitizers.
@@ -66,6 +105,41 @@ class ZIC_Admin {
 				'sanitize_callback' => array( __CLASS__, 'sanitize_return_url' ),
 			)
 		);
+	}
+
+	/**
+	 * A write-only secret: the box renders empty, so a blank (or absent) submit keeps
+	 * the stored value; anything typed replaces it.
+	 */
+	public static function sanitize_secret( $value, $option ) {
+		$value = is_string( $value ) ? trim( $value ) : '';
+		if ( '' === $value ) {
+			return (string) get_option( $option, '' );
+		}
+		return sanitize_text_field( $value );
+	}
+
+	/** A field the form may leave out (Stripe managed elsewhere): absent keeps the stored value. */
+	public static function sanitize_kept_when_absent( $value, $option ) {
+		if ( null === $value ) {
+			return (string) get_option( $option, '' );
+		}
+		return sanitize_text_field( (string) $value );
+	}
+
+	/** Is Stripe managed on Zorderz → Credentials? */
+	public static function stripe_managed_elsewhere() {
+		return class_exists( 'ZDZ_Core_Credentials' ) && ZDZ_Core_Credentials::engaged( 'stripe' );
+	}
+
+	/** One write-only secret box: empty value, and a note when one is stored. */
+	public static function secret_input( $option, $size = 60 ) {
+		$set = '' !== (string) get_option( $option, '' );
+		$h   = '<input type="password" name="' . esc_attr( $option ) . '" value="" size="' . (int) $size . '" autocomplete="new-password" placeholder="' . esc_attr( $set ? 'Enter a new value to replace' : 'Not set' ) . '" />';
+		if ( $set ) {
+			$h .= ' <span class="description">' . esc_html( 'Currently set (hidden). Leave blank to keep it.' ) . '</span>';
+		}
+		return $h;
 	}
 
 	/** Clamp the platform fee to a plain 0–100 percentage string. */
@@ -247,10 +321,13 @@ class ZIC_Admin {
 				<?php settings_fields( 'zic_settings_group' ); ?>
 
 				<h2>Payments (Stripe)</h2>
+				<?php if ( self::stripe_managed_elsewhere() ) : ?>
+				<p>Managed in <a href="<?php echo esc_url( ZDZ_Core_Credentials::page_url() ); ?>">Zorderz → Credentials</a>: the Stripe keys are changed there, for every app at once.</p>
+				<?php else : ?>
 				<table class="form-table">
 					<tr><th>Publishable Key</th><td><input type="text" name="zic_stripe_publishable" value="<?php echo esc_attr( get_option( 'zic_stripe_publishable' ) ); ?>" size="60" placeholder="pk_live_..." /></td></tr>
-					<tr><th>Secret Key</th><td><input type="password" name="zic_stripe_secret" value="<?php echo esc_attr( get_option( 'zic_stripe_secret' ) ); ?>" size="60" /></td></tr>
-					<tr><th>Webhook Secret</th><td><input type="password" name="zic_stripe_webhook_secret" value="<?php echo esc_attr( get_option( 'zic_stripe_webhook_secret' ) ); ?>" size="60" /></td></tr>
+					<tr><th>Secret Key</th><td><?php echo self::secret_input( 'zic_stripe_secret' ); // phpcs:ignore WordPress.Security.EscapeOutput -- built from escaped parts ?></td></tr>
+					<tr><th>Webhook Secret</th><td><?php echo self::secret_input( 'zic_stripe_webhook_secret' ); // phpcs:ignore WordPress.Security.EscapeOutput ?></td></tr>
 					<tr>
 						<th>Connected Account ID (optional)</th>
 						<td>
@@ -259,6 +336,7 @@ class ZIC_Admin {
 						</td>
 					</tr>
 				</table>
+				<?php endif; ?>
 
 				<h2>Platform fee</h2>
 				<table class="form-table">
@@ -290,10 +368,10 @@ class ZIC_Admin {
 				<p><strong>Token status:</strong> <?php echo esc_html( $fb_status ); ?></p>
 				<table class="form-table">
 					<tr><th>Client ID</th><td><input type="text" name="zic_fb_client_id" value="<?php echo esc_attr( get_option( 'zic_fb_client_id' ) ); ?>" size="60" /></td></tr>
-					<tr><th>Client Secret</th><td><input type="password" name="zic_fb_client_secret" value="<?php echo esc_attr( get_option( 'zic_fb_client_secret' ) ); ?>" size="60" /></td></tr>
+					<tr><th>Client Secret</th><td><?php echo self::secret_input( 'zic_fb_client_secret' ); // phpcs:ignore WordPress.Security.EscapeOutput ?></td></tr>
 					<tr><th>Redirect URI</th><td><input type="text" name="zic_fb_redirect_uri" value="<?php echo esc_attr( get_option( 'zic_fb_redirect_uri', $default_redirect ) ); ?>" size="80" /><p class="description">Default: <code><?php echo esc_html( $default_redirect ); ?></code></p></td></tr>
 					<tr><th>Account ID</th><td><input type="text" name="zic_freshbooks_account_id" value="<?php echo esc_attr( get_option( 'zic_freshbooks_account_id' ) ); ?>" size="40" /></td></tr>
-					<tr><th>Legacy Static Token (fallback)</th><td><input type="password" name="zic_freshbooks_token" value="<?php echo esc_attr( get_option( 'zic_freshbooks_token' ) ); ?>" size="60" /></td></tr>
+					<tr><th>Legacy Static Token (fallback)</th><td><?php echo self::secret_input( 'zic_freshbooks_token' ); // phpcs:ignore WordPress.Security.EscapeOutput ?></td></tr>
 				</table>
 
 				<h2>Notifications</h2>

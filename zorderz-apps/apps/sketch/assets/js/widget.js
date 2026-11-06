@@ -518,7 +518,7 @@
 
     // History parity with full-screen apps: push an entry so the phone /
     // browser back button (and Android hardware back) closes the overlay.
-    try { history.pushState({ tsspFS: 1 }, ''); st._fsHist = true; } catch (e) { st._fsHist = false; }
+    try { history.pushState({ zspFS: 1 }, ''); st._fsHist = true; } catch (e) { st._fsHist = false; }
 
     requestAnimationFrame(function () {
       var body = ov.querySelector('.zsp-w-fs-body');

@@ -2,8 +2,8 @@
 /**
  * ZDZ_Answer_Authority — the confidence tier and the single outbound gate.
  *
- * ONE service owns two jobs that the analytics/chat engine used to scatter across
- * a provenance checker, a self-check auditor, a query guard and four send paths:
+ * ONE service owns two jobs that would otherwise be scattered across a provenance
+ * checker, a self-check auditor, a query guard and four send paths:
  *
  *   1. THE CONFIDENCE TIER. Every figure a component states carries a tier —
  *      CONFIRMED > DERIVED > INFERRED > UNKNOWN — and the tier PROPAGATES THROUGH
@@ -16,11 +16,11 @@
  *   2. THE SINGLE OUTBOUND GATE. Every channel that emits text to a human —
  *      chat, email, push, digest, stream — routes its payload through
  *      ZDZ_Answer_Authority::gate() before it leaves. A send path that does not
- *      call the gate is a bug: the gate is where INV-12 is enforced, in ONE place,
- *      so a fix reaches every channel at once (the old code fixed the chat surface
- *      and left the push/digest/stream surfaces leaking).
+ *      call the gate is a bug: the gate is where the honest-output floor is enforced,
+ *      in ONE place, so a fix reaches every channel at once (a fix made only on the
+ *      chat surface would leave the push/digest/stream surfaces leaking).
  *
- * INV-12 (the safety floor the gate enforces, non-overridable):
+ * THE HONEST-OUTPUT FLOOR (the safety floor the gate enforces, non-overridable):
  *   - STATE FACTS ONLY. A figure a system of record does not back is not stated as
  *     fact; it is flagged, caveated, or withheld.
  *   - REFUSAL IS A VALID ANSWER. "I can't confirm that" beats a confident guess.
@@ -37,9 +37,7 @@
  * Ships NEUTRAL. Thresholds and the currency locale come from config with Core
  * defaults; no company, product, person, place, provider or vendor is named here.
  * A tenant may tighten the thresholds via the `zdz_answer_authority_thresholds`
- * filter but cannot lower the INV-12 floor.
- *
- * Crosswalk: 05 §D (T-01 … T-28), Playbook §2.3, §7.
+ * filter but cannot lower the honest-output floor.
  *
  * @since   1.1.0
  * @package Zorderz
@@ -146,7 +144,7 @@ class ZDZ_Answer_Authority {
 	 * A fourth verdict: the question does not apply (no filter was applied and
 	 * nothing matched) - the mirror image of a false refusal. The gate treats NA as
 	 * OK (the count block is simply omitted, no caveat added) and it NEVER upgrades a
-	 * real REFUSE. §64 CH2.
+	 * real REFUSE (see assess_count_answerability()).
 	 */
 	const NA = 'not_applicable';
 
@@ -215,7 +213,7 @@ class ZDZ_Answer_Authority {
 	 * Answerability + confidence thresholds. Core defaults are neutral and
 	 * universal (a fabricated money figure costs more than a fabricated count; a
 	 * figure with no near-neighbour is almost certainly invented). A tenant may
-	 * TIGHTEN these; the INV-12 floor below is not among them and cannot be moved.
+	 * TIGHTEN these; the honest-output floor below is not among them and cannot be moved.
 	 */
 	public static function thresholds(): array {
 		$defaults = array(
@@ -239,7 +237,7 @@ class ZDZ_Answer_Authority {
 	/**
 	 * Merge filtered thresholds over the defaults so that every value can only move in the
 	 * STRICTER direction. A filter (a tenant pack, another plugin) may raise the bar; it can
-	 * never lower the INV-12 floor, turn a refusal into a caveat, or let an unbacked figure
+	 * never lower the honest-output floor, turn a refusal into a caveat, or let an unbacked figure
 	 * through silently. A loosening value is ignored (the default stands) and logged.
 	 */
 	public static function clamp_thresholds( array $defaults, array $t ): array {
@@ -304,7 +302,7 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * The outcome/approval verbs that INV-12 governs. Generic and vendor-free;
+	 * The outcome/approval verbs the honest-output floor governs. Generic and vendor-free;
 	 * a tenant may ADD to this set but never remove one (the floor only rises).
 	 */
 	public static function outcome_terms(): array {
@@ -345,7 +343,7 @@ class ZDZ_Answer_Authority {
 		$th        = self::thresholds();
 		$verdict   = self::OK;
 
-		// ── INV-12: outcome language without a system-of-record confirmation ──
+		// ── honest output: outcome language without a system-of-record confirmation ──
 		if ( ! empty( $outcome_claims ) ) {
 			$score -= 40;
 			$policy = ( 'caveat' === $th['outcome_without_sor'] && empty( $context['side_effect'] ) )
@@ -435,7 +433,7 @@ class ZDZ_Answer_Authority {
 		$dispositions = $a['dispositions']; // returned to the caller
 		$fire         = $a['dispositions']; // fired here (reconcile fires its own)
 		
-		// -- CH1: total / row-sum reconciliation - flag-and-explain, NEVER rewrite --
+		// -- total / row-sum reconciliation - flag-and-explain, NEVER rewrite --
 		if ( isset( $context['reconcile'] ) && is_array( $context['reconcile'] )
 			&& isset( $context['reconcile']['printed'], $context['reconcile']['rows'] ) ) {
 			$rec = self::reconcile_total( $context['reconcile']['printed'], (array) $context['reconcile']['rows'] );
@@ -450,7 +448,7 @@ class ZDZ_Answer_Authority {
 			}
 		}
 		
-		// -- CH7: deterministic engine-emitted scope caveat (never asked of the model) --
+		// -- deterministic engine-emitted scope caveat (never asked of the model) --
 		if ( isset( $context['scope'] ) && is_array( $context['scope'] ) ) {
 			$sc       = $context['scope'];
 			$excluded = array_filter( array_map( 'trim', array_map( 'strval', (array) ( $sc['excluded'] ?? array() ) ) ) );
@@ -596,7 +594,7 @@ class ZDZ_Answer_Authority {
 		return (string) ( $m[0] + 0 );
 	}
 
-	/** A neutral refusal — INV-12: refusal is a valid answer. */
+	/** A neutral refusal — refusal is a valid answer. */
 	public static function refusal_text( array $assessment = array() ): string {
 		$why = '';
 		foreach ( (array) ( $assessment['dispositions'] ?? array() ) as $d ) {
@@ -613,13 +611,13 @@ class ZDZ_Answer_Authority {
 		return __( 'Note: some figures above are not confirmed by the underlying records — treat them as provisional.', 'zorderz' );
 	}
 
-	/* ----------------- AC2 additions (Wave A: CH1/CH2/CH7/CH11/CH19, S5-02) ------ */
+	/* ----------------- Reconciliation, scope, disclosure and payment checks ------- */
 
 	/**
-	 * CH1 - reconcile a printed total against the sum of its rows. FLAGS and EXPLAINS;
+	 * Reconcile a printed total against the sum of its rows. FLAGS and EXPLAINS;
 	 * it mutates nothing and NEVER rewrites the model's prose. Integer-cents compare.
-	 * Emits a total_reconcile disposition (nothing silent). Per S1-03 / D-04 it never
-	 * asserts which side is right beyond "likely".
+	 * Emits a total_reconcile disposition (nothing silent). It never asserts which side
+	 * is right beyond "likely": money is read as collected, not face value.
 	 *
 	 * @param float|int|string|ZDZ_Figure $printed
 	 * @param array                       $rows Row values (numbers, strings, or ZDZ_Figure).
@@ -710,7 +708,7 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * CH2 - the false-refusal guard. A filter is ACTIVE only when a filter field is
+	 * The false-refusal guard. A filter is ACTIVE only when a filter field is
 	 * non-empty. Filter active + zero matched -> REFUSE (a real "nothing matched").
 	 * Filter INACTIVE (an unfiltered whole-portfolio question) + zero matched -> NA (not
 	 * applicable: emit nothing, inject no prohibition). Data present -> OK. Sparse /
@@ -748,7 +746,7 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * CH7 - a deterministic, engine-emitted scope line (facts, never asked of the model).
+	 * A deterministic, engine-emitted scope line (facts, never asked of the model).
 	 * States what was searched, whether the search was broadened, and what was excluded
 	 * (e.g. past-dated documents the CALLER filtered - the engine states it, not the model).
 	 */
@@ -784,7 +782,7 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * CH11 - the reader's diagnostic tier, by TRAIT (never a role-slug literal). Fail-safe
+	 * The reader's diagnostic tier, by TRAIT (never a role-slug literal). Fail-safe
 	 * to the MIDDLE tier: fail-to-admin leaks diagnostics, fail-to-shared strips an
 	 * admin's forensics.
 	 *
@@ -818,7 +816,7 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * CH11 - the reader-facing disclosure for a tier. admin -> full (provisional note +
+	 * The reader-facing disclosure for a tier. admin -> full (provisional note +
 	 * score + flags); operator -> one plain provisional line, no score; shared -> ''
 	 * (nothing). Full detail is ALWAYS retained in the disposition log regardless of tier
 	 * - this governs reader-facing verbosity only. The raw score is surfaced to admin only.
@@ -851,7 +849,7 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * CH19 - an HONEST coverage badge. States what a figures-located metric actually
+	 * An HONEST coverage badge. States what a figures-located metric actually
 	 * measured; NEVER a raw confidence percentage.
 	 */
 	public static function coverage_note( int $located, int $total ): string {
@@ -866,10 +864,10 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * S5-02 - the payment-claim gate. Returns true ONLY when the system of record backs
+	 * The payment-claim gate. Returns true ONLY when the system of record backs
 	 * it: an explicit 'paid' SoR outcome, OR an SoR-backed amount match (amount_paid +
 	 * tolerance >= amount_due). Fail-safe FALSE - a heuristic or a model may NEVER assert
-	 * paid. The receipt paid panel calls this before rendering "PAID" (INV-12 for money).
+	 * paid. The receipt paid panel calls this before rendering "PAID" (honest output, for money).
 	 *
 	 * @param array $context ['sor_outcomes'=>string[],'amount_paid'=>mixed,'amount_due'=>mixed,'sor_backed'=>bool]
 	 */

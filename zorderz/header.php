@@ -42,13 +42,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	?>
 	<script>
 	(function(){try{var t=localStorage.getItem('zdz_theme');if(t&&/^(light|dark|sunlight|system)$/.test(t)){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();
-	/* v2.31.0: larger-text pref must also apply before first paint */
+	/* larger-text pref must also apply before first paint */
 	(function(){try{if(localStorage.getItem('zdz_textscale')==='lg'){document.documentElement.setAttribute('data-zdz-textscale','lg');}}catch(e){}})();
 	</script>
 
 	<?php
 	/**
-	 * v2.15.0: Inline critical CSS for app shell & skeleton screen.
+	 * Inline critical CSS for app shell & skeleton screen.
 	 *
 	 * This block renders the background color, bottom nav bar shape, and a
 	 * pulsing skeleton placeholder BEFORE any external CSS or JS downloads.
@@ -117,7 +117,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 <body <?php body_class(); ?>>
 <?php wp_body_open(); ?>
 
-<!-- v2.15.0: App shell skeleton — visible instantly, hidden by zdz-ready -->
+<!-- App shell skeleton — visible instantly, hidden by zdz-ready -->
 <div class="zdz-skeleton" aria-hidden="true" role="presentation">
 	<div class="zdz-skel-main">
 		<div class="zdz-skel-bar w60"></div>

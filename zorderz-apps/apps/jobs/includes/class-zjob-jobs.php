@@ -275,9 +275,14 @@ class ZJOB_Jobs {
 	}
 
 	/**
-	 * List jobs an actor may see. Admins see all; a crew lead sees their crew's
-	 * (+ their own); everyone else sees only jobs they created or are assigned.
-	 * Optionally filter by status.
+	 * List the jobs an actor may see, by the one visibility rule (ZJOB_Scope): the
+	 * shared device sees nothing; an administrator and the production role see every
+	 * job; a crew lead sees their own and their crew's; everyone else sees what they
+	 * created, what is assigned to them, and what carries their salesperson initials.
+	 * Seeing a row never widens what a person may DO with it (actor_can_* decide that).
+	 *
+	 * Optionally filter by status. Test jobs an administrator cleared stay out. Live
+	 * work is ordered first so the row cap bites the archive, never today's work.
 	 *
 	 * @return array<int, array>
 	 */
@@ -291,40 +296,26 @@ class ZJOB_Jobs {
 		$where = [];
 		$args  = [];
 
-		$is_admin = class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_admin( $actor_id );
-		if ( ! $is_admin ) {
-			$ids = [ $actor_id ];
-			if ( class_exists( 'ZDZ_Hierarchy' ) ) {
-				$ids = ZDZ_Hierarchy::overseeable_user_ids( $actor_id );
+		if ( class_exists( 'ZJOB_Scope' ) && method_exists( 'ZJOB_Scope', 'for_user' ) ) {
+			$pred = ZJOB_Scope::scope_predicate( ZJOB_Scope::for_user( $actor_id ) );
+			if ( null !== $pred ) {
+				// "1 = 0" is a deny and must be applied: no WHERE here would show everything.
+				$where[] = $pred[0];
+				$args    = array_merge( $args, $pred[1] );
 			}
-			$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
-			if ( ! in_array( $actor_id, $ids, true ) ) {
-				$ids[] = $actor_id;
-			}
-			$crew = array_values( array_diff( $ids, [ $actor_id ] ) );
+		} else {
+			// The scope class missing: own work only, never everyone.
+			$where[] = '( created_by = %d OR assigned_user_id = %d )';
+			$args[]  = $actor_id;
+			$args[]  = $actor_id;
+		}
 
-			$clauses = [];
-			// (a) Anything I originated — my backlog, scheduled or not.
-			$ph_all    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-			$clauses[] = "created_by IN ({$ph_all})";
-			$args      = array_merge( $args, $ids );
-			// (b) Work I assigned out to my crew (supervisor oversight) — any status.
-			if ( ! empty( $crew ) ) {
-				$ph_crew   = implode( ',', array_fill( 0, count( $crew ), '%d' ) );
-				$clauses[] = "assigned_user_id IN ({$ph_crew})";
-				$args      = array_merge( $args, $crew );
-			}
-			// (c) Work assigned TO ME as a worker. A worker can SEE an incoming job
-			//     before it is scheduled (Future view); present-tense actionability
-			//     stays scheduled-only via bucket_for(). Filterable to revert.
-			if ( apply_filters( 'zdz_job_worker_sees_future', true ) ) {
-				$clauses[] = '( assigned_user_id = %d )';
-			} else {
-				$clauses[] = '( assigned_user_id = %d AND scheduled_appt_id > 0 )';
-			}
-			$args[] = $actor_id;
-
-			$where[] = '( ' . implode( ' OR ', $clauses ) . ' )';
+		// A worker sees an incoming job before it is scheduled (Future view) unless a
+		// business turns that off; then a job that is only assigned waits for its time.
+		if ( ! apply_filters( 'zdz_job_worker_sees_future', true ) ) {
+			$where[] = '( assigned_user_id <> %d OR created_by = %d OR scheduled_appt_id > 0 )';
+			$args[]  = $actor_id;
+			$args[]  = $actor_id;
 		}
 
 		if ( $status_filter !== '' && in_array( $status_filter, self::STATUSES, true ) ) {
@@ -332,11 +323,16 @@ class ZJOB_Jobs {
 			$args[]  = $status_filter;
 		}
 
+		$cleared = self::cleared_ids();
+		if ( $cleared ) {
+			$where[] = 'id NOT IN (' . implode( ',', array_map( 'intval', $cleared ) ) . ')';
+		}
+
 		$sql = "SELECT * FROM {$table}";
 		if ( $where ) {
 			$sql .= ' WHERE ' . implode( ' AND ', $where );
 		}
-		$sql .= ' ORDER BY created_at DESC LIMIT 200';
+		$sql .= " ORDER BY ( status IN ('done','cancelled') ) ASC, created_at DESC LIMIT 500";
 
 		if ( $args ) {
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
@@ -444,6 +440,25 @@ class ZJOB_Jobs {
 		// Accept both the neutral crm_contact_id and the legacy nutshell_contact_id.
 		$contact_id = (int) ( $data['crm_contact_id'] ?? ( $data['nutshell_contact_id'] ?? 0 ) );
 
+		// The salesperson initials the work carries: the estimate's salesperson, else the
+		// creator's own code. Visibility only (ZJOB_Scope); never a permission.
+		$sp_code = class_exists( 'ZJOB_Scope' ) && method_exists( 'ZJOB_Scope', 'code_for_new_job' )
+			? ZJOB_Scope::code_for_new_job( $actor_id, (int) ( $data['estimate_id'] ?? 0 ) )
+			: '';
+
+		// An access code typed into the access box or the notes never reaches the row: the
+		// row keeps a placeholder, and once the job has its id the code is sealed under it.
+		$plain = [
+			'notes'        => sanitize_textarea_field( (string) ( $data['notes'] ?? '' ) ),
+			'access_notes' => sanitize_textarea_field( (string) ( $data['access_notes'] ?? '' ) ),
+		];
+		$kept = $plain;
+		if ( class_exists( 'ZJOB_Sealed' ) ) {
+			foreach ( $kept as $k => $v ) {
+				$kept[ $k ] = ZJOB_Sealed::cut( $v );
+			}
+		}
+
 		$ok = $wpdb->insert(
 			ZJOB_DB::table(),
 			[
@@ -455,13 +470,14 @@ class ZJOB_Jobs {
 				'crm_contact_id'    => $contact_id,
 				'assigned_user_id'  => $assignee,
 				'created_by'        => $actor_id,
+				'sp_code'           => $sp_code,
 				'brand'             => sanitize_text_field( (string) ( $data['brand'] ?? '' ) ),
 				'qty'               => max( 0, (int) ( $data['qty'] ?? 0 ) ),
-				'notes'             => sanitize_textarea_field( (string) ( $data['notes'] ?? '' ) ),
+				'notes'             => $kept['notes'],
 				'customer_business' => sanitize_text_field( (string) ( $data['customer_business'] ?? '' ) ),
 				'customer_address'  => sanitize_text_field( (string) ( $data['customer_address'] ?? '' ) ),
 				'customer_phone'    => sanitize_text_field( (string) ( $data['customer_phone'] ?? '' ) ),
-				'access_notes'      => sanitize_textarea_field( (string) ( $data['access_notes'] ?? '' ) ),
+				'access_notes'      => $kept['access_notes'],
 				'estimate_id'       => (int) ( $data['estimate_id'] ?? 0 ),
 				'estimate_line_index' => isset( $data['estimate_line_index'] ) ? (int) $data['estimate_line_index'] : -1,
 				'estimate_line_sig' => substr( sanitize_text_field( (string) ( $data['estimate_line_sig'] ?? '' ) ), 0, 191 ),
@@ -469,12 +485,23 @@ class ZJOB_Jobs {
 				'created_at'        => $now,
 				'updated_at'        => $now,
 			],
-			[ '%s','%s','%s','%d','%d','%d','%d','%d','%s','%d','%s','%s','%s','%s','%s','%d','%d','%s','%s','%s','%s' ]
+			[ '%s','%s','%s','%d','%d','%d','%d','%d','%s','%s','%d','%s','%s','%s','%s','%s','%d','%d','%s','%s','%s','%s' ]
 		);
 		if ( ! $ok ) {
 			return 0;
 		}
 		$id = (int) $wpdb->insert_id;
+
+		// Now that the job has an id, seal what was cut above under it (a code typed in
+		// both boxes is filed once).
+		if ( class_exists( 'ZJOB_Sealed' ) ) {
+			$seen = [];
+			foreach ( $plain as $v ) {
+				if ( '' !== $v && ZJOB_Sealed::has_code( $v ) ) {
+					ZJOB_Sealed::seal( $v, [ 'job', $id ], $seen );
+				}
+			}
+		}
 
 		self::audit( $actor_id, 'job_created',
 			sprintf( 'Created %s for %s, assigned to user #%d', $component, (string) ( $data['customer_name'] ?? '' ), $assignee ),
@@ -518,58 +545,179 @@ class ZJOB_Jobs {
 		return true;
 	}
 
-	/** Set a job's status. Actor must be able to manage it. */
-	public static function set_status( int $id, string $status, int $actor_id ): bool {
+	/**
+	 * Set a job's status. Actor must be able to manage it.
+	 *
+	 * @param string $expected the status the caller's screen showed. When given, the
+	 *                         change is refused if the job has moved on since (see
+	 *                         change_status()). '' keeps the unconditional write.
+	 */
+	public static function set_status( int $id, string $status, int $actor_id, string $expected = '' ): bool {
+		$r = self::change_status( $id, $status, $actor_id, $expected );
+		return ! empty( $r['ok'] );
+	}
+
+	/**
+	 * Set a status ONLY IF the job is still in the status the person's screen showed.
+	 * A job cancelled on one device must not be started on another that has not
+	 * refreshed. The check is made in the UPDATE itself (WHERE status = expected), so
+	 * two devices pressing at the same moment cannot both win.
+	 *
+	 * @return array{ok:bool,error:string,current:string} error 'moved' with the current
+	 *         status when the job changed underneath the caller; 'status_failed' otherwise.
+	 */
+	public static function change_status( int $id, string $status, int $actor_id, string $expected = '' ): array {
 		global $wpdb;
+		$out = [ 'ok' => false, 'error' => 'status_failed', 'current' => '' ];
 		if ( ! in_array( $status, self::STATUSES, true ) ) {
-			return false;
+			return $out;
+		}
+		if ( '' !== $expected && ! in_array( $expected, self::STATUSES, true ) ) {
+			$expected = '';
 		}
 		$row = self::get( $id );
 		if ( ! $row || ! self::actor_can_manage( $actor_id, $row ) ) {
-			return false;
+			return $out;
+		}
+		if ( '' !== $expected && (string) $row['status'] !== $expected ) {
+			$out['error']   = 'moved';
+			$out['current'] = (string) $row['status'];
+			return $out;
 		}
 		// Two-party integrity:
 		//  * `pending_close` is reachable ONLY through the photo-gated worker_complete().
 		//  * A plain worker may not jump straight to `done`; that goes through
 		//    "mark my part complete" then a distinct close-out (or a solo attestation).
 		if ( 'pending_close' === $status ) {
-			return false;
+			return $out;
 		}
-		if ( 'done' === $status ) {
+		$now  = current_time( 'mysql', true );
+		$set  = [ 'status' => $status, 'updated_at' => $now ];
+		$fmt  = [ '%s', '%s' ];
+		$done = ( 'done' === $status );
+		if ( $done ) {
 			if ( ! self::actor_can_schedule( $actor_id, $row ) ) {
-				return false;
+				return $out;
 			}
 			// The person doing the work never closes it here, even when they also created it
 			// (the solo case): their path is worker_complete() and then a close-out or a
 			// recorded single-party attestation. Otherwise the photo gate and the attestation
 			// record are skipped entirely.
 			if ( $actor_id === (int) ( $row['assigned_user_id'] ?? 0 ) ) {
-				return false;
+				return $out;
 			}
-			$now = current_time( 'mysql', true );
-			$wpdb->update(
-				ZJOB_DB::table(),
-				[ 'status' => 'done', 'closed_at' => $now, 'closed_by' => $actor_id, 'assurance_level' => self::ASSURANCE_MANAGER, 'close_deadline' => null, 'updated_at' => $now ],
-				[ 'id' => $id ],
-				[ '%s', '%s', '%d', '%s', '%s', '%s' ],
-				[ '%d' ]
-			);
+			$set = [ 'status' => 'done', 'closed_at' => $now, 'closed_by' => $actor_id, 'assurance_level' => self::ASSURANCE_MANAGER, 'close_deadline' => null, 'updated_at' => $now ];
+			$fmt = [ '%s', '%s', '%d', '%s', '%s', '%s' ];
+		}
+		$where = [ 'id' => $id ];
+		$wfmt  = [ '%d' ];
+		if ( '' !== $expected ) {
+			$where['status'] = $expected;
+			$wfmt[]          = '%s';
+		}
+		$n = $wpdb->update( ZJOB_DB::table(), $set, $where, $fmt, $wfmt );
+		if ( false === $n ) {
+			return $out; // a database error is not "moved"
+		}
+		if ( '' !== $expected && 0 === (int) $n && $status !== $expected ) {
+			// Another device changed it between our read and our write.
+			$now_row        = self::get( $id );
+			$out['error']   = 'moved';
+			$out['current'] = $now_row ? (string) $now_row['status'] : '';
+			return $out;
+		}
+		if ( $done ) {
 			self::audit( $actor_id, 'job_status',
 				sprintf( 'Set job #%d to done (manager close, no worker hand-off)', $id ),
 				[ 'job_id' => $id, 'status' => 'done', 'assurance' => self::ASSURANCE_MANAGER ] );
-			return true;
+		} else {
+			self::audit( $actor_id, 'job_status',
+				sprintf( 'Set job #%d to %s', $id, $status ),
+				[ 'job_id' => $id, 'status' => $status ] );
 		}
-		$wpdb->update(
-			ZJOB_DB::table(),
-			[ 'status' => $status, 'updated_at' => current_time( 'mysql', true ) ],
-			[ 'id' => $id ],
-			[ '%s', '%s' ],
-			[ '%d' ]
-		);
-		self::audit( $actor_id, 'job_status',
-			sprintf( 'Set job #%d to %s', $id, $status ),
-			[ 'job_id' => $id, 'status' => $status ] );
-		return true;
+		return [ 'ok' => true, 'error' => '', 'current' => $status ];
+	}
+
+	/* -----------------------------------------------------------------------
+	 * CLEAR TEST JOBS
+	 *
+	 * An administrator can clear every job whose customer name has the WORD "test"
+	 * in it (Test, TEST, "Test Customer"; never "Testa" or "Contest"). Clearing
+	 * cancels any that are still active and hides them from the Jobs list. Nothing is
+	 * deleted: the rows, their notes, photos and history stay, so a real job caught
+	 * by mistake comes back by removing its id from the option.
+	 * --------------------------------------------------------------------- */
+	const CLEARED_OPT = 'zjob_cleared_test_ids';
+
+	/** Pure: is this a test customer name? Whole word "test", any case. */
+	public static function is_test_name( string $name ): bool {
+		return 1 === preg_match( '/(?<![A-Za-z0-9])test(?![A-Za-z0-9])/i', $name );
+	}
+
+	/**
+	 * The test jobs still listed, across the whole table: how many, and the first few
+	 * customer names for the confirm step.
+	 *
+	 * @return array{count:int,names:string[]}
+	 */
+	public static function test_jobs_summary(): array {
+		global $wpdb;
+		$table = ZJOB_DB::table();
+		$rows  = $wpdb->get_results( "SELECT id, customer_name FROM {$table} WHERE customer_name LIKE '%test%'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a fixed name; the LIKE pattern is a literal; no input.
+		$done  = self::cleared_ids();
+		$names = [];
+		$n     = 0;
+		foreach ( (array) $rows as $r ) {
+			if ( in_array( (int) ( $r['id'] ?? 0 ), $done, true ) || ! self::is_test_name( (string) ( $r['customer_name'] ?? '' ) ) ) {
+				continue;
+			}
+			$n++;
+			if ( count( $names ) < 8 ) {
+				$names[] = (string) $r['customer_name'];
+			}
+		}
+		return [ 'count' => $n, 'names' => array_values( array_unique( $names ) ) ];
+	}
+
+	/** Ids hidden by "Clear test jobs" (ints, newest 2000). */
+	public static function cleared_ids(): array {
+		$ids = function_exists( 'get_option' ) ? get_option( self::CLEARED_OPT, [] ) : [];
+		return is_array( $ids ) ? array_values( array_filter( array_map( 'intval', $ids ) ) ) : [];
+	}
+
+	/**
+	 * Clear the test jobs. Administrators only. Returns how many were cleared.
+	 *
+	 * @return array{ok:bool,error:string,count:int}
+	 */
+	public static function clear_test_jobs( int $actor_id ): array {
+		global $wpdb;
+		if ( ! ( class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_admin( $actor_id ) ) ) {
+			return [ 'ok' => false, 'error' => 'not_permitted', 'count' => 0 ];
+		}
+		$table = ZJOB_DB::table();
+		$rows  = $wpdb->get_results( "SELECT id, status, customer_name FROM {$table} WHERE customer_name LIKE '%test%'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a fixed name; the LIKE pattern is a literal; no input.
+		$done  = self::cleared_ids();
+		$ids   = [];
+		$now   = current_time( 'mysql', true );
+		foreach ( (array) $rows as $r ) {
+			$id = (int) ( $r['id'] ?? 0 );
+			if ( $id <= 0 || in_array( $id, $done, true ) || ! self::is_test_name( (string) ( $r['customer_name'] ?? '' ) ) ) {
+				continue;
+			}
+			if ( ! in_array( (string) $r['status'], [ 'done', 'cancelled' ], true ) ) {
+				$wpdb->update( $table, [ 'status' => 'cancelled', 'updated_at' => $now ], [ 'id' => $id ], [ '%s', '%s' ], [ '%d' ] );
+			}
+			$ids[] = $id;
+		}
+		if ( $ids ) {
+			$all = array_slice( array_values( array_unique( array_merge( $done, $ids ) ) ), -2000 );
+			update_option( self::CLEARED_OPT, $all, false );
+			self::audit( $actor_id, 'jobs_test_cleared',
+				sprintf( 'Cleared %d test job(s): #%s', count( $ids ), implode( ', #', $ids ) ),
+				[ 'job_ids' => $ids ] );
+		}
+		return [ 'ok' => true, 'error' => '', 'count' => count( $ids ) ];
 	}
 
 	/**
@@ -1162,7 +1310,7 @@ class ZJOB_Jobs {
 			ZJOB_User_Log::log( $actor_id, $action, $message, 'jobs', $context );
 		}
 		/**
-		 * The audit seam (S3-07). Every audited Job change re-broadcasts its context
+		 * The audit seam. Every audited Job change re-broadcasts its context
 		 * (which carries 'job_id') so a downstream container can keep its own derived
 		 * state fresh. The jobs model never learns who — if anyone — is listening; a
 		 * subscriber that throws must never break the Job (subscribers swallow their own

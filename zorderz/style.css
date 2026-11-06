@@ -4,10 +4,11 @@ Theme URI: https://zorderz.org
 Author: Zorderz
 Author URI: https://zorderz.com
 Description: The Zorderz platform kernel. Turns a WordPress site into a business app: a mobile-first dashboard with runtime plugin auto-discovery, a four-mode theme system, roles and per-user data permissions, a shared media store with EXIF and offline place lookup, secret share-links, an alert router, and a REST surface plugins build on. Out of the box it is a blank slate - the business supplies its own identity, people, catalog and rules.
-Version: 1.10.2
+Version: 2.0.0
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
+Update URI: https://zorderz.org/
 License: GNU General Public License v2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: zorderz
@@ -32,7 +33,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --ref-green-500:#10B981;--ref-green-600:#059669;
   --ref-amber-500:#F59E0B;--ref-amber-600:#D97706;
   --ref-red-500:#EF4444;--ref-red-600:#DC2626;
-  /* v2.31.0: extended status tints backing the --sys-tint-* pairs */
+  /* extended status tints backing the --sys-tint-* pairs */
   --ref-green-100:#D1FAE5;--ref-green-300:#6EE7B7;--ref-green-800:#065F46;--ref-green-900:#064E3B;
   --ref-amber-100:#FEF3C7;--ref-amber-300:#FCD34D;--ref-amber-800:#92400E;--ref-amber-900:#78350F;
   --ref-red-100:#FEE2E2;--ref-red-300:#FCA5A5;--ref-red-800:#991B1B;--ref-red-900:#7F1D1D;
@@ -46,7 +47,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --ref-dur-fast:150ms;--ref-dur-norm:250ms;--ref-dur-slow:350ms;
   --ref-ease:cubic-bezier(.4,0,.2,1);--ref-ease-out:cubic-bezier(0,0,.2,1);
   --ref-ease-spring:cubic-bezier(.32,.72,0,1);
-  /* Category Colors (v2.14.1) */
+  /* Category Colors */
   --cat-sales:#7C3AED;--cat-finance:#059669;--cat-service:#2563EB;
   --cat-field:#EA580C;--cat-admin:#DC2626;
   --cat-ops:#0891B2;--cat-team:#DB2777;
@@ -56,7 +57,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
 :root, :root[data-theme="light"] {
   --sys-bg:var(--ref-gray-100);--sys-bg-alt:var(--ref-gray-200);
   --sys-surface:var(--ref-gray-0);--sys-surface-raised:#F8FAFC;
-  /* v2.14.0: surface-raised is now slate-50 (one step from base white surface)
+  /* surface-raised is now slate-50 (one step from base white surface)
      so plugins relying on a real one-step elevation — alternating rows,
      skeleton shimmer gradients, card-on-card patterns — render the same in
      light mode as they already do in dark/system. Pre-2.14 this resolved
@@ -64,7 +65,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-surface-blur:rgba(255,255,255,.82);
   --sys-surface-subtle:rgba(0,0,0,.03);
   --sys-text:var(--ref-gray-900);--sys-text-sec:var(--ref-gray-600);
-  /* v2.21.0 contrast retune: ter was gray-500, which passes on white surface
+  /* contrast retune: ter was gray-500, which passes on white surface
      (4.76:1) but FAILS on the --sys-bg gray-100 header zone (4.34:1). gray-600
      clears AA on both surface (7.58:1) and bg-100 (6.92:1). */
   --sys-text-ter:var(--ref-gray-600);--sys-text-inv:var(--ref-gray-0);
@@ -82,7 +83,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-font-wt-sb:600;--sys-font-wt-b:700;
   --sys-focus:0 0 0 3px var(--ref-brand-200);
   --sys-topbar-bg:var(--ref-brand-700);--sys-topbar-text:var(--ref-gray-0);
-  /* v2.31.0 tint pairs: status surfaces (badges/pills/chips). Components must
+  /* tint pairs: status surfaces (badges/pills/chips). Components must
      use bg+fg TOGETHER - never a tint bg under --sys-text. All pairs clear
      WCAG AA (most AAA) on their own bg; border token is transparent except
      Sunlight, which renders monochrome + border per its design language. */
@@ -100,7 +101,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-surface:var(--ref-gray-800);--sys-surface-raised:var(--ref-gray-700);
   --sys-surface-blur:rgba(30,41,59,.82);
   --sys-surface-subtle:rgba(255,255,255,.05);
-  /* v2.21.0 contrast retune: secondary/tertiary text must clear WCAG AA on the
+  /* contrast retune: secondary/tertiary text must clear WCAG AA on the
      WIDGET SURFACE (--sys-surface = gray-800), not just the page bg. Old values
      (sec=gray-400 @5.71:1 borderline, ter=gray-500 @3.07:1 FAIL on surface)
      produced the "gray text on dark-gray" complaint. New: sec=gray-300 (9.85:1,
@@ -121,7 +122,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-font-wt-sb:600;--sys-font-wt-b:700;
   --sys-focus:0 0 0 3px var(--ref-brand-800);
   --sys-topbar-bg:var(--ref-gray-900);--sys-topbar-text:var(--ref-gray-100);
-  /* v2.31.0 tint pairs: status surfaces (badges/pills/chips). Components must
+  /* tint pairs: status surfaces (badges/pills/chips). Components must
      use bg+fg TOGETHER - never a tint bg under --sys-text. All pairs clear
      WCAG AA (most AAA) on their own bg; border token is transparent except
      Sunlight, which renders monochrome + border per its design language. */
@@ -137,7 +138,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
 :root[data-theme="sunlight"] {
   --sys-bg:#FFFFFF;--sys-bg-alt:#FFFFFF;
   --sys-surface:#FFFFFF;--sys-surface-raised:#F1F5F9;
-  /* v2.14.0: surface-raised lifted to slate-100 (a touch more contrast than
+  /* surface-raised lifted to slate-100 (a touch more contrast than
      light theme to suit Sunlight's high-vis baseline) so alternating rows
      and elevation gradients are still perceptible without compromising
      21:1 text contrast. */
@@ -156,7 +157,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-font-wt-sb:800;--sys-font-wt-b:900;
   --sys-focus:0 0 0 4px #000;
   --sys-topbar-bg:#000000;--sys-topbar-text:#FFFFFF;
-  /* v2.31.0 tint pairs: status surfaces (badges/pills/chips). Components must
+  /* tint pairs: status surfaces (badges/pills/chips). Components must
      use bg+fg TOGETHER - never a tint bg under --sys-text. All pairs clear
      WCAG AA (most AAA) on their own bg; border token is transparent except
      Sunlight, which renders monochrome + border per its design language. */
@@ -175,7 +176,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-surface:var(--ref-gray-800);--sys-surface-raised:var(--ref-gray-700);
   --sys-surface-blur:rgba(30,41,59,.82);
   --sys-surface-subtle:rgba(255,255,255,.05);
-  /* v2.21.0 contrast retune — mirror of explicit dark mode (see above):
+  /* contrast retune — mirror of explicit dark mode (see above):
      sec=gray-300 (9.85:1 AAA), ter=gray-400 (5.71:1 AA) on --sys-surface. */
   --sys-text:var(--ref-gray-100);--sys-text-sec:var(--ref-gray-300);
   --sys-text-ter:var(--ref-gray-400);--sys-text-inv:var(--ref-gray-900);
@@ -191,7 +192,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-font-wt-sb:600;--sys-font-wt-b:700;
   --sys-focus:0 0 0 3px var(--ref-brand-800);
   --sys-topbar-bg:var(--ref-gray-900);--sys-topbar-text:var(--ref-gray-100);
-  /* v2.31.0 tint pairs: status surfaces (badges/pills/chips). Components must
+  /* tint pairs: status surfaces (badges/pills/chips). Components must
      use bg+fg TOGETHER - never a tint bg under --sys-text. All pairs clear
      WCAG AA (most AAA) on their own bg; border token is transparent except
      Sunlight, which renders monochrome + border per its design language. */
@@ -203,7 +204,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --sys-tint-border:transparent;
 }}
 
-/* === RESPONSIVE TYPOGRAPHY v2.12.5 === */
+/* === RESPONSIVE TYPOGRAPHY === */
 /* TABLET (≥600px) — iPad mini portrait, small tablets */
 @media (min-width: 600px) {
   :root {
@@ -221,7 +222,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
     --ref-space-6: 28px;
   }
 }
-/* v2.16.0 T13: Desktop sidebar breakpoint — +4pt readability boost */
+/* Desktop sidebar breakpoint — +4pt readability boost */
 @media (min-width: 820px) {
   :root {
     --ref-font-xs:   19px;
@@ -289,7 +290,7 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
 }
 /* === END RESPONSIVE TYPOGRAPHY === */
 
-/* === LARGER TEXT (data-zdz-textscale="lg") v2.31.0 ===
+/* === LARGER TEXT (data-zdz-textscale="lg") ===
    One-step accessibility bump: every --ref-font-* tier x1.125, rounded to
    whole px. Spacing tokens untouched (layout-safe); cut-plan SVG labels use
    attribute sizing and are intentionally unaffected. Attribute is set
@@ -378,11 +379,36 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
 }
 /* === END LARGER TEXT === */
 
+/* === TYPE ROLES ===
+   Names for what a piece of text IS, so an app's CSS asks for a role instead of a pixel size or a tier. Each role is
+   a tier of the scale above, so it follows every breakpoint and Larger text by itself. Use these, never a px size
+   under 14.
+     --zdz-type-title      a page or section title                      phone 22px · Larger text 25px
+     --zdz-type-body       running text, a chat message, a list row     phone 20px · Larger text 23px
+     --zdz-type-secondary  a row's second line, a sender's name, a hint phone 18px · Larger text 20px
+     --zdz-type-meta       times, counts, separators: the smallest      phone 16px · Larger text 18px
+     --zdz-type-label      the launcher's app names (= --zdz-applabel-size, app.css): on the focus home 17 / 19px,
+                           desktop 15 / 16px; the classic page (Apps as pages off) 18px. It is set on <body> on the
+                           focus home, so read it from an element inside <body>, not from <html>.
+     --zdz-type-lh-body    line height for body and secondary text      1.45
+     --zdz-type-lh-tight   line height for titles, labels, one-line rows 1.2
+   --zdz-type-meta is the floor: nothing in the app is drawn smaller than 14px. */
+:root{
+  --zdz-type-title:var(--ref-font-md);
+  --zdz-type-body:var(--ref-font-base);
+  --zdz-type-secondary:var(--ref-font-sm);
+  --zdz-type-meta:var(--ref-font-xs);
+  --zdz-type-label:var(--zdz-applabel-size, 18px);
+  --zdz-type-lh-body:1.45;
+  --zdz-type-lh-tight:1.2;
+}
+/* === END TYPE ROLES === */
 
-/* ── PHASE 4 · H4 (v2.30.0): iOS 26 Liquid Glass hardening ──
+
+/* ── iOS 26 Liquid Glass hardening ──
  * iOS 26 samples the backgrounds of html/body and fixed/sticky bars for its
  * glass effects — an element relying on an inherited/transparent background
- * can render smeared or invisible (research pass, Jul 2). Pin explicit
+ * can render smeared or invisible. Pin explicit
  * backgrounds at the root and on the known fixed-position chrome. */
 html, body {
 	background: var(--sys-bg, #0b1220);

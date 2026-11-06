@@ -44,6 +44,18 @@
 .zsv-chip-left_vm { background: #fde0e0; color: #8a1f1f; }
 .zsv-chip-excluded { background: #e7e7e7; color: #555; }
 
+/* The progress slot sits right under the main buttons; it reserves one line on a wide card so the
+   layout does not jump when a message appears, two on a narrow one. */
+.zsv-progress { min-height: 2.6em; font-size: 13px; line-height: 1.3; color: var(--sys-on-surface, #1a1a1a); }
+@media (min-width: 640px) { .zsv-progress { min-height: 1.3em; } }
+.zsv-send { align-self: flex-start; }
+.zsv-more summary { cursor: pointer; font-size: 13px; padding: 6px 0; color: var(--sys-on-surface, #1a1a1a); }
+.zsv-more[open] summary { margin-bottom: 6px; }
+@media (max-width: 480px) {
+	.zsv-row { padding: 10px 0; background: none; border-radius: 0; } /* a phone row reads top to bottom with no inner box */
+	.zsv-row-main { flex-direction: column; align-items: flex-start; }
+}
+
 .zsv-empty { padding: 16px; text-align: center; font-size: 13px; opacity: 0.7; }
 .zsv-loading { opacity: 0.5; }
 

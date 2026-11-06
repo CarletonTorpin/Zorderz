@@ -1,6 +1,6 @@
 # No-Submit-Shift Contract (v1)
 
-> **Status:** Stable (new in Theme v2.21.0)
+> **Status:** Stable
 > **Depends on:** `--sys-*` tokens (DATA-THEME-CONTRACT), `.dash-widget-body { overflow: clip }` (WIDGET-OVERFLOW-CONTRACT)
 > **Depended on by (should adopt):** Surveys (Surveys), Leads (Leads), Commissions (Commissions), Estimates (Estimates): any widget with an action button that triggers a server round-trip.
 
@@ -28,7 +28,7 @@ When a user taps an action button inside a dashboard widget ("Send to CRM", "Run
 
 ## Shared affordances the theme provides
 
-These ship in `app.css` (v2.21.0). Plugins opt in by toggling the classes.
+These ship in `app.css`. Plugins opt in by toggling the classes.
 
 ### `.zdz-btn-busy`: the busy button state
 

@@ -13,7 +13,7 @@
  *   INBOUND (this class):
  *     The recipient replies to that email. The Knowledge Vault's Microsoft-Graph
  *     poller (ZKV_Mailbox::poll → ZKV_Email_Ingest::ingest) is the SINGLE reader
- *     of the shared App@ mailbox. Before it turns a message into a vault document
+ *     of the business's shared app mailbox. Before it turns a message into a vault document
  *     it asks us — message_is_dm_reply($msg) — and if we claim it, hands the raw
  *     Graph message to handle_graph_message($msg). We verify the token, confirm
  *     the sender IS the person the DM was addressed to, strip the quoted history,
@@ -34,9 +34,9 @@
  *               NON-autoloaded, server-side only, never localized / returned).
  *     The token proves routing; it is NOT a capability — the sender must still
  *     match the intended recipient, and ZIM_Messages::post() re-checks write
- *     permission (kiosk refused) server-side (INV-1 / INV-10).
+ *     permission (kiosk refused) server-side.
  *
- * HONEST OUTPUT (INV-12): a reply that cannot be routed is dropped and logged;
+ * HONEST OUTPUT: a reply that cannot be routed is dropped and logged;
  *     we never fabricate a delivery and never send backscatter to strangers.
  *
  * @since 1.1.0
@@ -109,7 +109,7 @@ class ZIM_Email_Reply {
 	 * Bridge config. Defaults derive from the Knowledge Vault mailbox config so
 	 * the mailbox is configured in ONE place (the vault Email-In screen):
 	 *   mailbox_base = local part of the vault mailbox (e.g. "app")
-	 *   mail_domain  = domain of the vault mailbox (e.g. "the marketing site")
+	 *   mail_domain  = domain of the vault mailbox (e.g. "example.com")
 	 *
 	 * @return array{enabled:bool,mailbox_base:string,mail_domain:string}
 	 */
@@ -300,7 +300,7 @@ class ZIM_Email_Reply {
 		if ( ! $recipient || empty( $recipient->user_email ) ) {
 			return self::fail( 'token recipient is not a WP user' );
 		}
-		if ( strtolower( $from_email ) !== strtolower( (string) $recipient->user_email ) ) {
+		if ( ! self::sender_is_recipient( $from_email, (string) $recipient->user_email ) ) {
 			// Someone other than the intended recipient replied (or a forward).
 			// Never post as them; drop it.
 			return self::fail( 'reply sender ' . $from_email . ' != intended recipient' );
@@ -344,6 +344,16 @@ class ZIM_Email_Reply {
 			'reason'     => '',
 			'message_id' => is_array( $res ) ? (int) ( $res['message_id'] ?? 0 ) : 0,
 		);
+	}
+
+	/**
+	 * Is the reply's sender the person the message was e-mailed to? Both addresses present and equal, ignoring case.
+	 * The token proves routing only; this is what stops a forwarded e-mail being posted as its recipient.
+	 */
+	public static function sender_is_recipient( $from_email, $recipient_email ) {
+		$a = strtolower( trim( (string) $from_email ) );
+		$b = strtolower( trim( (string) $recipient_email ) );
+		return '' !== $a && '' !== $b && false !== strpos( $a, '@' ) && hash_equals( $b, $a );
 	}
 
 	// ──────────────────────────────────────────────────────────────

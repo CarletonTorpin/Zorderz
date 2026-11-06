@@ -1,0 +1,19 @@
+{
+  "id": "us-ca",
+  "label": "California: home solicitation and home improvement contracts",
+  "country": "US",
+  "region": "CA",
+  "layers_on": "us-federal",
+  "summary": "California's home solicitation rules (Civil Code 1689.5 to 1689.14) and home improvement contract rules (Business and Professions Code 7159), layered on the federal standard for a job whose address is in California. Three business days to cancel, five when any buyer is 65 or older, seven for repairs after a declared disaster; cancellation by email; the down payment limit; and the items the contract's first page must carry. Where California gives the buyer more, its rule applies (16 CFR 429.2).",
+  "requires_job_region": true,
+  "not_legal_advice": "This pack is a starting point drawn from public law, not legal advice. Have your own lawyer review it, and your agreement template, before any customer signs.",
+  "sources": [
+    { "what": "Civil Code 1689.5 (definitions: business day, senior citizen), as amended by Stats. 2020, Ch. 158 (AB 2471)", "url": "https://law.counselstack.com/statute/ca/CIV/1689.5.", "checked": "2026-11-05" },
+    { "what": "Business and Professions Code 7159, as amended by Stats. 2025, Ch. 585 (SB 517) and Ch. 348 (AB 1327), in force 2026-01-01", "url": "https://law.counselstack.com/statute/ca/BPC/7159.", "checked": "2026-11-05" },
+    { "what": "Official text (check here before each release)", "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=BPC&sectionNum=7159", "checked": "2026-11-05" }
+  ],
+  "pending_not_law": [
+    { "what": "SB 784 (2025) would lengthen the windows (3 to 5, 5 to 7). Held in committee; not law. Not encoded. Check again before each release.", "checked": "2026-11-05" }
+  ],
+  "last_checked": "2026-11-05"
+}

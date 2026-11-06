@@ -101,7 +101,7 @@
 				return;
 			}
 			el.innerHTML = rows.map( function ( r ) {
-				return '<div class="zest-row" data-id="' + esc( r.id ) + '">'
+				return '<div class="zest-row" data-id="' + esc( r.id ) + '" data-number="' + esc( r.number ) + '" role="button" tabindex="0">'
 					+ '<div><div class="zest-row-name">' + esc( r.customer || 'Estimate' ) + '</div>'
 					+ '<div class="zest-row-sub">' + esc( r.number ? '#' + r.number : 'stub' ) + ' &middot; ' + esc( r.items ) + ' items</div></div>'
 					+ '<span class="zest-badge">' + esc( r.status ) + '</span></div>';
@@ -131,6 +131,7 @@
 			var price = parseFloat( li.unit_price || 0 );
 			return '<div class="zest-line"><div>' + esc( li.description || '' )
 				+ ( li.sub_description ? '<div class="zest-line-meta">' + esc( li.sub_description ) + '</div>' : '' )
+				+ ( li.door && li.door.text ? '<div class="zest-team-only">Team only: ' + esc( li.door.text ) + '</div>' : '' )
 				+ '</div><div class="zest-line-price">' + ( price > 0 ? money( price ) : '&mdash;' ) + '</div></div>';
 		} ).join( '' );
 		var warn = ( warnings || [] ).map( function ( w ) { return '<div class="zest-hint">' + esc( w ) + '</div>'; } ).join( '' );

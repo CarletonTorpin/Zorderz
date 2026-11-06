@@ -1,0 +1,64 @@
+{
+  "items": [
+    {
+      "id": "fed_seller_name",
+      "label": "the seller's legal name",
+      "kind": "fact",
+      "key": "legal_name",
+      "needed_in": ["on"],
+      "citation": "16 CFR 429.1(a), (c)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "fed_seller_address",
+      "label": "the seller's business address",
+      "kind": "fact",
+      "key": "address_lines",
+      "needed_in": ["on"],
+      "citation": "16 CFR 429.1(a), (c)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "fed_statement",
+      "label": "the template printing the right-to-cancel statement beside the buyer's signature ({{pack_statement_html}})",
+      "kind": "template_uses",
+      "key": "pack_statement_html",
+      "needed_in": ["test", "on"],
+      "citation": "16 CFR 429.1(a)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "fed_form",
+      "label": "the template printing the Notice of Cancellation form ({{pack_cancellation_form_html}})",
+      "kind": "template_uses",
+      "key": "pack_cancellation_form_html",
+      "needed_in": ["test", "on"],
+      "citation": "16 CFR 429.1(b)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "fed_date",
+      "label": "the template printing the date of the transaction ({{signed_date}})",
+      "kind": "template_uses",
+      "key": "signed_date",
+      "needed_in": ["test", "on"],
+      "citation": "16 CFR 429.1(a)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "fed_job_state",
+      "label": "the state of the job's address (which state's rules apply)",
+      "kind": "job_region",
+      "key": "",
+      "needed_in": ["test", "on"],
+      "citation": "16 CFR 429.2",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    }
+  ]
+}

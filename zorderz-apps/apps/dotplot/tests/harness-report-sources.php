@@ -1,6 +1,6 @@
 <?php
 /**
- * No-WordPress harness for ZDZ_Report_Spec + ZDZ_Report_Sources (C-15).
+ * No-WordPress harness for ZDZ_Report_Spec + ZDZ_Report_Sources.
  * Run:  php -d zend.assertions=1 harness-report-sources.php
  *
  * Proves the security boundary:

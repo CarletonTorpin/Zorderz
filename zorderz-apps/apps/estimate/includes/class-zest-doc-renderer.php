@@ -1,6 +1,6 @@
 <?php
 /**
- * ZEST_Doc_Renderer — the shared, FreshBooks-parity document renderer (Phase 1).
+ * ZEST_Doc_Renderer — the shared, FreshBooks-parity document renderer.
  *
  * One renderer for estimates and (later) invoices. It takes a NORMALIZED document
  * array and emits a printable HTML page whose layout mirrors the FreshBooks
@@ -387,8 +387,7 @@ table.items tbody td.desc{text-align:left}
 
 	/**
 	 * Import a normalized document as an estimate row. Returns the new id (0 on failure).
-	 * Generic on purpose: this is the seam the manual PDF-import pipeline (Phase 4) will
-	 * feed. Preserves the supplied number/date/totals verbatim.
+	 * Generic on purpose: this is the seam a manual PDF-import pipeline would feed. Preserves the supplied number/date/totals verbatim.
 	 */
 	public static function import_estimate( array $doc ) {
 		global $wpdb;
@@ -464,7 +463,7 @@ table.items tbody td.desc{text-align:left}
 		return self::render_html( $doc );
 	}
 
-	/* ───────────────────────── invoices (Phase 2) ───────────────────────── */
+	/* ───────────────────────── invoices ───────────────────────── */
 	// Deliberately scoped to the DOCUMENT + payment tracking — not a CRM, not a
 	// store. Customer details live on the document; products/prices come from the
 	// Item Engine; "payments" are a manual record of money received elsewhere
@@ -678,7 +677,7 @@ table.items tbody td.desc{text-align:left}
 		return array( 'ok' => true, 'invoice_id' => (int) $invoice_id, 'amount_paid' => $paid, 'total' => $total, 'amount_due' => max( 0, round( $total - $paid, 2 ) ), 'status' => $status );
 	}
 
-	/* ─────────────────── management console (Phase-2 UI) ────────────────── */
+	/* ─────────────────── management console ────────────────── */
 
 	/** Gather estimates + invoices and render the staff console page. */
 	public static function render_console() {

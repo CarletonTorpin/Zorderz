@@ -57,24 +57,76 @@ class ZSV_Review_Checker {
 		$t   = ZSV_DB::leads_table();
 		$now = current_time( 'mysql' );
 
+		// review_checked_at is written in the site's time, so the "not in the last 6 hours"
+		// cutoff is computed in the same frame (comparing it with the database's UTC NOW()
+		// moved the window by the site's offset, and every run re-checked every lead).
 		$leads = $wpdb->get_results(
-			"SELECT id, email, first_name, last_name, crm_lead_id
-			 FROM {$t}
-			 WHERE email_sent_at IS NOT NULL
-			   AND ( review_left = 0 OR review_left IS NULL )
-			   AND ( review_checked_at IS NULL OR review_checked_at < DATE_SUB(NOW(), INTERVAL 6 HOUR) )
-			 ORDER BY email_sent_at DESC
-			 LIMIT 200",
+			$wpdb->prepare(
+				"SELECT id, email, first_name, last_name, crm_lead_id
+				 FROM {$t}
+				 WHERE email_sent_at IS NOT NULL
+				   AND ( review_left = 0 OR review_left IS NULL )
+				   AND ( review_checked_at IS NULL OR review_checked_at < %s )
+				 ORDER BY email_sent_at DESC
+				 LIMIT 200",
+				self::recheck_cutoff()
+			),
 			ARRAY_A
 		);
 		if ( empty( $leads ) ) {
 			return array( 'checked' => 0, 'found' => 0, 'errors' => 0 );
 		}
 
-		$stats = array( 'checked' => 0, 'found' => 0, 'errors' => 0 );
-		$crm   = ZSV_Settings::crm();
+		$stats   = array( 'checked' => 0, 'found' => 0, 'errors' => 0, 'deferred' => 0 );
+		$manager = new ZSV_Survey_Manager();
+		$opened  = ZSV_Budget::open( 'review_check', (float) ZSV_Survey_Manager::SWEEP_BUDGET_S );
+		try {
+			$manager->drain_owed_notes();
+			self::check_leads( $leads, $bridge, $manager, $bypass_cache, $now, $stats );
+		} finally {
+			if ( $opened ) {
+				ZSV_Budget::log_run( 'review_check', $stats['checked'], count( $leads ), $stats['deferred'] );
+				ZSV_Budget::close();
+			}
+		}
+		return $stats;
+	}
 
+	/** The site-local "Y-m-d H:i:s" six hours ago: a lead checked since then is not checked again. Pure given now. */
+	public static function recheck_cutoff( ?int $now = null, ?DateTimeZone $tz = null ): string {
+		$tz = $tz ?? ( function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' ) );
+		return ( new DateTimeImmutable( '@' . ( null === $now ? time() : $now ) ) )->setTimezone( $tz )->modify( '-6 hours' )->format( 'Y-m-d H:i:s' );
+	}
+
+	/**
+	 * A review date from the bridge, in the site's time like every other date in the table.
+	 * The bridge sends ISO 8601 with an offset; a date with no zone is kept as given. Pure.
+	 */
+	public static function review_date_from_bridge( string $raw, string $fallback, ?DateTimeZone $tz = null ): string {
+		$raw = trim( $raw );
+		if ( '' === $raw ) {
+			return $fallback;
+		}
+		if ( preg_match( '/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/', $raw ) ) {
+			return strlen( $raw ) === 10 ? $raw . ' 00:00:00' : ( strlen( $raw ) === 16 ? $raw . ':00' : $raw );
+		}
+		try {
+			$tz = $tz ?? ( function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' ) );
+			return ( new DateTimeImmutable( $raw ) )->setTimezone( $tz )->format( 'Y-m-d H:i:s' );
+		} catch ( \Throwable $e ) {
+			return $fallback;
+		}
+	}
+
+	/** One lead at a time while the budget lets the next start; the rest wait for the next run. */
+	private static function check_leads( array $leads, $bridge, ZSV_Survey_Manager $manager, bool $bypass_cache, string $now, array &$stats ): void {
+		global $wpdb;
+		$t = ZSV_DB::leads_table();
 		foreach ( $leads as $i => $lead ) {
+			if ( ! ZSV_Budget::can_start( 2 ) ) {
+				$stats['deferred']++;
+				continue;
+			}
 			$stats['checked']++;
 			$name = trim( ( $lead['first_name'] ?? '' ) . ' ' . ( $lead['last_name'] ?? '' ) );
 
@@ -89,13 +141,7 @@ class ZSV_Review_Checker {
 
 			if ( ! empty( $result['found'] ) ) {
 				$stats['found']++;
-				$date = $now;
-				if ( ! empty( $result['date'] ) ) {
-					$p = strtotime( (string) $result['date'] );
-					if ( $p ) {
-						$date = gmdate( 'Y-m-d H:i:s', $p );
-					}
-				}
+				$date = self::review_date_from_bridge( (string) ( $result['date'] ?? '' ), $now );
 				$snippet = ! empty( $result['snippet'] ) ? sanitize_text_field( (string) $result['snippet'] ) : null;
 				$wpdb->update(
 					$t,
@@ -111,25 +157,20 @@ class ZSV_Review_Checker {
 					array( '%d' )
 				);
 
-				// A confirmed review closes the loop (best-effort CRM note).
-				if ( $crm && ! empty( $lead['crm_lead_id'] ) ) {
-					try {
-						$body = '[Surveys] Review confirmed via bridge on ' . wp_date( 'M j, Y g:i A' );
-						if ( $snippet ) {
-							$body .= "\n\n\"" . $snippet . '"';
-						}
-						$crm->add_note( array( 'entity' => array( 'entityType' => 'leads', 'id' => (int) $lead['crm_lead_id'] ), 'note' => array( 'body' => $body ) ) );
-					} catch ( \Throwable $e ) {
-						ZSV_DB::disposition( 'review_note_failed', array( 'lead_id' => (int) $lead['id'], 'error' => $e->getMessage() ) );
+				// A confirmed review closes the loop with a CRM note — durable: one not posted
+				// now is posted by the next sweep (the lead has left the set this check reads).
+				if ( ! empty( $lead['crm_lead_id'] ) ) {
+					$body = '[Surveys] Review confirmed via bridge on ' . wp_date( 'M j, Y g:i A' );
+					if ( $snippet ) {
+						$body .= "\n\n\"" . $snippet . '"';
+					}
+					$state = $manager->post_note_durably( 'reviewed', (int) $lead['crm_lead_id'], (int) $lead['id'], $body );
+					if ( 'posted' !== $state ) {
+						ZSV_DB::disposition( 'review_note_owed', array( 'lead_id' => (int) $lead['id'], 'state' => $state ) );
 					}
 				}
 			}
-
-			if ( 0 === ( $i + 1 ) % 50 && ( $i + 1 ) < count( $leads ) ) {
-				sleep( 2 );
-			}
 		}
-		return $stats;
 	}
 
 	public static function run(): void {

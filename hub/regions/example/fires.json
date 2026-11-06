@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"OBJECTID":1,"fire_year":2018,"fire_name":"EXAMPLE RIDGE","burn_acres":1250.0,"start_date":"2018-07-14","CAUSE":1,"AGENCY":"EX"},"geometry":{"type":"Polygon","coordinates":[[[-100.19,40.07],[-100.15,40.07],[-100.15,40.1],[-100.19,40.1],[-100.19,40.07]]]}}]}

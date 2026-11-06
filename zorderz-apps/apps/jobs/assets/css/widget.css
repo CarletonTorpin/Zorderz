@@ -5,7 +5,7 @@
  * the dashboard SPA host. Built entirely on the theme's --sys-* / --ref-*
  * design tokens so Light / Dark / System / Sunlight all track automatically;
  * every token carries a hard-coded fallback so the widget still renders if it
- * is ever loaded outside the theme shell (house convention, per tsec/tssc).
+ * is ever loaded outside the theme shell (the convention every app follows).
  *
  * The theme wraps this body in the shared .dash-widget-container /
  * .dash-widget-header / .dash-widget-body shell (bridge_type inline_widget),
@@ -214,7 +214,7 @@
 }
 
 /* --------------------------------------------------------------------------
- * 4b. RICH WORKER CARD (Phase 2)
+ * 4b. RICH WORKER CARD
  * Headline (job type) . customer/business . tap-to-map . tap-to-call .
  * access callout . meta . people . notes . actions. Reuses the .zjob-item base
  * and restacks it into a full-width vertical card via .zjob-card.
@@ -296,7 +296,7 @@
 }
 
 /* --------------------------------------------------------------------------
- * 4c. SCHEDULE (Phase 3) - the "when" chip + the admin set-time editor.
+ * 4c. SCHEDULE - the "when" chip + the admin set-time editor.
  * ------------------------------------------------------------------------- */
 .zjob-sched {
 	display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
@@ -544,7 +544,7 @@
 .zjob-inline-status.zjob-is-err  { color: var(--sys-error, #DC2626); }
 
 /* ==========================================================================
- * 7. SUNLIGHT MODE - high-contrast overrides (matches tsec/tsemc)
+ * 7. SUNLIGHT MODE - high-contrast overrides (as the Estimates and Prep widgets do)
  * ========================================================================== */
 [data-theme="sunlight"] .zjob-btn-primary {
 	background: #1A1A1A; color: #FFFFFF; border-color: #1A1A1A;
@@ -577,9 +577,9 @@
 
 
 /* ==========================================================================
- * 10. FINISH PHOTOS + COMPLETION MODAL (Phase 7a)
+ * 10. FINISH PHOTOS + COMPLETION MODAL
  * The submitted-photos strip on a pending_close / done card, and the worker's
- * capture modal ("Mark my part complete"). Modal is tsjc- prefixed and appended
+ * capture modal ("Mark my part complete"). Modal is zjobc- prefixed and appended
  * to <body>, so it is styled independently of the .zjob-w widget scope.
  * ========================================================================== */
 
@@ -618,7 +618,7 @@
 .zjob-fp-note { font-size: var(--ref-font-xs, 11px); color: var(--sys-text-sec, #475569); font-style: italic; }
 
 /* ---- capture modal ---------------------------------------------------- */
-.tsjc-overlay {
+.zjobc-overlay {
 	position: fixed; inset: 0; z-index: 100000;
 	display: flex; align-items: center; justify-content: center;
 	padding: 16px;
@@ -626,7 +626,7 @@
 	-webkit-font-smoothing: antialiased;
 	font-family: inherit;
 }
-.tsjc-dialog {
+.zjobc-dialog {
 	width: 100%; max-width: 460px; max-height: 92vh; overflow: auto;
 	display: flex; flex-direction: column;
 	background: var(--sys-surface, #FFFFFF);
@@ -637,41 +637,41 @@
 	font-size: var(--ref-font-sm, 13px);
 	animation: zjob-fade-in 180ms ease;
 }
-.tsjc-head {
+.zjobc-head {
 	display: flex; align-items: center; justify-content: space-between;
 	padding: 14px 16px 8px;
 }
-.tsjc-title { font-size: var(--ref-font-lg, 17px); font-weight: var(--sys-font-wt-b, 700); color: var(--sys-text, #0F172A); }
-.tsjc-x {
+.zjobc-title { font-size: var(--ref-font-lg, 17px); font-weight: var(--sys-font-wt-b, 700); color: var(--sys-text, #0F172A); }
+.zjobc-x {
 	appearance: none; border: none; background: transparent; cursor: pointer;
 	font-size: 22px; line-height: 1; color: var(--sys-text-ter, #64748B);
 	padding: 2px 6px; border-radius: var(--ref-radius-sm, 8px);
 }
-.tsjc-x:hover { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); }
-.tsjc-sub {
+.zjobc-x:hover { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); }
+.zjobc-sub {
 	padding: 0 16px 12px; font-size: var(--ref-font-sm, 13px);
 	line-height: 1.5; color: var(--sys-text-sec, #475569);
 	border-bottom: 1px solid var(--sys-border, #E2E8F0);
 }
-.tsjc-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
-.tsjc-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-.tsjc-tile {
+.zjobc-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.zjobc-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.zjobc-tile {
 	position: relative; width: 84px; height: 84px;
 	display: flex; align-items: center; justify-content: center;
 	background: var(--sys-bg-alt, #F1F5F9);
 	border: 2px solid var(--sys-border, #E2E8F0);
 	border-radius: var(--ref-radius-md, 12px); overflow: hidden;
 }
-.tsjc-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.tsjc-tile.is-verified   { border-color: var(--sys-success, #16A34A); }
-.tsjc-tile.is-unverified { border-color: var(--sys-warning, #D97706); }
-.tsjc-tile-spin {
+.zjobc-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.zjobc-tile.is-verified   { border-color: var(--sys-success, #16A34A); }
+.zjobc-tile.is-unverified { border-color: var(--sys-warning, #D97706); }
+.zjobc-tile-spin {
 	width: 20px; height: 20px;
 	border: 2px solid var(--sys-border, #E2E8F0);
 	border-top-color: #0E9F8E; border-radius: 50%;
 	animation: zjob-spin 0.7s linear infinite;
 }
-.tsjc-tile-x {
+.zjobc-tile-x {
 	position: absolute; top: 2px; right: 2px;
 	width: 20px; height: 20px; padding: 0;
 	display: flex; align-items: center; justify-content: center;
@@ -679,16 +679,16 @@
 	background: rgba(15, 23, 42, 0.72); border: none;
 	border-radius: 50%; cursor: pointer;
 }
-.tsjc-tile-x:hover { background: var(--sys-error, #DC2626); }
-.tsjc-tile-badge {
+.zjobc-tile-x:hover { background: var(--sys-error, #DC2626); }
+.zjobc-tile-badge {
 	position: absolute; left: 0; right: 0; bottom: 0;
 	padding: 1px 0; text-align: center;
 	font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
 	color: #FFFFFF; background: rgba(15, 23, 42, 0.66);
 }
-.tsjc-tile.is-verified .tsjc-tile-badge   { background: rgba(22, 163, 74, 0.85); }
-.tsjc-tile.is-unverified .tsjc-tile-badge { background: rgba(217, 119, 6, 0.9); }
-.tsjc-add {
+.zjobc-tile.is-verified .zjobc-tile-badge   { background: rgba(22, 163, 74, 0.85); }
+.zjobc-tile.is-unverified .zjobc-tile-badge { background: rgba(217, 119, 6, 0.9); }
+.zjobc-add {
 	display: inline-flex; align-items: center; justify-content: center; gap: 8px;
 	min-height: 46px; padding: 10px 16px;
 	font-size: 15px; font-family: inherit; font-weight: var(--sys-font-wt-sb, 600);
@@ -698,41 +698,41 @@
 	border-radius: var(--ref-radius-md, 12px);
 	cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
-.tsjc-add:hover:not(:disabled) { border-color: #0E9F8E; color: #0B8073; }
-.tsjc-add:disabled { opacity: 0.55; cursor: default; }
-.tsjc-add i { width: 18px; height: 18px; }
-.tsjc-foot {
+.zjobc-add:hover:not(:disabled) { border-color: #0E9F8E; color: #0B8073; }
+.zjobc-add:disabled { opacity: 0.55; cursor: default; }
+.zjobc-add i { width: 18px; height: 18px; }
+.zjobc-foot {
 	display: flex; align-items: center; gap: 10px;
 	padding: 12px 16px; border-top: 1px solid var(--sys-border, #E2E8F0);
 }
-.tsjc-status { flex: 1; min-width: 0; font-size: var(--ref-font-sm, 13px); color: var(--sys-text-sec, #475569); }
-.tsjc-status.is-busy { color: var(--sys-text-sec, #475569); }
-.tsjc-status.is-ok   { color: var(--sys-success, #16A34A); }
-.tsjc-status.is-warn { color: var(--sys-warning, #D97706); }
-.tsjc-status.is-err  { color: var(--sys-error, #DC2626); }
-.tsjc-cancel, .tsjc-go {
+.zjobc-status { flex: 1; min-width: 0; font-size: var(--ref-font-sm, 13px); color: var(--sys-text-sec, #475569); }
+.zjobc-status.is-busy { color: var(--sys-text-sec, #475569); }
+.zjobc-status.is-ok   { color: var(--sys-success, #16A34A); }
+.zjobc-status.is-warn { color: var(--sys-warning, #D97706); }
+.zjobc-status.is-err  { color: var(--sys-error, #DC2626); }
+.zjobc-cancel, .zjobc-go {
 	appearance: none; cursor: pointer; font-family: inherit; font-size: 15px;
 	min-height: 46px; padding: 10px 18px; border-radius: var(--ref-radius-md, 12px);
 	font-weight: var(--sys-font-wt-sb, 600); border: 1px solid transparent;
 	display: inline-flex; align-items: center; gap: 6px;
 }
-.tsjc-cancel { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); border-color: var(--sys-border, #E2E8F0); }
-.tsjc-cancel:hover { border-color: var(--sys-border-strong, #CBD5E1); }
-.tsjc-go { background: #0E9F8E; color: #FFFFFF; border-color: #0E9F8E; }
-.tsjc-go:hover:not(:disabled) { background: #0B8073; border-color: #0B8073; }
-.tsjc-go:disabled { opacity: 0.5; cursor: default; }
-.tsjc-go i { width: 17px; height: 17px; }
-[data-theme="sunlight"] .tsjc-go { background: #1A1A1A; border-color: #1A1A1A; }
-[data-theme="sunlight"] .tsjc-go:hover:not(:disabled) { background: #000000; border-color: #000000; }
+.zjobc-cancel { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); border-color: var(--sys-border, #E2E8F0); }
+.zjobc-cancel:hover { border-color: var(--sys-border-strong, #CBD5E1); }
+.zjobc-go { background: #0E9F8E; color: #FFFFFF; border-color: #0E9F8E; }
+.zjobc-go:hover:not(:disabled) { background: #0B8073; border-color: #0B8073; }
+.zjobc-go:disabled { opacity: 0.5; cursor: default; }
+.zjobc-go i { width: 17px; height: 17px; }
+[data-theme="sunlight"] .zjobc-go { background: #1A1A1A; border-color: #1A1A1A; }
+[data-theme="sunlight"] .zjobc-go:hover:not(:disabled) { background: #000000; border-color: #000000; }
 
 @media (prefers-reduced-motion: reduce) {
-	.tsjc-dialog { animation: none; }
-	.tsjc-tile-spin { animation-duration: 1.4s; }
+	.zjobc-dialog { animation: none; }
+	.zjobc-tile-spin { animation-duration: 1.4s; }
 }
 
 
 /* ==========================================================================
- * 11. CLOSE-OUT (Phase 7b) - SLA flag, chip count badge, close-confirm state
+ * 11. CLOSE-OUT - SLA flag, chip count badge, close-confirm state
  * ========================================================================== */
 .zjob-sla-flag {
 	display: inline-flex; align-items: center;
@@ -762,7 +762,7 @@
 
 
 /* ==========================================================================
- * 12. AUTO-CLOSE COUNTDOWN + EXTEND FORM (Phase 7c)
+ * 12. AUTO-CLOSE COUNTDOWN + EXTEND FORM
  * ========================================================================== */
 /* Countdown neutral variant (far from the deadline); is-soon/is-over reuse section 11. */
 .zjob-sla-flag.is-ok { background: var(--sys-tint-info-bg, #DBEAFE); color: var(--sys-tint-info-fg, #1E40AF); }
@@ -858,3 +858,21 @@
 .zjob-mini-warn { background: var(--sys-warning, #D97706); border-color: var(--sys-warning, #D97706); color: #FFFFFF; }
 .zjob-mini-warn:hover:not(:disabled) { background: #B45309; border-color: #B45309; color: #FFFFFF; }
 [data-theme="sunlight"] .zjob-mini-warn { background: #1A1A1A; border-color: #1A1A1A; color: #FFFFFF; }
+
+/* ── My next ─────────────────────────────────────────────────────────── */
+.zjob-next {
+	border: 1px solid var(--sys-border, #E2E8F0);
+	border-radius: var(--ref-radius-md, 10px);
+	padding: var(--ref-space-3, 12px);
+	margin-bottom: var(--ref-space-2, 8px);
+	background: var(--sys-surface, #FFFFFF);
+}
+.zjob-next.is-held { border-color: var(--sys-warning, #D97706); }
+.zjob-next.is-past { opacity: .8; }
+.zjob-next-top { display: flex; align-items: center; gap: var(--ref-space-2, 8px); flex-wrap: wrap; }
+.zjob-next-top svg, .zjob-next-top i { width: 16px; height: 16px; flex: none; }
+.zjob-next-when { margin-left: auto; color: var(--sys-text-sec, #475569); font-size: var(--ref-font-xs, 12px); }
+.zjob-next-where, .zjob-next-why { color: var(--sys-text-sec, #475569); margin-top: 4px; overflow-wrap: anywhere; }
+.zjob-next-code { font-size: var(--ref-font-xs, 12px); opacity: .8; }
+.zjob-next-act { margin-top: var(--ref-space-2, 8px); }
+.zjob-next-h { margin: var(--ref-space-4, 16px) 0 var(--ref-space-2, 8px); font-size: var(--ref-font-sm, 13px); color: var(--sys-text-sec, #475569); }

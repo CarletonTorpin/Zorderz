@@ -62,9 +62,13 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 			}
 		}
 
+		$uid  = (int) get_current_user_id();
+		$mode = ZPREP_Dashboard::queue_mode( $uid );
 		return array(
 			'ajaxurl'    => admin_url( 'admin-ajax.php' ),
 			'nonce'      => wp_create_nonce( ZPREP_NONCE ),
+			'queueMode'  => $mode,
+			'canManage'  => 'manager' === $mode,
 			'version'    => ZPREP_VERSION,
 			'settings'   => array(
 				'grungyMarginIn' => ZPREP_Settings::grungy_margin_in(),
@@ -101,7 +105,10 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 	private function body_html( int $user_id ): string {
 		wp_enqueue_style( 'zprep-widget', ZPREP_URL . 'assets/css/widget.css', array(), zprep_asset_ver( 'assets/css/widget.css' ) );
 		wp_enqueue_style( 'zprep-print', ZPREP_URL . 'assets/css/print.css', array( 'zprep-widget' ), zprep_asset_ver( 'assets/css/print.css' ) );
-		wp_enqueue_script( 'zprep-widget', ZPREP_URL . 'assets/js/widget.js', array(), zprep_asset_ver( 'assets/js/widget.js' ), true );
+		wp_enqueue_script( 'zprep-install-merge', ZPREP_URL . 'assets/js/install-merge.js', array(), zprep_asset_ver( 'assets/js/install-merge.js' ), true );
+		wp_enqueue_script( 'zprep-sections', ZPREP_URL . 'assets/js/sections.js', array(), zprep_asset_ver( 'assets/js/sections.js' ), true );
+		wp_enqueue_script( 'zprep-upcoming', ZPREP_URL . 'assets/js/upcoming.js', array(), zprep_asset_ver( 'assets/js/upcoming.js' ), true );
+		wp_enqueue_script( 'zprep-widget', ZPREP_URL . 'assets/js/widget.js', array( 'zprep-install-merge', 'zprep-sections' ), zprep_asset_ver( 'assets/js/widget.js' ), true );
 		wp_localize_script( 'zprep-widget', 'zprepWidgetData', $this->localized_data() );
 
 		ob_start();
@@ -114,6 +121,9 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 				<div id="zprep-w-atc" class="zprep-w-atc">
 					<div class="zprep-w-section-head">
 						<h3><?php esc_html_e( 'Ready to Cut', 'zorderz' ); ?></h3>
+						<?php if ( 'manager' === ZPREP_Dashboard::queue_mode( $user_id ) ) : ?>
+						<button id="zprep-w-remakes-btn" class="zprep-w-btn zprep-w-btn-ghost" type="button"><?php esc_html_e( 'Remakes', 'zorderz' ); ?></button>
+						<?php endif; ?>
 						<button id="zprep-w-atc-reload" class="zprep-w-btn zprep-w-btn-ghost" type="button"><?php esc_html_e( 'Reload', 'zorderz' ); ?></button>
 					</div>
 					<p class="zprep-w-hint"><?php esc_html_e( 'Jobs in the configured cut stage. Tap one to plan its cuts.', 'zorderz' ); ?></p>
@@ -127,6 +137,15 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 					<div id="zprep-w-atc-notice" class="zprep-w-atc-notice" style="display:none;"></div>
 				</div>
 
+				<?php if ( class_exists( 'ZPREP_Upcoming' ) && ZPREP_Upcoming::allowed( $user_id ) ) : ?>
+				<details id="zprep-w-upcoming" class="zprep-w-upcoming">
+					<summary><?php esc_html_e( 'Upcoming production', 'zorderz' ); ?></summary>
+					<p class="zprep-w-hint"><?php esc_html_e( 'Sold work coming up, the prep sheet each needs, and the day it must be ready by.', 'zorderz' ); ?></p>
+					<div id="zprep-w-upcoming-body" class="zprep-w-upcoming-body"></div>
+				</details>
+				<?php endif; ?>
+
+				<?php if ( 'assignee' !== ZPREP_Dashboard::queue_mode( $user_id ) ) : // an assignee works only their own jobs ?>
 				<div class="zprep-w-atc-divider"><span><?php esc_html_e( 'or look one up', 'zorderz' ); ?></span></div>
 
 				<p class="zprep-w-lead"><?php esc_html_e( 'Plan cuts from a CRM lead or billing estimate.', 'zorderz' ); ?></p>
@@ -139,6 +158,7 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 					<span class="zprep-w-spin"></span>
 					<span id="zprep-w-lookup-msg"><?php esc_html_e( 'Searching…', 'zorderz' ); ?></span>
 				</div>
+				<?php endif; ?>
 				<div id="zprep-w-lookup-error" class="zprep-w-error" style="display:none;"></div>
 			</div>
 

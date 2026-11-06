@@ -1,26 +1,26 @@
 <?php
 /**
- * Zorderz Prep — install-date DISPLAY adapter (Prep side of S5-10/S5-11).
+ * Zorderz Prep — install-date DISPLAY adapter (the Prep side of the install date).
  *
  * Prep prints an INSTALL date on the cut sheet, the Ready-to-Cut card, the lead picker and
  * the CRM completion note. Prep does NOT know how an install date is resolved: it consumes
- * the PUBLISHED cross-plugin resolver boundary (INV-8) exposed by the jobs app —
- * `Zjob_Install_Date` — and nothing else. Two — and only two — resolver methods are called:
+ * the PUBLISHED cross-plugin resolver boundary exposed by the jobs app —
+ * `ZJOB_Install_Date` — and nothing else. Two — and only two — resolver methods are called:
  *
- *   Zjob_Install_Date::for_leads( array $lead_ids, int $viewer ) : array   // [lead_id => envelope]
- *   Zjob_Install_Date::for_estimate_numbers( array $nums, int $viewer ) : array  // [num => envelope]
+ *   ZJOB_Install_Date::for_leads( array $lead_ids, int $viewer ) : array   // [lead_id => envelope]
+ *   ZJOB_Install_Date::for_estimate_numbers( array $nums, int $viewer ) : array  // [num => envelope]
  *
- * INV-8: Prep touches NO jobs table directly. Every resolver call is guarded with
- * class_exists( 'Zjob_Install_Date' ); when the resolver is absent Prep DEGRADES GRACEFULLY —
- * it bakes no install_fallback and the surfaces simply omit the install line (the S5-10
- * relabels still ship). Prep never queries `scheduled_appt_id` / `scheduled_start_utc`.
+ * THE PUBLISHED BOUNDARY: Prep touches NO jobs table directly. Every resolver call is guarded with
+ * class_exists( 'ZJOB_Install_Date' ); when the resolver is absent Prep DEGRADES GRACEFULLY —
+ * it bakes no install_fallback and the surfaces simply omit the install line (the
+ * relabelled dates still show). Prep never queries `scheduled_appt_id` / `scheduled_start_utc`.
  *
- * BOTH ARMS (S5-11). An estimate-born card often carries only its estimate reference, not a
+ * BOTH ARMS. An estimate-born card often carries only its estimate reference, not a
  * lead reference (the CRM lead syncs on a later clock). Prep therefore asks BOTH arms and
  * prefers a KNOWN (scheduled) answer from EITHER key; a non-known answer never downgrades a
  * known one (merge()).
  *
- * FIRST-PAINT SERVER BAKE (S5-11). annotate_jobs() resolves both arms ONCE for the whole
+ * FIRST-PAINT SERVER BAKE. annotate_jobs() resolves both arms ONCE for the whole
  * queue and writes `install_fallback` onto each card, so the chip paints on first render
  * against a stale cached widget — no second async round trip for the initial paint.
  *
@@ -31,14 +31,25 @@
  *
  * WORDING IS NOT RE-HARDCODED. The three-state paper wording (scheduled date / "unscheduled" /
  * "unknown" / "not applicable") is owned by the resolver and produced by
- * Zjob_Install_Date::paper_line() — a value that never returns empty and prints the non-scheduled
- * states distinctly (INV-12). Prep REUSES paper_line() and never re-hardcodes those status
+ * ZJOB_Install_Date::paper_line() — a value that never returns empty and prints the non-scheduled
+ * states distinctly. Prep REUSES paper_line() and never re-hardcodes those status
  * strings.
  *
  * 0000-00-00 GUARD. The resolver guards the zeroed MySQL sentinel at the source (a real date
  * rides ONLY state==='known'; every other state has date===null). Prep adds defence in depth:
  * it exposes a raw date to the client NEVER — the client renders only the resolver's paper_line
  * string — and a zeroed/blank date can never surface as a real date.
+ *
+ * PRECEDENCE: THE JOBS ANSWER WINS, THE BILLING GUESS FILLS ONLY BLANKS. A card may also carry
+ * a date read from its billing paperwork (`billing_install`, ZPREP_Billing_Chain). That guess
+ * is shown only when the jobs app has no known date for the card; it never replaces one.
+ * precedence() is the one ordering, and the widget's install-merge.js applies the same ranks
+ * when a later answer for the same job arrives in the browser:
+ *
+ *     jobs: known date   >   billing guess   >   jobs: unscheduled   >   jobs: unknown / n.a.
+ *
+ * A guess is shown as a guess (state `estimated`, never `known`) and names the document it
+ * came from.
  *
  * Ships EMPTY: names no company / person / product / place / provider.
  *
@@ -51,8 +62,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZPREP_Install_Date {
 
-	/** The published resolver class — the ONLY jobs symbol Prep is permitted to call (INV-8). */
-	const RESOLVER = 'Zjob_Install_Date';
+	/** The published resolver class — the ONLY jobs symbol Prep is permitted to call. */
+	const RESOLVER = 'ZJOB_Install_Date';
 
 	/**
 	 * Is the published install-date resolver available? Every public method fails soft to a
@@ -77,9 +88,17 @@ class ZPREP_Install_Date {
 	 * @param int   $viewer WP user id (the arms gate per row, fail-closed).
 	 * @return array the cards, order and membership unchanged, each with 'install_fallback' when available.
 	 */
-	public static function annotate_jobs( array $jobs, int $viewer ): array {
+	public static function annotate_jobs( array $jobs, int $viewer, bool $with_ts = false ): array {
 		if ( ! self::available() || empty( $jobs ) ) {
-			return $jobs; // graceful degrade: no install line, relabels still ship.
+			// Graceful degrade: no install line at all (not even a billing guess), and the
+			// raw guess never leaves the server.
+			foreach ( $jobs as &$job ) {
+				if ( is_array( $job ) ) {
+					unset( $job['billing_install'] );
+				}
+			}
+			unset( $job );
+			return $jobs;
 		}
 
 		// Collect the distinct keys for a single call per arm.
@@ -106,11 +125,105 @@ class ZPREP_Install_Date {
 			if ( ! is_array( $job ) ) {
 				continue;
 			}
-			$job['install_fallback'] = self::resolve_card( $job, $lead_map, $est_map );
+			$raw   = ( isset( $job['billing_install'] ) && is_array( $job['billing_install'] ) ) ? $job['billing_install'] : null;
+			$guess = $raw ? self::billing_payload( $raw ) : null;
+			$env   = self::resolve_env( $job, $lead_map, $est_map );
+			$jobs_payload            = self::fallback_for_envelope( $env );
+			$job['install_fallback'] = self::precedence( $jobs_payload, $guess );
+			if ( $with_ts ) {
+				// Server-side only (the queue counts): the time of the date the card shows.
+				$job['install_ts'] = self::shown_ts( $job['install_fallback'], $env, $raw );
+			}
+			unset( $job['billing_install'] ); // the raw guess (a UTC datetime) never leaves the server
 		}
 		unset( $job );
 
 		return $jobs;
+	}
+
+	/* ================================================================
+	 * PRECEDENCE — one order for the server bake and the browser merge.
+	 * ================================================================ */
+
+	/** The unix time of the date a card shows (0 when it shows no date). */
+	private static function shown_ts( ?array $shown, array $env, ?array $raw ): int {
+		if ( ! is_array( $shown ) ) {
+			return 0;
+		}
+		if ( 'billing' === (string) ( $shown['source'] ?? '' ) ) {
+			$t = strtotime( (string) ( $raw['start_utc'] ?? '' ) . ' UTC' );
+			return $t ? (int) $t : 0;
+		}
+		if ( 'known' === (string) ( $shown['state'] ?? '' ) && preg_match( '/^\d{4}-\d{2}-\d{2}/', (string) ( $env['date'] ?? '' ) ) ) {
+			$t = strtotime( substr( (string) $env['date'], 0, 10 ) . ' 12:00:00 UTC' );
+			return $t ? (int) $t : 0;
+		}
+		return 0;
+	}
+
+	/**
+	 * Rank a display payload: 3 a date the jobs app knows, 2 a billing-paperwork guess,
+	 * 1 jobs "unscheduled", 0 jobs unknown / not applicable, -1 nothing.
+	 */
+	public static function display_rank( ?array $p ): int {
+		if ( ! is_array( $p ) || '' === (string) ( $p['line'] ?? '' ) ) {
+			return -1;
+		}
+		if ( 'billing' === (string) ( $p['source'] ?? '' ) ) {
+			return 2;
+		}
+		if ( 'known' === (string) ( $p['state'] ?? '' ) ) {
+			return 3;
+		}
+		return 'unscheduled' === (string) ( $p['status'] ?? '' ) ? 1 : 0;
+	}
+
+	/**
+	 * The payload a card shows: the jobs answer when it is a known date, else the billing guess
+	 * when there is one, else the jobs answer (unscheduled / unknown), else null.
+	 */
+	public static function precedence( ?array $jobs, ?array $guess ): ?array {
+		return self::display_rank( $guess ) > self::display_rank( $jobs ) ? $guess : $jobs;
+	}
+
+	/**
+	 * A billing-paperwork guess as a display payload. The line names the day (and time, when one
+	 * was written), the document it was read from, and that more dates exist when they do.
+	 * Wording filter: zprep_install_guess_line( $line, $env ).
+	 */
+	public static function billing_payload( array $env ): ?array {
+		$day = (string) ( $env['date'] ?? '' );
+		$utc = (string) ( $env['start_utc'] ?? '' );
+		if ( '' === $utc || '0000-00-00 00:00:00' === $utc ) {
+			return null;
+		}
+		$ts = strtotime( $utc . ' UTC' );
+		if ( ! $ts ) {
+			return null;
+		}
+		$fmt  = ! empty( $env['has_time'] ) ? 'D M j, g:i a' : 'D M j';
+		$when = function_exists( 'wp_date' ) ? (string) wp_date( $fmt, $ts ) : gmdate( $fmt, $ts );
+		if ( '' === $when && '' !== $day ) {
+			$when = $day;
+		}
+		$doc  = (string) ( $env['doc'] ?? '' );
+		$line = '' !== $doc
+			/* translators: 1: day (and time), 2: billing document, e.g. "invoice #1001". */
+			? sprintf( __( '%1$s · per %2$s', 'zorderz' ), $when, $doc )
+			: $when;
+		if ( ! empty( $env['spread'] ) ) {
+			$line .= ' ' . __( '(+more dates)', 'zorderz' );
+		}
+		$line = trim( (string) apply_filters( 'zprep_install_guess_line', $line, $env ) );
+		if ( '' === $line ) {
+			return null;
+		}
+		return array(
+			'line'   => $line,
+			'status' => 'scheduled',
+			'state'  => 'estimated',
+			'source' => 'billing',
+		);
 	}
 
 	/**
@@ -148,7 +261,7 @@ class ZPREP_Install_Date {
 			return array();
 		}
 		try {
-			$out = Zjob_Install_Date::for_leads( $lead_ids, $viewer );
+			$out = ZJOB_Install_Date::for_leads( $lead_ids, $viewer );
 			return is_array( $out ) ? $out : array();
 		} catch ( \Throwable $e ) {
 			return array(); // bookkeeping must not break the cut queue.
@@ -161,7 +274,7 @@ class ZPREP_Install_Date {
 			return array();
 		}
 		try {
-			$out = Zjob_Install_Date::for_estimate_numbers( $est_nums, $viewer );
+			$out = ZJOB_Install_Date::for_estimate_numbers( $est_nums, $viewer );
 			return is_array( $out ) ? $out : array();
 		} catch ( \Throwable $e ) {
 			return array();
@@ -175,6 +288,11 @@ class ZPREP_Install_Date {
 	 * (the three-state contract is honest: "unknown" = nothing matched).
 	 */
 	private static function resolve_card( array $job, array $lead_map, array $est_map ): array {
+		return self::fallback_for_envelope( self::resolve_env( $job, $lead_map, $est_map ) );
+	}
+
+	/** The merged resolver envelope of one card (see resolve_card()). */
+	private static function resolve_env( array $job, array $lead_map, array $est_map ): array {
 		$lid = (int) ( $job['lead_id'] ?? 0 );
 		$num = self::estimate_of( $job );
 
@@ -186,19 +304,19 @@ class ZPREP_Install_Date {
 			: null;
 
 		if ( null === $lead_env && null === $est_env ) {
-			return self::fallback_for_envelope( self::unknown_envelope() );
+			return self::unknown_envelope();
 		}
 		if ( null === $lead_env ) {
-			return self::fallback_for_envelope( $est_env );
+			return $est_env;
 		}
 		if ( null === $est_env ) {
-			return self::fallback_for_envelope( $lead_env );
+			return $lead_env;
 		}
-		return self::fallback_for_envelope( self::merge( $lead_env, $est_env ) );
+		return self::merge( $lead_env, $est_env );
 	}
 
 	/**
-	 * Cross-arm merge (S5-11 mergeInstallMap discipline, server side). A KNOWN answer wins; when
+	 * Cross-arm merge (the same rule as the client's mergeInstallMap, server side). A KNOWN answer wins; when
 	 * both are known they are the same confirmed booking (the lead arm is kept, deterministic);
 	 * when neither is known the more informative status is kept — a scheduled answer is NEVER
 	 * downgraded to unknown.
@@ -216,7 +334,7 @@ class ZPREP_Install_Date {
 	/** Known-ness via the PUBLISHED helper (state === 'known'); never re-derived locally. */
 	private static function is_known( array $env ): bool {
 		if ( self::available() && is_callable( array( self::RESOLVER, 'is_scheduled' ) ) ) {
-			return (bool) Zjob_Install_Date::is_scheduled( $env );
+			return (bool) ZJOB_Install_Date::is_scheduled( $env );
 		}
 		return false;
 	}
@@ -245,7 +363,7 @@ class ZPREP_Install_Date {
 	/**
 	 * Build the client display payload from a resolver envelope.
 	 *
-	 *   line   : the paper string (Zjob_Install_Date::paper_line — never empty, distinct per state,
+	 *   line   : the paper string (ZJOB_Install_Date::paper_line — never empty, distinct per state,
 	 *            no fault token). This is the ONLY value the client renders.
 	 *   status : scheduled|unscheduled|unknown|not_applicable — presentation (chip style) only.
 	 *   state  : known|unknown|not_applicable — presentation only (is this a real date?).
@@ -260,7 +378,7 @@ class ZPREP_Install_Date {
 
 		$line = '';
 		if ( self::available() && is_callable( array( self::RESOLVER, 'paper_line' ) ) ) {
-			$line = (string) Zjob_Install_Date::paper_line( $env );
+			$line = (string) ZJOB_Install_Date::paper_line( $env );
 		}
 		$line = trim( $line );
 		if ( '' === $line ) {
@@ -271,6 +389,7 @@ class ZPREP_Install_Date {
 			'line'   => $line,
 			'status' => $status,
 			'state'  => $state,
+			'source' => 'jobs',
 		);
 	}
 

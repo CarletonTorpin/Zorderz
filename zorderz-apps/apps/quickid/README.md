@@ -1,13 +1,13 @@
 # Zorderz Quick-ID
 
 A full-screen, photographable digital business card for the signed-in person.
-Swipe in from the left edge of the homepage; another person photographs the
+Pull it in from the left edge of the homepage; another person photographs the
 screen to keep the card.
 
 This is an **output-only** module: no AJAX, no REST, no admin-post, no nonces in
 the DOM. The card is rendered server-side and shows only the **current person's
-own** identity (INV-1). The shared-device / kiosk tier never shows a personal
-card (INV-10).
+own** identity. The shared-device / kiosk tier never shows a personal
+card, because a shared device is not a person.
 
 ## Where the card gets its content
 
@@ -33,11 +33,17 @@ with no placeholder identity.
 
 ## Behaviour
 
-- **Open:** swipe right from the left edge of the homepage (drag follows the
-  finger). Desktop: triple-click an empty spot in the left sidebar region, or
-  mouse-drag from the left edge.
-- **Close:** swipe left anywhere on the card, tap the X, press Escape, or use
-  the Back gesture/button.
+- **Open:** a long, deliberate pull-in from the left edge of the homepage. The
+  card previews as you pull but only commits to open once the pull crosses
+  most of the screen, so a short edge touch or a tablet's system edge-swipe
+  does not open it. Desktop: triple-click an empty spot in the far-left region,
+  or mouse-drag from the left edge.
+- **Close:** swipe left anywhere on the card, tap outside it, tap the X, press
+  Escape, or use the Back gesture/button.
+- **Safe by construction:** only the card slides (the close button never
+  moves), page scroll is locked only while the card is fully open, and a
+  gesture the system interrupts (no touchend, the tab hidden) always settles
+  closed, so the card can never half-open or leave the page locked.
 - The screen is kept awake (wake lock) while the card is shown.
 - The card scales to the largest 4:7 portrait rectangle that fits the screen.
 

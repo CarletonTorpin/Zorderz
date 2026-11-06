@@ -14,9 +14,15 @@
  *   - the payability gate + attribution contract from ZDZ_Compensation.
  *
  * SAFETY: an UNCONFIGURED plan is never paid at a default rate — it computes $0
- * and raises a loud disposition (Playbook §7). A ledger-kind line (refund, fee,
- * …) is booked non-commissionable per its flags. An unresolvable share on a
- * shared job pays zero-and-flags.
+ * and raises a loud disposition. A ledger-kind line (refund, fee, …) is booked
+ * non-commissionable per its flags. An unresolvable share on a shared job pays
+ * zero-and-flags. A locked (finalized) row is never recomputed or rewritten: its
+ * month is closed, and an invoice locked under another month is left out of
+ * this one (a partly paid invoice can show in two months; it is paid once).
+ * A location line and a line billed $0 carry no cost.
+ *
+ * The caller passes only the invoices attributed to this party
+ * (ZCC_Attribution::partition); this engine does not decide who sold what.
  *
  * @package Zorderz\Commission
  */
@@ -26,6 +32,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class ZCC_Calc_Engine {
+
+	/**
+	 * A what-if run (ZCC_Material_Cost::report_row) must not touch the ledger: no locked
+	 * rows read (so the comparison covers the whole month) and no draft rows written.
+	 */
+	public static $no_ledger = false;
 
 	/**
 	 * Calculate commissions for a set of invoices for one party.
@@ -50,16 +62,38 @@ class ZCC_Calc_Engine {
 			return strcmp( $a['date_completed'] ?? '', $b['date_completed'] ?? '' );
 		} );
 
-		$finalized_ids = class_exists( 'ZCC_Ledger' ) ? ZCC_Ledger::get_finalized_invoice_ids( $party_id, $period_key ) : [];
+		$use_ledger    = class_exists( 'ZCC_Ledger' ) && ! self::$no_ledger;
+		$finalized_ids = $use_ledger ? ZCC_Ledger::get_finalized_invoice_ids( $party_id, $period_key ) : [];
 		$processed     = [];
 		$running_total = 0.0;
-		$ledger_stats  = [ 'inserted' => 0, 'updated' => 0, 'locked' => 0, 'skipped' => 0 ];
+		$ledger_stats  = [ 'inserted' => 0, 'updated' => 0, 'locked' => 0, 'skipped' => 0, 'locked_elsewhere' => 0 ];
+
+		// An invoice already locked under ANOTHER month was paid there: left out of this one.
+		$elsewhere = [];
+		if ( $use_ledger ) {
+			$ids = array_values( array_filter( array_map( static function ( $i ) {
+				return (int) ( $i['invoice_id'] ?? 0 );
+			}, $invoices ) ) );
+			foreach ( ZCC_Ledger::rows_for_invoices( $party_id, $ids ) as $iid => $row ) {
+				if ( 'finalized' === ( $row['status'] ?? '' ) && ( $row['period_key'] ?? '' ) !== $period_key ) {
+					$elsewhere[ (int) $iid ] = (string) $row['period_key'];
+				}
+			}
+		}
 
 		// Finalized rows contribute to the tiered running total at their locked value.
-		if ( class_exists( 'ZCC_Ledger' ) && $finalized_ids ) {
+		if ( $use_ledger && $finalized_ids ) {
 			foreach ( ZCC_Ledger::get_period( $party_id, $period_key ) as $le ) {
 				if ( ( $le['status'] ?? '' ) !== 'finalized' ) {
 					continue;
+				}
+				// A locked row is never changed. If today's cost rules would cost it differently,
+				// it is listed for a person to look at, with the old and the new figure.
+				if ( class_exists( 'ZCC_Cost_Recheck' ) ) {
+					$recheck = ZCC_Cost_Recheck::flag_for_entry( $le );
+					if ( $recheck ) {
+						$flags[] = $recheck;
+					}
 				}
 				$processed[] = [
 					'invoice_number'    => $le['invoice_number'],
@@ -84,6 +118,11 @@ class ZCC_Calc_Engine {
 				$ledger_stats['locked']++;
 				continue;
 			}
+			if ( isset( $elsewhere[ $inv_id ] ) ) {
+				$ledger_stats['locked_elsewhere']++;
+				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => 'Locked in another month', 'amount' => 0, 'reason' => sprintf( 'This invoice is already locked in %s and is left out here, so it is paid once.', $elsewhere[ $inv_id ] ), 'severity' => 'info' ];
+				continue;
+			}
 			// Payability re-checked at fetch; belt-and-suspenders here too.
 			if ( ! self::is_payable_status( $inv ) ) {
 				continue;
@@ -95,7 +134,7 @@ class ZCC_Calc_Engine {
 			if ( ! empty( $result['flags'] ) ) {
 				$flags = array_merge( $flags, $result['flags'] );
 			}
-			if ( class_exists( 'ZCC_Ledger' ) && $inv_id ) {
+			if ( $use_ledger && $inv_id ) {
 				$action = ZCC_Ledger::upsert_entry( $party_id, $period_key, $result );
 				if ( isset( $ledger_stats[ $action ] ) ) {
 					$ledger_stats[ $action ]++;
@@ -158,6 +197,27 @@ class ZCC_Calc_Engine {
 				continue;
 			}
 
+			// A location line is billed, never a product, never a cost. Only a PRICED one gets
+			// here (a $0 one is the invoice's location), so a person is asked to look.
+			if ( ! empty( $cls['is_location'] ) ) {
+				$gross_billed     += $line_amount;
+				$processed_lines[] = [
+					'description'    => $line['description'] ?? '',
+					'amount'         => round( $line_amount, 2 ),
+					'cogs'           => 0.0,
+					'cogs_source'    => 'Location line — never carries a cost',
+					'commissionable' => true,
+					'net'            => round( $line_amount, 2 ),
+					'category'       => 'location',
+					'item_id'        => '',
+					'quantity'       => 1,
+				];
+				if ( abs( $line_amount ) > 0.005 ) {
+					$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => 'This location line carries an amount. It counts as billed, with no cost; check whether the amount belongs on a product or service line.', 'severity' => 'warning' ];
+				}
+				continue;
+			}
+
 			// Non-commissionable product line (attribute-flagged).
 			if ( ! empty( $cls['non_commissionable'] ) ) {
 				$gross_billed     += $line_amount;
@@ -183,6 +243,36 @@ class ZCC_Calc_Engine {
 				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => "Classified to item '{$item_id}', which is not in the catalog — $0 COGS applied, flagged.", 'severity' => 'warning' ];
 			} elseif ( $item_id === '' && ( $cls['confidence'] ?? 0 ) < 0.6 && ! self::is_noise_zero_line( $line_amount, $line['description'] ?? '' ) ) {
 				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => $cls['notes'] ?? 'Low-confidence classification.' ];
+			}
+
+			// A line billed $0 (or less) gets no catalog cost: a warranty or replacement part the
+			// business paid for is a person's decision, so it is flagged instead. An item the
+			// catalog marks `cost_on_zero_lines` (its price sits on another line of the job, its
+			// parts are listed at $0) keeps its cost.
+			$zero_ok = false;
+			if ( $item_id !== '' ) {
+				$it      = zcc_item_get( $item_id );
+				$zero_ok = is_array( $it ) && ! empty( $it['attributes']['cost_on_zero_lines'] ); // an item priced on another line of the job
+			}
+			if ( $line_amount <= 0.005 && $line_cogs > 0.005 && ! $zero_ok ) {
+				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => sprintf( 'This line names an item but is billed $0, so no cost was applied (the cost book says $%s). If the business paid for it, a person decides what to charge.', number_format( $line_cogs, 2 ) ), 'severity' => 'warning' ];
+				$cogs_source .= ' — not applied: the line is billed $0 (flagged for review)';
+				$line_cogs    = 0.0;
+			}
+
+			// The material cost rules (price book cost for a family, purchase tax), only for
+			// invoices on or after the business's start date.
+			$material = [];
+			if ( class_exists( 'ZCC_Material_Cost' ) && $line_amount > 0.005 ) {
+				$mc = ZCC_Material_Cost::adjust_line( $inv, $line, $cls, (float) $line_cogs, (int) $line_qty );
+				if ( ! empty( $mc['flag'] ) ) {
+					$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => (string) $mc['flag'], 'severity' => 'warning' ];
+				}
+				if ( ! empty( $mc['applied'] ) ) {
+					$line_cogs    = (float) $mc['cogs'];
+					$cogs_source .= (string) $mc['source'];
+					$material     = (array) $mc['material'];
+				}
 			}
 
 			// COGS sanity cap: cost > revenue is always a wrong match — cap + flag.
@@ -211,6 +301,9 @@ class ZCC_Calc_Engine {
 				'net'            => round( $line_amount - $line_cogs, 2 ),
 				'category'       => $cls['category'],
 				'subtype'        => $subtype,
+				'item_id'        => $item_id,
+				'quantity'       => $line_qty,
+				'material'       => $material,
 			];
 		}
 
@@ -256,7 +349,6 @@ class ZCC_Calc_Engine {
 			'customer_name'     => $inv['customer_name'] ?? '',
 			'date_completed'    => $inv['date_completed'] ?? '',
 			'date_paid'         => $inv['date_paid'] ?? '',
-			'fb_url'            => $inv['fb_url'] ?? '',
 			'payment_status'    => self::resolve_pay_status( $inv ),
 			'lines'             => $processed_lines,
 			'gross_billed'      => round( $gross_billed, 2 ),

@@ -166,7 +166,7 @@ class ZPREP_Billing {
 		if ( ! $this->is_ready() ) {
 			return array();
 		}
-		$cache_key = 'zprep_billing_approved_' . max( 7, $days );
+		$cache_key = 'zprep_billing_approved2_' . max( 7, $days );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) ) {
 			return $cached;
@@ -174,7 +174,7 @@ class ZPREP_Billing {
 
 		$date_min = gmdate( 'Y-m-d', time() - ( max( 7, $days ) * DAY_IN_SECONDS ) );
 		$out      = array();
-		$resp     = $this->get( '/estimates/estimates', array( 'search[date_min]' => $date_min, 'include[0]' => 'invoices', 'per_page' => 100 ) );
+		$resp     = $this->get( '/estimates/estimates', array( 'search[date_min]' => $date_min, 'include[0]' => 'invoices', 'include[1]' => 'lines', 'per_page' => 100 ) );
 		$ests     = $resp['response']['result']['estimates'] ?? array();
 
 		foreach ( $ests as $est ) {
@@ -185,11 +185,15 @@ class ZPREP_Billing {
 			if ( ! ZPREP_Settings::job_in_queue( (string) ( $est['po_number'] ?? '' ), '' ) ) {
 				continue;
 			}
-			$bucket     = ( 'invoiced' === $ui ) ? 'billed' : 'ready';
-			$inv_status = '';
+			$bucket       = ( 'invoiced' === $ui ) ? 'billed' : 'ready';
+			$inv_status   = '';
+			$inv_statuses = array();
 			foreach ( (array) ( $est['invoices'] ?? array() ) as $li ) {
 				$vs         = strtolower( (string) ( $li['v3_status'] ?? $li['ui_status'] ?? '' ) );
 				$inv_status = '' !== $vs ? $vs : $inv_status;
+				if ( '' !== $vs ) {
+					$inv_statuses[] = $vs;
+				}
 				if ( in_array( $vs, array( 'paid', 'partial', 'autopaid', 'deposit-paid', 'deposit-partial' ), true ) ) {
 					$bucket = 'billed';
 					break;
@@ -208,6 +212,9 @@ class ZPREP_Billing {
 				'bucket'          => $bucket,
 				'reference'       => (string) ( $est['po_number'] ?? '' ),
 				'created_at'      => (string) ( $est['create_date'] ?? $est['created_at'] ?? '' ),
+				'updated'         => (string) ( $est['updated'] ?? '' ),
+				'invoice_statuses' => $inv_statuses,
+				'sched'           => self::scheduled_guess( $est ),
 			);
 		}
 
@@ -364,6 +371,25 @@ class ZPREP_Billing {
 		return trim( implode( "\n", array_filter( $parts ) ) );
 	}
 
+	/**
+	 * The scheduled date a billing document writes, as a guess envelope, or null. A date
+	 * written without a year takes its year from the document (the later of its issue and
+	 * update dates), not from today.
+	 */
+	public static function scheduled_guess( array $doc ): ?array {
+		if ( ! class_exists( 'ZPREP_Install_Fallback' ) ) {
+			return null;
+		}
+		$ref = 0;
+		foreach ( array( 'updated', 'create_date', 'created_at', 'date' ) as $k ) {
+			$t = strtotime( (string) ( $doc[ $k ] ?? '' ) );
+			if ( $t && $t > $ref ) {
+				$ref = (int) $t;
+			}
+		}
+		return ZPREP_Install_Fallback::from_text( self::estimate_text( $doc ), $ref > 0 ? $ref : null );
+	}
+
 	/** Does the doc text carry a receipt link — i.e. the job is done (installed + receipted)? */
 	public static function text_has_receipt_link( string $text ): bool {
 		if ( '' === $text ) {
@@ -390,7 +416,7 @@ class ZPREP_Billing {
 			return array();
 		}
 		$days      = (int) apply_filters( 'zprep_atc_invoice_lookback_days', max( 14, $days ) );
-		$cache_key = 'zprep_fb_qinv_' . max( 7, $days );
+		$cache_key = 'zprep_fb_qinv2_' . max( 7, $days );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) ) {
 			return $cached;
@@ -427,8 +453,10 @@ class ZPREP_Billing {
 					'estimateid'     => (string) ( $inv['estimateid'] ?? '' ),
 					'reference'      => (string) ( $inv['po_number'] ?? '' ),
 					'created_at'     => (string) ( $inv['create_date'] ?? $inv['created_at'] ?? $inv['date'] ?? '' ),
+					'updated'        => (string) ( $inv['updated'] ?? '' ),
+					'v3_status'      => strtolower( (string) ( $inv['v3_status'] ?? '' ) ),
 					'installed'      => self::text_has_receipt_link( $text ),
-					'scheduled'      => class_exists( 'ZPREP_Install_Fallback' ) ? ZPREP_Install_Fallback::from_text( $text ) : null,
+					'scheduled'      => self::scheduled_guess( $inv ),
 					'mesh'           => null,
 				);
 			}

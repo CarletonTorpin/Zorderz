@@ -1,5 +1,5 @@
 /*!
- * Zorderz Theme — Dashboard Personalization Styles (v2.14.1)
+ * Zorderz Theme — Dashboard Personalization Styles
  *
  * Scoped tightly to only the new elements we inject:
  *   - .zdz-drag-handle          (added inside each .kpi-card by JS)
@@ -10,7 +10,7 @@
  * existing theme selector. Uses --sys-* / --ref-* design tokens
  * throughout so responsive scaling and theme variants work correctly.
  *
- * v2.14.1: Converted all hard-coded px values to design tokens.
+ * Converted all hard-coded px values to design tokens.
  *          --sys-surface-subtle is now defined in style.css for all 4 themes.
  */
 

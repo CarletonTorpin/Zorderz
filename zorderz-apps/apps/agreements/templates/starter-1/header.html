@@ -1,0 +1,25 @@
+<!--
+  Starter template, section "header": the agreement's first page. A skeleton, not an agreement: have your lawyer write
+  your terms. The legal pack fills {{pack_first_page_html}} with what its law puts on the first page (nothing, for a pack
+  that asks for nothing there). Every paragraph marked "todo" holds the agreement back from customers until it is
+  replaced with your own words.
+-->
+<p class="todo">Starter template: a skeleton, not an agreement. Have your lawyer write your terms before any customer signs.</p>
+<h2>Agreement</h2>
+<p>This is your agreement with {{company_name}}. Please read it all, then sign at the end.</p>
+<div class="card">
+<h3>You</h3>
+<p>{{buyer_name}}<br>The work will be done at:<br>{{job_address_html}}</p>
+<p class="age-slot"></p>
+</div>
+<div class="cards">
+<div class="card">
+<h3>Us</h3>
+<p>{{company_name}}<br>{{company_address_html}}<br>License number: {{license_number}}<br>Questions: {{help_phone}}</p>
+</div>
+<div class="card">
+<h3>Your salesperson</h3>
+<p>{{salesperson_name}}<br>Registration number, if applicable: {{salesperson_registration}}</p>
+</div>
+</div>
+{{pack_first_page_html}}

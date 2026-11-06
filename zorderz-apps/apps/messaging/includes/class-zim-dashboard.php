@@ -46,9 +46,12 @@ class ZIM_Dashboard {
 			'zim_upload'              => 'ajax_upload',
 			'zim_push_subscribe'      => 'ajax_push_subscribe',
 			'zim_push_unsubscribe'    => 'ajax_push_unsubscribe',
+			'zim_push_test'           => 'ajax_push_test',        // Settings -> Notifications: Send me a test
 			'zim_channel_create'      => 'ajax_channel_create',
 			'zim_member_add'          => 'ajax_member_add',
 			'zim_preview_ref'         => 'ajax_preview_ref',
+			'zim_share_ref'           => 'ajax_share_ref',     // share a message's #NNNN with its conversation
+			'zim_unshare_ref'         => 'ajax_unshare_ref',   // stop sharing it
 			'zim_preview_vault'       => 'ajax_preview_vault', // v1.0.20: Knowledge Vault doc previews
 			'zim_set_quiet_hours'     => 'ajax_set_quiet_hours',
 			'zim_dm_open'             => 'ajax_dm_open',
@@ -105,10 +108,19 @@ class ZIM_Dashboard {
 				'code'    => 'zim_unavailable',
 			), 404 );
 		}
+		// An account in Privacy View runs only the few actions of its one direct conversation, and only once an
+		// administrator has chosen who it may message (ZIM_Privacy_View).
+		if ( class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on()
+			&& ! ZIM_Privacy_View::action_ok( isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '' ) ) {
+			wp_send_json_error( array( 'message' => 'Not available.', 'code' => 'zim_unavailable' ), 403 );
+		}
 	}
 
 	private function gate_admin() {
 		$this->gate();
+		if ( class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on() ) {
+			wp_send_json_error( array( 'message' => 'Admin required.' ), 403 );   // never an administrator's action
+		}
 		// v1.0.24 — read-only roles (kiosk) are never admins; refuse explicitly
 		// so channel-create / member-add can't be driven by the shared account.
 		$this->deny_if_read_only();
@@ -158,6 +170,10 @@ class ZIM_Dashboard {
 			wp_send_json_error( array( 'message' => 'Bad conversation.' ), 400 );
 		}
 		if ( ! ZIM_Membership::is_member( get_current_user_id(), $conversation_id ) ) {
+			wp_send_json_error( array( 'message' => 'Not a member of this conversation.' ), 403 );
+		}
+		// An account in Privacy View opens only its direct conversation with the administrator it may message.
+		if ( class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on() && ! ZIM_Privacy_View::conversation_ok( $conversation_id ) ) {
 			wp_send_json_error( array( 'message' => 'Not a member of this conversation.' ), 403 );
 		}
 		return $conversation_id;
@@ -210,11 +226,13 @@ class ZIM_Dashboard {
 	public function ajax_sidebar() {
 		$this->gate();
 		$user_id = get_current_user_id();
-		wp_send_json_success( array(
+		$out     = array(
 			'channels'    => ZIM_Channels::list_for_user( $user_id ),
 			'dms'         => ZIM_DMs::list_for_user( $user_id ),
 			'server_time' => gmdate( 'c' ),
-		) );
+		);
+		// An account in Privacy View: its list is its one direct conversation, nothing else.
+		wp_send_json_success( class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on() ? ZIM_Privacy_View::sidebar( $out ) : $out );
 	}
 
 	// ─────────────────────────────────────────────────────────────
@@ -231,6 +249,12 @@ class ZIM_Dashboard {
 		$attachment_ids = isset( $_POST['attachment_ids'] )
 			? array_map( 'absint', (array) $_POST['attachment_ids'] )
 			: array();
+		// An account in Privacy View posts text only (no attachment, no shared document). ZIM_Messages::post() makes
+		// its body plain text with its prefix.
+		if ( class_exists( 'ZIM_Privacy_View' ) && ZIM_Privacy_View::on()
+			&& ( array_filter( $attachment_ids ) || ! empty( $_POST['share_refs'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in gate_write() at the top of this handler.
+			wp_send_json_error( array( 'message' => 'Text only from this account.', 'code' => 'zim_text_only' ), 403 );
+		}
 
 		$result = ZIM_Messages::post(
 			$conversation_id,
@@ -245,10 +269,29 @@ class ZIM_Dashboard {
 			), 400 );
 		}
 
+		// "Share #1234 with Sam (this document only)", ticked in the composer. Only numbers that are in the stored
+		// message are shared, to the other people in this conversation (ZIM_Doc_Shares).
+		$shared = 0;
+		$share  = ( isset( $_POST['share_refs'] ) && class_exists( 'ZIM_Doc_Shares' ) ) // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in gate_write() at the top of this handler.
+			? array_slice( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['share_refs'] ) ), 0, ZIM_Doc_Shares::MAX_REFS ) // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in gate_write() at the top of this handler.
+			: array();
+		if ( $share ) {
+			$stored = ZIM_Messages::stored_body( (int) $result['message_id'] );
+			$shared = ZIM_Doc_Shares::grant_for_message( (int) $result['message_id'], $conversation_id, get_current_user_id(), $stored, $share );
+		}
+
+		// Counted here, not in ZIM_Messages::post(): e-mail replies, the chat, other apps' notices and media cards post
+		// through it too.
+		function_exists( 'zim_usage' ) && zim_usage( 'message_sent', (int) $conversation_id );
+		if ( $shared > 0 ) {
+			function_exists( 'zim_usage' ) && zim_usage( 'document_shared', (int) $result['message_id'] );
+		}
+
 		$fresh = ZIM_Messages::fetch_since( $conversation_id, (int) $result['message_id'] - 1, 1 );
 		wp_send_json_success( array(
 			'message_id' => (int) $result['message_id'],
 			'messages'   => $fresh,
+			'shared'     => (int) $shared,
 		) );
 	}
 
@@ -264,6 +307,7 @@ class ZIM_Dashboard {
 				'code'    => $result->get_error_code(),
 			), 400 );
 		}
+		function_exists( 'zim_usage' ) && zim_usage( 'message_edited', $message_id );
 		wp_send_json_success( array( 'message_id' => (int) $result['message_id'] ) );
 	}
 
@@ -362,8 +406,20 @@ class ZIM_Dashboard {
 	// Push subscriptions
 	// ─────────────────────────────────────────────────────────────
 
+	/**
+	 * The shared device cannot subscribe: a subscription on the shared login
+	 * would reach every device that ever signed up on it. Neither can an
+	 * account in Privacy View (ZIM_Push::refused). The session that subscribes
+	 * is recorded, so signing out removes this device only
+	 * (ZIM_Push::on_logout). The stored endpoint's hash comes back, so the app
+	 * can recognise this device in messaging.push_setup's list.
+	 */
 	public function ajax_push_subscribe() {
 		$this->gate();
+		$this->deny_if_read_only();
+		if ( ZIM_Push::refused( get_current_user_id() ) ) {
+			wp_send_json_error( array( 'message' => 'Notifications are off on this account.', 'code' => 'zim_push_refused' ), 403 );
+		}
 		$endpoint = isset( $_POST['endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['endpoint'] ) ) : '';
 		$p256dh   = isset( $_POST['p256dh'] )   ? sanitize_text_field( wp_unslash( $_POST['p256dh'] ) ) : '';
 		$auth     = isset( $_POST['auth'] )     ? sanitize_text_field( wp_unslash( $_POST['auth'] ) )   : '';
@@ -373,7 +429,24 @@ class ZIM_Dashboard {
 		if ( is_wp_error( $id ) ) {
 			wp_send_json_error( array( 'message' => $id->get_error_message() ), 400 );
 		}
-		wp_send_json_success( array( 'subscription_id' => (int) $id ) );
+		wp_send_json_success( array( 'subscription_id' => (int) $id, 'endpoint_hash' => hash( 'sha256', $endpoint ) ) );
+	}
+
+	/**
+	 * Send me a test (Settings -> Notifications). The fixed test push, to the
+	 * asker's own subscriptions - this device's when the endpoint is given.
+	 * Five an hour; never the shared device; sent at once (quiet hours do not
+	 * apply to a push the person asked for).
+	 */
+	public function ajax_push_test() {
+		$this->gate();
+		$this->deny_if_read_only();
+		$endpoint = isset( $_POST['endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['endpoint'] ) ) : '';
+		$r        = ZIM_Push::send_test( get_current_user_id(), $endpoint );
+		if ( is_wp_error( $r ) ) {
+			wp_send_json_error( array( 'message' => $r->get_error_message(), 'code' => $r->get_error_code() ), 'zim_test_limit' === $r->get_error_code() ? 429 : 400 );
+		}
+		wp_send_json_success( $r );
 	}
 
 	public function ajax_push_unsubscribe() {
@@ -421,6 +494,7 @@ class ZIM_Dashboard {
 			}
 		}
 
+		function_exists( 'zim_usage' ) && zim_usage( 'channel_created', (int) $id );
 		wp_send_json_success( array( 'conversation_id' => (int) $id ) );
 	}
 
@@ -461,6 +535,19 @@ class ZIM_Dashboard {
 			wp_send_json_error( array( 'message' => 'Bad number.' ), 400 );
 		}
 
+		// The document itself, as the billing system shows it, only for someone who may see it -- their own right in
+		// Estimates, or a share from the message's sender (ZIM_Doc_Shares). Decided per person, per request; nothing
+		// about a document is cached here. Without a document provider it says so: the plain card below would hand
+		// every viewer the same customer and total.
+		if ( class_exists( 'ZIM_Doc_Shares' ) ) {
+			$mid = isset( $_GET['message_id'] ) ? absint( $_GET['message_id'] ) : 0;
+			if ( $mid && ! $this->message_visible( $mid ) ) {
+				$mid = 0;
+			}
+			$kind = isset( $_GET['kind'] ) ? sanitize_key( wp_unslash( $_GET['kind'] ) ) : '';
+			wp_send_json_success( ZIM_Doc_Shares::preview_for( get_current_user_id(), (string) $number, $mid, $kind ) );
+		}
+
 		$card = ZIM_Preview_Cards::get_card( $number );
 		if ( is_wp_error( $card ) ) {
 			// Graceful neutral chip so the UI doesn't surface a scary error.
@@ -472,12 +559,62 @@ class ZIM_Dashboard {
 				'total'         => null,
 				'currency'      => '',
 				'status'        => '',
-				'url'           => 'https://my.freshbooks.com/#/search?q=' . rawurlencode( (string) $number ),
+				'url'           => '',   // a card never sends anyone off to the billing system
 				'source'        => 'fallback',
 				'unavailable'   => true,
 			) );
 		}
 		wp_send_json_success( $card );
+	}
+
+	/** Is this message in a conversation the current user belongs to? */
+	private function message_visible( $message_id ) {
+		global $wpdb;
+		$conv = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT conversation_id FROM {$wpdb->prefix}zim_messages WHERE id = %d",
+			(int) $message_id
+		) );
+		return $conv > 0 && ZIM_Membership::is_member( get_current_user_id(), $conv );
+	}
+
+	/**
+	 * "Share with this conversation": the sender shares the #NNNN in a message they sent (one sent unticked, or
+	 * before shares existed). Only its author (ZIM_Doc_Shares::share_message checks).
+	 */
+	public function ajax_share_ref() {
+		$this->gate_write();
+		if ( ! class_exists( 'ZIM_Doc_Shares' ) ) {
+			wp_send_json_error( array( 'message' => 'Not available.' ), 404 );
+		}
+		$mid = isset( $_POST['message_id'] ) ? absint( $_POST['message_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in gate_write() at the top of this handler.
+		if ( ! $mid || ! $this->message_visible( $mid ) ) {
+			wp_send_json_error( array( 'message' => 'Message not found.' ), 404 );
+		}
+		$num = isset( $_POST['number'] ) ? preg_replace( '/\D/', '', (string) wp_unslash( $_POST['number'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in gate_write(); the value is reduced to digits.
+		$r   = ZIM_Doc_Shares::share_message( $mid, get_current_user_id(), $num );
+		if ( is_wp_error( $r ) ) {
+			wp_send_json_error( array( 'message' => $r->get_error_message(), 'code' => $r->get_error_code() ), 403 );
+		}
+		function_exists( 'zim_usage' ) && zim_usage( 'document_shared', $mid );
+		wp_send_json_success( array( 'share' => $r ) );
+	}
+
+	/** Stop sharing the documents in a message. Its author, or a site administrator. */
+	public function ajax_unshare_ref() {
+		$this->gate_write();
+		if ( ! class_exists( 'ZIM_Doc_Shares' ) ) {
+			wp_send_json_error( array( 'message' => 'Not available.' ), 404 );
+		}
+		$mid = isset( $_POST['message_id'] ) ? absint( $_POST['message_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in gate_write() at the top of this handler.
+		// The same answer for "no such message" and "not in your conversation".
+		if ( ! $mid || ( ! $this->message_visible( $mid ) && ! current_user_can( 'manage_options' ) ) ) {
+			wp_send_json_error( array( 'message' => 'Message not found.' ), 404 );
+		}
+		$r = ZIM_Doc_Shares::withdraw( $mid, get_current_user_id() );
+		if ( is_wp_error( $r ) ) {
+			wp_send_json_error( array( 'message' => $r->get_error_message(), 'code' => $r->get_error_code() ), 403 );
+		}
+		wp_send_json_success( array( 'share' => $r ) );
 	}
 
 	/**

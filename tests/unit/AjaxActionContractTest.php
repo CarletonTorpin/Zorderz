@@ -47,6 +47,23 @@ final class AjaxActionContractTest extends TestCase {
 		return $dynamic && (bool) preg_match( "/['\"]" . preg_quote( $action, '/' ) . "['\"]\s*=>/", $php );
 	}
 
+	/**
+	 * The actions an app lists as OPTIONAL_AJAX: posted by its page only after the server found them registered
+	 * (has_action), so a page without them draws no button. Each must really be checked with has_action in that code.
+	 */
+	private static function optional( string $php ): array {
+		$out = array();
+		if ( preg_match_all( '/const OPTIONAL_AJAX = array\((.*?)\n\t\);/s', $php, $blocks ) ) {
+			foreach ( $blocks[1] as $b ) {
+				preg_match_all( "/'([a-z][a-z0-9_]{3,})'/", $b, $names );
+				foreach ( $names[1] as $n ) {
+					$out[ $n ] = true;
+				}
+			}
+		}
+		return false !== strpos( $php, "has_action( 'wp_ajax_' . " ) ? $out : array();
+	}
+
 	public function test_every_posted_action_has_a_hook(): void {
 		$root      = dirname( __DIR__, 2 );
 		$theme_php = self::concat( self::files( $root . '/zorderz', '.php' ) );
@@ -54,10 +71,12 @@ final class AjaxActionContractTest extends TestCase {
 		$checked   = 0;
 		foreach ( glob( $root . '/zorderz-apps/apps/*', GLOB_ONLYDIR ) as $app ) {
 			preg_match_all( self::ACTION_RE, self::concat( self::files( $app, '.js' ) ), $m );
-			$php = self::concat( self::files( $app, '.php' ) ) . "\n" . $theme_php;
+			$app_php  = self::concat( self::files( $app, '.php' ) );
+			$php      = $app_php . "\n" . $theme_php;
+			$optional = self::optional( $app_php );
 			foreach ( array_unique( $m[1] ) as $action ) {
 				$checked++;
-				if ( ! self::registered( $action, $php ) ) {
+				if ( ! self::registered( $action, $php ) && ! isset( $optional[ $action ] ) ) {
 					$missing[] = basename( $app ) . ': ' . $action;
 				}
 			}

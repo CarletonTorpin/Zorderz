@@ -1,0 +1,151 @@
+{
+ "role": "reason",
+ "note": "Made-up arithmetic of the kind a hard chat turn needs.",
+ "cases": [
+  {
+   "id": "rs-days",
+   "system": "Work it out carefully, then give only the final number.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A team of 3 people each assembles 4 units a day. How many whole working days to assemble 30 units?"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "answer": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "answer"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 4000,
+   "expect": {
+    "json": {
+     "answer": 3
+    }
+   },
+   "example_answer": "{\"answer\": 3}"
+  },
+  {
+   "id": "rs-tiered",
+   "system": "Work it out carefully, then give only the final number.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A fee is 5% of the first $2,000 of an order and 7% of anything above. What is the fee on a $4,500 order, in dollars?"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "answer": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "answer"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 4000,
+   "expect": {
+    "json": {
+     "answer": 275
+    }
+   },
+   "example_answer": "{\"answer\": 275}"
+  },
+  {
+   "id": "rs-reels",
+   "system": "Work it out carefully, then give only the final number.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Cable comes in 50 m reels. Each run uses 3.5 m. How many whole reels are needed for 40 runs?"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "answer": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "answer"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 4000,
+   "expect": {
+    "json": {
+     "answer": 3
+    }
+   },
+   "example_answer": "{\"answer\": 3}"
+  },
+  {
+   "id": "rs-date",
+   "system": "Work it out carefully, then give only the final number.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A delivery is 10 business days after Friday, October 2, 2026 (no holidays). On what day of October 2026 does it fall? Give the day number."
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "answer": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "answer"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 4000,
+   "expect": {
+    "json": {
+     "answer": 16
+    }
+   },
+   "example_answer": "{\"answer\": 16}"
+  },
+  {
+   "id": "rs-split",
+   "system": "Work it out carefully, then give only the final number.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Two partners split a $2,400 bonus 70/30. How much more, in dollars, does the larger share get?"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "answer": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "answer"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 4000,
+   "expect": {
+    "json": {
+     "answer": 960
+    }
+   },
+   "example_answer": "{\"answer\": 960}"
+  }
+ ]
+}

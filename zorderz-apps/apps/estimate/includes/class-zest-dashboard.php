@@ -4,7 +4,7 @@
  *
  * Endpoints are nonce-checked and scoped. Row ownership is decided by created_by FIRST
  * (the reliable indexed column), with the provenance ("Submitted by:") initials as a
- * legacy fallback — a rep with no code configured still sees their own work (the "Robin"
+ * legacy fallback — a rep with no code configured still sees their own work (the no-code
  * defect). The assignable roster comes from ZDZ_Party (short code under key `initials`,
  * matched case-insensitively), never a local roster constant. Every estimate leaving the
  * app passes through ZDZ_Doc_Conventions ON OUTPUT. Billing status is read as a SIGNAL via
@@ -79,8 +79,16 @@ class ZEST_Dashboard {
 		return (bool) array_intersect( array( 'zdz_owner', 'zdz_admin' ), $roles );
 	}
 
-	/** created_by first, provenance-initials fallback. */
-	private static function owns_row( array $row, int $uid ): bool {
+	/**
+	 * Is the row this person's? ZEST_Salesperson's rule: the admin tier; else, unless an administrator removed their
+	 * access, its creator, a person its codes name (the salesperson column, the location line, the provenance line: so a
+	 * stub Territories routed to someone is theirs) or an administrator's grant. Without that class: created_by first,
+	 * provenance-initials fallback.
+	 */
+	public static function owns_row( array $row, int $uid ): bool {
+		if ( class_exists( 'ZEST_Salesperson' ) ) {
+			return ZEST_Salesperson::owned_by( $row, $uid );
+		}
 		if ( (int) ( $row['created_by'] ?? 0 ) === $uid ) {
 			return true;
 		}
@@ -127,20 +135,40 @@ class ZEST_Dashboard {
 		if ( empty( $res['ok'] ) ) {
 			wp_send_json_error( array( 'message' => $res['error'] ) );
 		}
-		wp_send_json_success( $res );
+		/**
+		 * A parse's answer on its way to the screen (gate codes cut, the seal hold attached, price book lines priced).
+		 *
+		 * @param array $res { ok, estimate, rejected, warnings }
+		 */
+		wp_send_json_success( apply_filters( 'zest_parse_result', $res ) );
 	}
 
 	/** Create the billing estimate + CRM lead from a confirmed preview. */
 	public static function ajax_create(): void {
 		$uid = self::guard();
-		// Third-layer defense (§61 INV-10, S2-08): the direct AJAX create path refuses on a
-		// shared device too, matching the chat bridge's kiosk hard-refusal.
+		// the direct create path refuses on a shared device too, as the chat's create does
 		if ( self::is_kiosk_session( $uid ) ) {
 			wp_send_json_error( array( 'message' => 'This action is not available on the shared device.' ), 403 );
 		}
 		$raw = isset( $_POST['estimate'] ) ? json_decode( wp_unslash( $_POST['estimate'] ), true ) : null;
 		if ( ! is_array( $raw ) ) {
 			wp_send_json_error( array( 'message' => 'Missing estimate.' ) );
+		}
+		$res = self::create_core( $raw, $uid );
+		if ( empty( $res['ok'] ) ) {
+			wp_send_json_error( array( 'message' => $res['error'] ) );
+		}
+		wp_send_json_success( array( 'number' => $res['number'], 'id' => $res['id'], 'local' => $res['local'] ) );
+	}
+
+	/**
+	 * The create itself, shared by the app and the chat's confirmed create: the $0 rules, Territories for a new operator
+	 * stub, entitlements, the billing estimate (or a local one), this app's row, the CRM lead. The caller has checked the
+	 * person (signed in, not the shared device). { ok, number, id, local, row_id } or { ok: false, error }.
+	 */
+	public static function create_core( array $raw, int $uid ): array {
+		if ( $uid <= 0 || self::is_kiosk_session( $uid ) ) {
+			return array( 'ok' => false, 'error' => 'This action is not available on the shared device.' );
 		}
 		$email = ZEST_FreshBooks::clean_email( $raw['customer_email'] ?? ( $raw['customer']['email'] ?? '' ) );
 		$is_operator = user_can( $uid, 'zest_create_zero_estimates' ) && ! self::is_admin_tier( $uid );
@@ -152,21 +180,51 @@ class ZEST_Dashboard {
 			$total += (float) ( $li['unit_price'] ?? 0 ) * (int) ( $li['quantity'] ?? 1 );
 		}
 
-		// E5 — the $0-stub allowance matrix (server-authoritative, INV-1). Privileged
+		// The $0-stub allowance matrix (server-authoritative). Privileged
 		// full-$0 stub allowed; a mixed $0 (a $0 billable among priced) blocked for all.
 		$zero = self::assess_zero_total( $items, $uid, array( 'is_operator' => $is_operator, 'path' => 'create' ) );
 		if ( empty( $zero['allow'] ) ) {
-			wp_send_json_error( array( 'message' => $zero['refuse_message'] ) );
+			return array( 'ok' => false, 'error' => (string) $zero['refuse_message'] );
 		}
 
+		// A new operator stub asks Territories who gets it (guarded: without Territories nothing changes). The
+		// answer is worked out here on the server, never taken from the browser.
+		$ctx   = self::output_ctx( $uid );
+		$route = null;
+		if ( $is_operator && $total <= 0 && class_exists( 'ZEST_Territories' ) ) {
+			$route = ZEST_Territories::route( $raw, (string) $ctx['initials'] );
+			$ctx   = ZEST_Territories::out_ctx( $route, $ctx );
+		}
+
+		$grants = array();
 		if ( ZEST_FreshBooks::is_configured() ) {
 			// Billing connected: a priced estimate needs an email to deliver, and we create through the provider.
 			if ( $total > 0 && '' === $email ) {
-				wp_send_json_error( array( 'message' => 'This estimate needs a valid email address to create and deliver the customer document.' ) );
+				return array( 'ok' => false, 'error' => 'This estimate needs a valid email address to create and deliver the customer document.' );
 			}
-			$res = ZEST_FreshBooks::create_estimate( $raw, self::output_ctx( $uid ) );
+			// an entitlement the customer earned with an earlier purchase (the price book's rules), reserved first
+			$cid = preg_replace( '/\D/', '', (string) ( $raw['billing_cust_id'] ?? ( $raw['customer']['client_id'] ?? '' ) ) );
+			if ( ! $is_operator && '' !== $cid && class_exists( 'ZEST_Price_Book_Lines' ) ) {
+				$lines  = $items;
+				$grants = ZEST_Price_Book_Lines::apply_entitlements( $lines, $cid, '', static function ( $client, $days ) {
+					$c = ZEST_FreshBooks::client();
+					return ( $c && method_exists( $c, 'get_client_invoices' ) ) ? (array) $c->get_client_invoices( $client, (int) $days ) : array();
+				} );
+				$raw['line_items']      = $lines;
+				$raw['billing_cust_id'] = $cid;
+			}
+			if ( class_exists( 'ZEST_Warranty_Note' ) ) {
+				$raw['notes'] = ZEST_Warranty_Note::add( (string) ( $raw['notes'] ?? '' ), (array) ( $raw['line_items'] ?? array() ) );
+			}
+			$res = ZEST_FreshBooks::create_estimate( $raw, $ctx );
 			if ( empty( $res['ok'] ) ) {
-				wp_send_json_error( array( 'message' => $res['error'] ) );
+				if ( class_exists( 'ZEST_Price_Book_Lines' ) ) {
+					ZEST_Price_Book_Lines::release( $grants );
+				}
+				return array( 'ok' => false, 'error' => (string) $res['error'] );
+			}
+			if ( class_exists( 'ZEST_Price_Book_Lines' ) ) {
+				ZEST_Price_Book_Lines::confirm( $grants, 'est:' . (string) $res['id'] );
 			}
 		} else {
 			// No billing provider connected: save a local estimate the app owns. It syncs to a
@@ -174,25 +232,41 @@ class ZEST_Dashboard {
 			$res = array( 'ok' => true, 'id' => '', 'number' => self::next_local_number(), 'local' => true );
 		}
 
-		// Mirror locally for ownership + history (source of truth for "my estimates").
-		self::store_row( $raw, $res, $uid );
+		// Mirror locally for ownership + history (source of truth for "my estimates"). A routed stub's provenance line
+		// and salesperson column name the person Territories routed it to; created_by stays the operator who typed it.
+		$eid = self::store_row( $raw, $res, $uid, $ctx );
+		if ( $route ) {
+			ZEST_Territories::after_save( $route, (string) $res['number'], (string) $ctx['initials'], (string) ( $raw['customer']['zip'] ?? ( $raw['customer_zip'] ?? '' ) ), $uid );
+		}
 
 		// CRM lead is failure-tolerant — a CRM outage never blocks the billing estimate.
 		if ( ZEST_Nutshell::is_configured() ) {
+			// what the team needs and the customer never sees (the home's door handle side) goes on the lead's note
+			$team = array();
+			foreach ( (array) ( $raw['line_items'] ?? array() ) as $li ) {
+				$t = ( is_array( $li ) && class_exists( 'ZEST_Door_Handle' ) ) ? ZEST_Door_Handle::team_line( $li ) : '';
+				if ( '' !== $t ) {
+					$team[] = '- ' . sanitize_text_field( (string) ( $li['description'] ?? '' ) ) . "\n   " . $t;
+				}
+			}
 			$lead = ZEST_Nutshell::create_lead( array(
 				'contact'   => (array) ( $raw['customer'] ?? array() ),
 				'reference' => (string) ( $raw['reference'] ?? '' ),
+				'note'      => $team ? 'Estimate #: ' . (string) $res['number'] . "\n" . implode( "\n", $team ) : '',
 			) );
 			if ( empty( $lead['ok'] ) ) {
 				error_log( 'Zorderz Estimates: CRM lead not created for estimate ' . $res['number'] . ' — ' . $lead['error'] );
 			}
 		}
 
-		wp_send_json_success( array( 'number' => $res['number'], 'id' => $res['id'], 'local' => ! empty( $res['local'] ) ) );
+		if ( function_exists( 'zest_usage' ) ) {
+			zest_usage( 'estimate_created', $eid );
+		}
+		return array( 'ok' => true, 'number' => (string) $res['number'], 'id' => (string) $res['id'], 'local' => ! empty( $res['local'] ), 'row_id' => $eid );
 	}
 
 	/**
-	 * Update an existing estimate (Plan 02 E1). Two-phase: with NO confirm_hash it returns
+	 * Update an existing estimate. Two-phase: with NO confirm_hash it returns
 	 * a preview + a content hash and writes nothing; WITH a confirm_hash + the echoed doc it
 	 * re-verifies and writes once. Nonce + login guarded (guard()), kiosk-refused server-side.
 	 */
@@ -249,15 +323,8 @@ class ZEST_Dashboard {
 		if ( ! $row ) {
 			wp_send_json_error( array( 'message' => 'Estimate not found.' ), 404 );
 		}
-		if ( ! self::is_admin_tier( $uid ) ) {
-			$mine = ( (int) $row['created_by'] === $uid );
-			if ( ! $mine ) {
-				$code = self::user_code( $uid );
-				$mine = ( '' !== $code && false !== stripos( (string) $row['notes'], $code ) );
-			}
-			if ( ! $mine ) {
-				wp_send_json_error( array( 'message' => 'Not allowed.' ), 403 );
-			}
+		if ( ! self::is_admin_tier( $uid ) && ! self::owns_row( $row, $uid ) ) {
+			wp_send_json_error( array( 'message' => 'Not allowed.' ), 403 );
 		}
 		$items = json_decode( (string) ( $row['items_json'] ?? '' ), true );
 		wp_send_json_success( array(
@@ -284,6 +351,9 @@ class ZEST_Dashboard {
 		$uid = self::guard();
 		$customer = isset( $_POST['customer'] ) ? sanitize_text_field( wp_unslash( $_POST['customer'] ) ) : '';
 		$is_kiosk = class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_kiosk( $uid );
+		if ( $is_kiosk && ! ( class_exists( 'ZEST_ZANA_Bridge' ) && ZEST_ZANA_Bridge::shared_device_lookup_allowed() ) ) {
+			wp_send_json_error( array( 'message' => __( 'Customer documents are not looked up on the shared device.', 'zorderz' ) ), 403 );
+		}
 		wp_send_json_success( array( 'documents' => self::lookup_documents( $customer, $uid, $is_kiosk ) ) );
 	}
 
@@ -423,7 +493,7 @@ class ZEST_Dashboard {
 		return array( 'ok' => true, 'number' => $estimate_number, 'email' => $email );
 	}
 
-	/* ---- update path (Plan 02 E1) — shared by AJAX + the chat bridge ---- */
+	/* ---- update path — shared by AJAX + the chat bridge ---- */
 
 	/**
 	 * Phase 1: compute the update preview. Loads the owned row, reads the prior items,
@@ -513,12 +583,12 @@ class ZEST_Dashboard {
 			return $out;
 		}
 
-		// E6 — carry the measurement rows into the CRM note (sanitized at the gate).
+		// Carry the measurement rows into the CRM note (sanitized at the gate).
 		$rows = array_values( array_filter( array_map( 'strval', (array) ( $doc['measurement_rows'] ?? array() ) ) ) );
 		if ( ! empty( $rows ) ) {
 			self::write_measurements_note( $row, $rows, $uid );
 		}
-		// E7 — geo-provenance finalize (idempotent, fail-open).
+		// Geo-provenance finalize (idempotent, fail-open).
 		$transcript = ! empty( $args['image_urls'] ) ? implode( "\n", $rows ) : '';
 		self::finalize_media_geo( (int) $row['id'], (string) $row['billing_doc_num'], (array) $args['image_urls'], $transcript, self::customer_from_doc( $doc, $row ), $uid );
 
@@ -526,7 +596,7 @@ class ZEST_Dashboard {
 	}
 
 	/**
-	 * Subtractive local write (workflow-web §5): ONLY the fields the confirmed doc names
+	 * Subtractive local write: ONLY the fields the confirmed doc names
 	 * change — items_json, item_count, reference, notes (provenance re-merged), updated_at.
 	 * billing_doc_id / created_by are never touched, no column is blanket-overwritten.
 	 *
@@ -567,7 +637,7 @@ class ZEST_Dashboard {
 		$items     = (array) ( $doc['line_items'] ?? array() );
 		$new_total = self::compute_doc_total( $items );
 
-		// E3 — zero-regression (identity-blind, fail-open) against the PRIOR total.
+		// Zero-regression (identity-blind, fail-open) against the PRIOR total.
 		if ( class_exists( 'Zdz_Doc_Guard' ) ) {
 			$prior = self::prior_total_for_row( $row );
 			$g     = Zdz_Doc_Guard::zero_regression_refusal( $prior, $new_total, array( 'row_id' => (int) $row['id'] ) );
@@ -584,13 +654,13 @@ class ZEST_Dashboard {
 		return array( 'refuse' => false, 'message' => '' );
 	}
 
-	/* ---- $0-stub allowance matrix (Plan 02 E5) ---- */
+	/* ---- $0-stub allowance matrix ---- */
 
 	/**
 	 * Classify a document's $0 posture and decide whether the acting user may save it.
-	 * Server-authoritative (INV-1). Privileged full-$0 stub allowed; a mixed $0 (a $0
+	 * Server-authoritative. Privileged full-$0 stub allowed; a mixed $0 (a $0
 	 * billable among priced) blocked for EVERYONE; a catalog line that matched an item but
-	 * resolved $0 is a forgotten price (D-11), treated as mixed except in operator mode
+	 * resolved $0 is a forgotten price, treated as mixed except in operator mode
 	 * where a full-$0 pre-estimate is the deliberate workflow.
 	 *
 	 * @return array{ allow:bool, kind:string, refuse_message:string }
@@ -627,7 +697,7 @@ class ZEST_Dashboard {
 			return array( 'allow' => true, 'kind' => 'priced', 'refuse_message' => '' );
 		}
 		$is_operator     = ! empty( $ctx['is_operator'] );
-		$forgotten_price = $matched_but_zero && ! $is_operator; // D-11 discrimination
+		$forgotten_price = $matched_but_zero && ! $is_operator; // a forgotten price, not a stub
 		if ( $priced > 0 || $forgotten_price ) {
 			$msg = $forgotten_price
 				? 'A line matched a catalog item but resolved to $0 — that is a missing price, not a stub. Add its price before saving.'
@@ -655,7 +725,7 @@ class ZEST_Dashboard {
 		return self::is_admin_tier( $uid );
 	}
 
-	/** D-11: a $0 billable line that matched a catalog item whose scheme resolved a real $0. */
+	/** A $0 billable line that matched a catalog item whose scheme resolved a real $0. */
 	private static function catalog_matched_but_zero( array $li ): bool {
 		if ( (float) ( $li['unit_price'] ?? 0 ) > 0 ) {
 			return false;
@@ -674,7 +744,7 @@ class ZEST_Dashboard {
 
 	/* ---- E6 CRM note + E7 geo-provenance ---- */
 
-	/** Write the measurement rows into a CRM note, sanitized on the outbound boundary (E6). */
+	/** Write the measurement rows into a CRM note, sanitized on the outbound boundary. */
 	private static function write_measurements_note( array $row, array $rows, int $uid ): void {
 		if ( empty( $rows ) || ! ZEST_Nutshell::is_configured() ) {
 			return;
@@ -695,7 +765,7 @@ class ZEST_Dashboard {
 	}
 
 	/**
-	 * Persist estimate media as geotagged ZDZ_User_Media rows (Plan 02 E7). Per photo, one
+	 * Persist estimate media as geotagged ZDZ_User_Media rows. Per photo, one
 	 * GPS-stamped row keyed by source_ref (idempotent). The measurement transcript becomes
 	 * an estimate_transcript row. The customer address is forward-geocoded ONCE via the
 	 * Plan-03b geocoder (method_exists-guarded — absent → rows save without GPS, fail-open).
@@ -778,7 +848,7 @@ class ZEST_Dashboard {
 
 	/**
 	 * Compose "street, city, state zip" the way the jobs Project does, so both hash to the
-	 * SAME geocode-cache key (Plan 01 contract). The jobs app owns the canonical normalizer;
+	 * SAME geocode-cache key (the shared address cache-key contract). The jobs app owns the canonical normalizer;
 	 * we compose the same string and route it through the shared filter so the two agree.
 	 */
 	public static function geo_address( array $customer ): string {
@@ -927,7 +997,7 @@ class ZEST_Dashboard {
 		return $doc;
 	}
 
-	/** A stable content hash of the written document (content-hash approval, workflow-web §5). */
+	/** A stable content hash of the written document (content-hash approval). */
 	private static function canonical_doc_hash( array $doc ): string {
 		$proj = array(
 			'customer'  => self::sort_map( (array) ( $doc['customer'] ?? array() ) ),
@@ -985,7 +1055,7 @@ class ZEST_Dashboard {
 			return;
 		}
 		global $wpdb;
-		$rows = $wpdb->get_results( 'SELECT id, billing_doc_id FROM ' . ZEST_DB::estimates_table() . " WHERE billing_doc_id <> '' AND status <> 'accepted' LIMIT 100", ARRAY_A );
+		$rows = $wpdb->get_results( 'SELECT * FROM ' . ZEST_DB::estimates_table() . " WHERE billing_doc_id <> '' AND status <> 'accepted' LIMIT 100", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix plus a fixed name (ZEST_DB::estimates_table())
 		foreach ( (array) $rows as $r ) {
 			try {
 				$est = $client->get_estimates( array( 'estimateid' => $r['billing_doc_id'] ) );
@@ -995,7 +1065,11 @@ class ZEST_Dashboard {
 				}
 				$signal = ZEST_FreshBooks::status_signal( $one );
 				if ( 'customer_accepted' === $signal ) {
-					$wpdb->update( ZEST_DB::estimates_table(), array( 'status' => 'accepted', 'accepted_source' => 'billing' ), array( 'id' => (int) $r['id'] ) );
+					if ( class_exists( 'ZEST_Accept_Watch' ) ) {
+						ZEST_Accept_Watch::stamp( $r, 'sync' );   // recorded once, its event fired once, whichever path saw it first
+					} else {
+						$wpdb->update( ZEST_DB::estimates_table(), array( 'status' => 'accepted', 'accepted_source' => 'billing' ), array( 'id' => (int) $r['id'] ) );
+					}
 				}
 			} catch ( \Throwable $e ) {
 				error_log( 'Zorderz Estimates: sync failed for estimate id ' . $r['id'] . ': ' . $e->getMessage() );
@@ -1010,8 +1084,13 @@ class ZEST_Dashboard {
 		$table = ZEST_DB::estimates_table();
 		if ( self::is_admin_tier( $uid ) ) {
 			$sql = $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where} ORDER BY created_at DESC LIMIT %d", $limit );
+		} elseif ( class_exists( 'ZEST_Salesperson' ) ) {
+			// "mine" = created, named on it (salesperson column: a routed stub is its routed person's), or granted
+			list( $mine, $args ) = ZEST_Salesperson::mine_sql( $uid );
+			$args[] = $limit;
+			$sql    = $wpdb->prepare( "SELECT * FROM {$table} WHERE ({$where}) AND {$mine} ORDER BY created_at DESC LIMIT %d", $args ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is ZEST_DB::estimates_table(); $where is a fixed clause from this class's callers; $mine is ZEST_Salesperson::mine_sql()'s fragment of placeholders and int-cast ids
 		} else {
-			// "mine" = created_by OR provenance-initials — always runs (the Robin fix).
+			// "mine" = created_by OR provenance-initials — always runs (the no-code fix).
 			$code = self::user_code( $uid );
 			$like = '%' . $wpdb->esc_like( 'Submitted by:' ) . '%' . $wpdb->esc_like( $code ) . '%';
 			$sql  = $wpdb->prepare(
@@ -1041,22 +1120,29 @@ class ZEST_Dashboard {
 		return 'EST-' . str_pad( (string) $n, 4, '0', STR_PAD_LEFT );
 	}
 
-	private static function store_row( array $raw, array $res, int $uid ): void {
+	private static function store_row( array $raw, array $res, int $uid, ?array $ctx = null ): int {
 		global $wpdb;
 		$items = (array) ( $raw['line_items'] ?? array() );
 		$notes = (string) ( $raw['notes'] ?? '' );
+		$ctx   = is_array( $ctx ) ? $ctx : self::output_ctx( $uid );
 		// Ensure the provenance line is present in the stored notes for legacy ownership.
 		if ( class_exists( 'ZDZ_Doc_Conventions' ) ) {
-			$ctx  = self::output_ctx( $uid );
 			$prov = ZDZ_Doc_Conventions::provenance_line( $ctx['initials'], $ctx['parenthetical'] );
 			if ( '' !== $prov ) {
 				$notes = ZDZ_Doc_Conventions::merge_provenance( $notes, $prov );
 			}
 		}
-		$wpdb->insert( ZEST_DB::estimates_table(), array(
-			'customer_name'   => (string) ( $raw['customer_name'] ?? ( $raw['customer']['name'] ?? '' ) ),
+		$cust = is_array( $raw['customer'] ?? null ) ? $raw['customer'] : array();
+		$data = array(
+			'customer_name'   => (string) ( $raw['customer_name'] ?? ( $cust['name'] ?? '' ) ),
+			'customer_phone'  => substr( (string) ( $cust['phone'] ?? ( $raw['customer_phone'] ?? '' ) ), 0, 50 ),
+			'customer_street' => substr( (string) ( $cust['street'] ?? ( $cust['address'] ?? ( $raw['customer_street'] ?? '' ) ) ), 0, 200 ),
+			'customer_city'   => substr( (string) ( $cust['city'] ?? ( $raw['customer_city'] ?? '' ) ), 0, 100 ),
+			'customer_state'  => substr( (string) ( $cust['state'] ?? ( $raw['customer_state'] ?? '' ) ), 0, 50 ),
+			'customer_zip'    => substr( (string) ( $cust['zip'] ?? ( $raw['customer_zip'] ?? '' ) ), 0, 20 ),
+			'billing_cust_id' => substr( preg_replace( '/\D/', '', (string) ( $raw['billing_cust_id'] ?? ( $cust['client_id'] ?? '' ) ) ), 0, 50 ),
 			'customer_email'  => ZEST_FreshBooks::clean_email( $raw['customer_email'] ?? ( $raw['customer']['email'] ?? '' ) ),
-			'salesperson'     => self::user_code( $uid ),
+			'salesperson'     => substr( '' !== (string) ( $ctx['initials'] ?? '' ) ? (string) $ctx['initials'] : self::user_code( $uid ), 0, 50 ),
 			'item_count'      => count( $items ),
 			'items_json'      => wp_json_encode( $items ),
 			'rejected_json'   => wp_json_encode( (array) ( $raw['rejected'] ?? array() ) ),
@@ -1067,7 +1153,16 @@ class ZEST_Dashboard {
 			'billing_doc_num' => (string) $res['number'],
 			'status'          => 'created',
 			'created_by'      => $uid,
-		) );
+			'seal_hold'       => class_exists( 'ZEST_Sealed' ) ? ZEST_Sealed::adopt( (string) ( $raw['seal_hold'] ?? '' ) ) : '',
+		);
+		/**
+		 * The row about to be stored (gate codes are cut here, ZEST_Sealed). Columns only; never adds a key.
+		 *
+		 * @param array $data Column => value.
+		 * @param int   $uid  Who is saving.
+		 */
+		$data = array_intersect_key( (array) apply_filters( 'zest_row_data', $data, $uid ), $data );
+		$wpdb->insert( ZEST_DB::estimates_table(), $data );
 		$eid = (int) $wpdb->insert_id;
 		if ( $eid > 0 && function_exists( 'do_action' ) ) {
 			/**
@@ -1077,7 +1172,7 @@ class ZEST_Dashboard {
 			 */
 			do_action( 'zest_estimate_saved', $eid, array( 'source' => 'dashboard', 'created_by' => (int) $uid ) );
 
-			// E7 — geo-provenance finalize on create (idempotent, fail-open). Only photo-based
+			// Geo-provenance finalize on create (idempotent, fail-open). Only photo-based
 			// estimates persist a transcript; a pure typed create has no photo to geotag.
 			$image_urls = array();
 			foreach ( array( 'image_urls', 'images' ) as $k ) {
@@ -1098,13 +1193,16 @@ class ZEST_Dashboard {
 			);
 			self::finalize_media_geo( $eid, (string) ( $res['number'] ?? '' ), $image_urls, $transcript, $customer, $uid );
 		}
+		return $eid;
 	}
 
 	/* ---- widget support ---- */
 
-	/** Field-level permissions for the current user (widget config). Neutral defaults. */
+	/**
+	 * Field-level permissions for the current user (widget config, line edits, the sale form). Neutral defaults: the
+	 * estimate's owner sees and edits its prices, quantities and wording; a business narrows them on the filter.
+	 */
 	public static function get_resolved_permissions( int $user_id ): array {
-		$perms = array( 'view_pricing' => true, 'edit_pricing' => true );
-		return (array) apply_filters( 'zest_field_permissions', $perms, $user_id );
+		return ZEST_Access::field_permissions( $user_id );
 	}
 }

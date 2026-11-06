@@ -1,6 +1,6 @@
 <?php
 /**
- * Inbox schema migration — v1.7.0 (Phase 0.2b — per-folder ingest: message folder identity).
+ * Inbox schema migration — v1.7.0 (per-folder ingest: message folder identity).
  *
  * Adds, to wp_zib_messages, the identity of the FOLDER a message was indexed from:
  *   folder_hash  char(32)     — md5(ms_folder_id); joins a message to its wp_zib_folders row.
@@ -9,7 +9,7 @@
  *   KEY idx_owner_folder (owner_user_id, folder_hash) — per-folder reads.
  *
  * The existing `folder varchar(16)` COARSE label (inbox|sent|other) is KEPT and still populated, so
- * the chat / Brain-Bot render layer is untouched by 0.2b — it keeps reading `folder` exactly as
+ * the chat / assistant render layer is untouched by 0.2b — it keeps reading `folder` exactly as
  * before. Surfacing real folder names IN chat is a later polish, not this sub-wave.
  *
  * Additive + idempotent. Uses guarded ALTERs (information_schema), the house idiom here — dbDelta is

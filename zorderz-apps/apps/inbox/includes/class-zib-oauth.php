@@ -5,7 +5,7 @@
  * A faithful clone of ZSCH_OAuth (the platform's first per-user OAuth surface),
  * narrowed to one provider (microsoft) and hardened one notch further: the
  * shared kiosk (`zdz_general`) is denied at EVERY door, because a mailbox is
- * personal and a kiosk is a shared device (INV-10). There is no read-only seat
+ * personal and a kiosk is a shared device. There is no read-only seat
  * here — unlike the Scheduler, Zorderz Inbox admits nobody who cannot write.
  *
  * ROUTES (template_redirect, not REST — a cookie-authenticated top-level

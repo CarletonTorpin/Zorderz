@@ -5,7 +5,7 @@
  * The module stores NO credentials — FreshBooks / Nutshell / Poe secrets live in the
  * theme's Connections layer (ZDZ_Core_Settings). This class only:
  *   - renders the per-party document preferences on the user profile (the short code, the
- *     parenthetical, and the measurement-notation profile — crosswalk D3/D8/D15), saving
+ *     parenthetical, and the measurement-notation profile), saving
  *     them to zdz_* meta that ZDZ_Party / ZDZ_Doc_Conventions read;
  *   - resolves the model registry through a filter (no hardcoded model list).
  *

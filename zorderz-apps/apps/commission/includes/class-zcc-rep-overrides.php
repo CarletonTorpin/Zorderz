@@ -105,7 +105,8 @@ class ZCC_Rep_Overrides {
 		}
 		self::$cache = null;
 		if ( class_exists( 'ZCC_Audit' ) ) {
-			ZCC_Audit::log( 'rep_override_assign', [ 'invoice_id' => $id, 'rep_code' => $code, 'by' => $by_user, 'note' => $note ] );
+			// The note is free text (it may name a customer): the log says only whether there is one.
+			ZCC_Audit::log( 'rep_override_assign', [ 'invoice_id' => $id, 'rep_code' => $code, 'by' => $by_user, 'has_note' => '' !== trim( $note ) ] );
 		}
 		return [ 'ok' => true ];
 	}

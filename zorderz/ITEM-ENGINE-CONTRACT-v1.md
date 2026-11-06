@@ -42,7 +42,7 @@ or company.
 
 ---
 
-## The COUNTS CONTRACT (INV-3)
+## The COUNTS CONTRACT (counts come from one authority)
 
 The single authority for the count vocabulary is `ZDZ_Item_Engine`. Count categories are **Items**,
 not a fixed enum. "How many of a given kind?" becomes a *grouping question*, not a schema question.

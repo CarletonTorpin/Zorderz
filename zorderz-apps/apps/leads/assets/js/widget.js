@@ -313,10 +313,12 @@
      * Auto-scrolls to bottom and trims to 200 lines.
      * @param {string} text
      */
-    function logMsg(text) {
+    function logMsg(text, quiet) {
         var log = $('zl-log');
         if (!log) { return; }
-        log.style.display = 'block';
+        // a quiet line is recorded without opening the
+        // log panel, so a routine action (deleting a batch) doesn't push the page.
+        if (!quiet) { log.style.display = 'block'; }
 
         var line = document.createElement('div');
         line.className = 'zl-w-log-line';
@@ -549,11 +551,11 @@
     }
 
     /* ================================================================
-     *  v2.1.0: NO-LAYOUT-SHIFT SUBMIT HELPERS  (Prompt 7)
+     *  NO-LAYOUT-SHIFT SUBMIT HELPERS
      *
-     *  Adopts the theme's forthcoming NO-SUBMIT-SHIFT contract. These
+     *  The no-submit-shift contract. These
      *  helpers keep a button's box size while it works (spinner via the
-     *  .is-busy / .ts-btn-busy CSS) and reveal status text in a slot that
+     *  .is-busy / .zl-btn-busy CSS) and reveal status text in a slot that
      *  ALREADY occupies space (so showing it pushes nothing). When the
      *  theme ships its canonical hooks, the same class names apply and the
      *  theme's (unscoped) rules take precedence.
@@ -569,7 +571,7 @@
         var r = btn.getBoundingClientRect();
         if (r && r.width)  { btn.style.minWidth  = Math.ceil(r.width)  + 'px'; }
         if (r && r.height) { btn.style.minHeight = Math.ceil(r.height) + 'px'; }
-        btn.classList.add('is-busy', 'ts-btn-busy');
+        btn.classList.add('is-busy', 'zl-btn-busy');
         btn.setAttribute('aria-busy', 'true');
         btn.disabled = true;
     }
@@ -580,7 +582,7 @@
      */
     function clearBtnBusy(btn) {
         if (!btn) { return; }
-        btn.classList.remove('is-busy', 'ts-btn-busy');
+        btn.classList.remove('is-busy', 'zl-btn-busy');
         btn.removeAttribute('aria-busy');
         btn.disabled = false;
         btn.style.minWidth = '';
@@ -795,7 +797,7 @@
             no_matches:  'zl-w-status-nomatch',
             test:        'zl-w-badge-test'
         };
-        // D-04: an empty result is neutral, not red — and reads 'No matches'.
+        // An empty result is neutral, not red — and reads 'No matches'.
         var labelMap = { no_matches: 'No matches' };
         var cls = statusMap[status] || '';
         var label = labelMap[status] || ucfirst(status);
@@ -1197,7 +1199,7 @@
                  '" data-batch-id="' + escHtml(batchId) + '">Undo Skip</button>';
         }
 
-        // D-03: recover a lead that failed to reach the CRM — one click, duplicate-safe.
+        // Recover a lead that failed to reach the CRM — one click, duplicate-safe.
         // Shown only on the failed-CRM state (server-computed crm_recoverable) with the
         // CRM-sync permission.
         var recoverable = (lead.crm_recoverable === 1 || lead.crm_recoverable === '1' || lead.crm_recoverable === true);
@@ -1256,7 +1258,7 @@
      * VOICE BINDING: the copy comes from a NEUTRAL default Voice profile localized by the
      * server (zlWidgetData.emailVoice), not from hardcoded house-voice text. A tenant
      * overrides the openers/offers/subjects via the zl_email_voice PHP filter; the
-     * statistically-derived company house voice is private and is NOT shipped here.
+     * business's own house voice comes from its pack and is NOT shipped here.
      * Tokens: {name} {product} {time} {signName} {phone}. An empty sign-off name or phone
      * line is omitted rather than filled with a placeholder — nothing is invented.
      */
@@ -1391,7 +1393,7 @@
      * @param {HTMLElement} container
      */
     /**
-     * D-03: post a duplicate-safe, CRM-only retry for one failed lead. A failed retry
+     * Post a duplicate-safe, CRM-only retry for one failed lead. A failed retry
      * is a real, human-labelled response (retryable or not), never a crash.
      * @param {string} leadId
      * @param {string} batchId
@@ -1428,7 +1430,7 @@
 
     function bindLeadEvents(container) {
 
-        /* D-03: recover-a-failed-lead */
+        /* Recover-a-failed-lead */
         var rBtns = container.querySelectorAll('.zl-btn-recover');
         for (var ri = 0; ri < rBtns.length; ri++) {
             rBtns[ri].addEventListener('click', function (e) {
@@ -1724,6 +1726,20 @@
      * Delete a batch after custom modal confirmation.
      * @param {string} batchId
      */
+    function removeBatchRow(batchId) {
+        var list = $('zl-batch-list');
+        if (!list) { return false; }
+        var rows = list.querySelectorAll('.zl-w-batch-row');
+        var row = null;
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].getAttribute('data-batch-id') === String(batchId)) { row = rows[i]; break; }
+        }
+        if (!row) { return false; }
+        if (rows.length <= 1) { return false; }
+        row.parentNode.removeChild(row);
+        return true;
+    }
+
     function deleteBatch(batchId) {
         if (isRunning) { return; }
 
@@ -1735,15 +1751,19 @@
             onConfirm: function () {
                 isRunning = true;
                 disableActions();
-                logMsg('Deleting batch ' + batchId + ' ...');
+                logMsg('Deleting batch ' + batchId + ' ...', true);
 
                 ajaxPost('zl_delete_batch', { batch_id: batchId })
                     .then(function (resp) {
                         isRunning = false;
                         enableActions();
                         if (resp && resp.success) {
-                            logMsg('Batch ' + batchId + ' deleted.');
-                            loadBatches();
+                            logMsg('Batch ' + batchId + ' deleted.', true);
+                            // Remove the deleted row in place instead of
+                            // re-rendering the whole list (which jumped the page and
+                            // collapsed any batch the person had open). Only an
+                            // emptied list is reloaded, to show its empty state.
+                            if (!removeBatchRow(batchId)) { loadBatches(); }
                             loadStats();
                         } else {
                             logMsg('Delete error: ' + extractMsg(resp));
@@ -2080,7 +2100,7 @@
                         clearStallBanner();
                         generationComplete(batchId);
                     } else if (status === 'no_matches') {
-                        // D-04: a definite empty result — terminal, but NOT an error.
+                        // A definite empty result — terminal, but NOT an error.
                         clearInterval(pollTimerId);
                         pollTimerId = null;
                         clearStallBanner();
@@ -2311,7 +2331,7 @@
                 // v1.6.0 — Fixed: field names now match the PHP response exactly.
                 var d          = resp.data || {};
                 if (d.no_matches) {
-                    // D-04: a definite empty result on the legacy path — stop cleanly,
+                    // A definite empty result on the legacy path — stop cleanly,
                     // show the neutral no-match state, do NOT proceed to later steps.
                     generationNoMatches(batchId, d.message);
                     return;
@@ -2496,7 +2516,7 @@
     }
 
     /**
-     * D-04: a batch that ran cleanly and matched nothing. Neutral, 100%, legible —
+     * A batch that ran cleanly and matched nothing. Neutral, 100%, legible —
      * the message names the gate that emptied it. Terminal, but never the red error
      * path (red text that isn't an error trains you to ignore red text).
      */
@@ -2788,7 +2808,7 @@
         /* bind events */
         bindWidgetEvents();
 
-        /* v2.5.0 — Rep mode (Phase 2): a salesperson sees ONLY their assigned
+        /* v2.5.0 — Rep mode: a salesperson sees ONLY their assigned
            leads and NOT the generate/batch machinery. Determined server-side
            (zlWidgetData.isRepMode is authoritative). We hide the generate +
            batch sections entirely and load the assigned-leads list instead. */
@@ -3268,7 +3288,7 @@
     };
 
     /* ================================================================
-     *  v2.5.0: REP MODE (Phase 2 — per-user assigned leads)
+     *  v2.5.0: REP MODE (per-user assigned leads)
      *
      *  A salesperson sees ONLY their assigned leads and NOT the generate
      *  or batch-history machinery. Everything here is additive: admins and
@@ -3390,8 +3410,307 @@
 
     // Hook into the init flow — the existing init() already ran,
     // so we need to attach panel toggles after the DOM is ready.
+
+    /* ================================================================
+     *  TEAM LEADS, moved here from the Estimate Creator's admin "Leads" tab.
+     *  Two views: the leads assigned to each salesperson, and the Nutshell queue with "Create stub".
+     *  The server work stays in the Estimate Creator (zest_list_assigned_leads, zest_list_ns_leads,
+     *  zest_lead_to_stub), so these calls carry its nonce (zlWidgetData.teamLeads.nonce), which the
+     *  page only has when the panel is shown. Contact details are scrubbed on the server, never here.
+     *  Loads the first time the panel is opened.
+     * ================================================================ */
+    var tl = { inited: false, loaded: false, mode: 'team', team: null, ns: null };
+
+    /* Through the theme's kit (ZDZ.ui.ajax: one request, never repeated for a POST, plain-words errors), answered in
+       the {success, data} shape the views below read. */
+    function tlPost(action, data) {
+        var cfg = (window.zlWidgetData && zlWidgetData.teamLeads) || null;
+        if (!cfg || !cfg.nonce) return Promise.resolve({ success: false, data: 'Team leads are not available here.' });
+        var ui = (window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.ajax === 'function') ? window.ZDZ.ui : null;
+        if (!ui) return Promise.resolve({ success: false, data: 'This needs a newer Zorderz theme. Reload the app.' });
+        var body = { nonce: cfg.nonce };
+        Object.keys(data || {}).forEach(function (k) { body[k] = data[k]; });
+        return ui.ajax(action, body, { timeout: 60000 }).then(function (d) {
+            return { success: true, data: d };
+        }, function (err) {
+            var d0 = err && err.body && err.body.data;
+            var msg = (typeof d0 === 'string' && d0) ? d0 : ((d0 && (d0.message || d0.error)) || (err && err.message) || 'Couldn’t load leads.');
+            return { success: false, data: msg };
+        });
+    }
+
+    /* Money in the business's own currency (Business Profile locale.currency, passed as teamLeads.currency). */
+    function tlMoney(n) {
+        var cfg = (window.zlWidgetData && zlWidgetData.teamLeads) || {};
+        var cur = String(cfg.currency || 'USD');
+        try {
+            return Number(n || 0).toLocaleString(cfg.locale || undefined, { style: 'currency', currency: cur });
+        } catch (e) {
+            return cur + ' ' + Number(n || 0).toFixed(2);
+        }
+    }
+
+    function tlAgo(dateStr) {
+        if (!dateStr) return '';
+        var then = new Date(String(dateStr).replace(' ', 'T'));
+        if (isNaN(then.getTime())) return String(dateStr);
+        var diff = Math.floor((Date.now() - then.getTime()) / 1000);
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+        return then.toLocaleDateString();
+    }
+
+    function tlList() { return $('zl-tl-list'); }
+
+    function tlSay(cls, text) {
+        var list = tlList();
+        if (list) list.innerHTML = '<div class="' + cls + '">' + escHtml(text) + '</div>';
+    }
+
+    function tlSetMode(mode) {
+        if (mode !== 'team' && mode !== 'ns') return;
+        tl.mode = mode;
+        var btns = document.querySelectorAll('#zl-panel-team .zl-tl-mode');
+        for (var i = 0; i < btns.length; i++) {
+            var on = btns[i].getAttribute('data-mode') === mode;
+            btns[i].classList.toggle('zl-tl-mode-active', on);
+            btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        var title = $('zl-tl-title'), sp = $('zl-tl-sp'), linkWrap = $('zl-tl-showlinked-wrap');
+        if (mode === 'team') {
+            if (title) title.textContent = 'Assigned leads by salesperson';
+            if (linkWrap) linkWrap.style.display = 'none';
+            tlLoadTeam(false);
+        } else {
+            if (title) title.textContent = 'Nutshell leads, newest 20';
+            if (sp) sp.style.display = 'none';
+            if (linkWrap) linkWrap.style.display = '';
+            tlLoadNs(false);
+        }
+    }
+
+    function tlLoadTeam(force) {
+        if (tl.team && !force) { tlBuildSpFilter(); tlRenderTeam(); return; }
+        tlSay('zl-w-loading', 'Loading team leads…');
+        tlPost('zest_list_assigned_leads', {}).then(function (resp) {
+            if (!resp || !resp.success) { tlSay('zl-tl-empty', (resp && resp.data && String(resp.data)) || 'Couldn’t load leads.'); return; }
+            tl.team = resp.data || {};
+            if (tl.mode !== 'team') return;
+            tlBuildSpFilter();
+            tlRenderTeam();
+        }).catch(function () { tlSay('zl-tl-empty', 'Network error loading leads.'); });
+    }
+
+    function tlBuildSpFilter() {
+        var sel = $('zl-tl-sp');
+        if (!sel || !tl.team) return;
+        var groups = tl.team.groups || [];
+        if (groups.length < 2 || tl.mode !== 'team') { sel.style.display = 'none'; return; }
+        var cur = sel.value;
+        var html = '<option value="">All salespeople</option>';
+        groups.forEach(function (g) {
+            html += '<option value="' + escHtml(String(g.user_id)) + '">' + escHtml(g.salesperson) + ' (' + (g.leads || []).length + ')</option>';
+        });
+        sel.innerHTML = html;
+        sel.value = cur || '';
+        sel.style.display = '';
+    }
+
+    function tlRenderTeam() {
+        var list = tlList();
+        if (!list || !tl.team) return;
+        var groups = tl.team.groups || [];
+        if (!groups.length) {
+            tlSay('zl-tl-empty', tl.team.zl_active
+                ? 'No assigned leads yet. Assign leads to a salesperson and they show up here.'
+                : 'The lead tables are not set up yet, so there are no assigned leads to show.');
+            return;
+        }
+        var sel = $('zl-tl-sp');
+        var who = sel ? sel.value : '';
+        var html = '';
+        groups.forEach(function (g) {
+            if (who && String(g.user_id) !== who) return;
+            var leads = g.leads || [];
+            var n = leads.length;
+            html += '<div class="zl-tl-group"><div class="zl-tl-group-h">' + escHtml(g.salesperson) +
+                ' <span class="zl-tl-group-n">' + n + ' lead' + (n === 1 ? '' : 's') +
+                (g.pending ? ' · ' + escHtml(String(g.pending)) + ' pending' : '') + '</span></div>';
+            leads.forEach(function (l) { html += tlCard(l); });
+            html += '</div>';
+        });
+        list.innerHTML = html || '<div class="zl-tl-empty">No leads for that salesperson.</div>';
+    }
+
+    function tlPipeline(hasCRM, contacted, skipped, closed) {
+        function step(label, done, extra) {
+            return '<span class="zl-tl-pip-step' + (done ? ' done' : '') + (extra ? ' ' + extra : '') + '">' +
+                '<span class="zl-tl-pip-dot"></span>' + label + '</span>';
+        }
+        function conn(done) { return '<span class="zl-tl-pip-conn' + (done ? ' done' : '') + '"></span>'; }
+        return '<div class="zl-tl-pip">' + step('Generated', true) + conn(hasCRM) + step('In CRM', hasCRM) +
+            conn(contacted || skipped) + step(skipped ? 'Skipped' : 'Contacted', contacted || skipped, skipped ? 'skipped' : '') +
+            conn(closed) + step('Closed', closed) + '</div>';
+    }
+
+    function tlPurchases(ph) {
+        if (!ph) return '';
+        var items = ph;
+        if (typeof ph === 'string') { try { items = JSON.parse(ph); } catch (e) { return ''; } }
+        if (!Array.isArray(items) || !items.length) return '';
+        var body = items.slice(0, 8).map(function (it) {
+            var meta = [it.date, (it.amount != null && it.amount !== '' ? tlMoney(it.amount) : '')].filter(Boolean).map(escHtml).join(' · ');
+            return '<div class="zl-tl-pi"><span class="zl-tl-pi-name">' + escHtml(it.name || it.description || 'Item') + '</span>' +
+                (meta ? '<span class="zl-tl-pi-meta">' + meta + '</span>' : '') + '</div>';
+        }).join('');
+        return '<details class="zl-tl-hist"><summary>Purchase history (' + items.length + ')</summary>' +
+            '<div class="zl-tl-hist-body">' + body + '</div></details>';
+    }
+
+    function tlCard(l) {
+        var name = ((l.first_name || '') + ' ' + (l.last_name || '')).trim() || (l.name || l.customer_name || 'Lead');
+        var loc = [l.city, l.state].filter(Boolean).join(', ');
+        var score = parseInt(l.score, 10) || 0;
+        var scoreCls = score >= 70 ? 'high' : (score >= 40 ? 'mid' : 'low');
+        var status = String(l.contact_status || 'pending').toLowerCase().replace(/[^a-z_-]/g, '');
+        var statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+        var hasCRM = !!(l.nutshell_lead_id && String(l.nutshell_lead_id).length && String(l.nutshell_lead_id) !== '0');
+        var contacted = (status === 'contacted' || status === 'closed');
+        var skipped = (status === 'skipped');
+        var closed = (status === 'closed');
+        var acts = '';
+        if (l.email) acts += '<a class="zl-tl-btn" href="mailto:' + escHtml(l.email) + '">Email</a>';
+        if (l.phone) acts += '<a class="zl-tl-btn" href="tel:' + escHtml(String(l.phone).replace(/[^0-9+]/g, '')) + '">Call</a>';
+        var nsUrl = l.nutshell_url || (hasCRM ? ('https://app.nutshell.com/lead/' + encodeURIComponent(l.nutshell_lead_id)) : '');
+        if (nsUrl && /^https:\/\//.test(nsUrl)) acts += '<a class="zl-tl-btn zl-tl-btn-ns" href="' + escHtml(nsUrl) + '" target="_blank" rel="noopener">Nutshell ↗</a>';
+        return '<div class="zl-tl-card"><div class="zl-tl-card-head">' +
+            '<span class="zl-tl-score zl-tl-score-' + scoreCls + '">' + score + '</span>' +
+            '<div class="zl-tl-id"><div class="zl-tl-name">' + escHtml(name) + '</div>' +
+            (loc ? '<div class="zl-tl-loc">' + escHtml(loc) + '</div>' : '') + '</div>' +
+            '<span class="zl-tl-status zl-tl-status-' + status + '">' + escHtml(statusLabel) + '</span></div>' +
+            (l.purchase_summary ? '<div class="zl-tl-why">' + escHtml(l.purchase_summary) + '</div>' : '') +
+            tlPurchases(l.purchase_history) + tlPipeline(hasCRM, contacted, skipped, closed) +
+            (acts ? '<div class="zl-tl-acts">' + acts + '</div>' : '') + '</div>';
+    }
+
+    function tlLoadNs(force) {
+        if (tl.ns && !force) { tlRenderNs(); return; }
+        tlSay('zl-w-loading', 'Loading Nutshell leads…');
+        tlPost('zest_list_ns_leads', {}).then(function (resp) {
+            if (!resp || !resp.success) { tlSay('zl-tl-empty', (resp && resp.data && String(resp.data)) || 'Couldn’t load leads.'); return; }
+            tl.ns = resp.data || {};
+            if (tl.mode === 'ns') tlRenderNs();
+        }).catch(function () { tlSay('zl-tl-empty', 'Network error loading leads.'); });
+    }
+
+    function tlRenderNs(flash) {
+        var list = tlList();
+        if (!list || !tl.ns) return;
+        var leads = (tl.ns.leads || []).slice();
+        var cb = $('zl-tl-showlinked');
+        var showLinked = !!(cb && cb.checked);
+        var hiddenLinked = leads.filter(function (l) { return l.linked; }).length;
+        if (!showLinked) leads = leads.filter(function (l) { return !l.linked; });
+        var head = flash ? '<div class="zl-tl-success" role="status">' + escHtml(flash) + '</div>' : '';
+        if (!leads.length) {
+            list.innerHTML = head + '<div class="zl-tl-empty">No open Nutshell leads waiting.' +
+                (hiddenLinked && !showLinked ? '<br><span class="zl-tl-hint">' + hiddenLinked + ' already linked; tick “Show linked”.</span>' : '') + '</div>';
+            return;
+        }
+        var opts = '<option value="">Assign to…</option>';
+        (tl.ns.assignables || []).forEach(function (a) {
+            opts += '<option value="' + escHtml(String(a.id)) + '"' + (a.id === tl.ns.current_user ? ' selected' : '') + '>' + escHtml(a.label) + '</option>';
+        });
+        var html = head;
+        leads.forEach(function (l) {
+            var meta = [];
+            if (l.number) meta.push('Lead #' + escHtml(String(l.number)));
+            meta.push(escHtml(tlAgo(l.created_at)));
+            if (l.milestone) meta.push(escHtml(l.milestone));
+            var appt = l.appt_label
+                ? '<span class="zl-tl-appt">' + escHtml(l.appt_label) + '</span>'
+                : '<span class="zl-tl-appt zl-tl-appt-none">No appointment</span>';
+            var linked = l.linked ? '<span class="zl-tl-linked">Est #' + escHtml(String(l.linked.est_num || '?')) + '</span>' : '';
+            html += '<div class="zl-tl-row" data-lead-id="' + escHtml(String(l.id)) + '">' +
+                '<div class="zl-tl-row-main"><div class="zl-tl-row-name">' + escHtml(l.name || 'Unknown lead') + linked + '</div>' +
+                '<div class="zl-tl-row-meta">' + meta.join(' · ') + '</div><div class="zl-tl-row-appt">' + appt + '</div></div>' +
+                (l.linked
+                    ? '<div class="zl-tl-row-acts"><span class="zl-tl-done">In FreshBooks ✓</span></div>'
+                    : '<div class="zl-tl-row-acts"><select class="zl-tl-select zl-tl-assignee" aria-label="Assign to">' + opts + '</select>' +
+                      '<button type="button" class="zl-tl-create">Create stub</button></div>') +
+                '</div>';
+        });
+        list.innerHTML = html;
+    }
+
+    function tlCreateStub(row, btn) {
+        if (!row || btn.disabled) return;
+        var sel = row.querySelector('.zl-tl-assignee');
+        var assignee = sel ? sel.value : '';
+        if (!assignee) {
+            btn.textContent = 'Pick a salesperson';
+            setTimeout(function () { btn.textContent = 'Create stub'; }, 1600);
+            return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Creating…';
+        row.classList.add('is-loading');
+        tlPost('zest_lead_to_stub', { lead_id: row.getAttribute('data-lead-id'), assignee_id: assignee }).then(function (resp) {
+            if (!resp || !resp.success) {
+                row.classList.remove('is-loading');
+                btn.disabled = false;
+                btn.textContent = 'Create stub';
+                var note = row.querySelector('.zl-tl-error');
+                if (!note) { note = document.createElement('div'); note.className = 'zl-tl-error'; row.appendChild(note); }
+                note.textContent = (resp && resp.data && String(resp.data)) || 'Could not create the stub.';
+                return;
+            }
+            var d = resp.data || {};
+            var msg = '✓ Estimate #' + (d.estimate_num || '?') + ' created for ' + (d.customer_name || 'the customer') +
+                ', assigned to ' + (d.assignee || 'the salesperson') + '. It is under Needs pricing in Estimates.';
+            tl.ns = null;
+            tl.team = null;
+            tlPost('zest_list_ns_leads', {}).then(function (r2) {
+                if (r2 && r2.success) { tl.ns = r2.data || {}; }
+                if (tl.mode === 'ns' && tl.ns) tlRenderNs(msg); else tlSay('zl-tl-success', msg);
+            }).catch(function () { tlSay('zl-tl-success', msg); });
+        }).catch(function () {
+            row.classList.remove('is-loading');
+            btn.disabled = false;
+            btn.textContent = 'Create stub';
+        });
+    }
+
+    function initTeamLeads() {
+        var panel = $('zl-panel-team');
+        if (tl.inited || !panel || !(window.zlWidgetData && zlWidgetData.teamLeads)) return;
+        tl.inited = true;
+        var header = $('zl-panel-team-header');
+        if (header) header.addEventListener('click', function () {
+            // The accordion toggle (initPanelToggles) runs on the same click; read the state after it.
+            setTimeout(function () {
+                if (!tl.loaded && panel.classList.contains('expanded')) { tl.loaded = true; tlSetMode(tl.mode); }
+            }, 0);
+        });
+        panel.addEventListener('click', function (e) {
+            var t = e.target;
+            var mode = t.closest ? t.closest('.zl-tl-mode') : null;
+            if (mode) { tlSetMode(mode.getAttribute('data-mode')); return; }
+            if (t.id === 'zl-tl-refresh') { if (tl.mode === 'team') tlLoadTeam(true); else tlLoadNs(true); return; }
+            var create = t.closest ? t.closest('.zl-tl-create') : null;
+            if (create) tlCreateStub(create.closest('.zl-tl-row'), create);
+        });
+        var sp = $('zl-tl-sp');
+        if (sp) sp.addEventListener('change', tlRenderTeam);
+        var cb = $('zl-tl-showlinked');
+        if (cb) cb.addEventListener('change', function () { tlRenderNs(); });
+    }
+
     function initV2() {
         initPanelToggles();
+        initTeamLeads();
     }
 
     // Run immediately if DOM is ready, else wait

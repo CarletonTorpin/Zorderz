@@ -70,6 +70,12 @@ class ZEST_Background {
 			$ctx['instruction']     = isset( $_POST['instruction'] ) ? wp_kses_post( wp_unslash( $_POST['instruction'] ) ) : '';
 		}
 
+		// gate codes are sealed before the words are stored or read (the hold rides with the job)
+		$text = (string) apply_filters( 'zest_parse_input', $text );
+		if ( class_exists( 'ZEST_Sealed' ) && '' !== ZEST_Sealed::current_hold() ) {
+			$ctx['seal_hold'] = ZEST_Sealed::current_hold();
+		}
+
 		$wpdb->insert( ZEST_DB::jobs_table(), array(
 			'user_id'      => $uid,
 			'status'       => 'queued',
@@ -140,7 +146,11 @@ class ZEST_Background {
 		}
 
 		ZEST_Progress::set( $job_id, 'pricing', 80 );
-		$ok = ! empty( $result['ok'] );
+		if ( class_exists( 'ZEST_Sealed' ) ) {
+			ZEST_Sealed::adopt( (string) ( $ctx['seal_hold'] ?? '' ) );
+		}
+		$result = (array) apply_filters( 'zest_parse_result', $result );   // a code a model read off a photo is never stored plain
+		$ok     = ! empty( $result['ok'] );
 		$wpdb->update( $table, array(
 			'status'      => $ok ? 'done' : 'error',
 			'result_json' => wp_json_encode( $result ),
@@ -164,10 +174,15 @@ class ZEST_Background {
 		if ( ! $row ) {
 			wp_send_json_error( array( 'message' => 'Job not found.' ), 404 );
 		}
+		$ctx = (array) json_decode( (string) $row['context_json'], true );
+		if ( class_exists( 'ZEST_Sealed' ) ) {
+			ZEST_Sealed::adopt( (string) ( $ctx['seal_hold'] ?? '' ) );
+		}
+		$result = 'done' === $row['status'] ? json_decode( (string) $row['result_json'], true ) : null;
 		wp_send_json_success( array(
 			'status'   => $row['status'],
 			'progress' => ZEST_Progress::get( $job_id ),
-			'result'   => 'done' === $row['status'] ? json_decode( (string) $row['result_json'], true ) : null,
+			'result'   => is_array( $result ) ? apply_filters( 'zest_parse_result', $result ) : null,
 			'error'    => (string) $row['error_msg'],
 		) );
 	}

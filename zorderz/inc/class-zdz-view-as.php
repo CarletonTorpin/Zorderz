@@ -13,7 +13,7 @@
  *   ?zdz_view_as=zdz_admin      → preview as an app admin (sees all apps)
  *   ?zdz_view_as=reset         → exit preview, return to real admin view
  *
- * UI surfaces (v2.14.0):
+ * UI surfaces:
  *   1. WP Admin Bar item (admin-only, in wp-admin) — primary entry point.
  *      The role-switching links live under a "👁 View As…" node added to
  *      the top-secondary area of the admin bar. See add_admin_bar_menu().
@@ -60,7 +60,7 @@ class ZDZ_View_As {
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'handle_query_param' ], 1 );
 		add_action( 'wp_footer', [ __CLASS__, 'render_banner' ] );
-		// v2.14.0: primary UI moved off the front-end to the WP Admin Bar.
+		// primary UI moved off the front-end to the WP Admin Bar.
 		// Priority 90 puts our node after WP's stock items (Howdy, Logout)
 		// while still keeping it within the user-facing right-side cluster.
 		add_action( 'admin_bar_menu', [ __CLASS__, 'add_admin_bar_menu' ], 90 );
@@ -74,6 +74,13 @@ class ZDZ_View_As {
 	 */
 	public static function handle_query_param() {
 		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		// An account in Privacy View never previews as anyone (its gate also refuses the switch's query keys); a
+		// cookie set before it was put in Privacy View is ignored.
+		if ( class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on() ) {
+			self::$emulated_role    = null;
+			self::$emulated_user_id = null;
 			return;
 		}
 
@@ -96,7 +103,7 @@ class ZDZ_View_As {
 			}
 		}
 
-		// v2.12.3: optional per-user View-As.
+		// optional per-user View-As.
 		if ( isset( $_GET['zdz_view_as_user'] ) ) { // phpcs:ignore WordPress.Security
 			$uid = absint( wp_unslash( $_GET['zdz_view_as_user'] ) );
 			if ( 0 === $uid ) {
@@ -123,7 +130,8 @@ class ZDZ_View_As {
 
 	/** Whether an admin is currently previewing as another role. */
 	public static function is_emulating(): bool {
-		return ! empty( self::$emulated_role ) && current_user_can( 'manage_options' );
+		return ! empty( self::$emulated_role ) && current_user_can( 'manage_options' )
+			&& ! ( class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on() );
 	}
 
 	/** The role slug being emulated (e.g. 'zdz_operator'), or null. */
@@ -167,7 +175,7 @@ class ZDZ_View_As {
 	 *
 	 * Hooked to `wp_footer` so it renders after the SPA shell.
 	 *
-	 * v2.14.0: This used to also render an always-visible "👁 View As…"
+	 * This used to also render an always-visible "👁 View As…"
 	 * floating button at top:8px right:12px so admins could activate
 	 * emulation from the front-end. That button overlapped the messaging
 	 * plugin's header controls (search/bell/settings) on iPhone and iPad
@@ -186,7 +194,7 @@ class ZDZ_View_As {
 			return;
 		}
 
-		// v2.14.0: render NOTHING unless actively emulating. The role
+		// render NOTHING unless actively emulating. The role
 		// picker lives in the admin bar now; the front-end surface is
 		// strictly an "active session" indicator.
 		if ( ! self::is_emulating() ) {
@@ -265,12 +273,12 @@ class ZDZ_View_As {
 		<?php
 	}
 
-	// ── WP Admin Bar UI (v2.14.0) ────────────────────────────────
+	// ── WP Admin Bar UI ────────────────────────────────
 
 	/**
 	 * Register a "View As…" menu in the WP Admin Bar.
 	 *
-	 * Replaces the front-end floating button removed in v2.14.0. The node
+	 * Replaces the front-end floating button removed. The node
 	 * is added to the `top-secondary` cluster (right side, next to Howdy)
 	 * so it sits among other user-context controls. Each role becomes a
 	 * child node; an "Exit Preview" entry appears while emulating.

@@ -42,6 +42,25 @@ class ZIM_Widget {
 	 *
 	 * Cached per request.
 	 */
+	/**
+	 * This site's hosts as people write them: the Business Profile's app domain (which falls back to this site's own
+	 * host). Plain host names only; the widget compares a link's host with these.
+	 */
+	public static function app_hosts() {
+		$hosts = array();
+		$own   = function_exists( 'home_url' ) ? (string) wp_parse_url( home_url( '/' ), PHP_URL_HOST ) : '';
+		$app   = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'web.app_domain', '' ) : '';
+		foreach ( array( $own, $app ) as $h ) {
+			$h = strtolower( trim( (string) $h ) );
+			$h = (string) preg_replace( '#^[a-z][a-z0-9+.-]*://#', '', $h );   // a domain saved with its scheme
+			$h = (string) preg_replace( '#[/:].*$#', '', $h );                   // and with a path or port
+			if ( '' !== $h && preg_match( '/^[a-z0-9.-]{1,253}$/', $h ) && ! in_array( $h, $hosts, true ) ) {
+				$hosts[] = $h;
+			}
+		}
+		return $hosts;
+	}
+
 	public static function should_render() {
 		static $cached = null;
 		if ( null !== $cached ) {
@@ -149,15 +168,25 @@ class ZIM_Widget {
 			'editWindowSec'     => ZIM_EDIT_WINDOW_SECONDS,
 			'context'           => (string) $context,
 			'previewProxyAvailable' => (bool) apply_filters( 'zdz_preview_proxy_available', false ),
+			// Estimates and invoices open (and can be shared) here only with a document reader present; without
+			// one the composer offers no share line.
+			'docShares'         => class_exists( 'ZIM_Doc_Shares' ) && ZIM_Doc_Shares::provider_present(),
+			// The business's app address, so a link to a vault document written with it is recognised as this site's.
+			'appHosts'          => self::app_hosts(),
 			'deepLinkConvoId'   => isset( $_GET['c'] ) ? absint( $_GET['c'] ) : 0,
 			// v1.0.7 — embed mode. When loaded inside the analytics app's iframe (?zdz_embed=analytics),
 			// the widget runs in "conversation-focused" mode: sidebar hidden by default,
 			// no redundant header chrome, signals parent frame with unreads.
 			'embedMode'         => isset( $_GET['zdz_embed'] ) ? sanitize_key( $_GET['zdz_embed'] ) : '',
+			// The one-thread view the chat docks under its answer (?zim_compact=1&c=<id>).
+			'compact'           => function_exists( 'zim_is_compact' ) && zim_is_compact(),
 		) );
 
 		ob_start();
 		$embed_class = isset( $_GET['zdz_embed'] ) ? ' zim-w--embed' : '';
+		if ( function_exists( 'zim_is_compact' ) && zim_is_compact() ) {
+			$embed_class .= ' zim-w--compact';
+		}
 		?>
 		<div class="zim-w zim-w--<?php echo esc_attr( $context ); ?><?php echo esc_attr( $embed_class ); ?>" id="zim-widget" data-user-id="<?php echo (int) $user_id; ?>">
 			<aside class="zim-w-sidebar" id="zim-w-sidebar" aria-label="Conversations">

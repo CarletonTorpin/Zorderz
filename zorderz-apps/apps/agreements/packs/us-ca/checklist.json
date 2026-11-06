@@ -1,0 +1,311 @@
+{
+  "items": [
+    {
+      "id": "ca_license",
+      "label": "the contractor's license number",
+      "kind": "fact",
+      "key": "license",
+      "needed_in": [
+        "test",
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(1)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_cancel_email",
+      "label": "the email address for cancellations",
+      "kind": "fact",
+      "key": "cancel_email",
+      "needed_in": [
+        "test",
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(c)(3)(B)(ii)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_help_phone",
+      "label": "the phone number that helps the buyer with the Notice of Cancellation",
+      "kind": "fact",
+      "key": "help_phone",
+      "needed_in": [
+        "test",
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(c)(3)(B)(iii)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_commencement",
+      "label": "what counts as substantial commencement of the work",
+      "kind": "fact",
+      "key": "substantial_commencement",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(10)(A)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_subcontractors",
+      "label": "the answer to whether a subcontractor will be used",
+      "kind": "fact",
+      "key": "subcontractors",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(c)(7)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_dates",
+      "label": "lead times for the approximate start and completion dates",
+      "kind": "lead_groups",
+      "key": "",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(10)(B)-(C), (d)(11)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_disaster",
+      "label": "the staff answer to whether the work repairs damage from a declared disaster",
+      "kind": "answer",
+      "key": "disaster",
+      "needed_in": [
+        "test",
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(e)(7)(A)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_statement",
+      "label": "the template printing the right-to-cancel notice ({{pack_statement_html}})",
+      "kind": "template_uses",
+      "key": "pack_statement_html",
+      "needed_in": [
+        "test",
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(e)(6)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_form",
+      "label": "the template printing the Notice of Cancellation form ({{pack_cancellation_form_html}})",
+      "kind": "template_uses",
+      "key": "pack_cancellation_form_html",
+      "needed_in": [
+        "test",
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(e)(6)(C)(vi)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_first_page",
+      "label": "the template printing the first-page items in its first section ({{pack_first_page_html}})",
+      "kind": "template_uses",
+      "key": "pack_first_page_html",
+      "needed_in": [
+        "test",
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(c)(3)(B)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_deposit",
+      "label": "the template printing the down payment notice ({{pack_deposit_notice_html}})",
+      "kind": "template_uses",
+      "key": "pack_deposit_notice_html",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(8)(C)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_registration",
+      "label": "the template printing the salesperson's name and registration number ({{salesperson_registration}})",
+      "kind": "template_uses",
+      "key": "salesperson_registration",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(2)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_schedule",
+      "label": "the template printing the schedule of payments ({{schedule_table_html}})",
+      "kind": "template_uses",
+      "key": "schedule_table_html",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(9)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_start",
+      "label": "the template printing the approximate start date ({{approx_start}})",
+      "kind": "template_uses",
+      "key": "approx_start",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(10)(B)-(C)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_completion",
+      "label": "the template printing the approximate completion date ({{approx_completion}})",
+      "kind": "template_uses",
+      "key": "approx_completion",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(11)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_sub_box",
+      "label": "the template printing the subcontractor Yes/No box ({{subcontractors}})",
+      "kind": "template_uses",
+      "key": "subcontractors",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(c)(7)(A)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_heading",
+      "label": "your template's heading \"Home Improvement\" (declared by the template as home_improvement_heading)",
+      "kind": "template_declares",
+      "key": "home_improvement_heading",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(3)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_filled_copy",
+      "label": "your template's statement about the completely filled-in copy (filled_copy_statement)",
+      "kind": "template_declares",
+      "key": "filled_copy_statement",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(4)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_progress",
+      "label": "your template's progress payment notice (progress_payment_notice)",
+      "kind": "template_declares",
+      "key": "progress_payment_notice",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(9)(C)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_cgl",
+      "label": "your template's commercial general liability insurance statement (cgl_statement)",
+      "kind": "template_declares",
+      "key": "cgl_statement",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(e)(1)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_workers_comp",
+      "label": "your template's workers' compensation statement (workers_comp_statement)",
+      "kind": "template_declares",
+      "key": "workers_comp_statement",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(e)(2)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_lien",
+      "label": "your template's Mechanics Lien Warning (mechanics_lien_warning)",
+      "kind": "template_declares",
+      "key": "mechanics_lien_warning",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(e)(4)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_board",
+      "label": "your template's Contractors State License Board information notice (license_board_information)",
+      "kind": "template_declares",
+      "key": "license_board_information",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(e)(5)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_bond",
+      "label": "your template's performance and payment bond notice near the signatures (bond_notice)",
+      "kind": "template_declares",
+      "key": "bond_notice",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(c)(6)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "ca_extra_work",
+      "label": "your template's note about extra work and change orders (change_order_note)",
+      "kind": "template_declares",
+      "key": "change_order_note",
+      "needed_in": [
+        "on"
+      ],
+      "citation": "Bus. & Prof. Code 7159(d)(13)",
+      "effective_from": "2026-01-01",
+      "last_checked": "2026-11-05"
+    }
+  ]
+}

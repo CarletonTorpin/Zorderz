@@ -13,7 +13,7 @@
  *           that reaches PAPER — a wrong link prints a wrong install date on a cut sheet.)
  *   GATE 2  ZSCH_Appointments::can_modify()                   — the estimate #/address land on a
  *           SHARED calendar; only someone who may modify the appointment may bind it. Called through
- *           is_callable(), so before the Scheduler port publishes can_modify() this fails CLOSED
+ *           is_callable(), so while the Scheduler does not publish can_modify() this fails CLOSED
  *           (the link is simply inert, never open).
  *
  * ONE APPOINTMENT PER PROJECT. Zdz_Flow_Refs' PRIMARY KEY(work_item_id, system, entity) allows one
@@ -51,7 +51,8 @@ if ( ! class_exists( 'Zjob_Appointment_Link' ) ) {
 		 * =================================================================== */
 
 		/**
-		 * The one appointment id linked to a Project (0 when none). One-per-project by the PRIMARY KEY.
+		 * The one appointment id linked to a Project (0 when none). Kept one-per-project by attach(),
+		 * which drops the earlier link when it moves; should two ever be found, the first recorded wins.
 		 *
 		 * @param string $project_id
 		 * @return int
@@ -88,7 +89,7 @@ if ( ! class_exists( 'Zjob_Appointment_Link' ) ) {
 		}
 
 		/**
-		 * Which Project owns (system, external_id)? The canonical resolver used by the INV-8 arms — it
+		 * Which Project owns (system, external_id)? The canonical resolver used by the install-date arms — it
 		 * resolves the entity for ANY registered system (core or a pack-added provider ns), not just the
 		 * container's built-ins.
 		 *
@@ -189,6 +190,8 @@ if ( ! class_exists( 'Zjob_Appointment_Link' ) ) {
 
 			$out = array( 'ok' => true, 'project_id' => $project_id, 'appt_id' => $appt_id );
 			if ( $prev > 0 && $prev !== $appt_id ) {
+				// A Project has one linked appointment: the earlier link goes once the new one is stored.
+				self::forget( $project_id, $prev );
 				$out['moved_from'] = $prev;
 			}
 			return $out;
@@ -383,7 +386,7 @@ if ( ! class_exists( 'Zjob_Appointment_Link' ) ) {
 		 */
 		private static function gate_appointment( int $viewer, array $appt ): bool {
 			if ( ! is_callable( array( 'ZSCH_Appointments', 'can_modify' ) ) ) {
-				return false; // the Scheduler port has not published can_modify() yet — fail closed.
+				return false; // the Scheduler does not publish can_modify() — fail closed.
 			}
 			return (bool) ZSCH_Appointments::can_modify( $viewer, $appt );
 		}

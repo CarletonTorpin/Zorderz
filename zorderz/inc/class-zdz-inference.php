@@ -10,13 +10,20 @@
  *
  * THE INVARIANTS THIS FILE MAKES STRUCTURAL
  *
- *   INV-11 — ZERO WRITES TO SOURCE-OF-TRUTH DATA. The service reads, infers, and
+ *   ZERO WRITES TO SOURCE-OF-TRUTH DATA. The service reads, infers, and
  *     records its inferences in its OWN store/tier; it never mutates a lead / estimate
  *     / job / customer record and never calls a provider write (no FreshBooks
  *     create/update, no Nutshell editLead/newLead/addNote). EVERY persistence in this
  *     class funnels through the single private method store_inference(), and that
- *     method writes ONLY non-autoloaded `zdz_infer_*` options. A grep of this file
- *     finds no update/insert against any non-inference table and no provider mutation.
+ *     method writes ONLY non-autoloaded `zdz_infer_*` options. The one other write is
+ *     the diagnostic's once-a-day marker (a `zdz_infer_diag_*` transient, see diag()).
+ *     A grep of this file finds no update/insert against any non-inference table and
+ *     no provider mutation.
+ *
+ *   NO CUSTOMER TEXT IN THE LOG. Free text read from a document (a customer's name, a
+ *     street, a town) never reaches debug.log: a diagnostic logs a line's SHAPE
+ *     (shape(): each word as its first letter and length) and the stored hint keeps
+ *     only ids, dates, codes and counts.
  *
  *   CRON-ONLY NETWORK. cron_tick() is the ONLY method that reads a source or reaches
  *     the model. Every interactive read (infer / for_estimate / for_invoice / for_lead)
@@ -27,14 +34,14 @@
  *     ZDZ_Answer_Authority::TIER_INFERRED by mint_envelope(); a consumer cannot promote
  *     a guess to a fact. Any surface that STATES an inferred date is expected to route
  *     it through ZDZ_Answer_Authority::gate(), where `scheduled`/`booked` are governed
- *     outcome verbs (INV-12) — this producer never states anything itself.
+ *     outcome verbs (honest output) — this producer never states anything itself.
  *
- *   NO PRIVATE MODEL CLIENT (INV-4). When a parser wants the model it goes through the
- *     Wave-A gateway (ZDZ_Core_Poe) resolved by ZDZ_Model_Registry — via
+ *   NO PRIVATE MODEL CLIENT. When a parser wants the model it goes through the
+ *     shared gateway (ZDZ_Core_Poe) resolved by ZDZ_Model_Registry — via
  *     Zdz_Inference::gateway(). This file issues no direct HTTP call and names no
  *     provider host: source reads go through the already-present Core FreshBooks/Nutshell
  *     adapters (Connections), the model goes through the shared gateway. Network work
- *     runs under the Wave-A request-guard / breaker (Zdz_Sweep → Zdz_Request_Guard →
+ *     runs under the request guard / breaker (Zdz_Sweep → Zdz_Request_Guard →
  *     Zdz_Service_Breaker) when present, and degrades to a bounded, breaker-aware loop
  *     when absent.
  *
@@ -59,8 +66,8 @@
  * until credentials exist, and are fully replaceable through `zdz_inference_sources`.
  * Because the parser registry ships empty, they mint nothing on a fresh install.
  *
- * Derives from S4-07 / S1-11 and PLAN-03a AC4. No Core DB table (the store is
- * non-autoloaded wp_options). Nothing is seeded on activation.
+ * No Core DB table (the store is non-autoloaded wp_options). Nothing is seeded on
+ * activation.
  *
  * @package Zorderz
  */
@@ -78,6 +85,12 @@ class Zdz_Inference {
 
 	/** Non-autoloaded index of every inference key written ({scope:id} => option_name). */
 	const INDEX_OPTION = 'zdz_infer_keys';
+
+	/** Transient prefix of the diagnostic's once-a-day marker (one per source + document). */
+	const DIAG_PREFIX = 'zdz_infer_diag_';
+
+	/** Diagnostic lines this tick may still write (null = not started; see diag()). */
+	private static $diag_left = null;
 
 	// ─────────────────────────────────────────────────────────────────
 	// FILTERABLE BOUNDS (constants expressed as filters — a tenant tunes them,
@@ -209,7 +222,7 @@ class Zdz_Inference {
 	 * THE ONLY NETWORK METHOD. Walks each registered source's bounded batch, runs the
 	 * registered (Identity) parser, cross-checks a mapped CRM lead by a LOCAL id (no CRM
 	 * search), stamps TIER_INFERRED, and writes the hint to the non-autoloaded store.
-	 * Network work runs under the Wave-A guard/breaker when present; it refuses to run
+	 * Network work runs under the request guard/breaker when present; it refuses to run
 	 * off a cron context (the network is cron-only).
 	 *
 	 * With the parser registry empty (a fresh Core install) this mints nothing.
@@ -224,7 +237,8 @@ class Zdz_Inference {
 		if ( empty( $sources ) ) {
 			return;
 		}
-		$parsers = self::parsers();
+		$parsers         = self::parsers();
+		self::$diag_left = self::diag_budget(); // each tick gets its own diagnostic budget
 
 		foreach ( $sources as $src ) {
 			if ( empty( $src['key'] ) || empty( $src['parser'] ) ) {
@@ -243,7 +257,7 @@ class Zdz_Inference {
 	 * A ready-to-use shared gateway bound to the inference model slot, for a parser that
 	 * wants model help turning unstructured text into a structured hint. The parser MUST
 	 * use this (or ZDZ_Model_Registry::gateway() directly) — never a private client
-	 * (INV-4). Returns null if the registry/gateway is unavailable (degrade).
+	 * (one model gateway). Returns null if the registry/gateway is unavailable (degrade).
 	 *
 	 * @return ZDZ_Core_Poe|null
 	 */
@@ -338,7 +352,7 @@ class Zdz_Inference {
 	// ─────────────────────────────────────────────────────────────────
 
 	/**
-	 * Read a source's bounded batch and process each doc. Prefers the Wave-A shared
+	 * Read a source's bounded batch and process each doc. Prefers the shared
 	 * sweep (lock + wall-clock budget + reserve-next-call + breaker + starved-pass log);
 	 * degrades to a bounded, breaker-aware loop when the sweep is absent.
 	 *
@@ -413,7 +427,18 @@ class Zdz_Inference {
 			return;
 		}
 		if ( ! is_array( $hint ) || empty( $hint['date'] ) ) {
-			return; // no date read — nothing to record (a blank is read, not inferred).
+			// No date read — nothing to record (a blank is read, not inferred). A parser that
+			// expected a date and found none says so in 'diag' (+ the free text it read in
+			// 'diag_text'), so "report what you failed to read" is one bounded, name-free line.
+			if ( is_array( $hint ) && ! empty( $hint['diag'] ) && is_string( $hint['diag'] ) ) {
+				self::diag(
+					(string) $src['key'],
+					$id,
+					$hint['diag'],
+					( isset( $hint['diag_text'] ) && is_array( $hint['diag_text'] ) ) ? $hint['diag_text'] : array()
+				);
+			}
+			return;
 		}
 
 		$env = self::mint_envelope( $hint, (string) $src['key'], $id, $src );
@@ -496,7 +521,7 @@ class Zdz_Inference {
 	}
 
 	/**
-	 * THE ONE WRITE METHOD (the INV-11 chokepoint). Writes ONLY non-autoloaded
+	 * THE ONE WRITE METHOD (the zero-writes chokepoint). Writes ONLY non-autoloaded
 	 * `zdz_infer_*` options: the per-hint envelope and a bounded key index. There is no
 	 * other persistence in this class, and this method touches no source-of-truth store.
 	 */
@@ -568,6 +593,79 @@ class Zdz_Inference {
 	/** TIER_UNKNOWN, degrading to the literal tier string if the gate class is absent. */
 	private static function tier_unknown(): string {
 		return class_exists( 'ZDZ_Answer_Authority' ) ? ZDZ_Answer_Authority::TIER_UNKNOWN : 'unknown';
+	}
+
+	/**
+	 * One diagnostic line for a document the parser could not date, bounded twice:
+	 *
+	 *   - at most diag_budget() lines per cron tick, and only a line actually written uses
+	 *     the budget (a document already reported today costs nothing);
+	 *   - each source + document at most once a DAY (a transient marker), because the same
+	 *     undated documents come back on every tick and a line repeated every few minutes
+	 *     drowns the log it is meant to inform.
+	 *
+	 * The message is the parser's own (it must hold ids, codes and counts only). Free text
+	 * read from the document goes in $free_text and is logged as its shape(), never as what
+	 * it says — a customer's name or street never reaches debug.log.
+	 *
+	 * @param string   $source_key The source descriptor key.
+	 * @param string   $doc_id     The document id within that source.
+	 * @param string   $message    What was expected and not found (no free text).
+	 * @param string[] $free_text  Label => text the parser read (logged as shapes).
+	 * @return bool True when a line was written.
+	 */
+	public static function diag( string $source_key, string $doc_id, string $message, array $free_text = array() ): bool {
+		if ( null === self::$diag_left ) {
+			self::$diag_left = self::diag_budget();
+		}
+		if ( self::$diag_left <= 0 ) {
+			return false;
+		}
+		$seen = self::DIAG_PREFIX . md5( $source_key . '|' . $doc_id );
+		if ( function_exists( 'get_transient' ) && get_transient( $seen ) ) {
+			return false;
+		}
+		if ( function_exists( 'set_transient' ) ) {
+			set_transient( $seen, 1, defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 );
+		}
+		$parts = array();
+		foreach ( $free_text as $label => $text ) {
+			$label   = preg_replace( '/[^a-z0-9_]/', '', strtolower( (string) $label ) );
+			$parts[] = ( '' !== $label ? $label . '=' : '' ) . '"' . self::shape( (string) $text ) . '"';
+		}
+		self::$diag_left--;
+		error_log( sprintf(
+			'[Zdz_Inference] %s #%s produced no date: %s%s (logged once a day per document)',
+			sanitize_key( $source_key ),
+			preg_replace( '/[^A-Za-z0-9_.:-]/', '', $doc_id ),
+			trim( preg_replace( '/\s+/', ' ', $message ) ),
+			$parts ? ' | ' . implode( ' ', $parts ) : ''
+		) );
+		return true;
+	}
+
+	/**
+	 * What a free-text line LOOKS like, without what it SAYS, for a diagnostic that must not
+	 * put a customer's name in debug.log. Each word becomes its first letter and its length
+	 * ("Alex Jordan, Oak Street" -> "A4 J6, O3 S6"); punctuation, digits and a short code in
+	 * parentheses ("(AB)") stay, because those are what a parser keys on. Pure.
+	 *
+	 * @param string $s
+	 * @return string
+	 */
+	public static function shape( string $s ): string {
+		$out = preg_replace_callback(
+			'/\(([A-Z]{1,4})\)|(\p{L})(\p{L}*)/u',
+			static function ( $m ) {
+				if ( isset( $m[1] ) && '' !== $m[1] ) {
+					return $m[0];
+				}
+				$word = $m[2] . $m[3];
+				return $m[2] . ( function_exists( 'mb_strlen' ) ? mb_strlen( $word, 'UTF-8' ) : strlen( $word ) );
+			},
+			$s
+		);
+		return is_string( $out ) ? $out : '';
 	}
 
 	/** Nothing silent: every drop/ambiguity is a logged disposition. */

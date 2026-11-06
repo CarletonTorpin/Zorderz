@@ -7,7 +7,7 @@
  * work: creating a lead/stub for an estimate and writing the billing document number
  * back to a custom field. Every external NAME (pipeline, milestone, custom field) is
  * resolved to an id through the Mappings layer via a filter, not matched by literal
- * string — so a CRM rename is a no-op instead of a silent break (crosswalk C1–C7). The
+ * string — so a CRM rename is a no-op instead of a silent break. The
  * platform never CREATES a pipeline/stage/field; an unresolved mapping is logged, never
  * guessed.
  *
@@ -95,8 +95,8 @@ class ZEST_Nutshell {
 
 	/**
 	 * Write the billing document number to the mapped custom field on a lead. OUTBOUND
-	 * only — the platform reads its own record, never a CRM note body, back (crosswalk
-	 * C9 forbids parsing note bodies as a protocol).
+	 * only — the platform reads its own record, never a CRM note body, back (a note body is
+	 * never parsed as a protocol).
 	 */
 	public static function set_billing_doc_number( string $lead_id, string $number ): bool {
 		$client = self::client();

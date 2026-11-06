@@ -62,15 +62,26 @@ class ZSCH_Admin {
 		}
 		check_admin_referer( 'zsch_settings' );
 
-		ZSCH_Settings::update_config( array(
-			'tenant_id'    => sanitize_text_field( wp_unslash( $_POST['tenant_id'] ?? '' ) ),
-			'client_id'    => sanitize_text_field( wp_unslash( $_POST['client_id'] ?? '' ) ),
+		/* While ms_calendar_sync is managed on the platform's Credentials screen —
+		 * or this form was rendered that way — the tenant id, client id and secret
+		 * are not this form's to write. Leaving them OUT of the patch keeps the
+		 * stored values (update_config() merges); default_tz and sync_enabled keep
+		 * saving normally. */
+		$sync_locked = ZSCH_Settings::cred_locked( 'ms_calendar_sync' );
+		$patch       = array(
 			'default_tz'   => sanitize_text_field( wp_unslash( $_POST['default_tz'] ?? '' ) ),
 			'sync_enabled' => ! empty( $_POST['sync_enabled'] ),
-		) );
+		);
+		if ( ! $sync_locked ) {
+			$patch = array(
+				'tenant_id' => sanitize_text_field( wp_unslash( $_POST['tenant_id'] ?? '' ) ),
+				'client_id' => sanitize_text_field( wp_unslash( $_POST['client_id'] ?? '' ) ),
+			) + $patch;
+		}
+		ZSCH_Settings::update_config( $patch );
 
 		// Only overwrite the secret if a new one was typed (blank = keep).
-		$secret = (string) wp_unslash( $_POST['client_secret'] ?? '' );
+		$secret = $sync_locked ? '' : (string) wp_unslash( $_POST['client_secret'] ?? '' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- a client secret is kept exactly as typed (sanitizing could change it); it is write-only and never printed.
 		if ( '' !== trim( $secret ) ) {
 			ZSCH_Settings::set_secret( trim( $secret ) );
 			ZSCH_Settings::clear_cached_token(); // force a fresh token next call
@@ -86,23 +97,41 @@ class ZSCH_Admin {
 		}
 		check_admin_referer( 'zsch_conncal' );
 
-		ZSCH_Settings::update_conncal_config( array(
-			'google_client_id' => sanitize_text_field( wp_unslash( $_POST['cc_google_client_id'] ?? '' ) ),
-			'ms_client_id'     => sanitize_text_field( wp_unslash( $_POST['cc_ms_client_id'] ?? '' ) ),
-			'conflict_policy'  => sanitize_text_field( wp_unslash( $_POST['cc_conflict_policy'] ?? 'warn' ) ),
-		) );
+		/* google_calendar and ms_calendars are judged independently. A managed
+		 * (or marker-posted) service's client id stays out of the patch, so
+		 * update_conncal_config() keeps the stored value, and its secret is never
+		 * written; conflict_policy and every other setting on this form keep
+		 * saving normally. */
+		$g_locked = ZSCH_Settings::cred_locked( 'google_calendar' );
+		$m_locked = ZSCH_Settings::cred_locked( 'ms_calendars' );
+		$patch    = array();
+		if ( ! $g_locked ) {
+			$patch['google_client_id'] = sanitize_text_field( wp_unslash( $_POST['cc_google_client_id'] ?? '' ) );
+		}
+		if ( ! $m_locked ) {
+			$patch['ms_client_id'] = sanitize_text_field( wp_unslash( $_POST['cc_ms_client_id'] ?? '' ) );
+		}
+		$patch['conflict_policy'] = sanitize_text_field( wp_unslash( $_POST['cc_conflict_policy'] ?? 'warn' ) );
+		ZSCH_Settings::update_conncal_config( $patch );
 
 		// Secrets: blank = keep existing (same posture as the Graph secret).
-		$gsec = trim( (string) wp_unslash( $_POST['cc_google_secret'] ?? '' ) );
+		$gsec = $g_locked ? '' : trim( (string) wp_unslash( $_POST['cc_google_secret'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- a client secret is kept exactly as typed (sanitizing could change it); it is write-only and never printed.
 		if ( '' !== $gsec ) {
 			ZSCH_Settings::set_google_secret( $gsec );
 		}
-		$msec = trim( (string) wp_unslash( $_POST['cc_ms_secret'] ?? '' ) );
+		$msec = $m_locked ? '' : trim( (string) wp_unslash( $_POST['cc_ms_secret'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- a client secret is kept exactly as typed (sanitizing could change it); it is write-only and never printed.
 		if ( '' !== $msec ) {
 			ZSCH_Settings::set_ms_delegated_secret( $msec );
 		}
 
 		update_option( 'zsch_connected_cals', ! empty( $_POST['cc_enabled'] ) ? 'yes' : 'no' );
+
+		/* Which connected accounts are WORK accounts. Stored as typed, normalised
+		 * on READ by ZSCH_Settings::work_domains(), so a stray comma or a trailing
+		 * dot here can never widen disclosure. Blank = disclose nothing. */
+		if ( isset( $_POST['cc_work_domains'] ) ) {
+			update_option( ZSCH_Settings::OPT_WORK_DOMAINS, sanitize_text_field( wp_unslash( $_POST['cc_work_domains'] ) ) );
+		}
 
 		add_settings_error( 'zsch', 'saved_conncal', 'Connected Calendars settings saved.', 'updated' );
 	}
@@ -111,6 +140,7 @@ class ZSCH_Admin {
 		$cfg = ZSCH_Settings::get_config();
 		$has_secret = ZSCH_Settings::has_secret();
 		$active = ZSCH_Settings::sync_active();
+		$sync_managed = ZSCH_Settings::cred_managed( 'ms_calendar_sync' );
 		?>
 		<div class="wrap">
 			<h1>Scheduler — Mode A: Org-wide Microsoft 365 Sync (optional)</h1>
@@ -139,6 +169,12 @@ class ZSCH_Admin {
 			<form method="post">
 				<?php wp_nonce_field( 'zsch_settings' ); ?>
 				<table class="form-table" role="presentation">
+					<?php if ( $sync_managed ) : ?>
+					<tr>
+						<th scope="row">Azure app (tenant, client ID, secret)</th>
+						<td><?php self::render_managed_note( 'ms_calendar_sync' ); ?></td>
+					</tr>
+					<?php else : ?>
 					<tr>
 						<th scope="row"><label for="tenant_id">Directory (tenant) ID</label></th>
 						<td><input name="tenant_id" id="tenant_id" type="text" class="regular-text" value="<?php echo esc_attr( $cfg['tenant_id'] ); ?>" placeholder="00000000-0000-0000-0000-000000000000"></td>
@@ -154,6 +190,7 @@ class ZSCH_Admin {
 							<p class="description">Stored server-side only. Leave blank to keep the existing secret.</p>
 						</td>
 					</tr>
+					<?php endif; ?>
 					<tr>
 						<th scope="row"><label for="default_tz">Default time zone</label></th>
 						<td>
@@ -178,6 +215,15 @@ class ZSCH_Admin {
 			</form>
 
 			<?php $this->render_conncal_section(); ?>
+
+			<?php
+			/* The Health panel: read-only, and last on the page — it answers "is
+			 * this running?", the question you have after configuring. Guarded so
+			 * the settings screen still renders if the class failed to load. */
+			if ( class_exists( 'ZSCH_Health' ) ) {
+				ZSCH_Health::render_panel();
+			}
+			?>
 		</div>
 
 		<script>
@@ -211,6 +257,20 @@ class ZSCH_Admin {
 		<?php
 	}
 
+	/**
+	 * The one line shown in place of a centrally managed service's credential
+	 * inputs, plus the marker that tells the save handler this form did not
+	 * carry those fields. Never prints a value.
+	 *
+	 * @param string $svc
+	 */
+	private static function render_managed_note( $svc ) {
+		?>
+		<p>Managed in <a href="<?php echo esc_url( ZSCH_Settings::credentials_url() ); ?>">Zorderz → Credentials</a> — one set for every app.</p>
+		<input type="hidden" name="zdz_cred_managed[<?php echo esc_attr( $svc ); ?>]" value="1">
+		<?php
+	}
+
 	/** v1.6.0 — the Connected Calendars (per-user OAuth) admin section. */
 	private function render_conncal_section() {
 		$cc         = ZSCH_Settings::conncal_config();
@@ -221,6 +281,8 @@ class ZSCH_Admin {
 		$google_uri = class_exists( 'ZSCH_OAuth' ) ? ZSCH_OAuth::redirect_uri( 'google' ) : '';
 		$ms_uri     = class_exists( 'ZSCH_OAuth' ) ? ZSCH_OAuth::redirect_uri( 'microsoft' ) : '';
 		$roster     = class_exists( 'ZSCH_Connections' ) ? ZSCH_Connections::roster() : array();
+		$g_managed  = ZSCH_Settings::cred_managed( 'google_calendar' );
+		$m_managed  = ZSCH_Settings::cred_managed( 'ms_calendars' );
 		?>
 		<hr style="margin:28px 0">
 		<h2>Connected Calendars (per-user, Google + Microsoft)</h2>
@@ -254,6 +316,16 @@ class ZSCH_Admin {
 		<form method="post">
 			<?php wp_nonce_field( 'zsch_conncal' ); ?>
 			<table class="form-table" role="presentation">
+				<?php if ( $g_managed ) : ?>
+				<tr>
+					<th scope="row">Google app (client ID, secret)</th>
+					<td>
+						<?php self::render_managed_note( 'google_calendar' ); ?>
+						<button type="button" id="zsch-test-google" class="button">Test Google config</button>
+						<span id="zsch-test-google-result" style="margin-left:10px"></span>
+					</td>
+				</tr>
+				<?php else : ?>
 				<tr>
 					<th scope="row"><label for="cc_google_client_id">Google Client ID</label></th>
 					<td><input name="cc_google_client_id" id="cc_google_client_id" type="text" class="regular-text" value="<?php echo esc_attr( $cc['google_client_id'] ); ?>" placeholder="….apps.googleusercontent.com"></td>
@@ -266,6 +338,17 @@ class ZSCH_Admin {
 						<span id="zsch-test-google-result" style="margin-left:10px"></span>
 					</td>
 				</tr>
+				<?php endif; ?>
+				<?php if ( $m_managed ) : ?>
+				<tr>
+					<th scope="row">Microsoft delegated app (client ID, secret)</th>
+					<td>
+						<?php self::render_managed_note( 'ms_calendars' ); ?>
+						<button type="button" id="zsch-test-ms" class="button">Test Microsoft config</button>
+						<span id="zsch-test-ms-result" style="margin-left:10px"></span>
+					</td>
+				</tr>
+				<?php else : ?>
 				<tr>
 					<th scope="row"><label for="cc_ms_client_id">Microsoft Application (client) ID</label></th>
 					<td>
@@ -281,6 +364,7 @@ class ZSCH_Admin {
 						<span id="zsch-test-ms-result" style="margin-left:10px"></span>
 					</td>
 				</tr>
+				<?php endif; ?>
 				<tr>
 					<th scope="row"><label for="cc_conflict_policy">Booking conflict policy</label></th>
 					<td>
@@ -288,7 +372,24 @@ class ZSCH_Admin {
 							<option value="warn" <?php selected( $cc['conflict_policy'], 'warn' ); ?>>Warn (allow "Book anyway")</option>
 							<option value="block" <?php selected( $cc['conflict_policy'], 'block' ); ?>>Block double-booking</option>
 						</select>
-						<p class="description">Takes effect when the busy overlay ships (Phase 1). Default: warn.</p>
+						<p class="description">Applies to the busy overlay. Default: warn.</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="cc_work_domains">Work calendar domains</label></th>
+					<td>
+						<input name="cc_work_domains" id="cc_work_domains" type="text" class="regular-text" value="<?php echo esc_attr( (string) get_option( ZSCH_Settings::OPT_WORK_DOMAINS, '' ) ); ?>" placeholder="example.com">
+						<p class="description">
+							Connected accounts on these domains are treated as <strong>work</strong> calendars: on the
+							team grid a colleague sees <em>what</em> the person is busy with, not just that they are.
+							Every other connected account &mdash; a personal Google or Microsoft account &mdash; stays
+							<strong>busy-only</strong>.<br>
+							Comma separated. Matched as a whole domain, so <code>sub.example.com</code> and
+							<code>notexample.com</code> do <em>not</em> match <code>example.com</code>.
+							<strong>Leave blank to disclose no titles at all</strong> (the default).<br>
+							Two things this does not override: an event the person marked <em>private</em> in Outlook or
+							Google never has a title stored, and a feed they set to busy-only never stores one either.
+						</p>
 					</td>
 				</tr>
 				<tr>

@@ -86,7 +86,7 @@ if ( ! class_exists( 'Zjob_Project_Sweep' ) ) {
 		 */
 		public static function run(): void {
 			if ( ! class_exists( 'Zdz_Sweep' ) || ! class_exists( 'Zjob_Project' ) ) {
-				return; // the Core sweep helper (Wave A) is a hard dependency.
+				return; // the Core sweep helper is a hard dependency.
 			}
 			self::run_mint_pass();
 			self::run_signal_pass();

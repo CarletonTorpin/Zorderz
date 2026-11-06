@@ -1,0 +1,20 @@
+# Counting rules and prospecting.
+charts:
+  data_coverage: Invoices from the example exports, up to TODAY.
+  include_unpaid_default: true
+  drill_min_jobs: 3
+  prospect:
+    products:
+      chimney_caps:
+        label: chimney caps
+        families: [Chimney caps]
+        words: [chimney caps, chimney cap, spark guards]
+        weights: {fire_zone: 0.8, burned_before: 0.5}
+      shade_sails:
+        label: shade sails
+        families: [Shade sails]
+        words: [shade sails, shade sail, sails]
+        weights: {inland: 0.8, lot_size: 0.5}
+    default_weights: {few_customers: 0.6, single_family: 0.5, owners: 0.5, not_hung: 0.4, close: 0.4}
+    hung_within_days: 90
+    origin: {street: 100 Main St, zip: "00015", label: the shop}

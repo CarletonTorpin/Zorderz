@@ -3,7 +3,7 @@
  * ZDP_Ai — the dictation adapter. Turns an utterance into a PROPOSED plot spec by asking the
  * shared AI gateway, constrained to the sources the viewer may actually plot.
  *
- * DISCIPLINE (S8-03, ported as a DELETION):
+ * DISCIPLINE (one credential, owned by the theme):
  *   - Binds the shared gateway BY NAME via ZDZ_Model_Registry::gateway(); the app NEVER passes an
  *     API key (the theme owns credentials). No key list, no per-app key, no rotation on 402, no
  *     remembered-winning-option, no upgrade-clear. Single-credential is the platform invariant.

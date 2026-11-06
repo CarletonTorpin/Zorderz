@@ -23,11 +23,36 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZCC_FreshBooks {
 
+	/** Invoices per page asked of the billing system, and the most pages one window may take. */
+	const PER_PAGE  = 100;
+	const MAX_PAGES = 50;
+
 	/** Request-scoped memo so several verbs in one turn share ONE fetch. */
 	private static $memo = [];
 
+	/** Why the last fetch failed ('' when it did not): a reason code, never invoice text. */
+	private static $last_error = '';
+
+	/**
+	 * Tests install a stand-in here: an object with get_invoices( array $params ) answering the
+	 * billing system's list shape. Production leaves it null and uses ZDZ_Core_FreshBooks.
+	 *
+	 * @var object|null
+	 */
+	public static $client = null;
+
+	private static function client() {
+		if ( is_object( self::$client ) ) {
+			return self::$client;
+		}
+		return class_exists( 'ZDZ_Core_FreshBooks' ) ? new ZDZ_Core_FreshBooks() : null;
+	}
+
 	/** Is a FreshBooks connection configured? */
 	public static function is_connected(): bool {
+		if ( is_object( self::$client ) ) {
+			return true;
+		}
 		if ( ! class_exists( 'ZDZ_Core_FreshBooks' ) ) {
 			return false;
 		}
@@ -39,8 +64,20 @@ class ZCC_FreshBooks {
 		}
 	}
 
+	/** The reason code of the last failed fetch in this request, '' when none failed. */
+	public static function last_error(): string {
+		return self::$last_error;
+	}
+
 	/**
 	 * Fetch + normalise paid/payable invoices in a date window.
+	 *
+	 * A payment-basis window ('paid') asks the billing system for invoices ISSUED from
+	 * lookback days before the window to its end, then keeps those collected inside it; an
+	 * invoice paid later than the lookback after it was issued is the one case that can be
+	 * missed, which the Coverage tab measures. Every page is read; deleted invoices are left
+	 * out. A failed read returns [] and sets last_error(), so a caller can say "couldn't be
+	 * loaded" instead of showing $0.
 	 *
 	 * @param string $date_start YYYY-MM-DD
 	 * @param string $date_end   YYYY-MM-DD
@@ -49,7 +86,9 @@ class ZCC_FreshBooks {
 	 * @return array Normalised invoices (already gated to payable).
 	 */
 	public static function get_invoices( string $date_start, string $date_end, $status = null, string $date_basis = 'paid' ): array {
+		self::$last_error = '';
 		if ( ! self::is_connected() ) {
+			self::$last_error = 'not_connected';
 			return [];
 		}
 		$gate     = class_exists( 'ZDZ_Compensation' ) ? ZDZ_Compensation::payability() : [ 'statuses' => [ 'paid', 'partial' ], 'money_tolerance' => 0.005 ];
@@ -60,19 +99,18 @@ class ZCC_FreshBooks {
 			return self::$memo[ $memo_key ];
 		}
 
-		$raw_list = [];
+		$issued_from = $date_start;
+		if ( 'paid' === $date_basis ) {
+			$lookback    = class_exists( 'ZCC_Coverage' ) ? ZCC_Coverage::lookback_days() : 75;
+			$ts          = strtotime( $date_start . ' 00:00:00 UTC' );
+			$issued_from = false === $ts ? $date_start : gmdate( 'Y-m-d', $ts - $lookback * 86400 );
+		}
+
 		try {
-			$client = new ZDZ_Core_FreshBooks();
-			// The theme client owns paging + the host; ask for the window. We widen
-			// the issue-date window backward for a payment-basis period and post-
-			// filter on date_paid below.
-			$params = [ 'date_start' => $date_start, 'date_end' => $date_end, 'date_basis' => $date_basis ];
-			$fetched = $client->get_invoices( $params );
-			if ( is_array( $fetched ) ) {
-				$raw_list = $fetched;
-			}
+			$raw_list = self::fetch_raw( $issued_from, $date_end );
 		} catch ( \Throwable $e ) {
-			error_log( 'ZCC_FreshBooks: invoice fetch failed — ' . $e->getMessage() );
+			self::$last_error = 'fetch_failed';
+			error_log( 'ZCC_FreshBooks: invoice fetch failed (fetch_failed)' );
 			return [];
 		}
 
@@ -86,9 +124,14 @@ class ZCC_FreshBooks {
 			if ( ! self::is_payable_status( $raw, $inv, $statuses, (float) $gate['money_tolerance'] ) ) {
 				continue;
 			}
-			// Payment-basis window: keep only invoices collected in range.
-			if ( $date_basis === 'paid' && $inv['date_paid'] !== '' ) {
-				if ( $inv['date_paid'] < $date_start || $inv['date_paid'] > $date_end ) {
+			if ( 'paid' === $date_basis && $inv['date_paid'] !== '' ) {
+				$paid_day = substr( $inv['date_paid'], 0, 10 );
+				if ( $paid_day < $date_start || $paid_day > $date_end ) {
+					continue;
+				}
+			} elseif ( 'paid' === $date_basis || 'issued' === $date_basis ) {
+				$issue_day = substr( $inv['date_completed'], 0, 10 );
+				if ( $issue_day !== '' && ( $issue_day < $date_start || $issue_day > $date_end ) ) {
 					continue;
 				}
 			}
@@ -99,34 +142,122 @@ class ZCC_FreshBooks {
 		return $out;
 	}
 
+	/**
+	 * Every invoice issued in a window, page by page, with its lines; deleted ones left out.
+	 * Accepts the billing system's envelope (response.result.invoices) or a client that has
+	 * already unwrapped it to a list. Throws when a page cannot be read.
+	 *
+	 * @return array[] Raw invoices.
+	 */
+	public static function fetch_raw( string $issued_from, string $issued_to ): array {
+		$client = self::client();
+		if ( ! $client || ! method_exists( $client, 'get_invoices' ) ) {
+			throw new \RuntimeException( 'no_client' );
+		}
+		$out   = [];
+		$page  = 1;
+		$pages = 1;
+		do {
+			$resp = $client->get_invoices( [
+				'search[date_min]' => $issued_from,
+				'search[date_max]' => $issued_to,
+				'include[]'        => 'lines',
+				'per_page'         => self::PER_PAGE,
+				'page'             => $page,
+			] );
+			if ( ! is_array( $resp ) || ! empty( $resp['response']['errors'] ) ) {
+				throw new \RuntimeException( 'page_unreadable' );
+			}
+			if ( isset( $resp['response']['result'] ) && is_array( $resp['response']['result'] ) ) {
+				$result = $resp['response']['result'];
+				$list   = (array) ( $result['invoices'] ?? [] );
+				$pages  = max( 1, (int) ( $result['pages'] ?? 1 ) );
+			} elseif ( isset( $resp['invoices'] ) && is_array( $resp['invoices'] ) ) {
+				$list  = $resp['invoices'];
+				$pages = max( 1, (int) ( $resp['pages'] ?? 1 ) );
+			} else {
+				$list  = array_values( array_filter( $resp, 'is_array' ) );
+				$pages = 1;
+			}
+			foreach ( $list as $inv ) {
+				if ( is_array( $inv ) && 1 !== (int) ( $inv['vis_state'] ?? 0 ) ) {
+					$out[] = $inv;
+				}
+			}
+			$page++;
+		} while ( $page <= $pages && $page <= self::MAX_PAGES );
+		return $out;
+	}
+
 	/** Drop the request memo (between tests / after a token change). */
 	public static function flush_memo(): void {
-		self::$memo = [];
+		self::$memo       = [];
+		self::$last_error = '';
+	}
+
+	/**
+	 * Is this billing-system ITEM name the job's location marker? The words come from the
+	 * `zcc_location_item_names` filter (Core default: "location", "loc", "loc."), compared
+	 * whole, case-insensitively, with an optional trailing colon.
+	 */
+	public static function is_location_item( string $name ): bool {
+		$name = strtolower( trim( rtrim( trim( $name ), ':' ) ) );
+		if ( '' === $name ) {
+			return false;
+		}
+		$words = (array) apply_filters( 'zcc_location_item_names', [ 'location', 'loc', 'loc.' ] );
+		foreach ( $words as $w ) {
+			if ( strtolower( trim( (string) $w ) ) === $name ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
 	 * Normalise a raw provider invoice into the shape the calc engine expects.
 	 * Reads several possible date keys (issue date is `create_date`, not `date`).
+	 *
+	 * A line whose billing ITEM is the location marker is the job's location, whatever its
+	 * words: a $0 one becomes the invoice's `location` (never a product line); a priced one
+	 * stays, marked `is_location`, so it is billed with no cost and a person is asked to look.
+	 * No link to the billing system is built: an invoice opens inside the app.
 	 */
 	public static function normalize_invoice( array $raw ): array {
-		$lines = [];
+		$lines     = [];
+		$locations = [];
 		foreach ( (array) ( $raw['lines'] ?? [] ) as $ln ) {
 			if ( ! is_array( $ln ) ) {
 				continue;
 			}
 			$amount = (float) ( $ln['amount']['amount'] ?? $ln['amount'] ?? 0 );
-			$lines[] = [
-				'description' => (string) ( $ln['name'] ?? '' ) . ( ! empty( $ln['description'] ) ? ' ' . $ln['description'] : '' ),
-				'desc_head'   => (string) ( $ln['name'] ?? '' ),
+			$name   = trim( (string) ( $ln['name'] ?? '' ) );
+			$sub    = trim( (string) ( $ln['description'] ?? '' ) );
+			$is_loc = self::is_location_item( $name );
+			if ( $is_loc && abs( $amount ) <= 0.005 ) {
+				$locations[] = $sub;
+				continue;
+			}
+			$row = [
+				'description' => $name . ( '' !== $sub ? ' ' . $sub : '' ),
+				'desc_head'   => $name,
+				'desc_sub'    => $sub,
+				'item_name'   => $name,
 				'qty'         => (int) round( (float) ( $ln['qty'] ?? 1 ) ),
+				'unit_cost'   => (float) ( $ln['unit_cost']['amount'] ?? $ln['unit_cost'] ?? 0 ),
 				'amount'      => $amount,
 			];
+			if ( $is_loc ) {
+				$row['is_location'] = true;
+			}
+			$lines[] = $row;
 		}
 
 		$issue = (string) ( $raw['create_date'] ?? $raw['generation_date'] ?? $raw['date'] ?? '' );
 		$paid  = (string) ( $raw['date_paid'] ?? '' );
 		$ref   = (string) ( $raw['po_number'] ?? $raw['reference'] ?? '' );
 		$notes = (string) ( $raw['notes'] ?? '' );
+		$text  = $ref . ' ' . $notes . ' ' . implode( ' ', $locations ) . ' ' . implode( ' ', array_column( $lines, 'description' ) );
 
 		return [
 			'invoice_id'      => (int) ( $raw['id'] ?? $raw['invoiceid'] ?? 0 ),
@@ -134,11 +265,11 @@ class ZCC_FreshBooks {
 			'customer_name'   => trim( (string) ( $raw['organization'] ?? ( ( $raw['fname'] ?? '' ) . ' ' . ( $raw['lname'] ?? '' ) ) ) ),
 			'date_completed'  => $issue,
 			'date_paid'       => $paid,
-			'fb_url'          => (string) ( $raw['fb_url'] ?? '' ),
-			'location'        => '',
+			'location'        => trim( implode( ' ', $locations ) ),
 			'reference'       => $ref,
+			'estimate_number' => (string) ( $raw['estimate_number'] ?? '' ),
 			'lines'           => $lines,
-			'salesperson_codes' => self::harvest_codes( $ref . ' ' . $notes . ' ' . implode( ' ', array_column( $lines, 'description' ) ) ),
+			'salesperson_codes' => self::harvest_codes( $text ),
 			// Tier-2 SHADOW annotation — a second attribution opinion computed in
 			// parallel for A/B comparison. IN-MEMORY ONLY: never persisted, never
 			// merged into salesperson_codes, never surfaced off the admin screen,
@@ -146,7 +277,7 @@ class ZCC_FreshBooks {
 			// a guarded no-op — a bare-initials, roster-guarded read that touches no
 			// pay figure — so the money engine and the ledger are byte-for-byte
 			// unchanged whether it finds a candidate or not.
-			't2_shadow'         => self::t2_shadow_for( $ref . ' ' . $notes . ' ' . implode( ' ', array_column( $lines, 'description' ) ) ),
+			't2_shadow'         => self::t2_shadow_for( $text ),
 			'discount_amount' => round( (float) ( $raw['discount_total']['amount'] ?? $raw['discount_amount'] ?? 0 ), 2 ),
 			'cc_fee'          => 0.0, // resolved from a line by the calc engine's ledger-kind pass
 			'outstanding'     => (float) ( $raw['outstanding']['amount'] ?? $raw['outstanding'] ?? 0 ),
@@ -154,6 +285,94 @@ class ZCC_FreshBooks {
 			'v3_status'       => (string) ( $raw['v3_status'] ?? '' ),
 			'status'          => (string) ( $raw['status'] ?? '' ),
 		];
+	}
+
+	/* ==================================================================
+	 * ONE INVOICE, FOR THE IN-APP VIEW (read live, stored nowhere)
+	 * ================================================================== */
+
+	private static function account_path(): string {
+		$acct = class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_fb_account_id' ) ? (string) ZDZ_Core_Settings::get_fb_account_id() : '';
+		return '' === $acct ? '' : '/accounting/account/' . rawurlencode( $acct );
+	}
+
+	/** One raw invoice with its lines by its id (deleted: null). Throws when it cannot be read. */
+	public static function find_invoice_by_id( int $invoice_id ): ?array {
+		$client = self::client();
+		$path   = self::account_path();
+		if ( $invoice_id <= 0 || ! $client || ! method_exists( $client, 'api_request' ) || '' === $path ) {
+			return null;
+		}
+		$data = $client->api_request( 'GET', $path . '/invoices/invoices/' . $invoice_id . '?include[]=lines' );
+		if ( ! is_array( $data ) ) {
+			throw new \RuntimeException( 'unreadable' );
+		}
+		$inv = $data['response']['result']['invoice'] ?? null;
+		return is_array( $inv ) && 1 !== (int) ( $inv['vis_state'] ?? 0 ) ? $inv : null;
+	}
+
+	/** One raw invoice by its number (leading zeros ignored; deleted skipped; a live copy wins). */
+	public static function find_invoice_by_number( string $number ): ?array {
+		$number = trim( $number );
+		$client = self::client();
+		$path   = self::account_path();
+		if ( ! preg_match( '/^[A-Za-z0-9-]{1,20}$/D', $number ) || ! $client || ! method_exists( $client, 'api_request' ) || '' === $path ) {
+			return null;
+		}
+		$data = $client->api_request( 'GET', $path . '/invoices/invoices?per_page=5&include[]=lines&search[invoice_number]=' . rawurlencode( $number ) );
+		if ( ! is_array( $data ) || ! empty( $data['response']['errors'] ) ) {
+			throw new \RuntimeException( 'unreadable' );
+		}
+		$archived = null;
+		foreach ( (array) ( $data['response']['result']['invoices'] ?? [] ) as $inv ) {
+			if ( ! is_array( $inv ) || 1 === (int) ( $inv['vis_state'] ?? 0 ) ) {
+				continue;
+			}
+			if ( ltrim( (string) ( $inv['invoice_number'] ?? '' ), '0' ) !== ltrim( $number, '0' ) ) {
+				continue;
+			}
+			if ( 0 === (int) ( $inv['vis_state'] ?? 0 ) ) {
+				return $inv;
+			}
+			$archived = $archived ?? $inv;
+		}
+		return $archived;
+	}
+
+	/**
+	 * The invoice's customer link (the billing system's share link, which the customer opens
+	 * without signing in), for a person to COPY into their own message; the app never opens it.
+	 * '' when the billing system gives none (a draft has none).
+	 */
+	public static function share_link( int $invoice_id ): string {
+		$client = self::client();
+		$path   = self::account_path();
+		if ( $invoice_id <= 0 || ! $client || ! method_exists( $client, 'api_request' ) || '' === $path ) {
+			return '';
+		}
+		$data = $client->api_request( 'GET', $path . '/invoices/invoices/' . $invoice_id . '/share_link?share_method=share_link' );
+		return self::share_link_from( $data );
+	}
+
+	/** The link out of the billing system's answer: only a whole https address on its own domain. Never built from a token. */
+	public static function share_link_from( $data ): string {
+		$cands = [];
+		if ( is_array( $data ) ) {
+			$cands[] = $data['response']['result']['share_link']['share_link'] ?? null;
+			$cands[] = $data['response']['result']['share_link'] ?? null;
+			$cands[] = $data['share_link']['share_link'] ?? null;
+			$cands[] = $data['share_link'] ?? null;
+		}
+		foreach ( $cands as $c ) {
+			if ( ! is_string( $c ) ) {
+				continue;
+			}
+			$c = trim( $c );
+			if ( preg_match( '#^https://([a-z0-9-]+\.)*freshbooks\.com/#i', $c ) && ! preg_match( '/[\s<>"\'`]/', $c ) ) {
+				return $c;
+			}
+		}
+		return '';
 	}
 
 	/**

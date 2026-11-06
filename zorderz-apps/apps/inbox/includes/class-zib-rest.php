@@ -125,7 +125,7 @@ class ZIB_REST {
 				'offset' => array( 'sanitize_callback' => 'absint' ),
 			),
 		) );
-		// Phase 2 — owner SEND (INV-SEND). POST only; the body/comment are NOT sanitize_text_field'd
+		// Owner SEND (only the owner sends). POST only; the body/comment are NOT sanitize_text_field'd
 		// (that would flatten an email body); identity is forced to the current user in the Gatekeeper.
 		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/reply', array(
 			'methods'             => 'POST',
@@ -135,6 +135,7 @@ class ZIB_REST {
 				'id'      => array( 'sanitize_callback' => 'absint' ),
 				'comment' => array( 'required' => true ),
 				'all'     => array(),
+				'docs'    => array(), // [{id, how, days}] Vault documents (ZIB_Compose::normalize_docs)
 			),
 		) );
 		register_rest_route( $ns, '/message/(?P<id>[0-9]+)/forward', array(
@@ -145,6 +146,7 @@ class ZIB_REST {
 				'id'      => array( 'sanitize_callback' => 'absint' ),
 				'to'      => array( 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
 				'comment' => array(),
+				'docs'    => array(),
 			),
 		) );
 		register_rest_route( $ns, '/send', array(
@@ -156,7 +158,22 @@ class ZIB_REST {
 				'cc'      => array( 'sanitize_callback' => 'sanitize_text_field' ),
 				'subject' => array( 'sanitize_callback' => 'sanitize_text_field' ),
 				'body'    => array(),
+				'docs'    => array(),
 			),
+		) );
+
+		// The composer's Vault picker, and the chat's "Open in Email" handoff. Read only.
+		register_rest_route( $ns, '/vault/find', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'vault_find' ),
+			'permission_callback' => $perm,
+			'args'                => array( 'q' => array( 'sanitize_callback' => 'sanitize_text_field' ) ),
+		) );
+		// POST, not GET: taking it is one-time, and the kit retries a GET after a lost signal.
+		register_rest_route( $ns, '/compose/handoff/(?P<token>[a-f0-9]{32})', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'compose_handoff' ),
+			'permission_callback' => $perm,
 		) );
 		// Triage write routes (INV-WRITE): mark-read + move. Same owner gate; identity forced to the
 		// current user; the move destination is allow-listed in the Gatekeeper.
@@ -400,6 +417,15 @@ class ZIB_REST {
 		if ( $gate ) {
 			return $gate;
 		}
+		// With Vault documents: the one compose send (the same one the chat's Confirm uses).
+		if ( ZIB_Compose::normalize_docs( $req->get_param( 'docs' ) ) ) {
+			return self::send_response( ZIB_Gatekeeper::owner_send_compose( get_current_user_id(), array(
+				'mode'       => $req->get_param( 'all' ) ? 'replyall' : 'reply',
+				'message_id' => (int) $req->get_param( 'id' ),
+				'body'       => (string) $req->get_param( 'comment' ),
+				'docs'       => $req->get_param( 'docs' ),
+			), 'email' ) );
+		}
 		return self::send_response( ZIB_Gatekeeper::owner_send_reply(
 			get_current_user_id(),
 			(int) $req->get_param( 'id' ),
@@ -412,6 +438,15 @@ class ZIB_REST {
 		$gate = self::write_gate( 'Mail.Send' );
 		if ( $gate ) {
 			return $gate;
+		}
+		if ( ZIB_Compose::normalize_docs( $req->get_param( 'docs' ) ) ) {
+			return self::send_response( ZIB_Gatekeeper::owner_send_compose( get_current_user_id(), array(
+				'mode'       => 'forward',
+				'message_id' => (int) $req->get_param( 'id' ),
+				'to'         => (string) $req->get_param( 'to' ),
+				'body'       => (string) $req->get_param( 'comment' ),
+				'docs'       => $req->get_param( 'docs' ),
+			), 'email' ) );
 		}
 		return self::send_response( ZIB_Gatekeeper::owner_send_forward(
 			get_current_user_id(),
@@ -426,12 +461,67 @@ class ZIB_REST {
 		if ( $gate ) {
 			return $gate;
 		}
+		if ( ZIB_Compose::normalize_docs( $req->get_param( 'docs' ) ) ) {
+			return self::send_response( ZIB_Gatekeeper::owner_send_compose( get_current_user_id(), array(
+				'mode'    => 'new',
+				'to'      => (string) $req->get_param( 'to' ),
+				'cc'      => (string) $req->get_param( 'cc' ),
+				'subject' => (string) $req->get_param( 'subject' ),
+				'body'    => (string) $req->get_param( 'body' ),
+				'docs'    => $req->get_param( 'docs' ),
+			), 'email' ) );
+		}
 		return self::send_response( ZIB_Gatekeeper::owner_send_new(
 			get_current_user_id(),
 			(string) $req->get_param( 'to' ),
 			(string) $req->get_param( 'cc' ),
 			(string) $req->get_param( 'subject' ),
 			(string) $req->get_param( 'body' )
+		) );
+	}
+
+	/**
+	 * Vault documents this person may open whose title or context match the words (the Vault matches,
+	 * on the site). The owner's own composer, so a Private document's title is shown to its own viewer
+	 * here - this answer never reaches an Ai model. Each: id, title, name, size, is_private, can_attach.
+	 */
+	public static function vault_find( WP_REST_Request $req ) {
+		$uid = get_current_user_id();
+		if ( ! ZIB_Compose::vault_ready() ) {
+			return rest_ensure_response( array( 'vault' => false, 'items' => array() ) );
+		}
+		$q    = trim( (string) $req->get_param( 'q' ) );
+		$hits = '' === $q ? array() : apply_filters( 'zdz_vault_find_for_user', null, $q, $uid, 8 );
+		$out  = array();
+		foreach ( (array) $hits as $h ) {
+			if ( ! is_array( $h ) ) { continue; }
+			$out[] = array(
+				'id'         => (int) ( $h['id'] ?? 0 ),
+				'title'      => (string) ( $h['title'] ?? '' ),
+				'name'       => (string) ( $h['name'] ?? '' ),
+				'size'       => (int) ( $h['size'] ?? 0 ),
+				'is_private' => ! empty( $h['is_private'] ),
+				'can_attach' => empty( $h['is_private'] ),
+			);
+		}
+		return rest_ensure_response( array( 'vault' => true, 'items' => $out, 'max_total' => ZIB_Compose::max_total(), 'link_days' => array( 14, 30 ) ) );
+	}
+
+	/** The chat's "Open in Email" — one time, this person only; the composer opens filled in. Sends nothing. */
+	public static function compose_handoff( WP_REST_Request $req ) {
+		$uid = get_current_user_id();
+		$r   = ZIB_Compose::take_handoff( $uid, (string) $req->get_param( 'token' ) );
+		if ( ! is_array( $r ) ) {
+			return new WP_Error( 'zib_handoff_gone', 'That email is no longer waiting. Ask the chat again.', array( 'status' => 404 ) );
+		}
+		$plan = ZIB_Compose::plan( $uid, (array) ( $r['docs'] ?? array() ) );
+		$docs = array();
+		foreach ( is_wp_error( $plan ) ? array() : $plan as $p ) {
+			$docs[] = array( 'id' => $p['id'], 'title' => $p['title'], 'size' => $p['size'], 'is_private' => $p['is_private'], 'how' => $p['how'], 'days' => $p['days'] );
+		}
+		return rest_ensure_response( array(
+			'mode' => 'new', 'to' => (string) $r['to'], 'cc' => (string) $r['cc'], 'subject' => (string) $r['subject'],
+			'body' => (string) $r['body'], 'docs' => $docs, 'docs_missing' => is_wp_error( $plan ) ? $plan->get_error_code() : '',
 		) );
 	}
 
@@ -524,9 +614,9 @@ class ZIB_REST {
 			$status = 404;
 		} elseif ( 'reconnect' === $reason || 'auth' === $reason ) {
 			$status = 409;
-		} elseif ( 'busy' === $reason ) {
+		} elseif ( 'busy' === $reason || 'unsure' === $reason ) {
 			$status = 503;
-		} elseif ( in_array( $reason, array( 'empty', 'no-recipients', 'not-connected', 'bad-dest' ), true ) ) {
+		} elseif ( in_array( $reason, array( 'empty', 'no-recipients', 'not-connected', 'bad-dest', 'vault-missing', 'doc-not-found', 'doc-no-share', 'too-slow' ), true ) ) {
 			$status = 422;
 		} else {
 			$status = 502;

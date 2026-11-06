@@ -123,8 +123,8 @@ class ZKV_Email_Ingest {
 		if ( ! $user ) {
 			return self::result( 'rejected', 'sender is not a staff WP user: ' . $from_email );
 		}
-		if ( in_array( 'zdz_general', (array) $user->roles, true ) ) {
-			// INV-Kiosk: the shared kiosk login never authors company knowledge.
+		if ( in_array( 'zdz_general', (array) $user->roles, true ) || ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_shared_device( $user ) ) ) {
+			// The shared device never authors company knowledge.
 			return self::result( 'rejected', 'kiosk account may not file knowledge' );
 		}
 		$forwarder_name = $user->display_name ?: ( $from_name ?: $from_email );
@@ -152,6 +152,21 @@ class ZKV_Email_Ingest {
 			$visibility         = 'transcript_private';
 			$subject            = trim( preg_replace( '/\[transcript\]/i', '', $subject ) );
 		}
+		// [private] = keep it Private (never sent to an AI service, stored encrypted). A transcript
+		// cannot also be Private yet, so [transcript] wins.
+		$is_private_mail = false;
+		if ( preg_match( '/\[private\]/i', $subject ) ) {
+			// Both tags: refused, never silently one of them - the forwarder sends it again with one.
+			if ( $is_transcript_mail ) {
+				return self::result( 'rejected', 'both [private] and [transcript] - a transcript cannot also be Private yet; send it again with one of them' );
+			}
+			// Private needs a usable key BEFORE anything is written: a locked key must not leave plain files behind.
+			if ( ! class_exists( 'ZKV_Private' ) || ! ZKV_Private::available() || null === ZKV_Private::key( true ) ) {
+				return self::result( 'rejected', '[private] mail while Private documents are unavailable (the key is locked, or this server cannot encrypt)' );
+			}
+			$is_private_mail = true;
+			$subject         = trim( preg_replace( '/\[private\]/i', '', $subject ) );
+		}
 		$title = self::clean_subject( $subject );
 
 		$received_local = self::format_received( (string) ( $msg['receivedDateTime'] ?? '' ) );
@@ -177,7 +192,7 @@ class ZKV_Email_Ingest {
 			$atts = ZKV_Mailbox::list_attachments( $mid );
 			$atts = array_slice( $atts, 0, self::MAX_ATTACHMENTS );
 			foreach ( $atts as $att ) {
-				$stored = self::store_attachment( $mid, $att, $user, $forwarder_name, $from_email, $title, $received_local, $visibility );
+				$stored = self::store_attachment( $mid, $att, $user, $forwarder_name, $from_email, $title, $received_local, $visibility, $is_private_mail );
 				$attachment_notes[] = $att['name'] . ' — ' . $stored['note'];
 				if ( ! empty( $stored['doc_id'] ) ) {
 					$attachment_rows[] = array(
@@ -228,7 +243,7 @@ class ZKV_Email_Ingest {
 		}
 		$safe_name = sanitize_file_name( substr( $title, 0, 60 ) );
 		$filename  = date( 'Y-m-d' ) . '-email-' . ( $safe_name ?: 'message' ) . '.txt';
-		$file_path = ZKV_VAULT_DIR . '/' . wp_unique_filename( ZKV_VAULT_DIR, $filename );
+		$file_path = ZKV_VAULT_DIR . '/' . ZKV_File_Names::random_name( $filename ); // a random name
 		if ( false === file_put_contents( $file_path, $doc_text ) ) {
 			return self::result( 'failed', 'could not write email text to the vault directory' );
 		}
@@ -243,7 +258,7 @@ class ZKV_Email_Ingest {
 			'uploaded_by'   => (int) $user->ID,
 			'slug'          => '',
 			'title'         => $title,
-			'original_name' => basename( $file_path ),
+			'original_name' => $filename, // the readable name; the file itself has a random one
 			'mime_type'     => 'text/plain',
 			'file_size'     => strlen( $doc_text ),
 			'file_url'      => $file_path,
@@ -254,6 +269,7 @@ class ZKV_Email_Ingest {
 			'category_id'   => null, // AI picks from the existing categories during indexing.
 			'status'        => 'pending',
 			'visibility'    => $visibility,
+			'is_private'    => $is_private_mail ? 1 : 0,
 			'transcript_status' => $is_transcript_mail ? 'detected' : '',
 			'version'       => 1,
 			'created_at'    => current_time( 'mysql' ),
@@ -272,6 +288,17 @@ class ZKV_Email_Ingest {
 				array( 'slug' => zkv_generate_slug( $title, $doc_id ) ),
 				array( 'id' => $doc_id ), array( '%s' ), array( '%d' )
 			);
+		}
+
+		// A [private] email is encrypted now, not when the indexing job runs; if that fails nothing stays.
+		if ( $is_private_mail && class_exists( 'ZKV_Private' ) ) {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}zkv_documents WHERE id = %d", $doc_id ), ARRAY_A );
+			if ( ! $row || true !== ZKV_Private::finish_private( $row ) ) {
+				$wpdb->delete( $wpdb->prefix . 'zkv_index', array( 'document_id' => $doc_id ), array( '%d' ) );
+				$wpdb->delete( $wpdb->prefix . 'zkv_documents', array( 'id' => $doc_id ), array( '%d' ) );
+				@unlink( $file_path );
+				return self::result( 'failed', 'could not encrypt the [private] email' );
+			}
 		}
 
 		// ── 9. Queue the forwarder's confirmation + schedule indexing ─
@@ -299,7 +326,7 @@ class ZKV_Email_Ingest {
 	 *
 	 * @return array{doc_id:int,note:string}
 	 */
-	private static function store_attachment( $mid, $att, $user, $forwarder_name, $from_email, $email_title, $received_local, $visibility ) {
+	private static function store_attachment( $mid, $att, $user, $forwarder_name, $from_email, $email_title, $received_local, $visibility, $is_private = false ) {
 		global $wpdb;
 
 		$name = sanitize_file_name( $att['name'] ?: 'attachment' );
@@ -343,7 +370,7 @@ class ZKV_Email_Ingest {
 		if ( function_exists( 'zkv_create_secure_vault_dir' ) ) {
 			zkv_create_secure_vault_dir();
 		}
-		$file_path = ZKV_VAULT_DIR . '/' . wp_unique_filename( ZKV_VAULT_DIR, $name );
+		$file_path = ZKV_VAULT_DIR . '/' . ZKV_File_Names::random_name( $name ); // a random name; the row keeps $name
 		if ( false === file_put_contents( $file_path, $bytes ) ) {
 			return array( 'doc_id' => 0, 'note' => 'not stored (write failed)' );
 		}
@@ -383,6 +410,7 @@ class ZKV_Email_Ingest {
 			'category_id'   => null, // AI picks during indexing.
 			'status'        => 'pending',
 			'visibility'    => $att_visibility,
+			'is_private'    => ( $is_private && '' === $att_tstatus ) ? 1 : 0,
 			'transcript_status' => $att_tstatus,
 			'version'       => 1,
 			'created_at'    => current_time( 'mysql' ),
@@ -400,6 +428,17 @@ class ZKV_Email_Ingest {
 				array( 'slug' => zkv_generate_slug( $title ?: $name, $doc_id ) ),
 				array( 'id' => $doc_id ), array( '%s' ), array( '%d' )
 			);
+		}
+
+		// A [private] attachment is encrypted now, not when the indexing job runs; on failure nothing stays.
+		if ( $is_private && '' === $att_tstatus && class_exists( 'ZKV_Private' ) ) {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}zkv_documents WHERE id = %d", $doc_id ), ARRAY_A );
+			if ( ! $row || true !== ZKV_Private::finish_private( $row ) ) {
+				$wpdb->delete( $wpdb->prefix . 'zkv_index', array( 'document_id' => $doc_id ), array( '%d' ) );
+				$wpdb->delete( $wpdb->prefix . 'zkv_documents', array( 'id' => $doc_id ), array( '%d' ) );
+				@unlink( $file_path );
+				return array( 'doc_id' => 0, 'note' => 'not stored (could not be encrypted)' );
+			}
 		}
 
 		wp_schedule_single_event( time() + 5, 'zkv_process_pending_doc', array( $doc_id ) );
@@ -460,7 +499,7 @@ class ZKV_Email_Ingest {
 		}
 
 		$final = $wpdb->get_row( $wpdb->prepare(
-			"SELECT d.title, d.slug, d.visibility, c.label AS category_label
+			"SELECT d.title, d.slug, d.visibility, d.is_private, c.label AS category_label
 			 FROM {$wpdb->prefix}zkv_documents d
 			 LEFT JOIN {$wpdb->prefix}zkv_categories c ON d.category_id = c.id
 			 WHERE d.id = %d",
@@ -472,7 +511,11 @@ class ZKV_Email_Ingest {
 
 		$lines   = array();
 		$lines[] = 'Filed in the Knowledge Vault: "' . $final['title'] . '"';
-		$lines[] = 'Category: ' . ( $final['category_label'] ?: 'General' ) . ' (AI-chosen) · Tagged: ' . self::TAG_LABEL;
+		if ( ! empty( $final['is_private'] ) ) {
+			$lines[] = 'Kept Private: never sent to an AI service, stored encrypted · Tagged: ' . self::TAG_LABEL;
+		} else {
+			$lines[] = 'Category: ' . ( $final['category_label'] ?: 'General' ) . ' (AI-chosen) · Tagged: ' . self::TAG_LABEL;
+		}
 		if ( 'admin_only' === $final['visibility'] ) {
 			$lines[] = 'Visibility: Admin only';
 		}

@@ -391,7 +391,7 @@ class ZDZ_Item_Engine_Admin {
 					<tr>
 						<td><code><?php echo esc_html( $s['id'] ); ?></code><br><?php echo esc_html( $s['name'] ); ?><?php echo $s['cloned_from'] ? '<br><span class="description">' . esc_html( sprintf( /* translators: %s: source id */ __( 'cloned from %s', 'zorderz' ), $s['cloned_from'] ) ) . '</span>' : ''; ?></td>
 						<td><?php echo esc_html( $s['method'] ); ?></td>
-						<td><code style="font-size:11px"><?php echo esc_html( 'formula' === $s['method'] ? $s['expression'] : wp_json_encode( $s['params'] ) ); ?></code></td>
+						<td><code style="font-size:11px"><?php echo esc_html( 'formula' === $s['method'] ? $s['expression'] : ( 'grid' === $s['method'] ? sprintf( /* translators: %d: number of variants */ __( '%d variants (see Price Book)', 'zorderz' ), count( (array) ( $s['params']['variants'] ?? [] ) ) ) : wp_json_encode( $s['params'] ) ) ); ?></code></td>
 						<td><?php echo esc_html( $s['scope'] ); ?></td>
 						<td>
 							<a class="button-link" href="<?php echo esc_url( add_query_arg( [ 'page' => self::SLUG, 'edit_scheme' => $s['id'] ] ) ); ?>#scheme-form"><?php esc_html_e( 'Edit', 'zorderz' ); ?></a>

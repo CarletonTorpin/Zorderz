@@ -27,9 +27,7 @@
  * model/bot name per task — comes from config, not a literal. NO vendor, product or
  * model name is hardcoded in this file: the base default is read from
  * ZDZ_Core_Settings, and the capability, fallback and retired maps ship EMPTY,
- * populated only by a tenant filter or an upgrade migration. Ships neutral.
- *
- * Crosswalk: 05 §C (P-37, P-41), §D (T-06 auditor pairing); Playbook §2.5, §6.
+ * populated only by a business's filter or an upgrade migration. Ships neutral.
  *
  * @since   1.1.0
  * @package Zorderz
@@ -49,7 +47,11 @@ class ZDZ_Model_Registry {
 	 * wants and a one-line purpose. A slot is CONFIG: which model fills it is not
 	 * decided here. Ships with no model literals.
 	 *
-	 * @return array<string,array{tier:string,purpose:string}>
+	 * A slot marked 'inherit_base' => false never falls back to the platform base model:
+	 * the Ai router's slots name models on its native provider, and the base model is a
+	 * gateway handle that provider would not recognise. Such a slot left empty stays ''.
+	 *
+	 * @return array<string,array{tier:string,purpose:string,inherit_base?:bool}>
 	 */
 	public static function slots(): array {
 		$slots = array(
@@ -61,6 +63,12 @@ class ZDZ_Model_Registry {
 			'vision'        => array( 'tier' => 'vision',   'purpose' => 'reads an image or handwritten note' ),
 			'dedup'         => array( 'tier' => 'fast',     'purpose' => 'proposes duplicate-record merges' ),
 			'kiosk'         => array( 'tier' => 'fast',     'purpose' => 'the terse shared-device answerer' ),
+			// The Ai router (ZDZ_Core_LLM): every kind of call, a call with little time left, after the primary fails.
+			'llm_primary'   => array( 'tier' => 'frontier', 'purpose' => 'the Ai router\'s model for every kind of call', 'inherit_base' => false ),
+			'llm_quick'     => array( 'tier' => 'fast',     'purpose' => 'the Ai router\'s model when a call has little time left', 'inherit_base' => false ),
+			'llm_fallback'  => array( 'tier' => 'frontier', 'purpose' => 'the Ai router\'s model after the primary fails', 'inherit_base' => false ),
+			// The gateway: a model with web search, asked for findings first when the chosen model has none.
+			'web'           => array( 'tier' => 'fast',     'purpose' => 'searches the web for findings when the model asked has no web search', 'inherit_base' => false ),
 		);
 		$extra = apply_filters( 'zdz_model_slots', array() );
 		if ( is_array( $extra ) ) {
@@ -71,7 +79,7 @@ class ZDZ_Model_Registry {
 
 	/** The platform base model — read from Core settings, never hardcoded here. */
 	public static function base_model(): string {
-		if ( class_exists( 'ZDZ_Core_Settings' ) ) {
+		if ( class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_ai_model' ) ) {
 			$m = (string) ZDZ_Core_Settings::get_ai_model();
 			if ( '' !== $m ) {
 				return self::remap( $m );
@@ -101,7 +109,7 @@ class ZDZ_Model_Registry {
 	 * Resolve the model for a task slot. Order:
 	 *   1. per-slot option  (zdz_model_slot_<slot>)
 	 *   2. the `zdz_model_for` filter (a tenant/plugin override)
-	 *   3. the platform base model
+	 *   3. the platform base model (not for a slot marked 'inherit_base' => false)
 	 * then the retired-value remap (idempotent) and an availability check with
 	 * cross-vendor fallback.
 	 *
@@ -114,7 +122,8 @@ class ZDZ_Model_Registry {
 
 		$model = (string) apply_filters( 'zdz_model_for', $model, $slot );
 
-		if ( '' === $model ) {
+		$slots = self::slots();
+		if ( '' === $model && false !== ( $slots[ $slot ]['inherit_base'] ?? true ) ) {
 			$model = self::base_model();
 		}
 
@@ -122,7 +131,6 @@ class ZDZ_Model_Registry {
 
 		// If the resolved model is known-unavailable, fall back for this slot's tier.
 		if ( '' !== $model && ! self::is_available( $model ) ) {
-			$slots = self::slots();
 			$tier  = $slots[ $slot ]['tier'] ?? 'frontier';
 			$fb    = self::fallback_for( $model, $tier );
 			if ( '' !== $fb ) {
@@ -199,6 +207,68 @@ class ZDZ_Model_Registry {
 			return $next;
 		}
 		return $model;
+	}
+
+	/* ── The model policy every road shares: when to try another model, a model that is gone, web search ── */
+
+	/**
+	 * HTTP statuses after which another model may answer where this one did not: the network or the provider timed out
+	 * (0, 408), the model is missing (404) or busy (429, 529), the provider failed (5xx), or the body was refused (400,
+	 * 413, 422: the other model gets a body built for it). Never 401 or 403: every model is reached with the same key,
+	 * so a key problem is not a model problem and no other model would do better.
+	 */
+	const FAILOVER_STATUSES = array( 0, 400, 404, 408, 413, 422, 429, 500, 502, 503, 504, 529 );
+
+	/** How long a model that answered 404 is remembered as gone (seconds), so it is not asked (and paid for) on every call. */
+	const GONE_TTL = 3600;
+
+	/** Would another model plausibly answer after this status? PURE. */
+	public static function fails_over( int $status ): bool {
+		if ( 401 === $status || 403 === $status ) {
+			return false;
+		}
+		return in_array( $status, self::FAILOVER_STATUSES, true ) || ( $status >= 500 && $status <= 599 );
+	}
+
+	private static function gone_key( string $model, string $provider ): string {
+		return 'zdz_model_gone_' . md5( strtolower( $provider . '|' . trim( $model ) ) );
+	}
+
+	/** Remember that a provider answered 404 for this model: it is skipped as a fallback for GONE_TTL. */
+	public static function mark_gone( string $model, string $provider = '' ): void {
+		if ( '' !== trim( $model ) && function_exists( 'set_transient' ) ) {
+			set_transient( self::gone_key( $model, $provider ), 1, self::GONE_TTL );
+		}
+	}
+
+	/** Did this provider answer 404 for this model within the last GONE_TTL? */
+	public static function is_gone( string $model, string $provider = '' ): bool {
+		return '' !== trim( $model ) && function_exists( 'get_transient' ) && false !== get_transient( self::gone_key( $model, $provider ) );
+	}
+
+	/**
+	 * Can this model search the web? The `zdz_model_web_capable` filter answers with a map, model id => bool (a
+	 * connections pack knows which of its models search). A model the map does not name is taken as able, as before;
+	 * only one marked false is never sent a web search.
+	 */
+	public static function web_capable( string $model ): bool {
+		$map = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_model_web_capable', array() ) : array();
+		if ( is_array( $map ) && array_key_exists( $model, $map ) ) {
+			return (bool) $map[ $model ];
+		}
+		return true;
+	}
+
+	/**
+	 * The model to ask for web findings on behalf of $for, which has no web search: the `web` slot's model, when one is
+	 * set, can search and is not $for itself and not gone. '' when there is none.
+	 */
+	public static function web_model( string $for = '', string $provider = '' ): string {
+		$m = self::model_for( 'web' );
+		if ( '' === $m || $m === $for || ! self::web_capable( $m ) || self::is_gone( $m, $provider ) ) {
+			return '';
+		}
+		return $m;
 	}
 
 	/**

@@ -1,0 +1,96 @@
+{
+ "role": "web",
+ "note": "A question only: the web never gets business data.",
+ "cases": [
+  {
+   "id": "web-bridge",
+   "system": "Look it up on the web and answer in one sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "In what year did the Golden Gate Bridge open?"
+    }
+   ],
+   "max_output": 2000,
+   "expect": {
+    "contains": [
+     "1937"
+    ],
+    "citations": true
+   },
+   "example_answer": "Answer: 1937."
+  },
+  {
+   "id": "web-tungsten",
+   "system": "Look it up on the web and answer in one sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What is the atomic number of tungsten?"
+    }
+   ],
+   "max_output": 2000,
+   "expect": {
+    "contains": [
+     "74"
+    ],
+    "citations": true
+   },
+   "example_answer": "Answer: 74."
+  },
+  {
+   "id": "web-zip",
+   "system": "Look it up on the web and answer in one sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Which U.S. state is ZIP code 10001 in?"
+    }
+   ],
+   "max_output": 2000,
+   "expect": {
+    "contains": [
+     "New York"
+    ],
+    "citations": true
+   },
+   "example_answer": "Answer: New York."
+  },
+  {
+   "id": "web-marathon",
+   "system": "Look it up on the web and answer in one sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "How long is a marathon in kilometres, exactly?"
+    }
+   ],
+   "max_output": 2000,
+   "expect": {
+    "contains": [
+     "42.195"
+    ],
+    "citations": true
+   },
+   "example_answer": "Answer: 42.195."
+  },
+  {
+   "id": "web-usgs",
+   "system": "Look it up on the web and answer in one sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "In which city is the U.S. Geological Survey's national headquarters?"
+    }
+   ],
+   "max_output": 2000,
+   "expect": {
+    "contains": [
+     "Reston"
+    ],
+    "citations": true
+   },
+   "example_answer": "Answer: Reston."
+  }
+ ]
+}

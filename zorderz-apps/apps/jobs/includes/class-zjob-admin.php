@@ -126,6 +126,7 @@ class ZJOB_Admin {
 				</table>
 				<p><button type="submit" name="zjob_settings_save" value="1" class="button button-primary"><?php esc_html_e( 'Save settings', 'zorderz' ); ?></button></p>
 			</form>
+			<?php do_action( 'zjob_settings_after' ); ?>
 		</div>
 		<?php
 	}

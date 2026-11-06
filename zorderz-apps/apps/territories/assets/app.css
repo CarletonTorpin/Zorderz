@@ -1,0 +1,195 @@
+/* Territories — the app's own styles, on the theme's tokens (light, dark, system and sunlight all come
+   from --sys-*). Buttons, sheets, toasts and loaders are the kit's. Group color: Sales. Vermilion is
+   never used here (reserved: "needs you"). A person's color comes from the theme (ZDZ_Person_Color) and is only ever a
+   badge background with the initials on it; nothing rests on color alone. */
+
+.zter-app, .zter-app *, .zter-form, .zter-form * { box-sizing: border-box; }
+/* the variables also on the sheets' bodies: the kit mounts a sheet on <body>, outside .zter-app */
+.zter-app, .zter-form {
+	--zter-text: var(--sys-text, CanvasText);
+	--zter-muted: var(--sys-text-muted, GrayText);
+	--zter-line: var(--sys-border, GrayText);
+	--zter-surface: var(--sys-surface, Canvas);
+	--zter-band: var(--sys-bg-subtle, Canvas);
+	--zter-accent: var(--zdz-grp-sales, var(--sys-brand, Highlight));
+	--zter-ok-bg: var(--sys-tint-success-bg, Canvas);
+	--zter-ok-fg: var(--sys-tint-success-fg, CanvasText);
+	--zter-warn-bg: var(--sys-tint-warning-bg, Canvas);
+	--zter-warn-fg: var(--sys-tint-warning-fg, CanvasText);
+	--zter-info-bg: var(--sys-tint-info-bg, var(--sys-tint-neutral-bg, Canvas));
+	--zter-info-fg: var(--sys-tint-info-fg, var(--sys-tint-neutral-fg, CanvasText));
+	--zter-no-bg: var(--sys-tint-neutral-bg, Canvas);
+	--zter-no-fg: var(--sys-tint-neutral-fg, CanvasText);
+	--zter-err-fg: var(--sys-tint-error-fg, CanvasText);
+}
+.zter-app {
+	font-family: var(--sys-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+	font-size: 16px;
+	line-height: 1.45;
+	color: var(--zter-text);
+	padding: 12px 16px 20px;
+	max-width: 100%;
+}
+.zter-app p, .zter-app li, .zter-app label, .zter-app td, .zter-app th, .zter-app span, .zter-app dd, .zter-app dt { font-family: inherit; }
+.zter-app p, .zter-form p { margin: 0 0 8px; color: var(--zter-text); }
+.zter-app button { font-family: inherit; }
+.zter-muted, .zter-app .zter-muted, .zter-form .zter-muted { color: var(--zter-muted); font-size: .9rem; }
+.zter-err { color: var(--zter-err-fg); }
+.zter-warn { color: var(--zter-warn-fg); font-size: .9rem; }
+.zter-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* header and the view switch */
+.zter-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.zter-app h2.zter-title { font-size: 1.35rem; line-height: 1.2; margin: 0; font-weight: 700; color: var(--zter-text); }
+.zter-scope { margin: 2px 0 0; font-size: .9rem; color: var(--zter-muted); }
+.zter-views { display: inline-flex; border: 1px solid var(--zter-line); border-radius: 12px; overflow: hidden; max-width: 100%; }
+.zter-views:empty { display: none; }
+.zter-views button { border: 0; background: transparent; color: var(--zter-text); padding: 0 14px; min-height: 40px; font-size: .95rem; cursor: pointer; }
+.zter-views button[aria-selected="true"] { background: var(--zter-accent); color: var(--zdz-grp-sales-ink, CanvasText); font-weight: 600; }
+
+/* banners: a tint pair each, plus words */
+.zter-banner { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--zter-info-bg); color: var(--zter-info-fg); font-size: .92rem; }
+.zter-banner strong { color: inherit; }
+.zter-banner--warn { background: var(--zter-warn-bg); color: var(--zter-warn-fg); }
+.zter-banner--live { background: var(--zter-ok-bg); color: var(--zter-ok-fg); }
+
+/* cards and people */
+.zter-card { border: 1px solid var(--zter-line); border-radius: 12px; background: var(--zter-surface); padding: 12px; margin: 0 0 10px; }
+.zter-card--accent { border-left: 4px solid var(--zter-accent); }
+.zter-app h3.zter-h3, .zter-form h3.zter-h3 { font-size: 1.02rem; margin: 14px 0 6px; font-weight: 700; color: var(--zter-text); }
+.zter-card h3.zter-h3 { margin-top: 0; }
+.zter-form h4.zter-h4 { font-size: .95rem; margin: 12px 0 4px; font-weight: 700; color: var(--zter-text); }
+.zter-person { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.zter-grow { flex: 1 1 180px; min-width: 0; }
+.zter-person p { margin: 0; }
+.zter-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 34px; padding: 0 6px; border-radius: 10px; font-weight: 700; font-size: .85rem; background: var(--zter-no-bg); color: var(--zter-no-fg); border: 1px solid var(--zter-line); vertical-align: middle; }
+.zter-badge--c { background: var(--zter-p); color: var(--zter-pi, CanvasText); border-color: transparent; }
+
+/* ZIP chips */
+.zter-chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 10px 0 0; padding: 0; }
+.zter-chip { font-variant-numeric: tabular-nums; font-size: .88rem; padding: 3px 8px; border-radius: 8px; background: var(--zter-band); border: 1px solid var(--zter-line); color: var(--zter-text); }
+.zter-chip--shared { background: var(--zter-warn-bg); color: var(--zter-warn-fg); border-color: transparent; font-weight: 600; }
+
+.zter-find { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+.zter-find input { width: 8ch; min-height: 40px; font-size: 1rem; padding: 4px 8px; border: 1px solid var(--zter-line); border-radius: 8px; background: var(--zter-surface); color: var(--zter-text); }
+.zter-find-out { color: var(--zter-muted); font-size: .92rem; }
+.zter-plain { list-style: none; margin: 0 0 8px; padding: 0; }
+.zter-plain li { margin: 0 0 6px; }
+.zter-checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 8px; }
+.zter-check { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
+.zter-check input { width: 18px; height: 18px; }
+.zter-inline { margin-right: 12px; }
+
+/* rules */
+.zter-rules { list-style: none; margin: 0 0 10px; padding: 0; }
+.zter-rule { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; border: 1px solid var(--zter-line); border-radius: 12px; background: var(--zter-surface); padding: 10px 12px; margin: 0 0 8px; }
+.zter-rule-text { display: flex; gap: 10px; flex: 1 1 260px; min-width: 0; }
+.zter-rule-no { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--zter-line); font-weight: 700; font-size: .85rem; }
+.zter-rule-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.zter-mode { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 8px; font-size: .82rem; font-weight: 600; white-space: nowrap; }
+.zter-mode--live { background: var(--zter-ok-bg); color: var(--zter-ok-fg); }
+.zter-mode--shadow { background: var(--zter-no-bg); color: var(--zter-no-fg); }
+
+.zter-tablewrap { overflow-x: auto; border: 1px solid var(--zter-line); border-radius: 12px; margin: 0 0 10px; -webkit-overflow-scrolling: touch; }
+.zter-app table.zter-table { width: 100%; max-width: none !important; display: table !important; border-collapse: collapse; font-size: .9rem; }
+.zter-table th, .zter-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--zter-line); vertical-align: top; }
+.zter-table th { background: var(--zter-surface); font-weight: 700; color: var(--zter-text); }
+.zter-table tr:last-child td { border-bottom: 0; }
+
+/* shadow */
+.zter-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.zter-filters select { min-height: 40px; border: 1px solid var(--zter-line); border-radius: 8px; background: var(--zter-surface); color: var(--zter-text); padding: 0 8px; }
+.zter-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.zter-tile { border: 1px solid var(--zter-line); border-radius: 12px; padding: 8px 10px; background: var(--zter-surface); display: flex; flex-direction: column; }
+.zter-tile strong { font-size: 1.4rem; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--zter-text); }
+.zter-tile span { font-size: .82rem; color: var(--zter-muted); }
+.zter-tile--diff { background: var(--zter-warn-bg); border-color: transparent; }
+.zter-tile--diff strong, .zter-tile--diff span { color: var(--zter-warn-fg); }
+.zter-decs { list-style: none; margin: 0; padding: 0; }
+.zter-decs li { margin: 0 0 6px; }
+.zter-dec { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--zter-line); border-radius: 12px; background: var(--zter-surface); color: var(--zter-text); cursor: pointer; font: inherit; }
+.zter-dec--diff { border-left: 4px solid var(--zter-warn-fg); }
+.zter-dec-when, .zter-dec-note { font-size: .82rem; color: var(--zter-muted); }
+.zter-dec-what { font-weight: 600; overflow-wrap: anywhere; }
+.zter-dec-who { font-size: .92rem; }
+.zter-diffmark { font-weight: 700; color: var(--zter-warn-fg); }
+.zter-test { font-weight: 600; }
+.zter-refer { font-weight: 600; }   /* a referral case */
+
+/* sheets: forms and a decision */
+.zter-form { color: var(--zter-text); font-size: 16px; line-height: 1.45; }
+.zter-form li, .zter-form dd, .zter-form dt, .zter-form p { font-size: inherit; }
+.zter-form label, .zter-form .zter-label { display: block; font-weight: 600; font-size: .9rem; margin: 10px 0 4px; }
+.zter-form label.zter-check { display: inline-flex; font-weight: 400; margin: 0; }
+.zter-form input:not([type="checkbox"]):not([type="radio"]), .zter-form select, .zter-form textarea { width: 100%; min-height: 40px; font: inherit; font-size: 1rem; padding: 6px 8px; border: 1px solid var(--zter-line); border-radius: 8px; background: var(--zter-surface); color: var(--zter-text); }
+.zter-form fieldset { border: 1px solid var(--zter-line); border-radius: 10px; padding: 8px 12px 12px; margin: 0 0 10px; }
+.zter-form legend { font-weight: 700; padding: 0 4px; }
+.zter-live { margin-top: 6px !important; }
+.zter-wrow { padding-bottom: 6px; }
+.zter-wtools { display: flex; gap: 6px; margin-top: 8px; }
+.zter-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0 0 8px; }
+.zter-dl dt { font-weight: 600; color: var(--zter-muted); }
+.zter-dl dd { margin: 0; overflow-wrap: anywhere; }
+.zter-trail { margin: 0 0 8px 1.2em; padding: 0; }
+.zter-trail li { margin: 0 0 4px; }
+.zter-lv { display: inline-flex; gap: 2px; align-items: center; padding: 1px 6px; border-radius: 6px; font-size: .8rem; font-weight: 600; white-space: nowrap; }
+.zter-lv--can { background: var(--zter-ok-bg); color: var(--zter-ok-fg); }
+.zter-lv--learning { background: var(--zter-warn-bg); color: var(--zter-warn-fg); }
+.zter-lv--cannot, .zter-lv--none { background: var(--zter-no-bg); color: var(--zter-no-fg); }
+.zter-why { margin: 6px 0 0 0; font-size: .9rem; color: var(--zter-muted); }
+.zter-note { border-left: 3px solid var(--zter-line); padding-left: 8px; }
+.zter-unm { margin: 0 0 8px; }
+.zter-hist { list-style: none; margin: 0; padding: 0; }
+.zter-hist li { padding: 6px 0; border-bottom: 1px solid var(--zter-line); overflow-wrap: anywhere; }
+
+@media (max-width: 520px) {
+	.zter-views { display: flex; width: 100%; }
+	.zter-views button { flex: 1 1 auto; padding: 0 8px; font-size: .9rem; }
+	.zter-dl { grid-template-columns: 1fr; }
+	.zter-dl dt { margin-top: 4px; }
+}
+
+/* the go-live checklist */
+.zter-golive { list-style: none; margin: 0; padding: 0; }
+.zter-gl { border: 1px solid var(--zter-line); border-radius: 12px; background: var(--zter-surface); padding: 10px 12px; margin: 0 0 8px; }
+.zter-gl--live { border-left: 4px solid var(--zter-ok-fg); }
+.zter-gl-head { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.zter-gl-sentence { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.zter-gl-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0; }
+.zter-gl-facts div { display: flex; flex-direction: column; }
+.zter-gl-facts dt { font-size: .8rem; color: var(--zter-muted); }
+.zter-gl-facts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.zter-gl-diff dd { color: var(--zter-warn-fg); }
+.zter-app .zter-label { font-weight: 600; font-size: .9rem; margin: 6px 0 4px; }
+.zter-gl-people { list-style: none; margin: 0 0 6px; padding: 0; }
+.zter-gl-people li { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; overflow-wrap: anywhere; }
+.zter-gl-off { opacity: .75; }
+.zter-gl-warn { list-style: none; margin: 4px 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--zter-warn-bg); color: var(--zter-warn-fg); font-size: .9rem; }
+.zter-gl-warn li { margin: 0 0 4px; }
+.zter-gl-quote { border-left: 3px solid var(--zter-accent); padding-left: 8px; font-weight: 600; }
+.zter-banner ul { margin: 4px 0; }
+.zter-banner p:last-child { margin-bottom: 0; }
+
+/* zones */
+.zter-form .zter-fs, .zter-fs { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
+.zter-form .zter-fs legend, .zter-fs legend { font-weight: 600; font-size: .9rem; margin: 0 0 4px; padding: 0; }
+.zter-form .zter-fs .zter-check, .zter-fs .zter-check { display: flex; margin: 2px 0; }
+.zter-lock { font-weight: 600; }
+
+/* two stages (New stubs: who sells it; Won jobs: who installs it). A two-way switch, not color alone: the picked
+   one is filled and its text is bold. */
+.zter-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.zter-stage { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 48px; padding: 8px 12px; text-align: left;
+	border: 1px solid var(--zter-line); border-radius: 12px; background: var(--zter-surface); color: var(--zter-text); font: inherit; cursor: pointer; }
+.zter-stage span { font-size: .85rem; color: var(--zter-muted); }
+.zter-stage[aria-checked="true"] { border: 2px solid var(--zter-accent); padding: 7px 11px; background: var(--zter-band); }
+.zter-stage[aria-checked="true"] strong::before { content: "● "; }
+.zter-stage[aria-checked="false"] strong::before { content: "○ "; }
+.zter-stage:focus-visible { outline: 2px solid var(--zter-accent); outline-offset: 2px; }
+.zter-form [hidden] { display: none !important; }
+
+/* Shadow -> Last asked and Who may ask (new stubs) */
+.zter-app .zter-asks { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--zter-line); }
+.zter-app .zter-asks h4.zter-h4 { font-size: .95rem; margin: 10px 0 4px; font-weight: 700; color: var(--zter-text); }
+.zter-app .zter-asks li { font-size: .92rem; color: var(--zter-text); }
+.zter-app .zter-asks .zter-warn, .zter-app .zter-asks .zter-test { font-size: inherit; }

@@ -1,0 +1,61 @@
+# Identity Pack · territories.yml — EXAMPLE, entirely fictional.
+#
+# Where the business works. A person is named by their initials on this site
+# (User Management); someone not on the team, the shared device, or initials
+# two people share are skipped and listed, never guessed. Write ZIP codes in
+# quotes so a leading zero survives.
+
+pack:
+  schema: 1
+  tenant_key: example-business
+
+# For the privacy coder.
+place_names:
+  # Places of two or more words that are never read as a person's name.
+  # One-word towns are refused: a town's name can be a customer's surname.
+  multi_word: ["North Example", "Example Bay"]
+  # Places "Ask chat about this" leaves visible.
+  ask_visible: ["Springfield", "Example Bay"]
+jurisdiction:
+  # The region's own code-book words: "<word> code 2024" is not an access code.
+  code_words: ["example state"]
+  # The region's postcode shape, written whole from ^ to $ (single quotes keep
+  # the backslash), and the region words that may stand before it.
+  postcode: { digits: '^\d{5}$', region: 'OR|Oregon' }
+
+# For the Territories app. Zones replace the zone list; each person named in
+# `territories` gets exactly these ZIP codes (people not named keep theirs).
+zones:
+  - id: service_area
+    label: "Service area"
+    kind: service                      # service | area | nogo
+    visible: staff                     # staff | admin
+    zips: ["97477", "97478", "97479"]
+  - label: "Kept out (example)"
+    kind: nogo                         # a person is never given work here
+    people: [SE]
+    zips: ["97479"]
+
+# Every rule a pack writes is in SHADOW: the apps keep their own picks and the
+# rules' choices are recorded beside them until a person turns each rule live
+# from the go-live checklist. "Everything else" is added when a list has none.
+rules:
+  stub:
+    - id: by_territory
+      who: territory
+    - fallback: true
+      who: default
+  install:
+    - id: north_installs
+      zips: ["97478"]
+      who: person
+      person: SE
+      need_can: true
+    - fallback: true
+      who: default
+
+territories:
+  - person: AE
+    zips: ["97477", "97478"]
+  - person: JE
+    zips: ["97479"]

@@ -9,15 +9,15 @@
  * is untouched and shares nothing with this class — separate app
  * registration, separate secret option, separate risk posture.
  *
- * Phase 0 surface: authorization URL, code exchange, token refresh, identity
- * (/me), calendar list (/me/calendars). Phase 1 adds calendarView delta +
+ * Surface: authorization URL, code exchange, token refresh, identity
+ * (/me), calendar list (/me/calendars). The sync engine adds calendarView delta +
  * subscriptions behind the same request core.
  *
  * AUTHORITY: /organizations (any work/school tenant, no personal MSA) — per
  * the plan; flipping to /common later is a config change plus an MSA
  * free/busy code path, deliberately out of scope.
  *
- * @since 1.6.0 (Connected Calendars Phase 0)
+ * @since 1.6.0 (Connected Calendars)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -29,7 +29,7 @@ class ZSCH_Graph_Delegated {
 	const AUTHORITY = 'https://login.microsoftonline.com/organizations';
 	const GRAPH     = 'https://graph.microsoft.com/v1.0';
 
-	/** Phase 1 delegated scopes; Calendars.ReadWrite arrives with Phase 2 re-consent. */
+	/** Delegated scopes (read); Calendars.ReadWrite arrives with write-back re-consent. */
 	const SCOPES = 'openid profile email offline_access User.Read Calendars.Read';
 
 	/**
@@ -196,7 +196,7 @@ class ZSCH_Graph_Delegated {
 	}
 
 	/**
-	 * Phase 1 (v1.7.0) — read one calendar's busy events over a UTC window.
+	 * Read one calendar's busy events over a UTC window.
 	 *
 	 * Uses calendarView (expands recurrences into instances) and asks Graph to
 	 * return start/end in UTC via the Prefer header, so no Windows-zone mapping
@@ -307,7 +307,7 @@ class ZSCH_Graph_Delegated {
 	/**
 	 * Microsoft has no delegated refresh-token revoke endpoint an app can call
 	 * with just the token; disconnect deletes our grant material and the
-	 * subscription (Phase 1) simply lapses. Kept for interface symmetry.
+	 * subscription simply lapses. Kept for interface symmetry.
 	 */
 	public static function revoke( string $token ): void {
 		// Intentionally a no-op; documented above.

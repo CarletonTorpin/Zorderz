@@ -11,7 +11,7 @@ pre-existing findings (overwhelmingly WPCS false positives — the SQL is
 $wpdb->prepare()'d, nonces sit on REST/alias-map handlers, etc.). This baseline
 grandfathers that import: CI subtracts baselined findings BEFORE the changed-lines
 gate, so genuinely new risk on changed code still fails while inherited noise does
-not. Full analysis: claude/ts-delta-analysis/phpcs-security-gate-findings.md.
+not.
 
 A finding's signature is line-number-INDEPENDENT — sha1(relpath \\0 sniff \\0
 normalized source-line text) — so the baseline survives edits that shift lines.

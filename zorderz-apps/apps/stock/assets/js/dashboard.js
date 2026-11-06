@@ -62,7 +62,7 @@
 			var stats = root.querySelector('[data-d="stats"]');
 			stats.innerHTML = tile('Total items', d.total_items || 0)
 				+ tile('Low stock', d.low_stock_count || 0)
-				+ tile('Pending orders', d.pending_orders || 0)
+				+ tile('Incoming', d.pending_orders || 0)
 				+ tile('Inventory value', '$' + (parseFloat(d.total_value) || 0).toFixed(2));
 			renderItems(d.all_items || [], d.catalog_empty);
 			renderOrders(d.recent_orders || []);

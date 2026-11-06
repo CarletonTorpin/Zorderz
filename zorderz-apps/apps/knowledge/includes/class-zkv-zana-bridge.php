@@ -90,6 +90,7 @@ class ZKV_ZANA_Bridge {
 		$tier_sql = $is_admin
 			? " AND d.visibility <> 'transcript_private'"
 			: " AND d.visibility = 'all_employees'";
+		$tier_sql .= ' AND d.is_private = 0'; // a Private document's title never reaches the chat
 
 		$rows = $wpdb->get_results(
 			"SELECT d.id, d.title, i.document_type
@@ -109,7 +110,10 @@ class ZKV_ZANA_Bridge {
 		foreach ( $rows as $r ) {
 			$block .= "- {$r['title']} [{$r['document_type']}] (vault #{$r['id']})\n";
 		}
-		$block .= "(Use vault content naturally — do not add citation brackets.)\n";
+		// The one way to LINK a listed document: the chat and Messages turn [VAULT-<id>]
+		// into a checked, clickable link titled with the document's name (Messages already
+		// does; the chat app must do the same for its answers).
+		$block .= "(Use vault content naturally — no citation brackets in an ordinary answer. To give someone a LINK to one of these documents, write [VAULT-<number>] with the vault # above, e.g. [VAULT-12]; it becomes a clickable link. Never type a vault address yourself.)\n";
 
 		set_transient( $tier_key, $block, HOUR_IN_SECONDS );
 		return $block;
@@ -155,7 +159,7 @@ class ZKV_ZANA_Bridge {
 		$uid = ( null === $uid ) ? get_current_user_id() : (int) $uid;
 		$acl = class_exists( 'ZKV_ACL' )
 			? ZKV_ACL::sql_where_chat( $uid, 'd' )
-			: " AND d.visibility = 'all_employees'";
+			: " AND d.visibility = 'all_employees' AND d.is_private = 0"; // the fallback too
 
 		// Layer 1: AI index search (synopsis, key_facts, tags).
 		$rows = $wpdb->get_results( $wpdb->prepare(
@@ -243,7 +247,7 @@ class ZKV_ZANA_Bridge {
 		// keywords the user used.
 		if ( $is_pricing_query && ! empty( $pricing_doc_ids ) ) {
 			foreach ( $pricing_doc_ids as $pdid ) {
-				// v1.5.0 (D5): a pricing-authority doc must never be a private
+				// v1.5.0: a pricing-authority doc must never be a private
 				// transcript. If one ever is, SKIP it loudly rather than pull
 				// its chunks through this shared-transient path — no reader is
 				// exempt from the ACL by assumption.
@@ -275,7 +279,7 @@ class ZKV_ZANA_Bridge {
 					continue;
 				}
 
-				// Get ALL chunks for this pricing doc (ACL-joined — §6.5: no
+				// Get ALL chunks for this pricing doc (ACL-joined — the vault's rule: no
 				// chunk SELECT runs outside the predicate, even this one).
 				$all_chunks = $wpdb->get_results( $wpdb->prepare(
 					"SELECT c.chunk_index, c.chunk_text
@@ -420,7 +424,7 @@ class ZKV_ZANA_Bridge {
 		$rows = array_slice( $rows, 0, $max_docs );
 
 		$block = "\n═══ KNOWLEDGE VAULT (matched reference material) ═══\n";
-		$block .= "Use this content naturally in your answer. Include vault links only when sharing to a channel or when the user asks for the source.\n\n";
+		$block .= "Use this content naturally in your answer. Include vault links only when sharing to a channel or DM, or when the user asks for the source — copy the Link exactly (or write the [VAULT-<number>] shown).\n\n";
 		foreach ( $rows as $r ) {
 			$slug = ! empty( $r['slug'] ) ? $r['slug'] : $r['id'];
 			$did  = (int) $r['id'];
@@ -447,7 +451,7 @@ class ZKV_ZANA_Bridge {
 				}
 				$block .= "  ── end content ──\n";
 			}
-			$block .= '  Link: ' . ( function_exists( 'zkv_secure_url' ) ? zkv_secure_url( $did, is_string( $slug ) ? $slug : '' ) : home_url( '/vault/' . $slug ) ) . "\n\n";
+			$block .= '  Link: ' . ( function_exists( 'zkv_secure_url' ) ? zkv_secure_url( $did, is_string( $slug ) ? $slug : '' ) : home_url( '/vault/' . $slug ) ) . " (or write [VAULT-{$did}])\n\n";
 		}
 
 		// v1.3.3: Log what the AI will receive so future issues are diagnosable.

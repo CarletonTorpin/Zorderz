@@ -14,8 +14,18 @@ use PHPUnit\Framework\TestCase;
 
 final class SafetyFloorTest extends TestCase {
 
+	protected function setUp(): void {
+		// another file's code may already have merged the rules once this request
+		unset( $GLOBALS['zdz_test_filters'] );
+		self::forget_rules();
+	}
+
 	protected function tearDown(): void {
 		unset( $GLOBALS['zdz_test_filters'] );
+		self::forget_rules();
+	}
+
+	private static function forget_rules(): void {
 		$memo = new ReflectionProperty( 'ZDZ_Rule_Governance', 'memo' );
 		$memo->setAccessible( true );
 		$memo->setValue( null, null );

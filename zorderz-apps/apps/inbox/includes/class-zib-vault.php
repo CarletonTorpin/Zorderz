@@ -2,17 +2,17 @@
 /**
  * ZIB_Vault — per-account encrypted token store + single-flight refresh.
  *
- * A faithful clone of ZSCH_Vault (Connected Calendars Phase 0). The two hard
+ * A faithful clone of the Scheduler's ZSCH_Vault. The two hard
  * parts, unchanged because they were already right:
  *
  *   1. ENCRYPTION AT REST. Tokens are sealed with libsodium secretbox
  *      (XSalsa20-Poly1305) when available, else OpenSSL AES-256-CTR + an
  *      HMAC-SHA256 tag (encrypt-then-MAC). The key derives from
  *      wp_salt('auth') + a domain string unique to this plugin, so a DB dump
- *      alone can never yield a usable token (INV-4). Values are prefixed
+ *      alone can never yield a usable token. Values are prefixed
  *      ('v1s:' / 'v1o:') so both schemes decrypt side by side.
  *
- *   2. SINGLE-FLIGHT REFRESH (INV-4, the FreshBooks lesson). Microsoft ROTATES
+ *   2. SINGLE-FLIGHT REFRESH (as the FreshBooks token service does). Microsoft ROTATES
  *      the refresh token on every use, so a lost rotation strands the grant.
  *      One MySQL GET_LOCK per account serializes the refresh; the holder
  *      re-reads and ADOPTS a sibling's fresh token (token_version bump) rather

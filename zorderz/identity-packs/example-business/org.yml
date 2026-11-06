@@ -41,6 +41,7 @@ roles:
   - slug: zdz_operator
     label: "Scheduler"
     department: ops
+    tier: staff                      # verb ladder: viewer | staff | admin (admin only for owner/admin roles)
     default_apps:
       allowed: [zdz-media, internal-messaging]
 
@@ -53,6 +54,7 @@ roles:
   - slug: zdz_tech
     label: "Service Tech"
     department: field
+    tier: viewer
     default_apps:
       allowed: [zdz-camera, zdz-sketch-pad, internal-messaging]
 
@@ -80,3 +82,23 @@ channels:
     description: "Techs and the shop."
     member_roles: [zdz_tech, zdz_mfg, zdz_admin, zdz_owner]
     department: field
+
+# Which launcher group each app sits in, and what the groups are called here.
+# Groups: sales, field, team, office, tools. The colours are the platform's and
+# do not change. Apps not listed keep the platform's arrangement.
+app_groups:
+  labels:
+    office: "Back Office"
+  apps:
+    invoice: sales
+
+# Extra notice channels per role, for one category of notice at a time. A role
+# otherwise gets exactly what the platform allows it (field and shop roles get
+# no bell or push by default). Channels: in_app, email, push. The shared
+# device never gets a grant.
+alerts:
+  role_category_grants:
+    zdz_tech:
+      jobs: [in_app, push]
+    zdz_mfg:
+      jobs: [in_app]

@@ -1,102 +1,45 @@
 /**
- * Zorderz Service Worker — v2.29.0 (logic unchanged from 2.24.2)
+ * Zorderz Service Worker
  *
- * MINIMAL SERVICE WORKER — bridge token + durable camera uploads.
+ * MINIMAL SERVICE WORKER — bridge token, self-healing shell, durable camera
+ * uploads. It caches no assets of its own; a page cache or CDN does that.
  *
- * @updated 2.29.0 — Stamp-only bump, no logic change. Pairs with the theme's
- *                   v2.29.0 registration script (functions.php): updates are
- *                   now CONSENTED mid-session (an "App update ready" pill
- *                   instead of auto skipWaiting+reload) while the launch-window
- *                   self-heal keeps auto-applying; installed PWAs re-check on
- *                   foreground + hourly and poll the new /zdz-version beacon.
- *                   The zdz-skip-waiting message handler below is unchanged and
- *                   is what the pill's Refresh tap invokes. (This stamp bump
- *                   itself makes the SW byte-diff, so every device installs
- *                   the "new" worker once and exercises the flow at launch.)
- * @updated 2.24.2 — Stronger self-heal on update: activate() now deletes EVERY
- *                   CacheStorage bucket except the bridge cache (was: only the
- *                   zdz-static-/zdz-shell- prefixes), and a `message` handler lets
- *                   the page force a waiting SW to skipWaiting. Removes the last
- *                   way an installed PWA could keep serving a stale shell/asset
- *                   after a theme deploy.
+ *  1. Login bridge. The custom fetch handler serves the virtual
+ *     /_zdz-bridge-token endpoint, which stores and retrieves bridge tokens in
+ *     CacheStorage. CacheStorage is shared between Safari and standalone PWA
+ *     mode on iOS, which is the key property that lets a login in Safari reach
+ *     the installed app.
  *
- * NitroPack (Strong mode) handles all caching (CDN, browser cache headers,
- * critical CSS extraction, JS deferral). This SW exists to support the
- * PWA ↔ Safari authentication bridge via CacheStorage, and (since v2.21.0)
- * to drain the Zorderz Camera durable upload queue via Background Sync.
+ *  2. Self-healing shell. Devices reuse a cached dashboard shell for DAYS
+ *     (stale baked nonces, stale ?ver= script URLs), so plugin updates never
+ *     reach installed PWAs and server purges cannot help: the staleness is in
+ *     the device's own HTTP cache. Same-origin GET navigations are therefore
+ *     fetched NETWORK-FIRST with an explicit HTTP-cache bypass
+ *     (cache:'reload'), falling back to a normal fetch (which may serve from
+ *     cache) only when the network fails. Every online launch gets the
+ *     CURRENT shell; wp-admin is left untouched. The theme's logged-in
+ *     no-cache headers make the first load correct before this SW controls
+ *     the page.
  *
- * The custom fetch handler is for the virtual /_ts-bridge-token endpoint,
- * which stores/retrieves bridge tokens in CacheStorage. All other requests
- * pass through to the network untouched.
+ *  3. Updates. activate() deletes EVERY CacheStorage bucket except the bridge
+ *     cache, so a theme update can never leave a stale shell or asset behind.
+ *     A `message` handler lets the page tell a waiting SW to skipWaiting: the
+ *     page's "App update ready" pill invokes it mid-session, and updates found
+ *     in the launch window apply on their own.
  *
- * CacheStorage is shared between Safari and standalone PWA mode on iOS,
- * which is the key property that enables the bridge.
+ *  4. Durable camera uploads. The `sync` handler (tag 'zdz-upload-sync')
+ *     drains the camera's IndexedDB store (zdz-camera → uploads) when
+ *     connectivity returns, even if the tab/PWA has since closed
+ *     (Android/Chromium). See the section below for the lease that stops the
+ *     page and this SW uploading the same capture twice, and for why records
+ *     carry bytes rather than a Blob.
  *
- * The `sync` handler (tag 'zdz-upload-sync') drains the camera plugin's
- * IndexedDB store (zdz-camera → uploads) when connectivity returns, even if
- * the tab/PWA has since closed (Android/Chromium). This is additive and
- * independent of the bridge-token fetch logic. See the section below.
- *
- * @since 2.18.0
- * @updated 2.22.0 — SELF-HEALING APP SHELL. Two production facts (Jun 2026,
- *                   the camera nonce saga): (1) this SW never actually ran in
- *                   production — WP Engine's nginx 404s the virtual /sw.js
- *                   route, so registration failed silently on every device
- *                   since 2.18.0 (now fixed: served + registered as /zdz-sw);
- *                   (2) devices reuse a cached dashboard shell for DAYS —
- *                   stale baked nonces, stale ?ver= script URLs — so plugin
- *                   updates never reached installed PWAs and server purges
- *                   couldn't help (the staleness is in the device's own HTTP
- *                   cache). Fix: same-origin GET navigations are now fetched
- *                   NETWORK-FIRST with an explicit HTTP-cache bypass
- *                   (cache:'reload'), falling back to a normal fetch (which
- *                   may serve from cache) only when the network fails — so
- *                   every online app launch gets the CURRENT shell, and a
- *                   stale shell can never outlive connectivity again. wp-admin
- *                   is left untouched. Pairs with functions.php 2.23.1
- *                   (logged-in nocache headers — first-load correctness even
- *                   before this SW controls the page).
- * @updated 2.21.4 — tscamPost() refuses to POST empty/truncated bytes: iOS can
- *                   return an EMPTY ArrayBuffer when a large freshly-written
- *                   IndexedDB record is read straight back (zdz-camera v1.2.9's
- *                   server log showed "bytes=0" for new captures). The drain
- *                   now skips such a record (marks it failed → the page's
- *                   foreground drain retries later, when the stored bytes have
- *                   materialized — or uses its own in-memory copy). Uses the
- *                   record's `size` (original byte length, recorded at capture
- *                   by zcam-queue.js 1.2.9) when present.
- * @updated 2.21.3 — tscamPost() sends the record's `rest_nonce` (the theme's
- *                   wp_rest nonce, captured at shutter by zdz-camera v1.2.8) as
- *                   the standard X-WP-Nonce header. Pairs with zdz-camera
- *                   v1.2.8, whose ajax handlers now dual-accept the fresh
- *                   wp_rest nonce OR the legacy ZCAM_NONCE field (which was
- *                   being rejected on every upload — "nonce check FAILED" —
- *                   because it was baked into re-injected/cacheable widget
- *                   HTML). A long-deferred background sync may still hold an
- *                   expired nonce — acceptable: the attempt fails clean and
- *                   the foreground drain retries with a live one.
- * @updated 2.21.0 — Background Sync drain for Zorderz Camera durable uploads.
- * @updated 2.21.2 — Background-Sync drain rebuilds the upload Blob from the
- *                   record's ArrayBuffer (`buf`) via tscamBlob(), matching
- *                   zdz-camera v1.2.7 (which stores bytes, not a Blob, because
- *                   iOS can't reliably store Blobs in IndexedDB). Legacy ≤1.2.6
- *                   `file` Blob records still work via fallback. Byte-identical
- *                   rebuild → EXIF preserved. No schema change.
- * @updated 2.21.1 — Single-uploader LEASE: the drain now CLAIMS each record
- *                   before POSTing and SKIPS any record the page (foreground
- *                   drain) is actively uploading (a live lease it owns). This
- *                   stops the page and the SW from POSTing the same original
- *                   file concurrently — the double media_handle_upload() that
- *                   stalled big-HEIC thumbnail generation and stranded uploads
- *                   at "Uploading…/Upload failed". Pairs with zdz-camera v1.2.6
- *                   (zcam-queue.js claim()/release()). Lease fields are plain
- *                   record properties — NO IndexedDB schema/version change, so
- *                   this SW still opens the DB with no upgrade path. The
- *                   bridge-token fetch logic is untouched.
+ * The page registers this file as /zdz-sw (extension-less, so hosts whose
+ * nginx serves *.js statically still route it to WordPress).
  */
 
 var BRIDGE_CACHE = 'zdz-bridge-v1';
-var BRIDGE_KEY   = '/_ts-bridge-token';
+var BRIDGE_KEY   = '/_zdz-bridge-token';
 
 // ---- INSTALL ----
 self.addEventListener('install', function () {
@@ -106,13 +49,12 @@ self.addEventListener('install', function () {
 // ---- ACTIVATE ----
 self.addEventListener('activate', function (event) {
   event.waitUntil(
-    // v2.24.2: On activation of a NEW service worker, delete EVERY CacheStorage
-    // bucket EXCEPT the bridge cache (which holds the auth-bridge token + camera
-    // upload support and must survive). Previously only the old zdz-static-/
-    // zdz-shell- prefixes were cleared; broadening this means a theme update can
+    // On activation of a NEW service worker, delete EVERY CacheStorage bucket
+    // EXCEPT the bridge cache (which holds the auth-bridge token + camera upload
+    // support and must survive). Clearing everything means a theme update can
     // never leave a stale cached shell/asset behind on an installed PWA — the
-    // root cause of "deployed but still looks old". The bridge cache is
-    // explicitly preserved so login + durable camera uploads are unaffected.
+    // cause of "deployed but still looks old". The bridge cache is explicitly
+    // preserved so login + durable camera uploads are unaffected.
     caches.keys().then(function (names) {
       return Promise.all(
         names
@@ -126,7 +68,7 @@ self.addEventListener('activate', function (event) {
 });
 
 // ---- MESSAGE: let the page force an immediate update ----
-// v2.24.2: the page can postMessage({type:'zdz-skip-waiting'}) to tell a freshly
+// The page can postMessage({type:'zdz-skip-waiting'}) to tell a freshly
 // installed (waiting) SW to take over now, so a stale shell doesn't linger until
 // every tab closes. Harmless if no waiting worker exists.
 self.addEventListener('message', function (event) {
@@ -139,11 +81,11 @@ self.addEventListener('message', function (event) {
 self.addEventListener('fetch', function (event) {
   var url = new URL(event.request.url);
 
-  // ── v2.22.0: self-healing app shell ─────────────────────────────────────
+  // ── Self-healing app shell ──────────────────────────────────────────────
   // Same-origin GET navigations (opening the PWA, any page load) are fetched
   // network-first with an explicit HTTP-cache BYPASS, so a device can never
-  // keep serving a stale cached shell (stale nonces + stale ?ver= scripts —
-  // the root cause of the Jun 2026 camera saga). Offline/failed → fall back
+  // keep serving a stale cached shell (stale nonces + stale ?ver= scripts,
+  // which broke camera uploads). Offline/failed → fall back
   // to a normal fetch, which may serve the cached copy (desired: a stale
   // shell offline beats no shell). wp-admin is excluded — leave WP's own
   // admin behavior alone. The navigation Request keeps redirect:'manual', so
@@ -241,7 +183,7 @@ self.addEventListener('fetch', function (event) {
 });
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Zorderz Camera — Durable photo upload via Background Sync (v2.x)
+ * Zorderz Camera — Durable photo upload via Background Sync
  *
  * The camera plugin persists each capture (original file + EXIF args) to an
  * IndexedDB store the instant the shutter fires. When a foreground upload
@@ -260,11 +202,11 @@ var ZCAM_DB = 'zdz-camera', ZCAM_VER = 1, ZCAM_STORE = 'uploads', ZCAM_SYNC = 'z
 
 self.addEventListener('sync', function (event) {
   if (event.tag === ZCAM_SYNC) {
-    event.waitUntil(tscamDrain());
+    event.waitUntil(zcamDrain());
   }
 });
 
-function tscamOpen() {
+function zcamOpen() {
   return new Promise(function (resolve, reject) {
     // No onupgradeneeded: the page owns the schema. If the store doesn't
     // exist yet, there's nothing to drain.
@@ -274,7 +216,7 @@ function tscamOpen() {
   });
 }
 
-function tscamGetAll(db) {
+function zcamGetAll(db) {
   return new Promise(function (resolve, reject) {
     if (!db.objectStoreNames.contains(ZCAM_STORE)) { resolve([]); return; }
     var os = db.transaction(ZCAM_STORE, 'readonly').objectStore(ZCAM_STORE);
@@ -284,7 +226,7 @@ function tscamGetAll(db) {
   });
 }
 
-function tscamDelete(db, id) {
+function zcamDelete(db, id) {
   return new Promise(function (resolve) {
     var os = db.transaction(ZCAM_STORE, 'readwrite').objectStore(ZCAM_STORE);
     var r = os.delete(id);
@@ -307,7 +249,7 @@ var ZCAM_SW_OWNER   = 'sw';
 var ZCAM_SW_LEASE_MS = 120000; // generous: Background Sync + a big upload can be slow
 var ZCAM_SW_FETCH_MS = 90000;  // abort a hung SW fetch so it can't hold the lease forever
 
-function tscamClaim(db, id) {
+function zcamClaim(db, id) {
   return new Promise(function (resolve, reject) {
     var os = db.transaction(ZCAM_STORE, 'readwrite').objectStore(ZCAM_STORE);
     var g = os.get(id);
@@ -332,7 +274,7 @@ function tscamClaim(db, id) {
 
 // Clear our lease (and optionally patch status/tries) so a later sync — or the
 // page on next foreground — can retry. No-op if the record is already gone.
-function tscamRelease(db, id, patch) {
+function zcamRelease(db, id, patch) {
   return new Promise(function (resolve) {
     var os = db.transaction(ZCAM_STORE, 'readwrite').objectStore(ZCAM_STORE);
     var g = os.get(id);
@@ -351,11 +293,11 @@ function tscamRelease(db, id, patch) {
   });
 }
 
-// Rebuild the upload Blob for a record. v1.2.7 stores the ORIGINAL bytes as an
-// ArrayBuffer (`buf`) because iOS Safari can't reliably store Blobs in IndexedDB;
-// new Blob([buf]) is byte-identical so EXIF/GPS is preserved. Legacy ≤1.2.6
+// Rebuild the upload Blob for a record. The camera stores the ORIGINAL bytes as
+// an ArrayBuffer (`buf`) because iOS Safari can't reliably store Blobs in
+// IndexedDB; new Blob([buf]) is byte-identical so EXIF/GPS is preserved. Older
 // records that still carry a `file` Blob are used as a fallback. Null if neither.
-function tscamBlob(rec) {
+function zcamBlob(rec) {
   if (rec && rec.buf) {
     try { return new Blob([rec.buf], { type: rec.type || 'application/octet-stream' }); }
     catch (e) { /* fall through */ }
@@ -365,9 +307,9 @@ function tscamBlob(rec) {
 
 // POST one record with an abort timeout, so a hung request rejects (and frees
 // the lease) instead of holding the SW — and the record — open indefinitely.
-function tscamPost(rec) {
-  var blob = tscamBlob(rec);
-  // v2.21.4: also refuse EMPTY or size-mismatched bytes (iOS fresh-write
+function zcamPost(rec) {
+  var blob = zcamBlob(rec);
+  // Also refuse EMPTY or size-mismatched bytes (iOS fresh-write
   // read-back flakiness) — never POST a body the server can't use. Returning
   // false marks the record failed; a later drain retries when the stored
   // bytes have materialized.
@@ -386,9 +328,9 @@ function tscamPost(rec) {
   if (rec.gps_lng != null) fd.append('gps_lng', rec.gps_lng);
   if (rec.meta && rec.meta.geo_source) fd.append('geo_source', rec.meta.geo_source);
   if (rec.meta && rec.meta.time_source) fd.append('time_source', rec.meta.time_source);
-  if (rec.note) fd.append('note', rec.note); // photo purpose (v1.2.0)
+  if (rec.note) fd.append('note', rec.note); // photo purpose
   var opts = { method: 'POST', body: fd, credentials: 'same-origin' };
-  // v2.21.3 (pairs with zdz-camera v1.2.8): authenticate with the fresh wp_rest
+  // Authenticate with the fresh wp_rest
   // nonce captured at shutter (rec.rest_nonce) via the standard X-WP-Nonce
   // header. The legacy `nonce` field above stays as a server-side fallback.
   if (rec.rest_nonce) opts.headers = { 'X-WP-Nonce': rec.rest_nonce };
@@ -400,9 +342,9 @@ function tscamPost(rec) {
     .then(function (ok) { if (timer) clearTimeout(timer); return ok; });
 }
 
-function tscamDrain() {
-  return tscamOpen().then(function (db) {
-    return tscamGetAll(db).then(function (items) {
+function zcamDrain() {
+  return zcamOpen().then(function (db) {
+    return zcamGetAll(db).then(function (items) {
       var now = Date.now();
       var pending = items
         // Don't even consider a record the PAGE is actively uploading (a live
@@ -422,13 +364,13 @@ function tscamDrain() {
           if (!rec.ajaxurl) return; // can't post without the endpoint
           // CLAIM atomically. If we lost the race (page grabbed it just now),
           // skip — but count it as "still pending" so the sync is retried.
-          return tscamClaim(db, rec.id).then(function (claimed) {
+          return zcamClaim(db, rec.id).then(function (claimed) {
             if (!claimed) { hadFailure = true; return; }
-            return tscamPost(claimed).then(function (ok) {
-              if (ok) { return tscamDelete(db, claimed.id); }
+            return zcamPost(claimed).then(function (ok) {
+              if (ok) { return zcamDelete(db, claimed.id); }
               // Failed: drop our lease + mark failed so a retry can reclaim it.
               hadFailure = true;
-              return tscamRelease(db, claimed.id, { status: 'failed' });
+              return zcamRelease(db, claimed.id, { status: 'failed' });
             });
           });
         });

@@ -1,0 +1,18 @@
+# Identity Pack · catalog.yml — EXAMPLE, entirely fictional.
+#
+# This version reads two blocks of the catalog file: `price_book` (see the
+# README; write it as JSON) and `vocabulary` below. Products and services
+# themselves are entered on Zorderz → Item Engine for now.
+
+pack:
+  schema: 1
+  tenant_key: example-business
+
+vocabulary:
+  # The business's own words that are never a person's name on their own, one
+  # word each. The privacy coder never reads them as a name, so they are never
+  # hidden from the Ai.
+  plain_words: [skimmer, chlorinator, backwash]
+  # Product or model words: a number right after one is a model number, never
+  # an access code.
+  model_words: [ex-100, ex-pump]

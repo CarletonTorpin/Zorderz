@@ -49,14 +49,13 @@ class ZCC_App implements \Zorderz\Widget_App_Interface {
 		?>
 		<div class="zcc-widget" data-app="<?php echo esc_attr( ZCC_APP_ID ); ?>">
 			<?php if ( ! $connected ) : ?>
-				<p class="zcc-note"><?php esc_html_e( 'Connect FreshBooks in settings to calculate commission.', 'zorderz' ); ?></p>
+				<p class="zcc-note"><?php esc_html_e( 'Commission is worked out from FreshBooks, which is not connected yet. An administrator connects it on Zorderz → Credentials.', 'zorderz' ); ?></p>
 			<?php else : ?>
 				<div class="zcc-controls">
 					<label class="zcc-label"><?php esc_html_e( 'Period', 'zorderz' ); ?>
 						<select class="zcc-period">
 							<option value="this_month"><?php esc_html_e( 'This month', 'zorderz' ); ?></option>
 							<option value="last_month"><?php esc_html_e( 'Last month', 'zorderz' ); ?></option>
-							<option value="mtd"><?php esc_html_e( 'Month to date', 'zorderz' ); ?></option>
 						</select>
 					</label>
 					<button type="button" class="zcc-run button"><?php echo $is_piece ? esc_html__( 'My pay', 'zorderz' ) : esc_html__( 'My commission', 'zorderz' ); ?></button>

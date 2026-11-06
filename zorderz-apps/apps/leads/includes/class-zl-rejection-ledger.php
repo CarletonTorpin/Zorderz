@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Leads — Rejection accounting + "no matches is a result" (D-04 / S6-05)
+ * Zorderz Leads — Rejection accounting + "no matches is a result"
  *
  * Legibility over the SAME numbers. This adds no counting authority and moves no total;
  * it only makes an existing outcome legible. Two disciplines:

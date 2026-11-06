@@ -57,6 +57,7 @@ class ZJOB_App implements \Zorderz\Widget_App_Interface {
 	/** The widget BODY (no card frame — the theme provides it). */
 	private function body_html( int $user_id ): string {
 		$can_handoff = ZJOB_Jobs::user_can_hand_off( $user_id );
+		$is_admin    = class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_admin( $user_id );
 		$is_lead     = class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_crew_lead( $user_id );
 
 		// Job creation flows through the Estimates app ("Send as job(s)"). The legacy
@@ -71,9 +72,16 @@ class ZJOB_App implements \Zorderz\Widget_App_Interface {
 			zjob_asset_ver( 'assets/css/widget.css' )
 		);
 		wp_enqueue_script(
+			'zjob-my-next',
+			ZJOB_URL . 'assets/js/my-next.js',
+			array(),
+			zjob_asset_ver( 'assets/js/my-next.js' ),
+			true
+		);
+		wp_enqueue_script(
 			'zjob-widget',
 			ZJOB_URL . 'assets/js/widget.js',
-			array(),
+			array( 'zjob-my-next' ),
 			zjob_asset_ver( 'assets/js/widget.js' ),
 			true
 		);
@@ -83,6 +91,7 @@ class ZJOB_App implements \Zorderz\Widget_App_Interface {
 			'version'      => ZJOB_VERSION,
 			'canHandoff'   => (bool) $can_handoff,
 			'isLead'       => (bool) $is_lead,
+			'isAdmin'      => (bool) $is_admin,
 			'minPhotos'    => (int) ZJOB_Jobs::min_finish_photos(),
 			'accuracyMax'  => (int) ZJOB_Jobs::gps_accuracy_max_m(),
 			'closeMaxDays' => (int) ZJOB_Jobs::close_max_days(),
@@ -108,13 +117,19 @@ class ZJOB_App implements \Zorderz\Widget_App_Interface {
 			<!-- LIST PANEL -->
 			<div class="zjob-w-panel is-active" data-panel="list">
 				<div class="zjob-w-filters" role="group" aria-label="<?php esc_attr_e( 'Past, present and future jobs', 'zorderz' ); ?>">
-					<button class="zjob-chip is-active" data-bucket="present"><?php esc_html_e( 'Present', 'zorderz' ); ?></button>
+					<button class="zjob-chip is-active" data-bucket="next"><?php esc_html_e( 'My next', 'zorderz' ); ?></button>
+					<button class="zjob-chip" data-bucket="present"><?php esc_html_e( 'Present', 'zorderz' ); ?></button>
 					<button class="zjob-chip" data-bucket="future"><?php esc_html_e( 'Future', 'zorderz' ); ?></button>
 					<button class="zjob-chip" data-bucket="past"><?php esc_html_e( 'Past', 'zorderz' ); ?></button>
 				</div>
 				<div class="zjob-w-list" id="zjob-list" aria-live="polite">
 					<div class="zjob-empty zjob-loading"><?php esc_html_e( 'Loading', 'zorderz' ); ?>&hellip;</div>
 				</div>
+				<?php if ( $is_admin ) : ?>
+				<div class="zjob-admin-tools">
+					<button type="button" class="zjob-mini zjob-mini-ghost" data-act="clear-tests"><span><?php esc_html_e( 'Clear test jobs', 'zorderz' ); ?></span></button>
+				</div>
+				<?php endif; ?>
 			</div>
 
 			<?php if ( $show_form ) : ?>

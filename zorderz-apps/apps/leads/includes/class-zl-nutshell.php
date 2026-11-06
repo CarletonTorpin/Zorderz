@@ -55,7 +55,7 @@ class ZL_Nutshell {
 	/**
 	 * Constructor.
 	 *
-	 * v2.5.2 (interop §1.2/§1.4): credentials may be omitted. When they are, we
+	 * v2.5.2: credentials may be omitted. When they are, we
 	 * source them from the theme's shared settings (ZDZ_Core_Settings) — the SAME
 	 * single source the shared ZDZ_Core_Nutshell uses — so ZL no longer holds an
 	 * independent copy of the Nutshell credential that could drift. Explicitly
@@ -68,6 +68,16 @@ class ZL_Nutshell {
 	 * @param string $api_key Nutshell API key.   Empty → shared settings.
 	 */
 	public function __construct( $email = '', $api_key = '' ) {
+		// With no creds passed, the matched pair Zorderz →
+		// Credentials manages wins; otherwise the cascade below is unchanged.
+		if ( '' === $email && '' === $api_key && class_exists( 'ZL_Admin' )
+			&& is_callable( array( 'ZL_Admin', 'managed_nutshell' ) ) ) {
+			$managed = ZL_Admin::managed_nutshell();
+			if ( null !== $managed ) {
+				$email   = $managed['email'];
+				$api_key = $managed['api_key'];
+			}
+		}
 		// Prefer explicitly-passed creds; otherwise fall back to the shared source.
 		if ( ( '' === $email || '' === $api_key ) && class_exists( 'ZDZ_Core_Settings' ) ) {
 			if ( '' === $email && method_exists( 'ZDZ_Core_Settings', 'get_ns_email' ) ) {
@@ -200,7 +210,7 @@ class ZL_Nutshell {
 		$body_json   = wp_remote_retrieve_body( $response );
 
 		if ( 401 === $status_code ) {
-			throw new Exception( 'Nutshell authentication failed. Check your API Key and Login Email in settings.' );
+			throw new Exception( 'Nutshell authentication failed. Check the Nutshell key and login email on Zorderz → Credentials.' );
 		}
 
 		if ( 200 !== $status_code ) {

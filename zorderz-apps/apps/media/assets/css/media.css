@@ -1,35 +1,55 @@
-/* Zorderz Media — Library Styles v2.3.3
+/* Zorderz Media - Library Styles
  *
  * Two surfaces (dashboard widget + full-screen gallery) + one shared lightbox.
  * Uses the theme's real --sys- and --ref- tokens so it tracks light/dark/system/
  * sunlight. Fallback values match the THEME palette (brand #2C5F8A), not the
  * v1 placeholder purple.
  *
- * v2.3.3 — widget usability: (1) scope tabs are sized to their labels (not
+ * widget usability: (1) scope tabs are sized to their labels (not
  * forced equal thirds) so "Organization" is never truncated, scrolling
  * horizontally only if all three can't fit; (2) a "Load more" button
  * (.zml-w-more) under the compact grid appends more photos in place so the
  * widget is browsable without opening "See All" — the card grows downward with
  * no nested scroll (honours WIDGET-OVERFLOW-CONTRACT).
  *
- * v2.3.2 — CRITICAL parse fix: this file's banner contained the literal
- * sequence "*​/" inside a comment (the token pair was written "--sys-*" then
+ * LIGHTBOX MADE MOBILE-FIRST. The stage is now the full viewport and
+ * both chrome layers (top bar, meta panel) float over it; the meta panel became
+ * a collapsed-by-default sheet. On an iPhone 17 Pro Max in portrait this takes a
+ * 3:4 photo from roughly 330x440 (about 35% of the screen, with ~55px of black
+ * down each side) to 440x587 (about 61%, no horizontal black), and raises the
+ * effective ceiling of the unchanged 4x zoom by the same ratio. Also: arrows now
+ * centre on the image rather than the viewport, chrome hides while zoomed, the
+ * first media queries in this component's history, an iOS keyboard inset so the
+ * software keyboard cannot cover the note field, and a visible fallback when a
+ * browser cannot decode a HEIC original. See the v2.4.0 note below about the
+ * zero-width space this file used to rely on.
+ *
+ * CRITICAL parse fix: this file's banner contained the literal
+ * sequence STAR-SLASH inside a comment (the token pair was written "--sys-*" then
  * "/--ref-*"), which PREMATURELY CLOSED the opening comment. Everything after
  * it parsed as invalid CSS, so the browser discarded the ENTIRE stylesheet
  * (0 rules applied) — the Media widget rendered with NO styling at all: plain
- * unstyled tab/chip text, no pills, no hover/click affordances. Reworded so no
- * "*"+"/" ever appears in a comment. (Guard when editing this file: never let
- * that two-character sequence appear inside a comment.) No rule changed; this
- * simply makes the v2.3.1 layout — and every prior rule — actually load.
+ * unstyled tab/chip text, no pills, no hover/click affordances.
  *
- * v2.3.1 — mobile bar layout fix for the 3-tab scope set (My Photos /
+ * the v2.3.2 "fix" was NOT a rewording. It wedged a literal U+200B
+ * ZERO WIDTH SPACE between the two characters, and then claimed in this banner
+ * that the pair no longer appeared. It did appear; it was merely invisible. Any
+ * linter, minifier, sed pass, sanitising editor or automated edit that strips
+ * zero-width characters would have silently re-created the bug and taken the
+ * whole stylesheet down again. The sequence is now spelled out in prose
+ * (STAR-SLASH) and no zero-width character is load-bearing anywhere in this
+ * file. GUARD WHEN EDITING: never let those two characters sit adjacent inside
+ * a comment, and do not "fix" it with an invisible separator. The real gate is
+ * a parse check that asserts cssRules.length > 0 (see the build notes).
+ *
+ * mobile bar layout fix for the 3-tab scope set (My Photos /
  * Organization / All). The v2.0.1 widget bar was a single-row 3-column grid
  * sized for TWO tabs; the admin "All" tab (added in v2.3.0) overflowed it, so
  * the segmented control wrapped into a tall dark stack and Add/See-All got
  * squeezed off-center. Now:
  *   • WIDGET bar is TWO rows — the segmented control on its own full-width row
  *     (equal-width tabs that never wrap; horizontal-scroll fallback à la
- *     zdz-estimate-creator's .tsec-w-tabs), and Add + See All on a second,
+ *     zdz-estimate-creator's .zest-w-tabs), and Add + See All on a second,
  *     right-aligned row.
  *   • FULL-SCREEN bar reserves a top row for the pinned Select/Add corners
  *     (top padding), so the centered scope segment sits BELOW them and can
@@ -52,7 +72,7 @@
    Base: an inline pill-group whose tabs never wrap. When there are more tabs
    than fit the width (e.g. the admin 3-tab My Photos / Organization / All), the
    group degrades to a hidden-scrollbar horizontal SCROLL rather than wrapping
-   into a stack — the same pattern zdz-estimate-creator uses for .tsec-w-tabs.
+   into a stack — the same pattern zdz-estimate-creator uses for .zest-w-tabs.
    Surface overrides below decide alignment (widget = full-width row; full-screen
    = centered). */
 .zml-seg { display:inline-flex; gap:4px; padding:3px; background:var(--sys-bg-alt,#E2E8F0);
@@ -71,13 +91,13 @@
 /* Type chips. */
 .zml-chips, .zml-w-chips { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
 .zml-chip { appearance:none; cursor:pointer; padding:6px 14px; font-size:var(--ref-font-xs,15px);
-  font-weight:500; line-height:1; border:1px solid var(--sys-border,#E2E8F0); border-radius:999px;
+  font-weight:500; line-height:1; border:1px solid var(--sys-border,#E2E8F0); border-radius:var(--ref-radius-sm,8px); /* v2.10.3: not an oval */
   background:var(--sys-surface,#FFF); color:var(--sys-text-sec,#475569);
   transition:background 150ms,color 150ms,border-color 150ms; -webkit-tap-highlight-color:transparent;
   min-height:36px; }
-.zml-chip.zml-active { background:var(--sys-brand,#2C5F8A); border-color:var(--sys-brand,#2C5F8A); color:#FFF; }
+.zml-chip.zml-active { background:var(--sys-brand,#2C5F8A); border-color:var(--sys-brand,#2C5F8A); color:var(--sys-text-brand,#FFF); }
 
-.zml-loading, .zml-empty { padding:32px 20px; text-align:center; font-size:var(--ref-font-xs,15px);
+.zml-empty { padding:32px 20px; text-align:center; font-size:var(--ref-font-xs,15px);
   color:var(--sys-text-ter,#64748B); line-height:1.5; }
 
 /* Uniform responsive grid (shared). */
@@ -85,11 +105,29 @@
 @media (min-width:520px) { .zml-grid { grid-template-columns:repeat(auto-fill, minmax(128px, 1fr)); gap:10px; } }
 
 .zml-cell { position:relative; appearance:none; border:none; padding:0; cursor:pointer;
-  aspect-ratio:1/1; border-radius:12px; overflow:hidden; background:var(--sys-bg-alt,#E2E8F0);
+  display:block; text-align:left; border-radius:12px; overflow:hidden; background:var(--sys-bg-alt,#E2E8F0);
   -webkit-tap-highlight-color:transparent; transition:transform 120ms, box-shadow 120ms; }
 .zml-cell:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.12); }
 .zml-cell:focus-visible { outline:3px solid var(--sys-brand,#2C5F8A); outline-offset:2px; }
+/* the THUMB (not the cell) is the positioning context for every image
+   overlay and it carries the aspect ratio — so a card can grow a text footer
+   beneath it without the badge/note/vis/check overlays drifting. Square by
+   default, which keeps the dense compact peek identical to pre-2.7.0. */
+.zml-cell-thumb { position:relative; display:block; aspect-ratio:1/1; overflow:hidden;
+  background:var(--sys-bg-alt,#E2E8F0); }
 .zml-cell-img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* text footer — hidden everywhere by default; only the full-screen card
+   grid (.zml-grid-cards) reveals it. Mirrors zdz-camera's My-Photos info block. */
+.zml-cell-foot { display:none; padding:8px 10px; }
+.zml-cell-title { display:block; font-size:12px; font-weight:500; line-height:1.3;
+  color:var(--sys-text,#0F172A); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  min-height:16px; }
+.zml-cell-metarow { display:flex; justify-content:space-between; align-items:center;
+  gap:6px; margin-top:3px; }
+.zml-cell-time { font-size:10px; color:var(--sys-text-ter,#64748B); white-space:nowrap; }
+.zml-cell-src { display:inline-flex; padding:1px 6px; border-radius:4px; font-size:9px;
+  font-weight:600; background:rgba(14,165,233,0.1); color:#0284C7; white-space:nowrap; }
 
 .zml-cell-badge { position:absolute; left:6px; bottom:6px; padding:2px 7px; border-radius:6px;
   font-size:11px; font-weight:700; color:#FFF; background:rgba(15,23,42,0.66); backdrop-filter:blur(2px); }
@@ -98,6 +136,39 @@
 .zml-cell-vis { position:absolute; left:6px; top:6px; width:20px; height:20px; display:flex;
   align-items:center; justify-content:center; color:#FFF; border-radius:50%;
   background:rgba(44,95,138,0.92); filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+/* video indicator — lower-right camcorder + duration (the free corner;
+   source badge is bottom-left, note top-right, visibility top-left). Shown in
+   BOTH the dense grid and the card grid. */
+.zml-cell-video { position:absolute; right:6px; bottom:6px; display:inline-flex; align-items:center;
+  gap:4px; padding:2px 6px; border-radius:6px; font-size:11px; font-weight:700; color:#FFF;
+  background:rgba(15,23,42,0.72); backdrop-filter:blur(2px); line-height:1; pointer-events:none; }
+.zml-cell-video svg { display:block; }
+.zml-cell-vdur { font-variant-numeric:tabular-nums; }
+[data-theme="sunlight"] .zml-cell-video { background:#000; }
+
+/* who uploaded it: a small badge in the lower-right corner. The badge is the kit's
+   (ZDZ.ui.personChip: the person's initials on their shape and tone); a clip's camcorder badge steps left
+   of it, and while selecting, the check mark has the corner. */
+.zml-cell-who { position:absolute; right:6px; bottom:6px; z-index:1; line-height:0; pointer-events:none;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+.zml-cell-who + .zml-cell-video { right:34px; }
+.zml-selecting .zml-cell:not(.zml-nodel) .zml-cell-who { display:none; }
+.zml-lb-who { flex-shrink:0; line-height:0; }
+.zml-lb-who[hidden] { display:none; }
+
+/* ── v2.7.0 · My-Photos card grid (full-screen) ─────────────────────────────
+   Visual parity with zdz-camera's "My Photos" gallery: roomier 4:3 cards, each
+   with a titled info footer (name · time · source). Applied ONLY to the
+   full-screen grouped grid; the compact dashboard strip keeps dense squares. */
+.zml-grid-cards { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
+@media (min-width:520px) {
+  .zml-grid-cards { grid-template-columns:repeat(auto-fill, minmax(184px, 1fr)); gap:14px; }
+}
+.zml-grid-cards .zml-cell { border:1px solid var(--sys-border,#E2E8F0);
+  background:var(--sys-bg-alt,#F1F5F9); }
+.zml-grid-cards .zml-cell-thumb { aspect-ratio:4/3; }
+.zml-grid-cards .zml-cell-foot { display:block; }
+.zml-grid-cards .zml-cell-badge { display:none; } /* source is shown in the footer pill instead */
 
 /* ════════════════════════════════════════════════════════════════════════
    SURFACE 1 — DASHBOARD WIDGET (compact)
@@ -109,7 +180,7 @@
   font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
   color:var(--sys-text,#0F172A); }
 
-/* v2.3.1: TWO-ROW bar. The v2.0.1 single-row 3-column grid (spacer | segment |
+/* TWO-ROW bar. The v2.0.1 single-row 3-column grid (spacer | segment |
    See All) was built for a TWO-tab segment; the admin third tab ("All") made
    the centered segment overflow its column, so the pill wrapped into a tall
    dark stack and Add/See-All got squeezed off-center. The bar is now two clean
@@ -148,7 +219,7 @@
 .zml-grid-compact { grid-template-columns:repeat(3, minmax(0,1fr)); }
 @media (min-width:520px) { .zml-grid-compact { grid-template-columns:repeat(6, minmax(0,1fr)); } }
 
-/* v2.3.3: "Load more" — a full-width, subtle button under the compact grid that
+/* "Load more" — a full-width, subtle button under the compact grid that
    appends the next page in place (the card grows; no nested scroll). Brand-
    tinted, ≥44px tap target, matches the app's pill/chip idiom. */
 .zml-w-more { appearance:none; cursor:pointer; display:flex; align-items:center;
@@ -170,7 +241,7 @@
   font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
   color:var(--sys-text,#0F172A); background:var(--sys-bg,#F1F5F9); }
 
-/* v2.3.1: the corner actions (Select top-left, Add top-right) are pinned
+/* the corner actions (Select top-left, Add top-right) are pinned
    absolutely (rules further below), so they occupy a "row 0". Reserve vertical
    space for that row with top padding, then stack the scope segment and chips
    BELOW it — instead of the old approach of shrinking the segment horizontally
@@ -206,10 +277,34 @@
 
 body.zml-lb-open { overflow:hidden; }
 
+/* FULL-BLEED STAGE. THE FIX FOR "TONS OF BLACK BORDER".
+   Before: .zml-lb-top and .zml-lb-meta were normal-flow flex children, so the
+   stage got only the height left over after them. On a phone the meta panel
+   (info + location + visibility + note + save + delete) ran to roughly 370px of
+   an ~850px viewport. That crushed the stage into a SHORT, WIDE box, and a
+   PORTRAIT photo fitted into a landscape box pillarboxes -- which is where the
+   black bars came from. The bars are horizontal; the cause was vertical. Note
+   the arrows were never the reason: .zml-lb-nav has always been absolutely
+   positioned and costs zero layout width. It merely sat IN the black.
+   Now both chrome layers are absolutely positioned OVER the stage, so the stage
+   is the entire viewport and the photo is bounded only by its own aspect ratio.
+   Second-order win: zoom scale 1 == fit, so enlarging the fit also raises the
+   effective ceiling of the unchanged maxScale:4 -- more real detail at maximum
+   zoom without touching one line of the zoom engine.
+   Uses the existing position:fixed + inset:0 rather than introducing dvh units,
+   which appear nowhere else in this plugin or the theme. */
 .zml-lb { position:fixed; inset:0; z-index:100050; display:flex; flex-direction:column;
-  background:rgba(8,10,16,0.95);
-  padding-top:env(safe-area-inset-top,0px); }
-.zml-lb-top { display:flex; align-items:center; gap:10px; padding:12px 14px; color:#fff; }
+  background:rgba(8,10,16,0.95); }
+
+/* Top chrome floats over the photo. The scrim is not decoration: the title is
+   white text that now sits on top of whatever the photo happens to be, and a
+   bright sky would render it invisible without it. Safe-area padding moved off
+   .zml-lb and onto the chrome so the stage can run edge to edge. */
+.zml-lb-top { position:absolute; top:0; left:0; right:0; z-index:3;
+  display:flex; align-items:center; gap:10px; color:#fff;
+  padding:12px 14px; padding-top:calc(12px + env(safe-area-inset-top,0px));
+  background:linear-gradient(to bottom, rgba(8,10,16,0.74) 0%, rgba(8,10,16,0.40) 58%, rgba(8,10,16,0) 100%);
+  transition:opacity 180ms ease; }
 .zml-lb-title { flex:1; min-width:0; font-size:var(--ref-font-sm,17px); font-weight:600;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .zml-lb-btn { appearance:none; display:inline-flex; align-items:center; justify-content:center;
@@ -217,9 +312,9 @@ body.zml-lb-open { overflow:hidden; }
   background:rgba(255,255,255,0.12); text-decoration:none; -webkit-tap-highlight-color:transparent; }
 .zml-lb-btn:hover { background:rgba(255,255,255,0.22); }
 
-/* v2.0.1: the top-left control is an explicit BACK affordance (chevron + label)
+/* the top-left control is an explicit BACK affordance (chevron + label)
    so the full-screen viewer never reads as a dead-end "broad browser page"
-   (the owner's note). Same close action as before (history-back / teardown);
+  . Same close action as before (history-back / teardown);
    only the affordance changed. Auto-width to fit the label; keeps the ≥44px
    tap target and matches the prev/next chevron idiom. */
 .zml-lb-back { width:auto; gap:6px; padding:0 14px 0 10px; font:inherit;
@@ -227,37 +322,153 @@ body.zml-lb-open { overflow:hidden; }
 .zml-lb-back svg { flex-shrink:0; }
 .zml-lb-back-label { line-height:1; }
 
-.zml-lb-stage { flex:1; min-height:0; display:flex; align-items:center; justify-content:center;
-  padding:8px 12px; overflow:hidden; touch-action:none; }
-.zml-lb-img { max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; display:block;
+/* The nav arrows are position:absolute SIBLINGS of this element, so their
+   containing block is .zml-lb, not the stage -- position:relative here does not
+   capture them. It is set anyway so any future absolutely-positioned CHILD (the
+   HEIC fallback card below is one) anchors to the image area rather than the
+   window. The arrows are fixed by a different mechanism: now that the top bar
+   and the meta panel are both out of flow, the stage is the only in-flow child
+   and fills .zml-lb exactly, so top:50% finally lands on the image's centre
+   instead of ~136px below it.
+   Padding dropped to zero and the border-radius removed: at full bleed a rounded
+   corner just clips the photo against the screen edge. */
+.zml-lb-stage { flex:1; min-height:0; position:relative;
+  display:flex; align-items:center; justify-content:center;
+  padding:0; overflow:hidden; touch-action:none; }
+.zml-lb-img { max-width:100%; max-height:100%; object-fit:contain; display:block;
   transform-origin:center center; will-change:transform; -webkit-user-select:none; user-select:none;
   -webkit-user-drag:none; }
-/* v2.0.3: real in-lightbox zoom (pinch / double-tap / drag), driven by a JS
+/* in-browser video player — fills the stage, native controls, its own
+   touch handling (the stage gestures bail for video in media.js). */
+.zml-lb-video { max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain;
+  display:block; margin:auto; background:#000; z-index:2; position:relative; touch-action:auto; }
+/* Cross-browser honesty: an iPhone HEIC original cannot be decoded by Chrome,
+   Firefox, Edge or Android. Until v2.4.0 that failed to an EMPTY BLACK STAGE
+   with no error handler -- indistinguishable from "still loading" or "the app
+   is broken". media.js now falls back to the JPEG derivative and, if that also
+   fails, shows this instead of nothing. */
+.zml-lb-fallback { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  max-width:min(84%,420px); text-align:center; color:#CBD5E1; font-size:13px; line-height:1.5;
+  padding:16px 18px; border-radius:12px; background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.14); }
+.zml-lb-fallback strong { display:block; color:#F1F5F9; font-size:var(--ref-font-sm,17px);
+  font-weight:600; margin-bottom:6px; }
+/* real in-lightbox zoom (pinch / double-tap / drag), driven by a JS
    transform on the image. The stage clips; the image is panned via transform.
    So the original is viewable WITHOUT navigating away from the lightbox. */
 .zml-lb.zml-zoomed .zml-lb-stage { cursor:grab; }
 .zml-lb.zml-zoomed .zml-lb-stage:active { cursor:grabbing; }
-/* Arrows hidden while zoomed in (JS also sets display:none; this is a fallback
-   so they never overlap a panned image). "Back"/Esc still exit the viewer. */
-.zml-lb.zml-zoomed .zml-lb-nav { display:none !important; }
+/* hide-while-zoomed moved from `display:none !important` to opacity +
+   pointer-events. The !important display rule could not coexist with any second
+   reason to hide chrome, and opacity is already this component's idiom for the
+   same job (see .zml-lb-nav:disabled). While zoomed, ALL chrome gets out of
+   the way -- you are inspecting the photo, not the UI. "Back"/Esc still exit. */
+.zml-lb.zml-zoomed .zml-lb-nav,
+.zml-lb.zml-zoomed .zml-lb-top,
+.zml-lb.zml-zoomed .zml-lb-meta { opacity:0; pointer-events:none; }
 .zml-lb-open-in, .zml-lb-open-out { display:block; }
 
+/* the lightbox previously had NOT ONE media query -- its layout was
+   byte-identical on a 393px phone and a 2560px monitor. In landscape (or any
+   short viewport) the expanded sheet must not swallow the photo, and the top
+   chrome can afford to be tighter. */
+@media (max-height:520px) {
+  .zml-lb-top { padding:8px 12px; padding-top:calc(8px + env(safe-area-inset-top,0px)); }
+  .zml-lb.zml-meta-open .zml-lb-meta-body { max-height:52vh; }
+  .zml-lb-meta-toggle { min-height:40px; }
+}
+/* Pointer-precise devices get a slightly larger hit area on the arrows and do
+   not need the phone-sized tap targets crowding a wide photo. */
+@media (min-width:900px) {
+  .zml-lb.zml-meta-open .zml-lb-meta-body { max-height:min(56vh,520px); }
+}
+
+/* the arrows used to sit in the black margin, where a translucent-white
+   pill was perfectly legible. Now the photo runs edge to edge and they sit ON
+   it -- and white-on-white over a bright sky is invisible. Same problem the
+   title had, same answer: give them their own dark scrim. */
 .zml-lb-nav { position:absolute; top:50%; transform:translateY(-50%); width:48px; height:48px;
   display:flex; align-items:center; justify-content:center; border:none; border-radius:50%;
-  background:rgba(255,255,255,0.12); color:#fff; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-.zml-lb-nav:hover { background:rgba(255,255,255,0.24); }
+  background:rgba(8,10,16,0.55); color:#fff; cursor:pointer;
+  -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+  box-shadow:0 1px 6px rgba(0,0,0,0.35);
+  transition:background 150ms, opacity 180ms ease;
+  -webkit-tap-highlight-color:transparent; }
+.zml-lb-nav:hover { background:rgba(8,10,16,0.75); }
 .zml-lb-nav:disabled { opacity:0; pointer-events:none; }
 .zml-lb-prev { left:10px; } .zml-lb-next { right:10px; }
 
-.zml-lb-meta { padding:12px 16px calc(16px + env(safe-area-inset-bottom,0px));
-  background:rgba(0,0,0,0.38); color:#E5E7EB; }
-.zml-lb-row { font-size:13px; color:#CBD5E1; margin-bottom:10px; }
+/* rotate action bar: floats near the stage foot while a rotation is
+   pending. Reset undoes the preview; Save commits it (server re-encode). Fixed
+   to the viewport (the overlay has no transform) so it clears the nav + meta. */
+.zml-lb-rotate-bar {
+  position:fixed; left:50%; bottom:calc(96px + env(safe-area-inset-bottom,0px));
+  transform:translateX(-50%); z-index:12;
+  display:flex; align-items:center; gap:10px;
+  padding:8px 10px 8px 16px; border-radius:var(--ref-radius-lg,16px); /* v2.10.3: not an oval */
+  background:rgba(8,10,16,0.86); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  box-shadow:0 6px 20px rgba(0,0,0,0.5); }
+.zml-lb-rotate-hint { color:#FFF; font-size:14px; font-weight:600; white-space:nowrap; }
+.zml-lb-rotate-reset, .zml-lb-rotate-save {
+  appearance:none; cursor:pointer; min-height:36px; padding:6px 16px; border-radius:var(--ref-radius-md,12px);
+  font-size:14px; font-weight:700; border:1px solid transparent;
+  -webkit-tap-highlight-color:transparent; }
+.zml-lb-rotate-reset { background:transparent; color:#CBD5E1; border-color:rgba(255,255,255,0.35); }
+.zml-lb-rotate-reset:hover { background:rgba(255,255,255,0.12); }
+.zml-lb-rotate-save { position:relative; background:var(--sys-brand,#2563EB); color:var(--sys-text-brand,#FFF); }
+.zml-lb-rotate-save:hover { background:var(--sys-brand-hover,#1D4ED8); }
+.zml-lb-rotate-save:disabled { opacity:0.6; cursor:default; }
+
+/* THE META PANEL IS NOW AN OVERLAY SHEET, COLLAPSED BY DEFAULT.
+   This is the single change that gives the photo its screen back. It also fixes
+   a latent bug: the panel had no max-height and the stage had min-height:0, so a
+   long read-only note grew the panel without bound and collapsed the stage
+   toward zero -- with body.zml-lb-open{overflow:hidden} and no scroller on
+   .zml-lb, that overflow was simply unreachable.
+   Collapsed it is a slim tappable summary (source + date + chevron). Expanded it
+   slides up over the photo, capped and scrollable, so it can never again steal
+   the whole viewport. --zml-kb is the iOS keyboard inset (see media.js): with a
+   fixed-position sheet the software keyboard would otherwise cover the note
+   field the user just tapped into. */
+.zml-lb-meta { position:absolute; left:0; right:0; bottom:0; z-index:3;
+  color:#E5E7EB; padding:0 16px calc(10px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(to top, rgba(8,10,16,0.90) 0%, rgba(8,10,16,0.74) 62%, rgba(8,10,16,0) 100%);
+  transform:translateY(calc(-1 * var(--zml-kb,0px)));
+  transition:opacity 180ms ease, transform 180ms ease; }
+
+.zml-lb-meta-toggle { appearance:none; -webkit-appearance:none; width:100%; border:none;
+  background:transparent; color:inherit; font:inherit; cursor:pointer; text-align:left;
+  display:flex; align-items:center; gap:10px; min-height:48px; padding:6px 2px;
+  -webkit-tap-highlight-color:transparent; }
+.zml-lb-meta-caret { flex-shrink:0; opacity:0.75; transition:transform 200ms ease; }
+.zml-lb.zml-meta-open .zml-lb-meta-caret { transform:rotate(180deg); }
+.zml-lb-meta-toggle:focus-visible { outline:2px solid rgba(255,255,255,0.6); outline-offset:2px; border-radius:8px; }
+
+/* Collapsed to zero height. media.js also sets `inert` so the note field and
+   buttons inside cannot be reached by keyboard or assistive tech while hidden --
+   max-height alone would leave them in the tab order. */
+.zml-lb-meta-body { max-height:0; overflow:hidden;
+  transition:max-height 220ms ease; }
+.zml-lb.zml-meta-open .zml-lb-meta-body { max-height:min(62vh,460px); overflow-y:auto;
+  -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+/* Collapsed, a soft gradient is right -- it should barely interrupt the photo.
+   Open, it is a real surface holding a text field, a segmented control and a
+   destructive button, so it needs opaque backing. A translucent panel over a
+   photo is where form controls become unreadable and mis-tapped. */
+.zml-lb.zml-meta-open .zml-lb-meta { background:rgba(8,10,16,0.95);
+  -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
+  box-shadow:0 -8px 32px rgba(0,0,0,0.45); border-top-left-radius:16px; border-top-right-radius:16px; }
+.zml-lb.zml-meta-open .zml-lb-meta-toggle { border-bottom:1px solid rgba(255,255,255,0.10); }
+
+.zml-lb-row { font-size:13px; color:#E2E8F0; margin:0; flex:1; min-width:0;
+  text-shadow:0 1px 3px rgba(0,0,0,0.6); }
+.zml-lb.zml-meta-open .zml-lb-row { text-shadow:none; color:#CBD5E1; }
 
 /* ── Location (tappable "Located") ──
    Sits in the dark lightbox meta area. The toggle is a quiet pill; expanding it
    reveals the place name, coordinates, a provenance chip, and the user-tap
    "Open in Maps" link. Matches the lightbox's translucent-white-on-dark idiom. */
-.zml-lb-loc { margin-bottom:12px; }
+.zml-lb-loc { margin-bottom:12px; margin-top:4px; }
 .zml-lb-loc-toggle { appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:8px;
   padding:8px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.16);
   background:rgba(255,255,255,0.08); color:#E5E7EB; font:inherit; font-size:13px; font-weight:600;
@@ -269,14 +480,12 @@ body.zml-lb-open { overflow:hidden; }
 .zml-lb-loc-open .zml-lb-loc-caret { transform:rotate(180deg); }
 
 .zml-lb-loc-detail { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
-.zml-lb-loc-loading { display:flex; align-items:center; gap:8px; font-size:13px; color:#CBD5E1; }
-.zml-lb-loc-spin { width:14px; height:14px; border-radius:50%;
-  border:2px solid rgba(255,255,255,0.35); border-top-color:#fff;
-  animation:tsmlSpin 0.7s linear infinite; display:inline-block; }
+/* the kit's loader, fitted to the dark meta sheet. */
+.zml-lb-loc-detail .zdz-loading { justify-content:flex-start; padding:2px 0; font-size:13px; color:inherit; }
 .zml-lb-loc-place { font-size:var(--ref-font-sm,17px); font-weight:600; color:#F1F5F9; line-height:1.35; }
 .zml-lb-loc-coords { font-size:12px; color:#94A3B8; font-variant-numeric:tabular-nums; }
 .zml-lb-loc-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
-.zml-lb-loc-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px;
+.zml-lb-loc-chip { display:inline-flex; align-items:center; padding:3px 9px; border-radius:var(--ref-radius-sm,8px);
   font-size:11px; font-weight:600; color:#CBD5E1; background:rgba(255,255,255,0.10);
   border:1px solid rgba(255,255,255,0.14); }
 .zml-lb-loc-maps { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; margin-top:4px;
@@ -286,7 +495,7 @@ body.zml-lb-open { overflow:hidden; }
 .zml-lb-loc-maps:hover { filter:brightness(1.08); }
 .zml-lb-loc-maps svg { flex-shrink:0; }
 
-/* ── Visibility control (owner-only) ── */
+/* ── Visibility control ── */
 .zml-lb-vis { display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px; margin-bottom:12px; }
 .zml-lb-vis-seg { display:inline-flex; gap:4px; padding:3px; border-radius:10px;
   background:rgba(255,255,255,0.10); }
@@ -318,19 +527,17 @@ body.zml-lb-open { overflow:hidden; }
 .zml-inline-status { font-size:13px; color:#86EFAC; min-height:1em; opacity:1;
   transition:opacity 150ms; }
 
-/* No-shift busy button (local .zdz-btn-busy; the theme may also define one). */
+/* No-shift busy button. v2.10.3: busy is the kit's ZDZ.ui.busy(); its look (.zdz-btn-busy) is the
+   theme's, so the private spinner that was here is gone. */
 .zml-lb-save { position:relative; appearance:none; border:none; cursor:pointer;
   padding:10px 18px; border-radius:8px; font-size:var(--ref-font-xs,15px); font-weight:600; color:#fff;
   background:var(--sys-brand,#2C5F8A); -webkit-tap-highlight-color:transparent; min-height:44px;
-  min-width:108px; /* fixed-ish box so busy spinner doesn't resize it */
+  min-width:108px; /* fixed-ish box, so the busy state never resizes it */
   display:inline-flex; align-items:center; justify-content:center; transition:filter 150ms,opacity 150ms; }
 .zml-lb-save:hover:not(:disabled):not(.zdz-btn-busy) { filter:brightness(1.08); }
 .zml-lb-save:disabled { opacity:0.5; cursor:not-allowed; }
-.zml-lb-save.zdz-btn-busy { color:transparent; pointer-events:none; opacity:1; }
-.zml-lb-save.zdz-btn-busy::after { content:""; position:absolute; width:18px; height:18px;
-  border:2px solid rgba(255,255,255,0.45); border-top-color:#fff; border-radius:50%;
-  animation:tsmlSpin 0.7s linear infinite; }
-@keyframes tsmlSpin { to { transform:rotate(360deg); } }
+.zml-lb-save.zdz-btn-busy { opacity:1; }
+.zml-inline-status.is-error { color:#FCA5A5; } /* the viewer is dark in every theme */
 
 /* ════════════════════════════════════════════════════════════════════════
    ADD PHOTOS — buttons on both surfaces
@@ -339,8 +546,8 @@ body.zml-lb-open { overflow:hidden; }
 /* Shared "Add Photos" affordance (full-screen bar + widget). Brand-filled pill,
    matches the chip/See-All idiom and the ≥36–44px tap targets used elsewhere. */
 .zml-add { appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
-  padding:8px 16px; border:none; border-radius:999px; font:inherit; font-size:var(--ref-font-xs,15px);
-  font-weight:600; line-height:1; color:#fff; background:var(--sys-brand,#2C5F8A);
+  padding:8px 16px; border:none; border-radius:var(--ref-radius-md,12px); font:inherit; font-size:var(--ref-font-xs,15px);
+  font-weight:600; line-height:1; color:var(--sys-text-brand,#fff); background:var(--sys-brand,#2C5F8A);
   -webkit-tap-highlight-color:transparent; min-height:40px; white-space:nowrap;
   transition:filter 150ms; }
 .zml-add:hover { filter:brightness(1.08); }
@@ -349,7 +556,7 @@ body.zml-lb-open { overflow:hidden; }
    it doesn't push the centered scope/chip stack around. */
 .zml-fs-bar { position:relative; }
 .zml-fs-bar .zml-add { position:absolute; top:12px; right:14px; }
-/* v2.3.1: on phones the pinned top-right Add collapses to a compact "+" so the
+/* on phones the pinned top-right Add collapses to a compact "+" so the
    top action row (Select · Add) stays uncrowded; the full label returns at
    ≥620px where the bar has room. Matches the widget's compact Add. */
 @media (max-width:619px) {
@@ -457,7 +664,7 @@ body.zml-no-scroll { overflow:hidden; }
 .zml-up-x:hover { background:var(--sys-bg-alt,#E2E8F0); color:var(--sys-text,#0F172A); }
 /* Thin per-row progress bar (shown while uploading / done). Occupies the third
    column slot in place of the remove button. */
-.zml-up-bar { width:64px; height:6px; border-radius:999px; background:var(--sys-bg-alt,#E2E8F0);
+.zml-up-bar { width:64px; height:6px; border-radius:3px; background:var(--sys-bg-alt,#E2E8F0);
   overflow:hidden; }
 .zml-up-bar-fill { display:block; height:100%; width:0; background:var(--sys-brand,#2C5F8A);
   transition:width 180ms ease; }
@@ -481,6 +688,8 @@ body.zml-no-scroll { overflow:hidden; }
 [data-theme="dark"] .zml-w-more { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); }
 [data-theme="dark"] .zml-w-more:hover { background:var(--sys-bg-alt,#0F172A); }
 [data-theme="dark"] .zml-cell { background:var(--sys-surface,#1E293B); }
+[data-theme="dark"] .zml-grid-cards .zml-cell { background:var(--sys-surface,#1E293B); }
+[data-theme="dark"] .zml-cell-src { background:rgba(56,189,248,0.16); color:#7DD3FC; } /* v2.7.0 footer pill */
 
 @media (prefers-color-scheme:dark) {
   [data-theme="system"] .zml-fs,
@@ -491,6 +700,7 @@ body.zml-no-scroll { overflow:hidden; }
   [data-theme="system"] .zml-w-more { background:var(--sys-surface,#1E293B); border-color:var(--sys-border,#334155); }
   [data-theme="system"] .zml-w-more:hover { background:var(--sys-bg-alt,#0F172A); }
   [data-theme="system"] .zml-cell { background:var(--sys-surface,#1E293B); }
+  [data-theme="system"] .zml-cell-src { background:rgba(56,189,248,0.16); color:#7DD3FC; } /* v2.7.0 footer pill */
 }
 
 /* Upload sheet — dark fallbacks (it uses --sys-* tokens, so it mostly tracks
@@ -520,13 +730,14 @@ body.zml-no-scroll { overflow:hidden; }
 [data-theme="sunlight"] .zml-cell { border:2px solid #000; }
 [data-theme="sunlight"] .zml-cell-badge { background:#000; }
 [data-theme="sunlight"] .zml-cell-vis { background:#000; }
+[data-theme="sunlight"] .zml-cell-src { background:#000; color:#fff; } /* v2.7.0 footer pill — high-contrast */
 [data-theme="sunlight"] .zml-seeall { color:#000; text-decoration:underline; }
 [data-theme="sunlight"] .zml-w-more { background:#fff; color:#000; border:2px solid #000; }
 [data-theme="sunlight"] .zml-lb-save { background:#000; }
 [data-theme="sunlight"] .zml-vis-btn.zml-active { background:#000; }
 
 /* ════════════════════════════════════════════════════════════════════════
-   v2.2.0 — SELECTION MODE + DELETE (granular or bulk, double-confirmed)
+   SELECTION MODE + DELETE (granular or bulk, double-confirmed)
    ════════════════════════════════════════════════════════════════════════ */
 
 /* "Select" toggle in the gallery bar (mirrors the Add button, neutral). */
@@ -618,22 +829,12 @@ body.zml-no-scroll { overflow:hidden; }
   transition:background 150ms,color 150ms; }
 .zml-lb-del:hover:not(:disabled) { background:rgba(220,38,38,0.18); color:#FECACA; }
 .zml-lb-del:disabled { opacity:0.6; cursor:not-allowed; }
-.zml-lb-del.zdz-btn-busy { color:transparent; pointer-events:none; }
-.zml-lb-del.zdz-btn-busy::after { content:""; position:absolute; left:50%; top:50%;
-  width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%;
-  border:2px solid rgba(255,255,255,0.35); border-top-color:#FFF;
-  animation:zml-spin 700ms linear infinite; }
-@keyframes zml-spin { to { transform:rotate(360deg); } }
-
-/* ── Toast (top-level result pill) ── */
-.zml-toast { position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom,0px));
-  transform:translate(-50%, 16px); z-index:100090; max-width:min(92vw, 420px);
-  padding:11px 18px; border-radius:999px; font-size:var(--ref-font-xs,15px); font-weight:600;
-  font-family:var(--sys-font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
-  background:rgba(15,23,42,0.92); color:#F8FAFC; box-shadow:0 8px 24px rgba(0,0,0,0.30);
-  opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
-.zml-toast.zml-toast-show { opacity:1; transform:translate(-50%, 0); }
-.zml-toast.zml-toast-err { background:rgba(153,27,27,0.95); }
+/* the busy look is the theme's .zdz-btn-busy (ZDZ.ui.busy), and results are the kit's toasts
+   (ZDZ.ui.toast). The theme's toast row sits under this app's top-level layers (the viewer, the upload and
+   confirm sheets), so while one of them is open it is lifted above them; otherwise "Rotation saved" or
+   "Photo deleted" would be hidden behind the photo. */
+html body.zml-lb-open #toast-container,
+html body.zml-no-scroll #toast-container { z-index:100090; }
 
 /* Dark-theme polish for the new surfaces. */
 [data-theme="dark"] .zml-select-toggle,
@@ -641,3 +842,103 @@ body.zml-no-scroll { overflow:hidden; }
 [data-theme="dark"] .zml-cf-cancel { background:var(--sys-surface,#0F172A); }
 [data-theme="dark"] .zml-selbar,
 [data-theme="dark"] .zml-cf-card { background:var(--sys-surface,#0F172A); }
+
+/* ── v2.5.0: keyword tags (lightbox) ──────────────────────────────────────── */
+.zml-lb-tags-wrap { margin-top: 12px; }
+#zml-lb-tags-label { display: block; margin-bottom: 6px; }
+.zml-lb-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.zml-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: var(--ref-radius-sm, 8px);
+  font-size: 13px; line-height: 1.2;
+  color: var(--sys-tint-neutral-fg, #334155);
+  background: var(--sys-tint-neutral-bg, #F1F5F9);
+  border: 1px solid var(--sys-tint-border, rgba(15,23,42,.12));
+}
+.zml-tag-label { white-space: nowrap; }
+.zml-tag-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; min-width: 18px; padding: 0; margin: 0 -3px 0 1px;
+  font-size: 15px; line-height: 1; color: inherit; background: transparent;
+  border: 0; border-radius: 50%; cursor: pointer; opacity: .7;
+}
+.zml-tag-x:hover, .zml-tag-x:focus { opacity: 1; background: rgba(15,23,42,.10); }
+.zml-tag-empty { font-size: 13px; color: var(--sys-text-ter, #94A3B8); }
+.zml-lb-tag-add { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.zml-lb-tag-input {
+  flex: 1 1 auto; min-width: 0; font: inherit; font-size: 17px;
+  min-height: 40px; padding: 7px 11px;
+  color: var(--sys-text); background: var(--sys-surface-raised);
+  border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px);
+}
+.zml-lb-tag-btn {
+  flex: 0 0 auto; font: inherit; font-size: 15px; font-weight: 600;
+  min-height: 40px; padding: 7px 15px;
+  color: #fff; background: var(--sys-brand); border: 1px solid var(--sys-brand);
+  border-radius: var(--ref-radius-sm, 6px); cursor: pointer;
+}
+.zml-lb-tag-btn[disabled], .zml-lb-tag-btn.zdz-btn-busy { opacity: .6; cursor: default; }
+
+/* ── v2.6.0: bulk-tag (selection bar button + prompt) ─────────────────────── */
+.zml-selbar-tag {
+  font: inherit; font-size: 14px; font-weight: 600;
+  min-height: 38px; padding: 7px 14px;
+  color: var(--sys-text); background: var(--sys-surface-raised);
+  border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px);
+  cursor: pointer;
+}
+.zml-selbar-tag[disabled] { opacity: .5; cursor: default; }
+.zml-tp-input {
+  display: block; width: 100%; box-sizing: border-box; margin: 10px 0 4px;
+  font: inherit; font-size: 17px; min-height: 44px; padding: 9px 12px;
+  color: var(--sys-text); background: var(--sys-surface-raised);
+  border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px);
+}
+
+/* ── v2.9.0 — Share-to-teammate dialog + Share buttons ─────────────────────
+ * The dialog reuses the confirm-frame chrome (.zml-cf / .zml-cf-card /
+ * .zml-cf-actions) that the tag prompt already styles; these rules cover only
+ * the share-specific inner elements. The Share buttons reuse the existing
+ * .zml-selbar-* and .zml-lb-btn base styles. */
+.zml-sp-search{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid rgba(127,127,127,.4);border-radius:8px;font-size:14px;margin-bottom:8px;background:transparent;color:inherit}
+.zml-sp-list{max-height:240px;overflow:auto;border:1px solid rgba(127,127,127,.22);border-radius:8px;margin-bottom:8px}
+.zml-sp-person{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;color:inherit;cursor:pointer;border-bottom:1px solid rgba(127,127,127,.14)}
+.zml-sp-person:last-child{border-bottom:0}
+.zml-sp-person:hover{background:rgba(127,127,127,.10)}
+.zml-sp-person.is-sel{background:rgba(56,132,255,.16);box-shadow:inset 3px 0 0 rgba(56,132,255,.9)}
+.zml-sp-av{flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:rgba(127,127,127,.22)}
+.zml-sp-nm{flex:1 1 auto;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zml-sp-empty{padding:14px;text-align:center;font-size:13px;opacity:.7}
+.zml-sp-note{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid rgba(127,127,127,.4);border-radius:8px;font-size:14px;resize:vertical;background:transparent;color:inherit;font-family:inherit}
+.zml-lb-share svg{display:block}
+
+/* the widget's Load more sits on a white surface; the theme's busy mark (brand ink) was white
+   on white. It takes the button's text color. */
+.zml-w-more.zdz-btn-busy::after { color: var(--sys-text); }
+
+/* ── v2.11.0: Belongs to (administrators) ───────────────────────────────── */
+.zml-lb-owner { margin-top: 12px; }
+.zml-lb-owner-sel {
+  flex: 1 1 auto; min-width: 0; font: inherit; font-size: 17px;
+  min-height: 40px; padding: 7px 11px;
+  color: var(--sys-text); background: var(--sys-surface-raised);
+  border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px);
+}
+.zml-lb-owner-up { margin: 6px 0 0; font-size: 13px; color: var(--sys-text-sec); }
+.zml-lb-owner-up:empty { display: none; }
+
+/* ── v2.12.0: Draw, and hide or show the marks ─────────────────────── */
+.zml-lb-draw svg, .zml-lb-marks svg { display: block; }
+.zml-lb-marks[aria-pressed="true"] { opacity: .6; }
+/* While someone draws (the theme's drawing bar is open), the viewer's own chrome gets out of the photo's way
+  : the top bar, the details sheet, the arrows and the rotate bar. */
+html.zdz-marking .zml-lb-top, html.zdz-marking .zml-lb-meta, html.zdz-marking .zml-lb-nav,
+html.zdz-marking .zml-lb-rotate-bar { visibility: hidden; }
+
+/* the Drawings button carries how many drawings this person sees; the tile's drawing badge sits top-centre,
+   clear of the corner badges (visibility, note, source, uploader). */
+.zml-lb-marks { position: relative; }
+.zml-lb-marks-n { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--sys-tint-warning-bg, rgba(255,179,0,.9)); color: var(--sys-tint-warning-fg, #1f2933); font-size: 11px; line-height: 16px; font-weight: 700; text-align: center; }
+.zml-lb-marks-n:empty { display: none; }
+.zml-cell-thumb > .zdz-marks-badge { right: auto; bottom: auto; top: 6px; left: 50%; transform: translateX(-50%); }

@@ -502,6 +502,12 @@ class ZIB_Ingest {
 				'received_at'     => $norm['received_at'],
 			), (string) $body['content'], (string) $body['format'] );
 		}
+
+		// Mail FROM a supplier on Stock's list -> Stock's Incoming (order number + lines only; never the
+		// body or the subject). Owner-scoped (this message's own owner); fail-soft; nothing without Stock.
+		if ( class_exists( 'ZIB_Supplier_Feed' ) ) {
+			ZIB_Supplier_Feed::on_stored( $owner, (int) $acct->id, $norm, (string) $body['content'], (string) $body['format'], $class );
+		}
 	}
 
 	private static function delete_by_ms_id( int $acct_id, string $ms_id ): void {

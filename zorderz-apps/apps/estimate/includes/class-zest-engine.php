@@ -33,11 +33,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZEST_Estimate_Engine {
 
-	/** @var ZEST_Poe_Client */
+	/** @var ZEST_AI_Provider */
 	private $ai;
 
 	public function __construct( $ai = null ) {
-		$this->ai = ( $ai instanceof ZEST_AI_Provider ) ? $ai : new ZEST_Poe_Client();
+		if ( $ai instanceof ZEST_AI_Provider ) {
+			$this->ai = $ai;
+		} else {
+			// the platform's Ai router where it is set up, else the chat gateway (ZEST_Router_Client::provider)
+			$this->ai = class_exists( 'ZEST_Router_Client' ) ? ZEST_Router_Client::provider() : new ZEST_Poe_Client();
+		}
 	}
 
 	public function ai(): ZEST_AI_Provider {
@@ -57,7 +62,12 @@ class ZEST_Estimate_Engine {
 	 */
 	public function parse( string $input, array $context = array() ): array {
 		$out = array( 'ok' => false, 'estimate' => array(), 'rejected' => array(), 'warnings' => array(), 'error' => '' );
-		$input = trim( $input );
+		/**
+		 * The words of a parse before anything reads them (gate codes are sealed and cut here, ZEST_Sealed).
+		 *
+		 * @param string $input What the salesperson typed or said.
+		 */
+		$input = trim( (string) apply_filters( 'zest_parse_input', $input ) );
 		if ( '' === $input ) {
 			$out['error'] = 'Nothing to parse.';
 			return $out;
@@ -251,13 +261,12 @@ class ZEST_Estimate_Engine {
 	 * ============================================================== */
 
 	/**
-	 * Apply a natural-language modification to an existing estimate's line items (Plan 02
-	 * E1/E2/E4/E6). The model proposes; the caller previews and confirms; conventions and
+	 * Apply a natural-language modification to an existing estimate's line items. The model proposes; the caller previews and confirms; conventions and
 	 * pricing are re-resolved server-side on output. The tail is:
 	 *   normalize prior (wire→model) → [vision: transcribe photos] → model applies the
 	 *   instruction → conflict guard → PRESERVATION LOCK → fold measurements → fill_prices.
 	 *
-	 * The preservation lock (E2) is armed from the operator's WORDS: a "leave the pricing"
+	 * The preservation lock is armed from the operator's WORDS: a "leave the pricing"
 	 * instruction restores the priced lines while keeping learned measurements; a named
 	 * line edit stands the lock down. Vision measurements land in the lock-IGNORED
 	 * dimensions/measurements fields, so pricing is preserved while measurements populate.
@@ -295,7 +304,7 @@ class ZEST_Estimate_Engine {
 			? Zdz_Doc_Preservation::normalize_provider_items( $existing_items )
 			: $existing_items;
 
-		// E6 — two-pass vision on update: transcribe the photographed measurement sheet.
+		// Two-pass vision on update: transcribe the photographed measurement sheet.
 		$transcript       = '';
 		$measurement_rows = array();
 		if ( ! empty( $images ) ) {
@@ -317,7 +326,7 @@ class ZEST_Estimate_Engine {
 			$model_items = $original_model;
 		}
 
-		// E4 — impossible-product conflict guard on the interpreted stream + items.
+		// Impossible-product conflict guard on the interpreted stream + items.
 		$conflict_text = trim( $instruction . ' ' . $transcript );
 		$conf          = ZEST_Catalog::detect_conflicts( $conflict_text, $model_items );
 		if ( ! empty( $conf['needs_review'] ) ) {
@@ -330,7 +339,7 @@ class ZEST_Estimate_Engine {
 			error_log( sprintf( 'Zorderz Estimates: product_conflict on update — %d contradiction(s); reference neutralized to ZIP-only.', count( (array) $conf['conflicts'] ) ) );
 		}
 
-		// E2 — the preservation lock (armed from the operator's words).
+		// The preservation lock (armed from the operator's words).
 		if ( class_exists( 'Zdz_Doc_Preservation' ) ) {
 			$lock        = Zdz_Doc_Preservation::apply( $original_model, $model_items, $instruction, $context );
 			$model_items = $lock['line_items'];
@@ -374,7 +383,7 @@ class ZEST_Estimate_Engine {
 		return is_array( $items ) ? $items : null;
 	}
 
-	/** Pass-1 faithful transcription of photographed field notes (E6). '' on failure. */
+	/** Pass-1 faithful transcription of photographed field notes. '' on failure. */
 	private function transcribe_field_notes( array $images, array $context ): string {
 		$images = array_values( array_filter( array_map( 'strval', $images ) ) );
 		if ( empty( $images ) || ! $this->ai->is_configured() ) {
@@ -441,7 +450,7 @@ class ZEST_Estimate_Engine {
 	/**
 	 * Remove only ACCIDENTAL duplicate METADATA lines (e.g. two identical location
 	 * lines from a double-parse). Product/service duplicates are preserved because the
-	 * line policy declares duplicates intentional (crosswalk D22). No merging, ever.
+	 * line policy declares duplicates intentional. No merging, ever.
 	 */
 	public function dedup_line_items( array $items ): array {
 		if ( class_exists( 'ZDZ_Doc_Conventions' ) && 'never' !== ZDZ_Doc_Conventions::get( 'estimate.line_policy.merge', 'never' ) ) {
@@ -497,7 +506,17 @@ class ZEST_Estimate_Engine {
 			$accepted[] = $li;
 		}
 
+		// the home's door handle side is the team's, never the customer's: kept on the line, its words taken off the text
+		if ( class_exists( 'ZEST_Door_Handle' ) ) {
+			$accepted = ZEST_Door_Handle::apply( $accepted );
+		}
 		$accepted = $this->fill_prices( $accepted, $context );
+		// the business's price book prices its families' lines (never an operator's $0 stub)
+		if ( empty( $context['is_operator_mode'] ) && class_exists( 'ZEST_Price_Book_Lines' ) ) {
+			$pb       = ZEST_Price_Book_Lines::price( $accepted );
+			$accepted = $pb['items'];
+			$warnings = array_merge( $warnings, $pb['flags'] );
+		}
 		$accepted = $this->dedup_line_items( $accepted );
 
 		$estimate = array(
@@ -509,7 +528,7 @@ class ZEST_Estimate_Engine {
 			'reference'      => (string) ( $data['reference'] ?? '' ),
 		);
 
-		// E4 — impossible-product conflict guard (create + interpreted-vision paths run
+		// Impossible-product conflict guard (create + interpreted-vision paths run
 		// through here). Scans the raw stream and each single line item; on a contradiction
 		// it forces ZIP-only (never re-guessed to a category) and flags needs_review. With
 		// the conflict-pairs config EMPTY (Core default) this is inert — output unchanged.
@@ -886,9 +905,15 @@ class ZEST_Estimate_Engine {
 		$p[] = $this->customer_extraction_block();
 		$p[] = $this->location_line_block();
 		$p[] = ZEST_Catalog::prompt_block();          // catalog (empty => omitted)
+		if ( ! $operator_new && class_exists( 'ZEST_Price_Book_Lines' ) ) {
+			$p[] = ZEST_Price_Book_Lines::prompt_block();   // the price book's families (prices only)
+		}
 		$p[] = $this->locality_lexicon_block();       // OCR ground truth (from Service Area)
 		$p[] = $this->line_preservation_block();
 		$p[] = $this->rules_block();                  // rendered tenant rules
+		if ( class_exists( 'ZEST_Door_Handle' ) ) {
+			$p[] = ZEST_Door_Handle::prompt_block();  // '' unless the business uses it
+		}
 		$p[] = $this->output_schema_block( $operator_new );
 
 		return implode( "\n\n", array_filter( array_map( 'trim', $p ) ) );

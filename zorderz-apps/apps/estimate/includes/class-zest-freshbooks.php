@@ -8,7 +8,7 @@
  * helpers: resolving a provider status integer to a platform SIGNAL (never treating the
  * integer as state), cleaning an email to a valid address or '', and building an estimate
  * payload. No account slug, deep-link literal or status integer is hardcoded — the status
- * map is tenant/provider config read through a filter (crosswalk C14).
+ * map is tenant/provider config read through a filter.
  *
  * @package Zorderz\Estimate
  */
@@ -106,6 +106,14 @@ class ZEST_FreshBooks {
 			return $out;
 		}
 
+		/**
+		 * A new estimate on its way to the billing system (gate codes sealed and cut, ZEST_Sealed).
+		 *
+		 * @param array $estimate The estimate as the app has it.
+		 * @param array $ctx      { initials, parenthetical, user_id }
+		 */
+		$estimate = (array) apply_filters( 'zest_billing_outgoing_estimate', $estimate, $ctx );
+
 		// House style on output only.
 		if ( class_exists( 'ZDZ_Doc_Conventions' ) ) {
 			$estimate = ZDZ_Doc_Conventions::apply_on_output( $estimate, $ctx );
@@ -129,7 +137,7 @@ class ZEST_FreshBooks {
 	}
 
 	/**
-	 * Update an existing billing estimate through the shared client (Plan 02 E1). Applies
+	 * Update an existing billing estimate through the shared client. Applies
 	 * document conventions ON OUTPUT, then maps the model shape → the provider WIRE shape
 	 * at THIS boundary — the one place the wire shape is authoritative:
 	 *   unit_price → unit_cost['amount'], quantity → qty, description → name,
@@ -158,8 +166,8 @@ class ZEST_FreshBooks {
 			$estimate = ZDZ_Doc_Conventions::apply_on_output( $estimate, $ctx );
 		}
 
-		// Model → WIRE mapping (the provider boundary owns the wire shape).
-		$wire = self::to_wire_estimate( $estimate );
+		// Model → WIRE mapping (the provider boundary owns the wire shape); every word cut of gate codes on its way.
+		$wire = (array) apply_filters( 'zest_billing_outgoing', self::to_wire_estimate( $estimate ), 'estimate', (string) $billing_doc_id );
 
 		try {
 			if ( method_exists( $client, 'update_estimate' ) ) {

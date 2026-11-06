@@ -23,8 +23,8 @@ class ZSTOCK_App implements \Zorderz\Widget_App_Interface {
 			'icon'        => 'package',
 			'cat'         => 'Field',
 			'cc'          => '#7C3AED',
-			'desc'        => 'Inventory tracking, supplier-invoice parsing, and low-stock alerts.',
-			'description' => 'Inventory tracking, supplier-invoice parsing, and low-stock alerts.',
+			'desc'        => 'Inventory, incoming supplier orders, counts and low-stock alerts.',
+			'description' => 'Inventory, incoming supplier orders, counts and low-stock alerts.',
 			// Admin/field tool — offered to admin-tier and field roles; live access is per-user.
 			'roles'       => array( 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_tech' ),
 			'bridge_type' => 'inline_widget',
@@ -55,6 +55,8 @@ class ZSTOCK_App implements \Zorderz\Widget_App_Interface {
 				'userName' => $user ? $user->display_name : '',
 				'version'  => ZSTOCK_VERSION,
 				'dashUrl'  => admin_url( 'admin.php?page=zstock-dashboard' ),
+				'appId'    => ZSTOCK_APP_ID,
+				'canWrite' => ! ZSTOCK_Orders::is_kiosk( $user_id ),
 			)
 		);
 
@@ -64,12 +66,19 @@ class ZSTOCK_App implements \Zorderz\Widget_App_Interface {
 			<div class="zstock-w-stats">
 				<div class="zstock-w-stat" data-stat="total"><span class="zstock-w-stat-val">--</span><span class="zstock-w-stat-label"><?php esc_html_e( 'Total Items', 'zorderz' ); ?></span></div>
 				<div class="zstock-w-stat" data-stat="low"><span class="zstock-w-stat-val">--</span><span class="zstock-w-stat-label"><?php esc_html_e( 'Low Stock', 'zorderz' ); ?></span></div>
-				<div class="zstock-w-stat" data-stat="pending"><span class="zstock-w-stat-val">--</span><span class="zstock-w-stat-label"><?php esc_html_e( 'Pending Orders', 'zorderz' ); ?></span></div>
+				<div class="zstock-w-stat" data-stat="pending"><span class="zstock-w-stat-val">--</span><span class="zstock-w-stat-label"><?php esc_html_e( 'Incoming', 'zorderz' ); ?></span></div>
 			</div>
 			<div class="zstock-w-actions">
-				<button class="zstock-w-btn zstock-w-btn-primary" data-action="upload" type="button"><?php esc_html_e( 'Upload Invoice', 'zorderz' ); ?></button>
-				<button class="zstock-w-btn" data-action="cycle" type="button"><?php esc_html_e( 'Cycle Count', 'zorderz' ); ?></button>
+				<button class="zstock-w-btn zstock-w-btn-primary" data-action="new-order" type="button"><?php esc_html_e( 'New order', 'zorderz' ); ?></button>
+				<button class="zstock-w-btn" data-action="cycle" type="button"><?php esc_html_e( 'Count', 'zorderz' ); ?></button>
+				<button class="zstock-w-btn" data-action="look-email" type="button" hidden><?php esc_html_e( 'Look in my email', 'zorderz' ); ?></button>
+				<button class="zstock-w-btn" data-action="upload" type="button"><?php esc_html_e( 'Upload Invoice', 'zorderz' ); ?></button>
 				<button class="zstock-w-btn" data-action="sync" type="button"><?php esc_html_e( 'Sync', 'zorderz' ); ?></button>
+			</div>
+			<div class="zstock-w-panel" hidden></div>
+			<div class="zstock-w-section zstock-w-matches" hidden>
+				<h4 class="zstock-w-section-title"><?php esc_html_e( 'Found in Stock', 'zorderz' ); ?></h4>
+				<div class="zstock-w-list" data-list="matches"></div>
 			</div>
 			<input type="file" class="zstock-w-upload-input" accept="image/jpeg,image/png,image/webp,application/pdf,image/gif" style="display:none" />
 			<div class="zstock-w-cycle" style="display:none">
@@ -77,6 +86,10 @@ class ZSTOCK_App implements \Zorderz\Widget_App_Interface {
 				<input class="zstock-w-cycle-count" type="number" min="0" step="1" placeholder="0" />
 				<button class="zstock-w-btn zstock-w-btn-primary" data-action="submit-cycle" type="button"><?php esc_html_e( 'Submit', 'zorderz' ); ?></button>
 				<button class="zstock-w-btn" data-action="cancel-cycle" type="button"><?php esc_html_e( 'Cancel', 'zorderz' ); ?></button>
+			</div>
+			<div class="zstock-w-section">
+				<h4 class="zstock-w-section-title"><?php esc_html_e( 'Incoming', 'zorderz' ); ?></h4>
+				<div class="zstock-w-list" data-list="incoming"><p class="zstock-w-empty"><?php esc_html_e( 'Loading…', 'zorderz' ); ?></p></div>
 			</div>
 			<div class="zstock-w-section">
 				<h4 class="zstock-w-section-title"><?php esc_html_e( 'Low Stock Alerts', 'zorderz' ); ?></h4>

@@ -1,0 +1,113 @@
+{
+ "role": "write",
+ "note": "Made-up names and a made-up 555 number (it goes out coded and must come back).",
+ "cases": [
+  {
+   "id": "wr-thanks",
+   "system": "You write short, warm, plain messages for a small company's customers. No exclamation marks. Keep any ⟦…⟧ codes exactly as written: they stand for details the site fills in.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a two-sentence thank-you to Riley Example for choosing us for their new shelving. Sign it \"The Example Co team\"."
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "thank",
+     "Example Co team"
+    ],
+    "max_words": 70
+   },
+   "example_answer": "Thank you, from the Example Co team."
+  },
+  {
+   "id": "wr-callback",
+   "system": "You write short, warm, plain messages for a small company's customers. No exclamation marks. Keep any ⟦…⟧ codes exactly as written: they stand for details the site fills in.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write one sentence asking Riley Example to call us back at 555-0142 to book the install."
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "555-0142"
+    ],
+    "max_words": 45
+   },
+   "example_answer": "Answer: 555-0142."
+  },
+  {
+   "id": "wr-summary",
+   "system": "Summarize call notes for a colleague in one sentence.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Notes: customer Jordan Sample wants a quote for two cabinets, is home Tuesday after 2, prefers text over calls."
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "Tuesday"
+    ],
+    "max_words": 40
+   },
+   "example_answer": "Answer: Tuesday."
+  },
+  {
+   "id": "wr-subject",
+   "system": "You write short, warm, plain messages for a small company's customers. No exclamation marks. Keep any ⟦…⟧ codes exactly as written: they stand for details the site fills in.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Give a subject line, under 8 words, for a survey email asking how the shelving install went."
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "subject": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "subject"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "install"
+    ],
+    "max_words": 12
+   },
+   "example_answer": "{\"subject\": \"How did your shelving install go\"}"
+  },
+  {
+   "id": "wr-plain",
+   "system": "Rewrite in plain words, one sentence, same meaning.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Pursuant to our prior correspondence, the installation appointment has been rescheduled to the subsequent Thursday."
+    }
+   ],
+   "max_output": 1500,
+   "expect": {
+    "contains": [
+     "Thursday"
+    ],
+    "not_contains": [
+     "pursuant",
+     "subsequent"
+    ],
+    "max_words": 25
+   },
+   "example_answer": "Answer: Thursday."
+  }
+ ]
+}

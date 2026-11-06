@@ -21,6 +21,8 @@ class ZSV_Dashboard {
 		add_action( 'wp_ajax_zsv_run_batch', array( __CLASS__, 'ajax_run_batch' ) );
 		add_action( 'wp_ajax_zsv_sync', array( __CLASS__, 'ajax_sync' ) );
 		add_action( 'wp_ajax_zsv_send_invites', array( __CLASS__, 'ajax_send_invites' ) );
+		add_action( 'wp_ajax_zsv_send_invite', array( __CLASS__, 'ajax_send_invite' ) );
+		add_action( 'wp_ajax_zsv_send_log', array( __CLASS__, 'ajax_send_log' ) );
 		add_action( 'wp_ajax_zsv_exclude', array( __CLASS__, 'ajax_exclude' ) );
 	}
 
@@ -80,7 +82,11 @@ class ZSV_Dashboard {
 	public static function ajax_run_batch(): void {
 		self::guard();
 		$manager = new ZSV_Survey_Manager();
-		wp_send_json_success( $manager->run_batch() );
+		$stats   = $manager->run_batch();
+		if ( ! empty( $stats['created'] ) ) {
+			zsv_usage( 'survey_batch_created' );
+		}
+		wp_send_json_success( $stats );
 	}
 
 	/** Sync operator notes for open leads (bounded to the sync window). */
@@ -114,49 +120,137 @@ class ZSV_Dashboard {
 		wp_send_json_success( array( 'synced' => count( $results ) ) );
 	}
 
+	/** Seconds into a request after which no further customer's e-mail is started. */
+	const SEND_SOFT_LIMIT_S = 30;
+
 	/**
-	 * Send invites to the given lead ids. The status guard is enforced per lead by the
-	 * manager (an id list cannot bypass it). Each successful invite closes the loop.
+	 * Send ONE customer's review e-mail. The page sends one customer per request, in order,
+	 * so a slow CRM on one customer never stops the rest. The status guard is enforced by the
+	 * manager (an id cannot bypass it); the CRM's part runs after the e-mail under its own
+	 * short budget, and what it could not do is owed, never lost.
+	 *
+	 * @return array{id:int,result:string,reason:string,crm:string}
+	 */
+	public static function send_one( ZSV_Survey_Manager $manager, int $lead_id ): array {
+		global $wpdb;
+		$leads = ZSV_DB::leads_table();
+		$lead  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$leads} WHERE id = %d", $lead_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $leads is $wpdb->prefix plus a fixed table name; the id is a placeholder.
+		if ( ! $lead ) {
+			return array( 'id' => $lead_id, 'result' => 'skipped', 'reason' => 'not_found', 'crm' => 'none' );
+		}
+		// The invite guard is the state, not the request shape.
+		if ( ! empty( $lead['email_sent_at'] ) ) {
+			return array( 'id' => $lead_id, 'result' => 'skipped', 'reason' => 'already_invited', 'crm' => 'none' );
+		}
+		$res = $manager->send_invite( $lead );
+		if ( empty( $res['sent'] ) ) {
+			$reason = (string) $res['reason'];
+			return array( 'id' => $lead_id, 'result' => 'send_failed' === $reason ? 'failed' : 'skipped', 'reason' => $reason, 'crm' => 'none' );
+		}
+		$wpdb->update(
+			$leads,
+			array( 'email_sent_at' => current_time( 'mysql' ), 'email_type' => (string) $res['channel'] ),
+			array( 'id' => $lead_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+		zsv_usage( 'survey_emails_sent', $lead_id );
+		// Emailing is a satisfactory signal → close as Won with a reason (owed when it fails).
+		$crm = ! empty( $lead['crm_lead_id'] ) ? $manager->after_send_bookkeeping( $lead_id, (int) $lead['crm_lead_id'], (string) $res['channel'] ) : 'none';
+		return array( 'id' => $lead_id, 'result' => 'sent', 'reason' => '', 'crm' => $crm );
+	}
+
+	/** One customer per request (the widget sends them in order and shows "Sending 2 of 6"). */
+	public static function ajax_send_invite(): void {
+		self::guard();
+		$id = isset( $_POST['lead_id'] ) ? (int) $_POST['lead_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in self::guard(); the id is cast to int.
+		if ( $id < 1 ) {
+			wp_send_json_error( 'No lead selected' );
+		}
+		wp_send_json_success( self::send_one( new ZSV_Survey_Manager(), $id ) );
+	}
+
+	/**
+	 * Several customers in one request (older callers). Each goes through send_one(); after
+	 * SEND_SOFT_LIMIT_S no further customer is started, and those are answered "not reached".
 	 */
 	public static function ajax_send_invites(): void {
 		self::guard();
-		$ids = isset( $_POST['lead_ids'] ) ? array_map( 'intval', (array) $_POST['lead_ids'] ) : array();
+		$ids = isset( $_POST['lead_ids'] ) ? array_values( array_unique( array_filter( array_map( 'intval', (array) $_POST['lead_ids'] ) ) ) ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in self::guard(); each id is cast to int.
 		if ( empty( $ids ) ) {
 			wp_send_json_error( 'No leads selected' );
 		}
-		global $wpdb;
-		$leads   = ZSV_DB::leads_table();
 		$manager = new ZSV_Survey_Manager();
-		$sent    = 0;
-		$held    = array();
-		$in      = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-		$rows    = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$leads} WHERE id IN ($in)", ...$ids ), ARRAY_A );
-
-		foreach ( (array) $rows as $lead ) {
-			// The invite guard is the state, not the request shape.
-			if ( ! empty( $lead['email_sent_at'] ) ) {
-				$held[] = array( 'id' => (int) $lead['id'], 'reason' => 'already_invited' );
+		$t0      = microtime( true );
+		$out     = array();
+		foreach ( $ids as $id ) {
+			if ( microtime( true ) - $t0 > self::SEND_SOFT_LIMIT_S ) {
+				$out[] = array( 'id' => $id, 'result' => 'not_reached', 'reason' => 'time', 'crm' => 'none' );
 				continue;
 			}
-			$res = $manager->send_invite( $lead );
-			if ( ! empty( $res['sent'] ) ) {
-				$wpdb->update(
-					$leads,
-					array( 'email_sent_at' => current_time( 'mysql' ), 'email_type' => (string) $res['channel'] ),
-					array( 'id' => (int) $lead['id'] ),
-					array( '%s', '%s' ),
-					array( '%d' )
-				);
-				// Emailing is a satisfactory signal → close as Won with a reason.
-				if ( ! empty( $lead['crm_lead_id'] ) ) {
-					$manager->mark_lead_won_with_reason( (int) $lead['id'], (int) $lead['crm_lead_id'], 'emailed' );
-				}
-				$sent++;
-			} else {
-				$held[] = array( 'id' => (int) $lead['id'], 'reason' => (string) $res['reason'] );
+			$out[] = self::send_one( $manager, $id );
+		}
+		self::log_press( $out );
+		$sent = count( array_filter( $out, function ( $r ) { return 'sent' === $r['result']; } ) );
+		$held = array();
+		foreach ( $out as $r ) {
+			if ( 'sent' !== $r['result'] ) {
+				$held[] = array( 'id' => $r['id'], 'reason' => $r['reason'] );
 			}
 		}
-		wp_send_json_success( array( 'sent' => $sent, 'held' => $held ) );
+		wp_send_json_success( array( 'sent' => $sent, 'held' => $held, 'results' => $out ) );
+	}
+
+	/** The widget's summary of one press, logged as one line. */
+	public static function ajax_send_log(): void {
+		self::guard();
+		$rows = isset( $_POST['results'] ) ? json_decode( wp_unslash( (string) $_POST['results'] ), true ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in self::guard(); the JSON is decoded and log_press() keeps only ints and known reason codes.
+		self::log_press( is_array( $rows ) ? $rows : array() );
+		wp_send_json_success( array( 'logged' => true ) );
+	}
+
+	/**
+	 * One log line per press: sent, skipped (with the reason, by lead number), failed, not
+	 * reached. Lead numbers and reason codes only — never a name or an address.
+	 */
+	public static function log_press( array $rows ): string {
+		$sent = $failed = $not = 0;
+		$skipped = array();
+		$crm_owed = 0;
+		foreach ( array_slice( $rows, 0, 200 ) as $r ) {
+			if ( ! is_array( $r ) ) {
+				continue;
+			}
+			$id     = (int) ( $r['id'] ?? 0 );
+			$result = preg_replace( '/[^a-z_]/', '', (string) ( $r['result'] ?? '' ) );
+			$reason = strtolower( (string) ( $r['reason'] ?? '' ) );
+			if ( ! preg_match( '/^(already_invited|not_found|no_email|no_review_destination|send_failed|time|request_failed|no_answer|status_holds_[a-z_]{1,30})$/', $reason ) ) {
+				$reason = '' === $reason ? '' : 'other'; // the widget sends codes; anything else is never logged as written
+			}
+			if ( 'sent' === $result ) {
+				$sent++;
+				if ( 'owed' === ( $r['crm'] ?? '' ) ) {
+					$crm_owed++;
+				}
+			} elseif ( 'failed' === $result ) {
+				$failed++;
+			} elseif ( 'not_reached' === $result ) {
+				$not++;
+			} else {
+				$skipped[] = '#' . $id . ( '' !== $reason ? ' ' . $reason : '' );
+			}
+		}
+		$line = sprintf(
+			'Zorderz Surveys: survey e-mails — sent %d, skipped %d%s, failed %d, not reached %d%s',
+			$sent,
+			count( $skipped ),
+			$skipped ? ' (' . implode( ', ', array_slice( $skipped, 0, 30 ) ) . ')' : '',
+			$failed,
+			$not,
+			$crm_owed ? sprintf( '; %d Won mark(s) owed to the daily sweep', $crm_owed ) : ''
+		);
+		error_log( $line );
+		return $line;
 	}
 
 	public static function ajax_exclude(): void {

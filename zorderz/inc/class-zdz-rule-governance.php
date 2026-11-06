@@ -2,14 +2,13 @@
 /**
  * ZDZ_Rule_Governance — rules as typed objects, and the prompt as a rendering.
  *
- * The assistant used to carry ~71 named rules as prose inside a ~740-line system
- * prompt, plus a shadow registry that pointed at seven of them
- * by two-letter id. Two-letter ids collide with staff initials by construction
- * (rule "DM" vs a person "DM"), the prompt was the only home of the wording, and a
- * cited id that no longer existed failed SILENTLY. This service fixes all three:
+ * Rules written as prose inside one long system prompt have three problems: a rule
+ * cited by a two-letter id collides with staff initials by construction (rule "AB"
+ * vs a person "AB"), the prompt becomes the only home of the wording, and a cited id
+ * that no longer exists fails SILENTLY. This service avoids all three:
  *
  *   - RULES ARE TYPED, PARAMETERISED OBJECTS in a registry, addressed by a
- *     descriptive slug (never a two-letter code). Each carries an invariant, an
+ *     descriptive slug (never a two-letter code). Each names the invariant it serves, an
  *     enforcement tier, its triggers, and a PLACEHOLDER-DRIVEN directive template.
  *   - THE PROMPT IS A RENDERING of the rule set — render() turns the selected rules
  *     into the prompt block, interpolating tenant values (business name, the
@@ -18,25 +17,22 @@
  *   - A CITED RULE MUST EXIST. cite() throws when a referenced id is unknown, and
  *     validate() lets a build fail on a dangling reference. Nothing cites a ghost.
  *
- * SAFETY FLOOR. Rules tiered `safety_floor` encode INV-level guarantees (honest
+ * SAFETY FLOOR. Rules tiered `safety_floor` encode the platform's invariants (honest
  * output, counts authority, no unconfirmed side effect, shared-device read-only).
  * A tenant may ADD rules or NARROW an advisory one through the `zdz_rules` filter,
  * but an attempt to weaken or remove a safety-floor rule is rejected and logged —
  * the floor only ever rises.
  *
- * The corpus here ships IN-REPO as
- * neutral, versioned templates: of the 62 live rules, the ~39 that name no company, product,
- * person, vendor or place ship as Core doctrine; the parameterised ones take their
- * specifics from the Business Profile, the Item Engine and the connection config at
- * render time. NO company/person/product/place/provider name appears in any
- * directive — only placeholders.
+ * The corpus here ships IN-REPO as versioned templates: rules that hold for every
+ * business ship as Core doctrine; the parameterised ones take their specifics from the
+ * Business Profile, the Item Engine and the connection config at render time. NO
+ * company/person/product/place/provider name appears in any directive — only
+ * placeholders.
  *
- * Advisory, not enforcement (INV-1): a model that recites a rule can still break it.
+ * Advisory, not enforcement (code enforces; words advise): a model that recites a rule can still break it.
  * The hard guarantees are enforced in code (ZDZ_Answer_Authority::gate(), the kiosk
  * strip, the confirm-before-write gates); this service helps the model SEE the rules
  * that govern the turn in front of it.
- *
- * Crosswalk: 05 §C (P-15, P-40, P-42), §D (T-22 … T-25); Playbook §2.6, §6.
  *
  * @since   1.1.0
  * @package Zorderz
@@ -55,7 +51,7 @@ class ZDZ_Rule_Governance {
 	const MAX_RULES_PER_TURN = 8;
 
 	/* ── Enforcement tiers ──────────────────────────────────────────────────
-	 * safety_floor    — an INV-level guarantee; NON-OVERRIDABLE; enforced in code.
+	 * safety_floor    — a platform invariant; NON-OVERRIDABLE; enforced in code.
 	 * server_enforced — a code gate guarantees it; the manifest just explains it.
 	 * hybrid          — partial code support + model discipline.
 	 * advisory        — no code gate possible; the manifest is the primary lever.
@@ -85,11 +81,11 @@ class ZDZ_Rule_Governance {
 	private static function core_rules(): array {
 		return array(
 
-			/* ── Safety floor (INV-level, non-overridable) ──────────────────── */
+			/* ── Safety floor (platform invariants, non-overridable) ─────────── */
 
 			'honest-output' => array(
 				'title'       => 'Honest output — system-of-record language only',
-				'invariant'   => 'INV-12',
+				'invariant'   => 'honest-output',
 				'tier'        => self::TIER_SAFETY,
 				'triggers'    => array( 'always' ),
 				'enforced_by' => 'ZDZ_Answer_Authority::gate()',
@@ -98,7 +94,7 @@ class ZDZ_Rule_Governance {
 
 			'counts-authority' => array(
 				'title'       => 'Counts come from the authoritative counting component',
-				'invariant'   => 'INV-3',
+				'invariant'   => 'counts-authority',
 				'tier'        => self::TIER_SAFETY,
 				'triggers'    => array( 'always', 'signal:asks_count' ),
 				'enforced_by' => '{counting_component} authoritative count block',
@@ -107,7 +103,7 @@ class ZDZ_Rule_Governance {
 
 			'no-unconfirmed-side-effect' => array(
 				'title'       => 'Draft first — confirm and re-verify before any side effect',
-				'invariant'   => 'INV-8',
+				'invariant'   => 'confirm-before-write',
 				'tier'        => self::TIER_SAFETY,
 				'triggers'    => array( 'signal:marker_pending', 'signal:write_intent' ),
 				'enforced_by' => 'draft→preview→confirm→re-verify (server side)',
@@ -116,7 +112,7 @@ class ZDZ_Rule_Governance {
 
 			'kiosk-read-only' => array(
 				'title'       => 'Shared / unattended session: no side effects',
-				'invariant'   => 'INV-10',
+				'invariant'   => 'shared-device-not-a-person',
 				'tier'        => self::TIER_SAFETY,
 				'triggers'    => array( 'signal:kiosk' ),
 				'enforced_by' => 'kiosk marker strip + bridge refusal (server side)',
@@ -125,7 +121,7 @@ class ZDZ_Rule_Governance {
 
 			'no-unsourced-figures' => array(
 				'title'       => 'Never state a figure the data does not contain',
-				'invariant'   => 'INV-12',
+				'invariant'   => 'honest-output',
 				'tier'        => self::TIER_SAFETY,
 				'triggers'    => array( 'always', 'signal:asks_figure' ),
 				'enforced_by' => 'ZDZ_Answer_Authority::gate()',
@@ -134,7 +130,7 @@ class ZDZ_Rule_Governance {
 
 			'customer-identity-provenance' => array(
 				'title'       => 'Same person only on an exact identifier match',
-				'invariant'   => 'INV-2',
+				'invariant'   => 'verify-source-data',
 				'tier'        => self::TIER_SAFETY,
 				'triggers'    => array( 'category:customer_lookup', 'signal:customer_in_context' ),
 				'enforced_by' => 'row-lineage association check',
@@ -143,7 +139,7 @@ class ZDZ_Rule_Governance {
 
 			'recipient-and-list-privacy' => array(
 				'title'       => 'Outbound recipient gate + email-list privacy',
-				'invariant'   => 'INV-12',
+				'invariant'   => 'honest-output',
 				'tier'        => self::TIER_SAFETY,
 				'triggers'    => array( 'signal:email_intent', 'category:customer_lookup' ),
 				'enforced_by' => 'ZDZ_Answer_Authority::gate() (email channel)',
@@ -154,7 +150,7 @@ class ZDZ_Rule_Governance {
 
 			'source-of-record-filters-untrusted' => array(
 				'title'       => 'A provider\'s own list filter is untrusted',
-				'invariant'   => 'INV-2',
+				'invariant'   => 'verify-source-data',
 				'tier'        => self::TIER_HYBRID,
 				'triggers'    => array( 'category:customer_lookup', 'signal:customer_in_context' ),
 				'enforced_by' => 'client-side re-verification of every list filter',
@@ -163,7 +159,7 @@ class ZDZ_Rule_Governance {
 
 			'assignment-vs-billing' => array(
 				'title'       => 'Work assignment and billing are separate records',
-				'invariant'   => 'INV-11',
+				'invariant'   => 'source-records-unchanged',
 				'tier'        => self::TIER_HYBRID,
 				'triggers'    => array( 'category:lead_lookup', 'category:customer_lookup' ),
 				'enforced_by' => '(advisory + bridge)',
@@ -172,7 +168,7 @@ class ZDZ_Rule_Governance {
 
 			'answerability' => array(
 				'title'       => 'Obey the answerability verdict',
-				'invariant'   => 'INV-12',
+				'invariant'   => 'honest-output',
 				'tier'        => self::TIER_HYBRID,
 				'triggers'    => array( 'always' ),
 				'enforced_by' => 'ZDZ_Answer_Authority::assess()',
@@ -181,7 +177,7 @@ class ZDZ_Rule_Governance {
 
 			'inference-is-inferred' => array(
 				'title'       => 'An estimate is an inferred figure, never a fact',
-				'invariant'   => 'INV-3',
+				'invariant'   => 'counts-authority',
 				'tier'        => self::TIER_HYBRID,
 				'triggers'    => array( 'signal:asks_count', 'signal:asks_figure' ),
 				'enforced_by' => 'ZDZ_Figure tier propagation',
@@ -192,7 +188,7 @@ class ZDZ_Rule_Governance {
 
 			'no-thinking-traces' => array(
 				'title'       => 'No visible chain-of-thought',
-				'invariant'   => 'INV-1',
+				'invariant'   => 'code-enforces',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'always' ),
 				'enforced_by' => '(advisory)',
@@ -201,7 +197,7 @@ class ZDZ_Rule_Governance {
 
 			'terse-and-quantified' => array(
 				'title'       => 'Terse, precise, quantified',
-				'invariant'   => 'INV-1',
+				'invariant'   => 'code-enforces',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'always' ),
 				'enforced_by' => '(advisory)',
@@ -210,7 +206,7 @@ class ZDZ_Rule_Governance {
 
 			'scope-transparency' => array(
 				'title'       => 'Disclose the scope of the search',
-				'invariant'   => 'INV-12',
+				'invariant'   => 'honest-output',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'always' ),
 				'enforced_by' => '(advisory)',
@@ -219,7 +215,7 @@ class ZDZ_Rule_Governance {
 
 			'zero-result-awareness' => array(
 				'title'       => 'A zero result may be a missed filter',
-				'invariant'   => 'INV-2',
+				'invariant'   => 'verify-source-data',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'signal:zero_result' ),
 				'enforced_by' => '(advisory)',
@@ -228,7 +224,7 @@ class ZDZ_Rule_Governance {
 
 			'ambiguity-detection' => array(
 				'title'       => 'Resolve ambiguity by asking',
-				'invariant'   => 'INV-1',
+				'invariant'   => 'code-enforces',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'signal:ambiguous' ),
 				'enforced_by' => '(advisory)',
@@ -237,7 +233,7 @@ class ZDZ_Rule_Governance {
 
 			'comparison-hygiene' => array(
 				'title'       => 'Compare like with like',
-				'invariant'   => 'INV-1',
+				'invariant'   => 'code-enforces',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'signal:comparison' ),
 				'enforced_by' => '(advisory)',
@@ -246,7 +242,7 @@ class ZDZ_Rule_Governance {
 
 			'cite-the-source' => array(
 				'title'       => 'Attach the record reference to a key claim',
-				'invariant'   => 'INV-12',
+				'invariant'   => 'honest-output',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'signal:asks_figure' ),
 				'enforced_by' => 'reference autolink pipeline',
@@ -255,7 +251,7 @@ class ZDZ_Rule_Governance {
 
 			'describe-not-prescribe' => array(
 				'title'       => 'Describe how the business works; advise only on request',
-				'invariant'   => 'INV-1',
+				'invariant'   => 'code-enforces',
 				'tier'        => self::TIER_ADVISORY,
 				'triggers'    => array( 'always' ),
 				'enforced_by' => '(advisory)',
@@ -400,7 +396,7 @@ class ZDZ_Rule_Governance {
 	 *
 	 * Matching against these phrases is the consumer's job and is a membership test on
 	 * a normalized token stream — NEVER a regex over free text (the English-only
-	 * regex identity surface the §61 lock replaced).
+	 * regex identity surface the document preservation lock replaced).
 	 *
 	 * @param string $intent e.g. 'doc_preserve', 'doc_line_edit'.
 	 * @return string[]
@@ -616,12 +612,12 @@ class ZDZ_Rule_Governance {
 	}
 
 	/**
-	 * Neutralise bracketed marker tokens ([ZDZ_EMAIL_DRAFT] → ZDZ_EMAIL_DRAFT, and
-	 * any legacy [Zorderz*_*]) so a recited rule can never match a marker parser. The
-	 * marker vocabulary itself lives in ONE constants map owned by the app layer.
+	 * Neutralise bracketed marker tokens ([ZDZ_EMAIL_DRAFT] → ZDZ_EMAIL_DRAFT, and every
+	 * app's [Z…_…] token such as [ZCC_CALC]) so a recited rule can never match a marker
+	 * parser. The marker vocabulary itself lives in ONE constants map owned by the app layer.
 	 */
 	public static function escape_markers( string $text ): string {
-		return preg_replace( '/\[(\/?(?:ZDZ|ZANA|Zorderz[A-Z]*)_[A-Z0-9_]+)\]/', '$1', $text );
+		return preg_replace( '/\[(\/?Z[A-Z]*_[A-Z0-9_]+)\]/', '$1', $text );
 	}
 }
 

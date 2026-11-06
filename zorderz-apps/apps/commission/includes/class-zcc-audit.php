@@ -3,7 +3,7 @@
  * ZCC_Audit — commission calculation audit trail.
  *
  * Every calculation run is stored permanently with its full breakdown. This
- * table is the MIGRATION GATE (crosswalk CP-25): replaying it must reproduce
+ * table is the MIGRATION GATE: replaying it must reproduce
  * per-invoice net_commissionable and total_commission identically before and
  * after every step of a taxonomy migration. Core mechanism; no taxonomy.
  *
@@ -46,7 +46,11 @@ class ZCC_Audit {
 		return (int) $wpdb->insert_id;
 	}
 
-	/** Generic disposition logger — used to surface loud, non-silent drops. */
+	/**
+	 * Generic disposition logger — used to surface loud, non-silent drops. Callers pass ids,
+	 * counts and reason codes only: never a customer's name, a line's text or free notes, so
+	 * the error log never holds customer details.
+	 */
 	public static function log( string $event, array $context = [] ): void {
 		do_action( 'zdz_flow_disposition', 'commission', $event, $context );
 		error_log( 'ZCC disposition [' . $event . ']: ' . wp_json_encode( $context ) );

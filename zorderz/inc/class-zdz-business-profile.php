@@ -186,6 +186,14 @@ class ZDZ_Business_Profile {
 				// e.g. "{first}@example.com" — used to suggest, never to assume.
 				'staff_email_pattern' => '',
 			],
+			'legal' => [
+				/*
+				 * The legal pack customer agreements follow (the agreements app's packs/<id>/). A pack is public
+				 * law, not identity: the United States' national standard is the neutral default, and the job
+				 * address's state adds its own layer. '' or "none" means no agreements are made.
+				 */
+				'agreement_pack' => 'us-federal',
+			],
 			'_meta' => [
 				'source'     => 'defaults',
 				'pack'       => '',
@@ -291,9 +299,9 @@ class ZDZ_Business_Profile {
 	 * A short monogram for the business — its initials.
 	 *
 	 * Used where there is room for two or three characters and no logo has been
-	 * supplied: the nav button, an avatar placeholder. Exists because the theme
-	 * shipped one company's initials as the hardcoded fallback, so every install
-	 * on earth would have shown that company's two-letter code until someone uploaded artwork.
+	 * supplied: the nav button, an avatar placeholder. Derived from the profile so
+	 * no install ever shows a fixed two-letter code before its own artwork is
+	 * uploaded.
 	 */
 	public static function initials( $max = 3 ) {
 		$name  = (string) self::get( 'identity.short_name', self::name() );
@@ -604,8 +612,8 @@ class ZDZ_Business_Profile {
 	/**
 	 * The PWA manifest, built from the profile.
 	 *
-	 * Replaces the static manifest.json, which hardcoded one company's name and
-	 * colours and — for months — pointed its icons at a theme folder that no
+	 * Replaces a static manifest.json, whose fixed name and colours could not
+	 * follow the profile and whose icons pointed at a theme folder that no
 	 * longer existed.
 	 */
 	public static function manifest() {

@@ -1,15 +1,15 @@
 <?php
 /**
- * Migration: v2.20.3 — Clean up deprecated Personal Records user meta keys.
+ * Migration: Clean up deprecated Personal Records user meta keys.
  *
- * The Personal Records system was redesigned in v2.20.0 to track effort-based
+ * The Personal Records system was redesigned to track effort-based
  * achievements instead of financial KPIs. The old keys were:
  *   - zdz_pr_best_single_day_revenue
  *   - zdz_pr_fastest_install_turnaround
  *   - zdz_pr_best_mom_growth_pct
  *
  * These are no longer written or read by any code but may still exist in
- * wp_usermeta from pre-v2.20.0 installs. This migration removes them.
+ * wp_usermeta from installs. This migration removes them.
  *
  * Idempotent: safe to run multiple times — DELETE WHERE ignores missing rows.
  *

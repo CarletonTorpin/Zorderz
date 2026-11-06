@@ -76,6 +76,7 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 			'conversation' => 'thread',
 			'lead'         => 'record',
 			'job'          => 'handoff',
+			'repair'       => 'record',
 		);
 
 		/**
@@ -103,12 +104,12 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 			add_filter( 'zdz_flow_derive_state', array( __CLASS__, 'derive_state_cb' ), 10, 3 );
 
 			// The Jobs model never learns Projects exist; it fires a seam and this subscriber reacts.
-			// (These actions are declared by the jobs model / orchestrator — an S3-07 seam. Subscribing
+			// (These actions are declared by the jobs model. Subscribing
 			// before they fire is a harmless no-op, and keeps the wiring in one place.)
 			if ( function_exists( 'add_action' ) ) {
 				add_action( 'zjob_handoff_created', array( __CLASS__, 'on_job_changed' ), 10, 1 );
 				add_action( 'zjob_job_audited', array( __CLASS__, 'on_job_changed' ), 10, 1 );
-				// B4 — the estimate is the upstream mint trigger (a quote alone becomes a Project).
+				// The estimate is the upstream mint trigger (a quote alone becomes a Project).
 				add_action( 'zest_estimate_saved', array( __CLASS__, 'on_estimate_saved' ), 10, 2 );
 			}
 		}
@@ -500,8 +501,15 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 		 * collapsed into an accidental see-all. A project is visible when the viewer can see one of its
 		 * child jobs (the same role-relative rule the jobs list uses) OR the viewer originated it.
 		 *
+		 * With `reading` set, a viewer holding the reading grant (`view_team_projects`, see
+		 * Zjob_Project_Visibility::sees_all_basic()) is listed every Project, as the detail gate lets
+		 * them open it. Callers choosing a Project to ACT on leave `reading` unset.
+		 *
+		 * With `confirmed` set, the Projects the viewer is confirmed on (a live row in ZJOB_Project_People,
+		 * any step) are listed too, as the detail gate lets them read those. Only for a list people read.
+		 *
 		 * @param int   $viewer WP user id.
-		 * @param array $args   { status?: one of self::STATES, limit?: int }.
+		 * @param array $args   { status?: one of self::STATES, limit?: int, reading?: bool, confirmed?: bool }.
 		 * @return array<int,array> work_item rows.
 		 */
 		public static function list_for( int $viewer, array $args = array() ): array {
@@ -527,7 +535,9 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 				$params[] = $status;
 			}
 
-			if ( $scope->is_all() ) {
+			$reads_all = ! empty( $args['reading'] ) && class_exists( 'Zjob_Project_Visibility' )
+				&& Zjob_Project_Visibility::sees_all_basic( $viewer );
+			if ( $scope->is_all() || $reads_all ) {
 				// SEE-ALL: add no ownership clause (the predicate would be NULL — we emit nothing).
 				$noop = true;
 				unset( $noop );
@@ -554,8 +564,14 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 				// The scope predicate inlines integer ids only (ZJOB_Scope guarantees), so it carries
 				// no bound params — safe to concatenate. The creator arm binds the same id set.
 				$by_creator = "wi.id IN ( SELECT t.work_item_id FROM {$tr} t WHERE t.sequence = 1 AND t.actor_kind = 'user' AND t.actor_id IN ({$uid_ph}) )";
-				$where[]    = "( {$by_jobs} OR {$by_creator} )";
 				$params     = array_merge( $params, $uids );
+				// The Projects the viewer is confirmed on, for a list people read (the detail's read gate agrees).
+				$by_people  = '';
+				if ( ! empty( $args['confirmed'] ) && class_exists( 'ZJOB_Project_People' ) && ZJOB_Project_People::ready() ) {
+					$by_people = ' OR wi.id IN ( SELECT pp.project_id FROM ' . ZJOB_Project_People::table() . ' pp WHERE pp.ended_at IS NULL AND pp.user_id = %d )';
+					$params[]  = $viewer;
+				}
+				$where[] = "( {$by_jobs} OR {$by_creator}{$by_people} )";
 			}
 
 			$limit = isset( $args['limit'] ) ? max( 1, min( 500, (int) $args['limit'] ) ) : 200;
@@ -638,7 +654,7 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 		}
 
 		/* ===================================================================
-		 * B4 — EVERY ESTIMATE IS A PROJECT (upstream mint + floor + signal).
+		 * EVERY ESTIMATE IS A PROJECT (upstream mint + floor + signal).
 		 * The estimate is the mint trigger: a quote alone becomes a Project
 		 * (usually zero jobs), so Projects is a pre-sale holistic view. ONE mint
 		 * door, an advisory lock OVER the DB-resolved retreat (the ref UNIQUE is
@@ -707,7 +723,7 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 		}
 
 		/**
-		 * The audit-seam subscriber for a saved estimate (the S3-08/B4 seam the estimate app fires).
+		 * The subscriber for a saved estimate (the seam the estimate app fires).
 		 * Swallows its own errors: minting a Project must never break the estimate save.
 		 *
 		 * @param int|array $estimate_id an estimate id, or a context array carrying id/estimate_id.
@@ -1127,7 +1143,7 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 		}
 
 		/* ===================================================================
-		 * B5 — THE MODEL BOUNDARY + FILTERED LAUNCH.
+		 * THE MODEL BOUNDARY + FILTERED LAUNCH.
 		 * =================================================================== */
 
 		/**

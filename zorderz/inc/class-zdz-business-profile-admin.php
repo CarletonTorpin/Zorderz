@@ -12,10 +12,10 @@
  *   snapshot is taken first so it can be reverted.
  *
  * WHY THE APPLY FLOW IS THIS DELIBERATE
- * The previous architecture seeded one company's business data into every fresh
- * install on activation, silently. Nobody chose it and nothing recorded it. So
- * here: nothing is written without a preview, a typed confirmation, a snapshot,
- * and a log entry. That is not ceremony — it is the specific defect being fixed.
+ * Business data written into an install on activation, silently, is data nobody
+ * chose and nothing recorded. So here: nothing is written without a preview, a
+ * typed confirmation, a snapshot, and a log entry. That is not ceremony — it is
+ * what makes every value traceable to a decision.
  *
  * @package Zorderz
  * @since   1.0.0
@@ -128,6 +128,13 @@ class ZDZ_Business_Profile_Admin {
 					'locale.date_format'   => [ __( 'Date format', 'zorderz' ), 'text', __( 'PHP date format, e.g. n/j/Y.', 'zorderz' ) ],
 				],
 			],
+			'legal' => [
+				'label'  => __( 'Legal', 'zorderz' ),
+				'intro'  => __( 'The legal pack an app uses for customer agreements: public law, chosen here, with the job address\'s state adding its own layer. Packs are a starting point, not legal advice: have your own lawyer review them.', 'zorderz' ),
+				'fields' => [
+					'legal.agreement_pack' => [ __( 'Legal pack', 'zorderz' ), 'select', __( 'The national standard for a business in the United States is the default. Choose none to make no agreements.', 'zorderz' ) ],
+				],
+			],
 			'people' => [
 				'label'  => __( 'People', 'zorderz' ),
 				'fields' => [
@@ -146,6 +153,17 @@ class ZDZ_Business_Profile_Admin {
 				],
 			],
 		];
+	}
+
+	/**
+	 * The choices for a 'select' field: value => label, offered by the app that owns the setting on the
+	 * zdz_business_profile_choices filter ( [ path => [ value => label ] ] ). No app, no choices: the field is
+	 * shown as text.
+	 */
+	public static function choices( $path ) {
+		$all = apply_filters( 'zdz_business_profile_choices', [] );
+		$c   = is_array( $all ) && isset( $all[ $path ] ) && is_array( $all[ $path ] ) ? $all[ $path ] : [];
+		return $c;
 	}
 
 	// ─────────────────────────────────────────────────── POST handling
@@ -199,6 +217,15 @@ class ZDZ_Business_Profile_Admin {
 						break;
 					case 'url':
 						$clean = '' === trim( (string) $raw ) ? '' : esc_url_raw( (string) $raw );
+						break;
+					case 'select':
+						// one of the choices an app offers for this path; anything else keeps the stored value
+						$choices = self::choices( $path );
+						$v       = sanitize_text_field( (string) $raw );
+						if ( $choices && ! array_key_exists( $v, $choices ) ) {
+							continue 2;
+						}
+						$clean = $v;
 						break;
 					case 'list':
 						// One per line, blanks dropped. A list replaces wholesale
@@ -458,7 +485,14 @@ class ZDZ_Business_Profile_Admin {
 						<tr>
 							<th scope="row"><label for="<?php echo esc_attr( self::form_key( $path ) ); ?>"><?php echo esc_html( $label ); ?></label></th>
 							<td>
-								<?php if ( 'list' === $type ) : ?>
+								<?php if ( 'select' === $type && self::choices( $path ) ) : ?>
+									<select id="<?php echo esc_attr( self::form_key( $path ) ); ?>" name="<?php echo esc_attr( $name ); ?>">
+										<?php $current = is_array( $stored ) ? '' : (string) ( '' === (string) $stored ? $resolved : $stored ); ?>
+										<?php foreach ( self::choices( $path ) as $value => $choice_label ) : ?>
+											<option value="<?php echo esc_attr( (string) $value ); ?>" <?php selected( $current, (string) $value ); ?>><?php echo esc_html( (string) $choice_label ); ?></option>
+										<?php endforeach; ?>
+									</select>
+								<?php elseif ( 'list' === $type ) : ?>
 									<textarea id="<?php echo esc_attr( self::form_key( $path ) ); ?>" name="<?php echo esc_attr( $name ); ?>" rows="3" class="large-text code"><?php echo esc_textarea( implode( "\n", (array) $stored ) ); ?></textarea>
 								<?php else : ?>
 									<input type="text" id="<?php echo esc_attr( self::form_key( $path ) ); ?>" name="<?php echo esc_attr( $name ); ?>"
@@ -709,7 +743,7 @@ class ZDZ_Business_Profile_Admin {
 					<?php endforeach; ?>
 				</ul>
 				<p class="description">
-					<?php esc_html_e( 'A pack is a folder of .yml or .json files. Only profile and org are read by this version; anything else is reported rather than ignored.', 'zorderz' ); ?>
+					<?php esc_html_e( 'A pack is a folder of .yml or .json files. The preview lists which of them this site reads; anything it cannot use is reported rather than ignored.', 'zorderz' ); ?>
 				</p>
 			<?php else : ?>
 				<table class="widefat striped" style="max-width:60em">
@@ -806,23 +840,52 @@ class ZDZ_Business_Profile_Admin {
 			<h3><?php esc_html_e( 'In the pack, but not readable by this version', 'zorderz' ); ?></h3>
 			<p><?php echo esc_html( implode( ', ', $p['unsupported'] ) ); ?></p>
 			<p class="description" style="max-width:46em">
-				<?php esc_html_e( 'These files stay exactly as they are. Later versions read catalog, pricing, compensation and the rest; this one reads identity and org shape only.', 'zorderz' ); ?>
+				<?php esc_html_e( 'These files stay exactly as they are: nothing on this site reads them yet.', 'zorderz' ); ?>
 			</p>
 		<?php endif; ?>
 
+		<?php if ( ! empty( $p['refused'] ) ) : ?>
+			<h3><?php esc_html_e( 'Refused: these values will not be applied', 'zorderz' ); ?></h3>
+			<table class="widefat striped" style="max-width:80em">
+				<thead><tr>
+					<th style="width:8%"><?php esc_html_e( 'File', 'zorderz' ); ?></th>
+					<th style="width:30%"><?php esc_html_e( 'Setting', 'zorderz' ); ?></th>
+					<th><?php esc_html_e( 'Why', 'zorderz' ); ?></th>
+				</tr></thead>
+				<tbody>
+				<?php foreach ( $p['refused'] as $r ) : ?>
+					<tr>
+						<td><?php echo esc_html( $r['file'] ); ?></td>
+						<td><code><?php echo esc_html( $r['path'] ); ?></code></td>
+						<td><?php echo esc_html( $r['why'] ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
+
+		<?php if ( ! empty( $p['notes'] ) ) : ?>
+			<h3><?php esc_html_e( 'Worth knowing before you apply', 'zorderz' ); ?></h3>
+			<ul class="ul-disc">
+				<?php foreach ( $p['notes'] as $n ) : ?>
+					<li><?php echo esc_html( $n ); ?></li>
+				<?php endforeach; ?>
+			</ul>
+		<?php endif; ?>
+
 		<?php if ( ! empty( $p['unconsumed'] ) ) : ?>
-			<h3><?php esc_html_e( 'Carried in the profile, but not used yet', 'zorderz' ); ?></h3>
+			<h3><?php esc_html_e( 'Carried in the pack, but not used yet', 'zorderz' ); ?></h3>
 			<p><code><?php echo esc_html( implode( ' · ', $p['unconsumed'] ) ); ?></code></p>
 			<p class="description" style="max-width:46em">
 				<?php esc_html_e( 'Values this pack declares that no part of this version reads. Listed so it is never a surprise which parts of a pack took effect.', 'zorderz' ); ?>
 			</p>
 		<?php endif; ?>
 
-		<?php if ( $p['changes'] ) : ?>
+		<?php if ( $p['changes'] && empty( $p['blocked'] ) ) : ?>
 			<h3><?php esc_html_e( 'Apply it', 'zorderz' ); ?></h3>
 			<div style="background:#fff;border-left:4px solid #dba617;padding:12px 16px;max-width:46em">
 				<p style="margin-top:0">
-					<?php esc_html_e( 'A snapshot of the current profile and role labels is taken first, so this can be reverted. Roles themselves are not created, renamed or removed — a pack may relabel a role and set which apps it opens with, nothing more.', 'zorderz' ); ?>
+					<?php esc_html_e( 'Everything this pack would write is recorded first, so Revert puts it back exactly. Roles themselves are not created, renamed or removed — a pack may relabel a role and set which apps it opens with, nothing more. Rules a pack brings for other apps start in shadow; a person turns them live.', 'zorderz' ); ?>
 				</p>
 				<form method="post" action="">
 					<?php wp_nonce_field( 'zdz_bp_apply_pack' ); ?>

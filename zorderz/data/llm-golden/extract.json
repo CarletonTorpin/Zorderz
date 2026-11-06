@@ -1,0 +1,211 @@
+{
+ "role": "extract",
+ "note": "Made-up sentences about a work day.",
+ "cases": [
+  {
+   "id": "ext-1",
+   "system": "Read one sentence about a work day and give the start and end times as 24-hour HH:MM, and the unpaid break in minutes (0 if none). Times without am or pm are during the working day (6 am to 7 pm).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "7:30 to 4 yesterday with a 30 minute lunch"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "start": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "end": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "break_minutes": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "break_minutes"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "start": "07:30",
+     "end": "16:00",
+     "break_minutes": 30
+    }
+   },
+   "example_answer": "{\"start\": \"07:30\", \"end\": \"16:00\", \"break_minutes\": 30}"
+  },
+  {
+   "id": "ext-2",
+   "system": "Read one sentence about a work day and give the start and end times as 24-hour HH:MM, and the unpaid break in minutes (0 if none). Times without am or pm are during the working day (6 am to 7 pm).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "worked 6am-2:30pm, no lunch"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "start": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "end": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "break_minutes": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "break_minutes"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "start": "06:00",
+     "end": "14:30",
+     "break_minutes": 0
+    }
+   },
+   "example_answer": "{\"start\": \"06:00\", \"end\": \"14:30\", \"break_minutes\": 0}"
+  },
+  {
+   "id": "ext-3",
+   "system": "Read one sentence about a work day and give the start and end times as 24-hour HH:MM, and the unpaid break in minutes (0 if none). Times without am or pm are during the working day (6 am to 7 pm).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "8 to 5 with an hour for lunch"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "start": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "end": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "break_minutes": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "break_minutes"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "start": "08:00",
+     "end": "17:00",
+     "break_minutes": 60
+    }
+   },
+   "example_answer": "{\"start\": \"08:00\", \"end\": \"17:00\", \"break_minutes\": 60}"
+  },
+  {
+   "id": "ext-4",
+   "system": "Read one sentence about a work day and give the start and end times as 24-hour HH:MM, and the unpaid break in minutes (0 if none). Times without am or pm are during the working day (6 am to 7 pm).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "started at quarter to seven, done at 3:15, took a 45 min break"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "start": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "end": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "break_minutes": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "break_minutes"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "start": "06:45",
+     "end": "15:15",
+     "break_minutes": 45
+    }
+   },
+   "example_answer": "{\"start\": \"06:45\", \"end\": \"15:15\", \"break_minutes\": 45}"
+  },
+  {
+   "id": "ext-5",
+   "system": "Read one sentence about a work day and give the start and end times as 24-hour HH:MM, and the unpaid break in minutes (0 if none). Times without am or pm are during the working day (6 am to 7 pm).",
+   "messages": [
+    {
+     "role": "user",
+     "content": "noon until 6:30, no break"
+    }
+   ],
+   "json_schema": {
+    "type": "object",
+    "properties": {
+     "start": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "end": {
+      "type": "string",
+      "description": "24-hour HH:MM"
+     },
+     "break_minutes": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "start",
+     "end",
+     "break_minutes"
+    ],
+    "additionalProperties": false
+   },
+   "max_output": 1500,
+   "expect": {
+    "json": {
+     "start": "12:00",
+     "end": "18:30",
+     "break_minutes": 0
+    }
+   },
+   "example_answer": "{\"start\": \"12:00\", \"end\": \"18:30\", \"break_minutes\": 0}"
+  }
+ ]
+}

@@ -510,6 +510,119 @@ class ZIB_Graph {
 		return self::graph_post( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $draft_id ) . '/send', array(), $hdr );
 	}
 
+	// ── the same three sends WITH Vault documents ─────────────────────────────────
+	//
+	// One shape for all three, so an email with documents is built the same way whichever Send the
+	// owner pressed (the Email app's, or the chat's Confirm): a DRAFT (createReply / createReplyAll /
+	// createForward, or POST /me/messages for a new one) → its body PATCHed → each file ATTACHED to the
+	// draft → the draft SENT. Still only reached through the owner-gated, audited Gatekeeper
+	// (owner_send_compose). A failure after the draft exists leaves it in Drafts, as the reply path
+	// always has — the connector never hard-deletes (INV-WRITE).
+
+	/** Files at or under this many bytes go in one POST; larger ones through an upload session. */
+	const ATTACH_INLINE_MAX = 3000000;
+	/** Upload-session chunk: a multiple of 320 KiB, as Graph asks (12 × 327,680). */
+	const UPLOAD_CHUNK = 3932160;
+
+	/**
+	 * Send a reply, reply-all, forward or new message carrying $attachments, through a draft.
+	 *
+	 * @param string $mode          reply | replyall | forward | new
+	 * @param string $ms_message_id the original's Graph id (reply / forward); '' for new
+	 * @param array  $message       new: {subject, toRecipients, ccRecipients?}; forward: {toRecipients}
+	 * @param string $html          the composed body (comment + documents block), already safe HTML
+	 * @param array  $attachments   list of {name, mime, bytes}
+	 * @param int    $deadline      unix time; past it, stop BEFORE /send
+	 * @return array|WP_Error       an error from the final /send carries data {stage: 'send'} - it may have gone
+	 */
+	public static function send_with_attachments( int $account_id, string $mode, string $ms_message_id, array $message, string $html, array $attachments, bool $immutable = false, int $deadline = 0 ) {
+		$hdr = $immutable ? self::immutable_headers() : array();
+		if ( 'new' === $mode ) {
+			$draft = self::graph_post( $account_id, self::GRAPH . '/me/messages', array_merge( $message, array(
+				'body' => array( 'contentType' => 'HTML', 'content' => $html ),
+			) ), $hdr );
+		} else {
+			$verb  = 'forward' === $mode ? 'createForward' : ( 'replyall' === $mode ? 'createReplyAll' : 'createReply' );
+			$draft = self::graph_post( $account_id, self::GRAPH . '/me/messages/' . rawurlencode( $ms_message_id ) . '/' . $verb, array(), $hdr );
+		}
+		if ( is_wp_error( $draft ) ) { return $draft; }
+		$draft_id = (string) ( $draft['id'] ?? '' );
+		if ( '' === $draft_id ) { return new WP_Error( 'zib_graph_draft', 'The draft was not created.' ); }
+		$base = self::GRAPH . '/me/messages/' . rawurlencode( $draft_id );
+		if ( 'new' !== $mode ) {
+			$patch = array( 'body' => array( 'contentType' => 'HTML', 'content' => self::prepend_into_body( $html, (string) ( $draft['body']['content'] ?? '' ) ) ) );
+			if ( 'forward' === $mode ) { $patch['toRecipients'] = (array) ( $message['toRecipients'] ?? array() ); }
+			$p = self::graph_patch( $account_id, $base, $patch, $hdr );
+			if ( is_wp_error( $p ) ) { return $p; }
+		}
+		foreach ( $attachments as $att ) {
+			$r = self::attach_to_draft( $account_id, $draft_id, (string) $att['name'], (string) $att['mime'], (string) $att['bytes'], $hdr, $deadline );
+			if ( is_wp_error( $r ) ) { return $r; }
+		}
+		if ( $deadline > 0 && time() > $deadline ) {
+			return new WP_Error( 'zib_too_slow', 'The email took too long to prepare, so it was not sent.' );
+		}
+		$sent = self::graph_post( $account_id, $base . '/send', array(), $hdr );
+		if ( is_wp_error( $sent ) ) {
+			// The one step whose failure does not prove nothing went: a timeout or a 5xx here may follow a delivery.
+			return new WP_Error( $sent->get_error_code(), $sent->get_error_message(), array( 'stage' => 'send' ) );
+		}
+		return $sent;
+	}
+
+	/** One file onto a draft: a single POST up to ATTACH_INLINE_MAX, an upload session above it. */
+	public static function attach_to_draft( int $account_id, string $draft_id, string $name, string $mime, string $bytes, array $hdr = array(), int $deadline = 0 ) {
+		if ( $deadline > 0 && time() > $deadline ) { // before every file, small ones too
+			return new WP_Error( 'zib_too_slow', 'The email took too long to prepare, so it was not sent.' );
+		}
+		$base = self::GRAPH . '/me/messages/' . rawurlencode( $draft_id ) . '/attachments';
+		$size = strlen( $bytes );
+		$name = '' !== $name ? $name : 'document';
+		$mime = '' !== $mime ? $mime : 'application/octet-stream';
+		if ( $size <= self::ATTACH_INLINE_MAX ) {
+			return self::graph_post( $account_id, $base, array(
+				'@odata.type'  => '#microsoft.graph.fileAttachment',
+				'name'         => $name,
+				'contentType'  => $mime,
+				'contentBytes' => base64_encode( $bytes ),
+			), $hdr );
+		}
+		$session = self::graph_post( $account_id, $base . '/createUploadSession', array(
+			'AttachmentItem' => array( 'attachmentType' => 'file', 'name' => $name, 'size' => $size, 'contentType' => $mime ),
+		), $hdr );
+		if ( is_wp_error( $session ) ) { return $session; }
+		$url = (string) ( $session['uploadUrl'] ?? '' );
+		// The upload URL is Graph's own pre-authorized address on the Outlook host; anything else is not sent bytes.
+		if ( '' === $url || ! preg_match( '#^https://[a-z0-9.-]+\.(office\.com|office365\.com|outlook\.com|microsoft\.com)/#i', $url ) ) {
+			return new WP_Error( 'zib_graph_upload', 'Graph did not give an upload address.' );
+		}
+		for ( $start = 0; $start < $size; $start += self::UPLOAD_CHUNK ) {
+			if ( $deadline > 0 && time() > $deadline ) {
+				return new WP_Error( 'zib_too_slow', 'The email took too long to prepare, so it was not sent.' );
+			}
+			$chunk = substr( $bytes, $start, self::UPLOAD_CHUNK );
+			$end   = $start + strlen( $chunk ) - 1;
+			// No Authorization header: the upload URL carries its own token (Graph's rule for upload sessions).
+			$resp = wp_remote_request( $url, array(
+				'method'      => 'PUT',
+				// never past the budget by more than a few seconds: many hosts end a request at 60
+				'timeout'     => $deadline > 0 ? max( 5, min( 30, $deadline + 10 - time() ) ) : 30,
+				'redirection' => 0, // the pinned host only, never where it might redirect
+				'headers' => array(
+					'Content-Type'   => 'application/octet-stream',
+					'Content-Length' => (string) strlen( $chunk ),
+					'Content-Range'  => 'bytes ' . $start . '-' . $end . '/' . $size,
+				),
+				'body'    => $chunk,
+			) );
+			if ( is_wp_error( $resp ) ) { return new WP_Error( 'zib_net', $resp->get_error_message() ); }
+			$code = (int) wp_remote_retrieve_response_code( $resp );
+			if ( 429 === $code || $code >= 500 ) { return new WP_Error( 'zib_graph_transient', 'Graph is throttling or unavailable (' . $code . ').' ); }
+			if ( $code < 200 || $code >= 300 ) { return new WP_Error( 'zib_graph_upload', 'The file upload was refused (' . $code . ').' ); }
+		}
+		return array();
+	}
+
 	/** Insert the owner's HTML comment at the top of the reply/forward's visible body (just after the
 	 *  <body> tag, or prepended if there is none). The quoted original stays beneath it. */
 	private static function prepend_into_body( string $comment_html, string $original_html ): string {

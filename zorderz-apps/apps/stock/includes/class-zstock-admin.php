@@ -23,6 +23,7 @@ class ZSTOCK_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'register_menu' ) );
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'admin_post_zstock_apply_sample', array( __CLASS__, 'handle_apply_sample' ) );
+		add_action( 'admin_post_zstock_save_suppliers', array( __CLASS__, 'handle_save_suppliers' ) );
 		// Reschedule the sweep when the sync options change.
 		add_action( 'update_option_zstock_auto_sync', 'zstock_reschedule_sync' );
 		add_action( 'update_option_zstock_sync_interval', 'zstock_reschedule_sync' );
@@ -150,8 +151,77 @@ class ZSTOCK_Admin {
 				</table>
 				<?php submit_button(); ?>
 			</form>
+			<?php self::render_suppliers(); ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * The supplier list: one supplier per line, "Name | orders@supplier.example" or "Name | @supplier.example" (a whole
+	 * domain and its subdomains). Mail from these senders, in a person's own connected mailbox, can add orders under
+	 * Incoming. The business's own domains, whole free-mail domains and public suffixes are refused.
+	 */
+	private static function render_suppliers() {
+		$lines = array();
+		foreach ( ZSTOCK_Suppliers::all() as $r ) {
+			$lines[] = $r['name'] . ' | ' . $r['match'];
+		}
+		?>
+		<h2 id="zstock-suppliers"><?php esc_html_e( 'Suppliers', 'zorderz' ); ?></h2>
+		<p class="description"><?php esc_html_e( 'Order mail from these senders adds orders under Incoming (it never changes stock: a person taps Received). One per line: Name | an address, or Name | @a-whole-domain. Your own domains and whole free-mail domains are refused.', 'zorderz' ); ?></p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<input type="hidden" name="action" value="zstock_save_suppliers" />
+			<?php wp_nonce_field( 'zstock_save_suppliers' ); ?>
+			<textarea name="zstock_suppliers_text" rows="8" class="large-text code" placeholder="Example Supply Co | orders@supplier.example"><?php echo esc_textarea( implode( "\n", $lines ) ); ?></textarea>
+			<?php submit_button( __( 'Save suppliers', 'zorderz' ) ); ?>
+		</form>
+		<?php
+	}
+
+	/** Parse "Name | match" lines into rows. PURE. */
+	public static function parse_supplier_lines( string $text ): array {
+		$rows = array();
+		foreach ( preg_split( '/\r\n|\r|\n/', $text ) as $line ) {
+			$parts = array_map( 'trim', explode( '|', (string) $line, 2 ) );
+			if ( 2 === count( $parts ) && '' !== $parts[0] && '' !== $parts[1] ) {
+				$rows[] = array( 'name' => $parts[0], 'match' => $parts[1] );
+			}
+		}
+		return $rows;
+	}
+
+	/** Save the supplier list (admin only), auditing each address added or removed. */
+	public static function handle_save_suppliers() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Not allowed.', 'zorderz' ) );
+		}
+		check_admin_referer( 'zstock_save_suppliers' );
+		$rows                            = self::parse_supplier_lines( sanitize_textarea_field( wp_unslash( $_POST['zstock_suppliers_text'] ?? '' ) ) );
+		list( $saved, $added, $removed ) = ZSTOCK_Suppliers::save( $rows );
+		foreach ( $added as $m ) {
+			self::audit( 'supplier_added', $m );
+		}
+		foreach ( $removed as $m ) {
+			self::audit( 'supplier_removed', $m );
+		}
+		$refused = count( $rows ) - count( $saved );
+		$msg     = $refused > 0
+			/* translators: 1: suppliers saved, 2: lines refused */
+			? sprintf( __( 'Saved %1$d suppliers. %2$d line(s) were refused: your own domain, a whole free-mail domain, a duplicate, or not an address.', 'zorderz' ), count( $saved ), $refused )
+			/* translators: %d: suppliers saved */
+			: sprintf( __( 'Saved %d suppliers.', 'zorderz' ), count( $saved ) );
+		add_settings_error( 'zstock', 'zstock_suppliers', $msg, $refused > 0 ? 'warning' : 'success' );
+		set_transient( 'settings_errors', get_settings_errors(), 30 );
+		wp_safe_redirect( admin_url( 'admin.php?page=zstock-settings&settings-updated=1#zstock-suppliers' ) );
+		exit;
+	}
+
+	private static function audit( $action, $detail ) {
+		if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
+			ZDZ_Admin_Dashboard::log_action( get_current_user_id(), $action, $detail, ZSTOCK_APP_ID );
+		} else {
+			zstock_log( $action . ': ' . $detail );
+		}
 	}
 
 	/** Apply the Item Engine's fictional sample catalog (confirmed, never auto). */

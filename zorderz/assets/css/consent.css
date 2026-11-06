@@ -1,0 +1,50 @@
+/* The usage-records card and Settings -> Usage records. Tokens only, so light / dark / system / sunlight follow
+   the theme; the sheet is the kit's ZDZ.ui.sheet, the row the shell's .settings-row, the buttons the kit's
+   .zdz-btn, the draft mark a --sys-tint pair. */
+
+.zdz-consent-section[hidden]{display:none}
+
+/* the card */
+.zdz-consent-card{display:flex;flex-direction:column;gap:var(--ref-space-3,12px);color:var(--sys-text);
+  font-size:var(--ref-font-md,16px);line-height:1.5}
+.zdz-consent-card p{margin:0;overflow-wrap:anywhere}
+.zdz-consent-words{padding:var(--ref-space-3,12px) var(--ref-space-4,16px);border:1px solid var(--sys-border);
+  border-radius:var(--ref-radius-md,12px);background:var(--sys-surface)}
+.zdz-consent-words p{margin:0 0 var(--ref-space-2,8px)}
+.zdz-consent-words p:last-child{margin-bottom:0}
+/* "In short" on top, a tint pair, then "The full notice" with a heading over each paragraph */
+.zdz-consent-short{padding:var(--ref-space-3,12px) var(--ref-space-4,16px);border-radius:var(--ref-radius-md,12px);
+  background:var(--sys-tint-info-bg);color:var(--sys-tint-info-fg)}
+.zdz-consent-h3{margin:0 0 var(--ref-space-2,8px);font-size:var(--ref-font-sm,15px);font-weight:var(--sys-font-wt-b,700);
+  color:inherit;letter-spacing:.01em}
+.zdz-consent-full .zdz-consent-h3{color:var(--sys-text)}
+.zdz-consent-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--ref-space-2,8px)}
+.zdz-consent-li{display:flex;gap:var(--ref-space-2,8px);align-items:flex-start;font-weight:var(--sys-font-wt-md,500);line-height:1.4}
+.zdz-consent-li span{min-width:0;overflow-wrap:anywhere}
+.zdz-consent-ico{flex:0 0 auto;width:20px;height:20px;margin-top:1px}
+.zdz-consent-h4{margin:0 0 var(--ref-space-1,4px);font-size:var(--ref-font-sm,15px);font-weight:var(--sys-font-wt-b,700);color:var(--sys-text)}
+.zdz-consent-words p+.zdz-consent-h4{margin-top:var(--ref-space-3,12px)}
+.zdz-consent-more{color:var(--sys-text-sec);font-size:var(--ref-font-sm,15px)}
+.zdz-consent-draft{align-self:flex-start;display:inline-flex;align-items:center;padding:var(--ref-space-1,4px) var(--ref-space-3,12px);
+  border-radius:var(--ref-radius-full,999px);font-size:var(--ref-font-xs,13px);font-weight:var(--sys-font-wt-md,500);
+  background:var(--sys-tint-warning-bg);color:var(--sys-tint-warning-fg)}
+
+/* Settings -> Usage records */
+.zdz-consent-row{gap:var(--ref-space-3,12px);align-items:center;flex-wrap:wrap}
+.zdz-consent-row .sr-left{min-width:0;flex:1 1 12em;align-items:flex-start}
+.zdz-consent-row .sr-right{flex:0 0 auto}
+.zdz-consent-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.zdz-consent-sub{font-size:var(--ref-font-xs,13px);color:var(--sys-text-sec);line-height:1.35;overflow-wrap:anywhere}
+.zdz-consent-row .zdz-btn{min-height:44px;white-space:nowrap}
+.zdz-consent-status{margin:0 0 var(--ref-space-2,8px);font-size:var(--ref-font-sm,15px);color:var(--sys-text-sec)}
+.zdz-consent-status:empty{margin:0}
+.zdz-consent-status.is-error{color:var(--sys-error,var(--sys-text))}
+
+/* Settings -> Your app use. The person's own last 30 days, a plain table in the kit's sheet. */
+.zdz-usage-table{width:100%;border-collapse:collapse;font-size:var(--ref-font-sm,15px);color:var(--sys-text)}
+.zdz-usage-cap{text-align:left;font-weight:var(--sys-font-wt-b,700);padding-bottom:var(--ref-space-2,8px)}
+.zdz-usage-table th,.zdz-usage-table td{padding:var(--ref-space-2,8px) var(--ref-space-1,4px);border-bottom:1px solid var(--sys-border);
+  text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}
+.zdz-usage-table thead th{font-size:var(--ref-font-xs,13px);color:var(--sys-text-sec);font-weight:var(--sys-font-wt-md,500)}
+.zdz-usage-table tbody th{font-weight:var(--sys-font-wt-md,500)}
+.zdz-usage-table td:last-child{white-space:nowrap}

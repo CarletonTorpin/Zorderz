@@ -1,7 +1,7 @@
 <?php
 /**
  * Zjob_Install_Date — the SINGLE scheduling authority for a Project's install date, and the
- * PUBLISHED cross-plugin resolver boundary (INV-8) that Prep and the Scheduler consume.
+ * PUBLISHED cross-plugin resolver boundary that Prep and the Scheduler consume.
  *
  * WHY ONE AUTHORITY. Three readers once tested the schedule columns themselves and disagreed —
  * "that is how there came to be three answers." Every consumer now calls this class; nobody re-reads
@@ -14,7 +14,7 @@
  *   STATE_UNKNOWN        no date is known, but one could still exist.         (date is null)
  *   STATE_NOT_APPLICABLE an install date is not a meaningful outcome here.    (date is null)
  *
- * The `status` REFINES that trichotomy so the answer reaches paper DISTINCTLY (INV-12) — an
+ * The `status` REFINES that trichotomy so the answer reaches paper DISTINCTLY — an
  * "unscheduled" job and an "unknown" lead must not print the same:
  *
  *   status        → state              meaning
@@ -23,7 +23,7 @@
  *   unknown       → unknown           indeterminate: no project, gated out, or nothing linked.
  *   not_applicable→ not_applicable    every component is dead/cancelled — a date will never apply.
  *
- * The crosswalk is TOTAL and enforced (state_for_status): a real date may ONLY ride STATE_KNOWN, and
+ * The status → state mapping is TOTAL and enforced (state_for_status): a real date may ONLY ride STATE_KNOWN, and
  * the '0000-00-00 00:00:00' sentinel is guarded at the source so a zeroed column never reads as a
  * date. "unknown" is never conflated with a real date or with 0000-00-00.
  *
@@ -35,10 +35,19 @@
  * cut sheets and (via the Scheduler write-back) personal calendars; a money value must never travel
  * with them. This is a hard geo-PII rule and is asserted recursively by the harness.
  *
- * INV-8 — THE PUBLISHED BOUNDARY. `for_leads()` and `for_estimate_numbers()` are the two — and only
- * two — methods Prep/Scheduler call. They resolve external ids → Project → confirmed appointment,
- * GATE PER ROW (fail-closed, existence-oracle-safe: a missing project and a forbidden viewer return
- * the SAME unknown envelope), and NEVER expose a jobs table. Prep names no jobs table.
+ * THE PUBLISHED BOUNDARY. `for_leads()` and `for_estimate_numbers()` are the two — and only
+ * two — methods Prep/Scheduler call. Each runs two arms:
+ *
+ *   1. the JOB ROWS: every job carrying the lead (as the parent lead OR the child lead a hand-off made)
+ *      or the estimate. EACH ROW passes ZJOB_Scope::can_see() for the viewer or contributes nothing —
+ *      not a date and not to job_count. If the scope class is missing, every row fails CLOSED.
+ *   2. the PROJECT, for anything a job row did not schedule: lead / estimate → Project (ref map) →
+ *      its own jobs (gated per row again) → its own linked appointment. The Project itself must pass
+ *      the Projects visibility rule. A missing project and a forbidden viewer return the SAME unknown
+ *      envelope (existence-oracle-safe). This arm only FILLS: it never overwrites a scheduled answer.
+ *
+ * Every requested key is present in the answer, so a caller never handles a missing key. Neither arm
+ * exposes a jobs table: Prep names none.
  *
  * AUTHORITY. This resolver returns only CONFIRMED dates (authority='confirmed') read off booked
  * appointments. The advisory paperwork parser (authority='inferred') is a SEPARATE service (S4); a
@@ -66,7 +75,7 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 		const STATE_UNKNOWN        = 'unknown';
 		const STATE_NOT_APPLICABLE = 'not_applicable';
 
-		/** The paper-facing statuses (a refinement of state; INV-12 wants these to print distinctly). */
+		/** The paper-facing statuses (a refinement of state; honest output needs these to print distinctly). */
 		const STATUS_SCHEDULED      = 'scheduled';
 		const STATUS_UNSCHEDULED    = 'unscheduled';
 		const STATUS_UNKNOWN        = 'unknown';
@@ -84,8 +93,31 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 		/** The zeroed-datetime sentinel a MySQL DATETIME can carry; guarded everywhere as "no time". */
 		const ZERO_DATETIME = '0000-00-00 00:00:00';
 
-		/** Component statuses that are DEAD for scheduling purposes (excluded from the pick). */
-		const DEAD_STATUSES = array( 'cancelled' );
+		/** Job statuses that are not worked for and never carry a live date (excluded from the pick). */
+		const DEAD_STATUSES = array( 'done', 'cancelled' );
+
+		/**
+		 * The columns every job-row read selects. created_by, assigned_user_id and sp_code are here
+		 * because ZJOB_Scope::can_see() reads them off the row: selecting fewer makes the gate answer
+		 * "no" for everyone, a permission boundary produced by a typo.
+		 */
+		const ROW_COLS = array(
+			'id',
+			'parent_lead_id',
+			'crm_child_lead_id',
+			'estimate_id',
+			'created_by',
+			'assigned_user_id',
+			'sp_code',
+			'status',
+			'scheduled_appt_id',
+			'scheduled_start_utc',
+			'scheduled_end_utc',
+			'scheduled_tz',
+		);
+
+		/** Per-request memo for the Project gate (flushable: a gate a test cannot vary is untestable). */
+		private static $project_gate_memo = array();
 
 		/** The Core-default CRM-lead ref system. A connections pack points this at its provider ns. */
 		const LEAD_SYSTEM_DEFAULT = 'lead';
@@ -95,15 +127,16 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 		 * =================================================================== */
 
 		/**
-		 * Subscribe the Scheduler drift actions (fired by the Scheduler port, C-02) and register the
+		 * Subscribe the Scheduler drift actions (zsch_appointment_updated / _deleted) and register the
 		 * ongoing lead-ref reconcile on the projects sweep + a version-gated boot run. Idempotent.
 		 */
 		public static function init(): void {
 			if ( ! function_exists( 'add_action' ) ) {
 				return;
 			}
-			// Drift: a calendar edit/delete elsewhere must not leave the cached date lying.
-			add_action( 'zsch_appointment_updated', array( __CLASS__, 'on_appointment_updated' ), 10, 1 );
+			// Drift: a calendar edit/delete elsewhere must not leave the cached date lying. The Scheduler
+			// fires both with the appointment id first (zsch_appointment_updated / _deleted).
+			add_action( 'zsch_appointment_updated', array( __CLASS__, 'on_appointment_changed' ), 10, 1 );
 			add_action( 'zsch_appointment_deleted', array( __CLASS__, 'on_appointment_deleted' ), 10, 1 );
 
 			// The lead-ref reconcile is an ONGOING pass (a one-shot is how Projects froze for six
@@ -113,6 +146,11 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 			$sweep_hook = class_exists( 'Zjob_Project_Sweep' ) ? (string) Zjob_Project_Sweep::HOOK : 'zjob_project_sweep';
 			add_action( $sweep_hook, array( __CLASS__, 'reconcile_tick' ) );
 			add_action( 'init', array( __CLASS__, 'maybe_boot_reconcile' ), 99 );
+		}
+
+		/** The same as init(): subscribe the drift subscriber and the reconcile sweep. */
+		public static function boot(): void {
+			self::init();
 		}
 
 		/* ===================================================================
@@ -134,6 +172,8 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 			$has_any  = false;
 			$has_live = false;
 			$best     = null; // array{ start_utc:string, job:array }
+			$count    = 0;
+			$seen     = array(); // distinct scheduled starts (spread)
 
 			foreach ( $jobs as $job ) {
 				if ( ! is_array( $job ) ) {
@@ -146,6 +186,7 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 					continue; // dead components excluded (a cancelled job is not "unscheduled").
 				}
 				$has_live = true;
+				$count++;
 
 				$appt = (int) ( $job['scheduled_appt_id'] ?? 0 );
 				$st   = trim( (string) ( $job['scheduled_start_utc'] ?? '' ) );
@@ -155,6 +196,8 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 				if ( '' === $st || self::ZERO_DATETIME === $st ) {
 					continue; // guard the zeroed sentinel — never a date.
 				}
+				$seen[ $st ] = true;
+				// EARLIEST wins: the first visit is the deadline, the later ones are slack.
 				if ( null === $best || $st < $best['start_utc'] ) {
 					$best = array( 'start_utc' => $st, 'job' => $job );
 				}
@@ -176,12 +219,17 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 						'confidence'       => 'confirmed',
 						'authority'        => self::AUTHORITY_CONFIRMED,
 						'basis'            => 'job_row_appointment',
+						'job_id'           => (int) ( $best['job']['id'] ?? 0 ),
+						'appt_id'          => (int) ( $best['job']['scheduled_appt_id'] ?? 0 ),
+						'job_count'        => $count,
+						// Several dates across the visible jobs: shown as "+1 more", never as a warning.
+						'spread'           => count( $seen ) > 1,
 					)
 				);
 			}
 
 			if ( $has_live ) {
-				return self::envelope( self::STATUS_UNSCHEDULED, array( 'basis' => 'live_component_no_appointment' ) );
+				return self::envelope( self::STATUS_UNSCHEDULED, array( 'basis' => 'live_component_no_appointment', 'job_count' => $count ) );
 			}
 			if ( $has_any ) {
 				return self::envelope( self::STATUS_NOT_APPLICABLE, array( 'basis' => 'all_components_dead' ) );
@@ -190,7 +238,7 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 		}
 
 		/* ===================================================================
-		 * PER-PROJECT resolution (the precedence rule) — used by the INV-8 arms.
+		 * PER-PROJECT resolution (the precedence rule) — used by the published arms.
 		 * =================================================================== */
 
 		/**
@@ -218,8 +266,8 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 				return self::envelope( self::STATUS_UNKNOWN, array( 'basis' => 'unresolved' ) );
 			}
 
-			// Arm 1 — a job row always wins.
-			$picked = self::pick( Zjob_Project::jobs_for( $project_id ) );
+			// Arm 1 — a job row always wins; each row the viewer may not see contributes nothing.
+			$picked = self::pick( self::visible_rows( $viewer, Zjob_Project::jobs_for( $project_id ) ) );
 			if ( self::STATE_KNOWN === $picked['state'] ) {
 				return $picked;
 			}
@@ -279,68 +327,204 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 					'confidence'       => 'confirmed',
 					'authority'        => self::AUTHORITY_CONFIRMED,
 					'basis'            => 'project_appointment',
+					'appt_id'          => $appt_id,
 				)
 			);
 		}
 
 		/* ===================================================================
-		 * INV-8 — the two PUBLISHED arms Prep and the Scheduler consume.
+		 * The two PUBLISHED arms Prep and the Scheduler consume.
 		 * =================================================================== */
 
 		/**
-		 * Resolve install dates for a batch of CRM lead ids. The lead ref system is the Core-default
-		 * `lead` unless a connections pack points `zdz_project_lead_system` at its provider namespace.
+		 * Resolve install dates for a batch of CRM lead ids — the key for anything that found its job
+		 * through the CRM. BOTH lead columns are matched: one estimate becomes several jobs, and a
+		 * hand-off makes a CRM child lead per job, so the lead a caller looked up may be the parent the
+		 * estimate came from or a child a job was created against.
 		 *
-		 * Each row is gated (fail-closed) inside for_project(); an unresolvable or forbidden lead yields
-		 * an unknown envelope, never a date and never a leak of which projects exist.
+		 * Arm 1: the job rows, each gated (ZJOB_Scope::can_see, fail-closed). Arm 2: the Project the
+		 * lead ref points at (the lead ref system is `lead` unless a connections pack points
+		 * `zdz_project_lead_system` at its provider namespace), only for a lead arm 1 did not schedule.
 		 *
 		 * @param array $lead_ids external CRM lead ids.
 		 * @param int   $viewer   WP user id.
-		 * @return array<string,array> lead_id => envelope.
+		 * @return array<string,array> lead_id => envelope; every requested id is present.
 		 */
 		public static function for_leads( array $lead_ids, int $viewer ): array {
-			$out    = array();
+			$ids = self::clean_ids( $lead_ids );
+			$out = array();
+			foreach ( $ids as $id ) {
+				$out[ (string) $id ] = self::envelope( self::STATUS_UNKNOWN, array( 'basis' => 'unresolved' ) );
+			}
+			if ( empty( $ids ) || $viewer <= 0 ) {
+				return $out;
+			}
+
+			// Arm 1 — the job rows.
+			$buckets = array_fill_keys( array_map( 'strval', $ids ), array() );
+			foreach ( self::visible_rows( $viewer, self::rows_for_leads( $ids ) ) as $r ) {
+				// One row can answer for more than one requested lead (a parent and its child).
+				$p = (string) (int) ( $r['parent_lead_id'] ?? 0 );
+				$c = (string) (int) ( $r['crm_child_lead_id'] ?? 0 );
+				if ( '0' !== $p && isset( $buckets[ $p ] ) ) {
+					$buckets[ $p ][] = $r;
+				}
+				if ( '0' !== $c && $c !== $p && isset( $buckets[ $c ] ) ) {
+					$buckets[ $c ][] = $r;
+				}
+			}
+			foreach ( $buckets as $key => $rows ) {
+				if ( $rows ) {
+					$out[ $key ] = self::pick( $rows );
+				}
+			}
+
+			// Arm 2 — the Project, for what a job row did not schedule.
 			$system = self::lead_system();
-			foreach ( $lead_ids as $lid ) {
-				$key = (string) $lid;
-				if ( '' === $key || isset( $out[ $key ] ) ) {
+			foreach ( $out as $key => $env ) {
+				$out[ $key ] = self::fill_from_project( $env, self::project_for( $system, (string) $key ), $viewer );
+			}
+			return $out;
+		}
+
+		/** Single-lead convenience. Wraps the batch; never a second query shape. */
+		public static function for_lead( int $lead_id, int $viewer ): array {
+			$all = self::for_leads( array( $lead_id ), $viewer );
+			return $all[ (string) $lead_id ] ?? self::envelope( self::STATUS_UNKNOWN, array( 'basis' => 'unresolved' ) );
+		}
+
+		/**
+		 * Resolve install dates for a batch of estimate NUMBERS — for a card that has no lead id. Each
+		 * number is the human document number, disambiguated to the estimate app's own id through the
+		 * `zdz_estimate_id_for_number` seam (estimate #12 and invoice #12 are different records). Arm 1:
+		 * the jobs made from that estimate, gated per row. Arm 2: the Project holding the estimate.
+		 *
+		 * @param array $est_nums estimate document numbers.
+		 * @param int   $viewer   WP user id.
+		 * @return array<string,array> estimate_number => envelope; every requested number is present.
+		 */
+		public static function for_estimate_numbers( array $est_nums, int $viewer ): array {
+			$nums = array();
+			foreach ( $est_nums as $n ) {
+				$n = trim( (string) $n );
+				if ( '' !== $n ) {
+					$nums[ $n ] = true;
+				}
+			}
+			$out = array();
+			foreach ( array_keys( $nums ) as $n ) {
+				$out[ (string) $n ] = self::envelope( self::STATUS_UNKNOWN, array( 'basis' => 'unresolved' ) );
+			}
+			if ( empty( $out ) || $viewer <= 0 ) {
+				return $out;
+			}
+			foreach ( array_keys( $out ) as $key ) {
+				$eid = self::estimate_id_for_number( (string) $key );
+				if ( $eid <= 0 ) {
 					continue;
 				}
-				$pid = self::project_for( $system, $key );
-				$out[ $key ] = ( '' === $pid )
-					? self::envelope( self::STATUS_UNKNOWN, array( 'basis' => 'unresolved' ) )
-					: self::for_project( $pid, $viewer );
+				$rows = self::visible_rows( $viewer, self::rows_for_estimate( $eid ) );
+				if ( $rows ) {
+					$out[ $key ] = self::pick( $rows );
+				}
+				$out[ $key ] = self::fill_from_project( $out[ $key ], self::project_for( 'estimate', (string) $eid ), $viewer );
 			}
 			return $out;
 		}
 
 		/**
-		 * Resolve install dates for a batch of estimate NUMBERS (the human document number, disambiguated
-		 * to a local estimate id → the `estimate` Project ref). Prep passes numbers; this maps each to a
-		 * local id via the `zdz_estimate_id_for_number` seam and gates per row.
-		 *
-		 * @param array $est_nums estimate document numbers.
-		 * @param int   $viewer   WP user id.
-		 * @return array<string,array> estimate_number => envelope.
+		 * The Project arm for one key: only when the job-row answer is not already scheduled, and only
+		 * for a Project the viewer may use. Keeps the more informative answer; never a downgrade.
 		 */
-		public static function for_estimate_numbers( array $est_nums, int $viewer ): array {
+		private static function fill_from_project( array $env, string $project_id, int $viewer ): array {
+			if ( self::STATE_KNOWN === ( $env['state'] ?? '' ) || '' === $project_id ) {
+				return $env; // a job row already answered: it wins.
+			}
+			$proj = self::for_project_memo( $project_id, $viewer );
+			if ( self::STATE_KNOWN === ( $proj['state'] ?? '' ) ) {
+				// Keep "we know of N jobs" from the job-side answer: a truer sentence than "nothing".
+				$proj['job_count'] = max( (int) ( $proj['job_count'] ?? 0 ), (int) ( $env['job_count'] ?? 0 ) );
+				return $proj;
+			}
+			return self::merge_non_known( $env, $proj );
+		}
+
+		/** for_project(), memoised per request (a batch can name one Project many times). */
+		private static function for_project_memo( string $project_id, int $viewer ): array {
+			$k = $viewer . ':' . $project_id;
+			if ( ! isset( self::$project_gate_memo[ $k ] ) ) {
+				self::$project_gate_memo[ $k ] = self::for_project( $project_id, $viewer );
+			}
+			return self::$project_gate_memo[ $k ];
+		}
+
+		/** Drop the per-request memo (tests; anything that changes scope mid-request). */
+		public static function flush_memo(): void {
+			self::$project_gate_memo = array();
+		}
+
+		/**
+		 * The rows this viewer may see, ONE BY ONE (ZJOB_Scope::can_see). Fails CLOSED: with no scope
+		 * class every row is dropped, because "we could not check" must never read as "allowed".
+		 *
+		 * @param int   $viewer
+		 * @param array $rows job rows (each carrying created_by, assigned_user_id, sp_code).
+		 * @return array the visible rows, in order.
+		 */
+		public static function visible_rows( int $viewer, array $rows ): array {
+			if ( $viewer <= 0 || ! class_exists( 'ZJOB_Scope' ) || ! method_exists( 'ZJOB_Scope', 'can_see' ) ) {
+				return array();
+			}
 			$out = array();
-			foreach ( $est_nums as $num ) {
-				$key = (string) $num;
-				if ( '' === $key || isset( $out[ $key ] ) ) {
-					continue;
+			foreach ( $rows as $r ) {
+				if ( is_array( $r ) && ZJOB_Scope::can_see( $viewer, $r ) ) {
+					$out[] = $r;
 				}
-				$eid = self::estimate_id_for_number( $key );
-				if ( $eid <= 0 ) {
-					$out[ $key ] = self::envelope( self::STATUS_UNKNOWN, array( 'basis' => 'unresolved' ) );
-					continue;
-				}
-				$pid = self::project_for( 'estimate', (string) $eid );
-				$out[ $key ] = ( '' === $pid )
-					? self::envelope( self::STATUS_UNKNOWN, array( 'basis' => 'unresolved' ) )
-					: self::for_project( $pid, $viewer );
 			}
 			return $out;
+		}
+
+		/** Job rows carrying any of these leads (parent or child), every status (pick() drops the dead). */
+		private static function rows_for_leads( array $ids ): array {
+			global $wpdb;
+			if ( empty( $ids ) || ! isset( $wpdb ) || ! class_exists( 'ZJOB_DB' ) ) {
+				return array();
+			}
+			$in    = implode( ',', array_map( 'intval', $ids ) ); // ints only (clean_ids)
+			$table = ZJOB_DB::table();
+			$cols  = implode( ', ', self::ROW_COLS );
+			$rows  = $wpdb->get_results(
+				"SELECT {$cols} FROM {$table} WHERE parent_lead_id IN ({$in}) OR crm_child_lead_id IN ({$in}) LIMIT 2000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- fixed table and column names (ZJOB_DB::table(), self::ROW_COLS); the IN list is ints only (clean_ids, intval).
+				ARRAY_A
+			);
+			return is_array( $rows ) ? $rows : array();
+		}
+
+		/** Job rows made from one estimate (the estimate app's own id), every status. */
+		private static function rows_for_estimate( int $estimate_id ): array {
+			global $wpdb;
+			if ( $estimate_id <= 0 || ! isset( $wpdb ) || ! class_exists( 'ZJOB_DB' ) ) {
+				return array();
+			}
+			$table = ZJOB_DB::table();
+			$cols  = implode( ', ', self::ROW_COLS );
+			$rows  = $wpdb->get_results(
+				$wpdb->prepare( "SELECT {$cols} FROM {$table} WHERE estimate_id = %d LIMIT 500", $estimate_id ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- fixed table and column names (ZJOB_DB::table(), self::ROW_COLS); the id is a placeholder.
+				ARRAY_A
+			);
+			return is_array( $rows ) ? $rows : array();
+		}
+
+		/** Positive unique ints only: what makes the IN clause safe. */
+		private static function clean_ids( array $ids ): array {
+			$out = array();
+			foreach ( $ids as $id ) {
+				$id = (int) $id;
+				if ( $id > 0 ) {
+					$out[ $id ] = true;
+				}
+			}
+			return array_keys( $out );
 		}
 
 		/* ===================================================================
@@ -349,7 +533,7 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 
 		/**
 		 * A non-empty display line for a resolved envelope. The three non-scheduled states print
-		 * DISTINCTLY (INV-12). Wording is [IDENTITY→document-conventions] via the
+		 * DISTINCTLY. Wording is [IDENTITY→document-conventions] via the
 		 * `zjob_install_date_paper_line` filter; the Core defaults are generic English (no company /
 		 * person / product / place / provider name) and carry NO overdue/late/fault token — a missing
 		 * date is not a fault.
@@ -382,7 +566,7 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 		}
 
 		/* ===================================================================
-		 * THE CROSSWALK — total; state and status never conflate.
+		 * STATUS → STATE MAP — total; state and status never conflate.
 		 * =================================================================== */
 
 		/**
@@ -410,65 +594,127 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 		 * =================================================================== */
 
 		/**
-		 * A linked appointment was UPDATED elsewhere. Re-read the truth (never trust the hook payload —
-		 * two differently shaped call sites exist, incl. the external-calendar reconcile) and refresh the
-		 * cached start/end/tz on every job row that points at it. Fires `zjob_schedule_drifted` only when the
-		 * start actually moved. A now-cancelled/deleted appointment clears the cache.
+		 * A linked appointment CHANGED elsewhere (moved in the Scheduler, or reconciled from an external
+		 * calendar). Refresh every job row cached against it.
+		 *
+		 * Deliberately ignores the hook payload and re-reads the appointment: the Scheduler's call sites
+		 * pass differently shaped data, and a subscriber that trusts one shape writes a wrong date the
+		 * first time the other fires. get_raw() is authoritative; this is a write path, not a render.
+		 *
+		 * Only rows whose cached start, end or time zone differ are written, and a history line
+		 * (`job_schedule_synced`) is recorded only for a row whose START moved: the hook also fires from
+		 * the periodic calendar pull, and a line per tick would bury the history in noise. A gone,
+		 * deleted or cancelled appointment is treated as a delete. `zjob_schedule_drifted` fires once
+		 * when any start moved.
 		 *
 		 * @param int $appt_id
 		 */
-		public static function on_appointment_updated( $appt_id ): void {
+		public static function on_appointment_changed( $appt_id ): void {
 			$appt_id = (int) $appt_id;
-			if ( $appt_id <= 0 ) {
+			if ( $appt_id <= 0 || ! class_exists( 'ZSCH_Appointments' ) || ! is_callable( array( 'ZSCH_Appointments', 'get_raw' ) ) ) {
 				return;
 			}
-			if ( ! class_exists( 'ZSCH_Appointments' ) || ! is_callable( array( 'ZSCH_Appointments', 'get_raw' ) ) ) {
-				return;
-			}
-			$raw = ZSCH_Appointments::get_raw( $appt_id );
-			if ( ! is_array( $raw ) || ! empty( $raw['deleted_at'] ) || 'cancelled' === strtolower( (string) ( $raw['status'] ?? '' ) ) ) {
-				self::on_appointment_deleted( $appt_id );
-				return;
-			}
-			$new_start = trim( (string) ( $raw['start_utc'] ?? '' ) );
-			$new_end   = trim( (string) ( $raw['end_utc'] ?? '' ) );
-			$new_tz    = (string) ( $raw['time_zone'] ?? '' );
-			if ( '' === $new_start || self::ZERO_DATETIME === $new_start ) {
-				return; // nothing meaningful to cache.
-			}
-
-			global $wpdb;
-			if ( ! isset( $wpdb ) || ! class_exists( 'ZJOB_DB' ) ) {
-				return;
-			}
-			$table = ZJOB_DB::table();
-			$moved = (int) $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT COUNT(*) FROM {$table} WHERE scheduled_appt_id = %d AND ( scheduled_start_utc IS NULL OR scheduled_start_utc <> %s )",
-					$appt_id,
-					$new_start
-				)
-			);
-			$wpdb->update(
-				$table,
-				array(
-					'scheduled_start_utc' => $new_start,
-					'scheduled_end_utc'   => ( '' !== $new_end && self::ZERO_DATETIME !== $new_end ) ? $new_end : null,
-					'scheduled_tz'        => $new_tz,
-				),
-				array( 'scheduled_appt_id' => $appt_id ),
-				array( '%s', '%s', '%s' ),
-				array( '%d' )
-			);
-			if ( $moved > 0 && function_exists( 'do_action' ) ) {
-				do_action( 'zjob_schedule_drifted', $appt_id, $new_start );
+			try {
+				$raw = ZSCH_Appointments::get_raw( $appt_id );
+				if ( ! is_array( $raw ) || ! empty( $raw['deleted_at'] ) || 'cancelled' === strtolower( (string) ( $raw['status'] ?? '' ) ) ) {
+					self::on_appointment_deleted( $appt_id );
+					return;
+				}
+				global $wpdb;
+				if ( ! isset( $wpdb ) || ! class_exists( 'ZJOB_DB' ) ) {
+					return;
+				}
+				$table = ZJOB_DB::table();
+				$rows  = $wpdb->get_results(
+					$wpdb->prepare( "SELECT id, scheduled_start_utc, scheduled_end_utc, scheduled_tz FROM {$table} WHERE scheduled_appt_id = %d", $appt_id ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a fixed name; the id is a placeholder.
+					ARRAY_A
+				);
+				$plan  = self::drift_plan( is_array( $rows ) ? $rows : array(), $raw );
+				$moved = false;
+				$now   = self::now();
+				foreach ( $plan as $u ) {
+					$wpdb->update(
+						$table,
+						array(
+							'scheduled_start_utc' => $u['start'],
+							'scheduled_end_utc'   => $u['end'],
+							'scheduled_tz'        => $u['tz'],
+							'updated_at'          => $now,
+						),
+						array( 'id' => $u['id'] ),
+						array( '%s', '%s', '%s', '%s' ),
+						array( '%d' )
+					);
+					if ( $u['moved'] ) {
+						$moved = true;
+						self::history(
+							$u['id'],
+							'job_schedule_synced',
+							'The appointment moved in the Scheduler. The job\'s time was updated to match.',
+							array( 'from' => $u['from'], 'to' => (string) $u['start'], 'appt_id' => $appt_id, 'via' => 'scheduler-hook' )
+						);
+					}
+				}
+				if ( $moved && function_exists( 'do_action' ) ) {
+					do_action( 'zjob_schedule_drifted', $appt_id, (string) ( $plan[0]['start'] ?? '' ) );
+				}
+			} catch ( \Throwable $e ) {
+				error_log( 'Zorderz Jobs: install-date sync failed for appointment ' . $appt_id . '.' );
 			}
 		}
 
+		/** The same subscriber under its earlier name. */
+		public static function on_appointment_updated( $appt_id ): void {
+			self::on_appointment_changed( $appt_id );
+		}
+
 		/**
-		 * A linked appointment was DELETED elsewhere. Mirror the clear on every job row (else
-		 * is_scheduled() answers true forever for a deleted appointment) and FORGET the Project's
-		 * appointment ref (else the UNIQUE index permanently blocks re-use of that appointment id).
+		 * PURE: which cached rows to write after an appointment changed, and which of them moved.
+		 * A row is written only when its start, end or time zone differs from the appointment; it is
+		 * "moved" only when its start differs. A zeroed or empty time is stored as NULL, never as a date.
+		 *
+		 * @param array $rows rows of { id, scheduled_start_utc, scheduled_end_utc, scheduled_tz }.
+		 * @param array $raw  the appointment as the Scheduler stores it (start_utc, end_utc, time_zone).
+		 * @return array<int,array{id:int,start:?string,end:?string,tz:string,moved:bool,from:string}>
+		 */
+		public static function drift_plan( array $rows, array $raw ): array {
+			$clean = static function ( $v ): ?string {
+				$v = trim( (string) $v );
+				return ( '' === $v || self::ZERO_DATETIME === $v ) ? null : $v;
+			};
+			$start = $clean( $raw['start_utc'] ?? '' );
+			$end   = $clean( $raw['end_utc'] ?? '' );
+			$tz    = (string) ( $raw['time_zone'] ?? '' );
+			$out   = array();
+			foreach ( $rows as $r ) {
+				$id = (int) ( $r['id'] ?? 0 );
+				if ( $id <= 0 ) {
+					continue;
+				}
+				$was_start = $clean( $r['scheduled_start_utc'] ?? '' );
+				$was_end   = $clean( $r['scheduled_end_utc'] ?? '' );
+				$was_tz    = (string) ( $r['scheduled_tz'] ?? '' );
+				$moved     = $was_start !== $start;
+				if ( ! $moved && $was_end === $end && $was_tz === $tz ) {
+					continue; // nothing changed for this row: no write, no history line.
+				}
+				$out[] = array(
+					'id'    => $id,
+					'start' => $start,
+					'end'   => $end,
+					'tz'    => $tz,
+					'moved' => $moved,
+					'from'  => (string) $was_start,
+				);
+			}
+			return $out;
+		}
+
+		/**
+		 * A linked appointment was DELETED elsewhere. Break the link on every job that cached it (else
+		 * is_scheduled() answers true forever for an appointment that no longer exists), record why on
+		 * each job, and FORGET the Project's appointment ref (else the unique index blocks re-use of that
+		 * appointment id). A system reaction to an authoritative event, so no permission gate.
 		 *
 		 * @param int $appt_id
 		 */
@@ -478,26 +724,50 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 				return;
 			}
 			global $wpdb;
-			if ( isset( $wpdb ) && class_exists( 'ZJOB_DB' ) ) {
-				$wpdb->update(
-					ZJOB_DB::table(),
-					array(
-						'scheduled_appt_id'   => 0,
-						'scheduled_start_utc' => null,
-						'scheduled_end_utc'   => null,
-						'scheduled_tz'        => '',
-					),
-					array( 'scheduled_appt_id' => $appt_id ),
-					array( '%d', '%s', '%s', '%s' ),
-					array( '%d' )
-				);
-			}
-			// Drop the Project's appointment ref so the calendar and the container agree again.
-			if ( class_exists( 'Zdz_Flow_Refs' ) && class_exists( 'Zjob_Appointment_Link' ) ) {
-				$pid = Zdz_Flow_Refs::get( Zjob_Appointment_Link::SYSTEM, Zjob_Appointment_Link::ENTITY, (string) $appt_id );
-				if ( null !== $pid ) {
-					Zjob_Appointment_Link::forget( (string) $pid, $appt_id );
+			try {
+				if ( isset( $wpdb ) && class_exists( 'ZJOB_DB' ) ) {
+					$table = ZJOB_DB::table();
+					$ids   = (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$table} WHERE scheduled_appt_id = %d", $appt_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a fixed name; the id is a placeholder.
+					foreach ( $ids as $jid ) {
+						$wpdb->update(
+							$table,
+							array(
+								'scheduled_appt_id'   => 0,
+								'scheduled_start_utc' => null,
+								'scheduled_end_utc'   => null,
+								'scheduled_tz'        => '',
+								'scheduled_by'        => 0,
+								'scheduled_at'        => null,
+								'updated_at'          => self::now(),
+							),
+							array( 'id' => (int) $jid ),
+							array( '%d', '%s', '%s', '%s', '%d', '%s', '%s' ),
+							array( '%d' )
+						);
+						self::history(
+							(int) $jid,
+							'job_schedule_cleared',
+							'The appointment was deleted in the Scheduler. This job is waiting for a time again.',
+							array( 'appt_id' => $appt_id, 'via' => 'scheduler-hook' )
+						);
+					}
 				}
+				// Drop the Project's appointment ref so the calendar and the container agree again.
+				if ( class_exists( 'Zdz_Flow_Refs' ) && class_exists( 'Zjob_Appointment_Link' ) ) {
+					$pid = Zdz_Flow_Refs::get( Zjob_Appointment_Link::SYSTEM, Zjob_Appointment_Link::ENTITY, (string) $appt_id );
+					if ( null !== $pid ) {
+						Zjob_Appointment_Link::forget( (string) $pid, $appt_id );
+					}
+				}
+			} catch ( \Throwable $e ) {
+				error_log( 'Zorderz Jobs: install-date clear failed for appointment ' . $appt_id . '.' );
+			}
+		}
+
+		/** One history line on a job (through the published job face, which also refreshes its Project). */
+		private static function history( int $job_id, string $type, string $words, array $context ): void {
+			if ( class_exists( 'ZJOB_Handoff' ) ) {
+				ZJOB_Handoff::record_event( $job_id, $type, 0, $words, $context );
 			}
 		}
 
@@ -654,7 +924,7 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 
 		/**
 		 * Build a well-formed envelope from a paper status. The state is DERIVED from the status (the
-		 * crosswalk is the only authority), and a real date/time/start_utc is stripped for any non-known
+		 * status → state mapping is the only authority), and a real date/time/start_utc is stripped for any non-known
 		 * state — so "unknown" is structurally incapable of carrying a real date or the zeroed sentinel.
 		 *
 		 * @param string $status one of the STATUS_* constants.
@@ -681,6 +951,10 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 				'confidence'       => 'none',
 				'basis'            => '',
 				'authority'        => self::AUTHORITY_NONE,
+				'job_id'           => 0,
+				'appt_id'          => 0,
+				'job_count'        => 0,
+				'spread'           => false,
 				'cached_at'        => self::now(),
 			);
 			foreach ( $extra as $k => $v ) {
@@ -697,6 +971,9 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 				$out['source']     = self::SOURCE_NONE;
 				$out['confidence'] = 'none';
 				$out['authority']  = self::AUTHORITY_NONE;
+				$out['job_id']     = 0;
+				$out['appt_id']    = 0;
+				$out['spread']     = false;
 			}
 			return $out;
 		}
@@ -826,12 +1103,12 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 			return 'UTC';
 		}
 
-		/** GATE 1, fail-closed: may this viewer use this project at all (relationship != none)? */
+		/** GATE 1, fail-closed: may this viewer see this project at all (relationship != none, reading)? */
 		private static function actor_may_use( int $viewer, array $project ): bool {
 			if ( ! class_exists( 'Zjob_Project_Visibility' ) ) {
 				return false; // refuse, do not guess.
 			}
-			return Zjob_Project_Visibility::actor_may_use_project( $viewer, $project );
+			return Zjob_Project_Visibility::may_view_project( $viewer, $project );
 		}
 
 		/** Current UTC timestamp (WP when present, else gmdate). */

@@ -14,7 +14,7 @@
  *      ('v1s:' / 'v1o:') so both schemes decrypt side by side if the PHP build
  *      changes.
  *
- *   2. SINGLE-FLIGHT REFRESH (INV-4 — the FreshBooks lesson). Refresh tokens
+ *   2. SINGLE-FLIGHT REFRESH (as the FreshBooks token service does). Refresh tokens
  *      race: two requests refreshing the same account can strand it, and
  *      Microsoft ROTATES the refresh token on every use, so a lost rotation is
  *      fatal for that grant. One MySQL GET_LOCK per account serializes the
@@ -34,7 +34,7 @@
  * LOGGING: token VALUES never appear in any log — lengths and versions only
  * (token-service house style).
  *
- * @since 1.6.0 (Connected Calendars Phase 0)
+ * @since 1.6.0 (Connected Calendars)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

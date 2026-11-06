@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build the two Zorderz release artifacts.
+# Build the three Zorderz release artifacts.
 #
 #   ./build.sh
 #
@@ -13,18 +13,21 @@
 #   zorderz-apps-<version>.zip    The apps bundle on its own. This is the update
 #                                 path, and the manual second artifact for hosts
 #                                 where the theme cannot write to wp-content/plugins.
+#   zorderz-hub-<version>.zip     The reference Charts hub (a Python service the
+#                                 business runs on its own computer; see
+#                                 hub/README.md). Never inside the theme or apps zips.
 #
 # The version is read from the theme's style.css, so both artifacts always agree.
 # The vendored copy under zorderz/bundled/zorderz-apps/ is a build product and is
 # gitignored; only zorderz/bundled/.gitkeep is tracked.
 #
-# ── Completeness / packaging gate (PLAN AC3, the "partial-zip" defense) ──
+# ── Completeness / packaging gate (the "partial-zip" defense) ──
 # Before ANY packaging, and again after vendoring, the build refuses to produce a
 # zip that is not whole: every file the app loaders reference must resolve, no
 # include may be pulled through a silent glob(), declared hot-path classes must be
 # defined in the tree, every app PHP file must lint, and the vendored file set must
 # equal the source set. A missing includes/*.php that would only fatal later at
-# wp_head (§74) is caught here instead of shipping.
+# wp_head is caught here instead of shipping.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -92,7 +95,7 @@ while IFS= read -r rel; do
     fi
   done < <(grep -E '(require|include)(_once)?([[:space:]]|\()' "${appfile}" || true)
 
-  # (b') A silent glob()-driven include is the exact §74 failure mode — forbid it
+  # (b') A silent glob()-driven include is the exact partial-zip failure mode — forbid it
   #      on the load path (an enumerated require_once cannot silently skip a file).
   #      Catch a require/include and a glob() together on one line, in either order.
   if grep -E 'glob[[:space:]]*\(' "${appfile}" | grep -qE '(require|include)'; then
@@ -114,6 +117,42 @@ while IFS= read -r -d '' php; do
     gate_note "PHP lint failed: ${php}"
   fi
 done < <(find zorderz-apps -name '*.php' -not -path '*/.git*' -print0)
+
+# (f) The hub: every module must compile, and the example packs must be present.
+if [ -d hub ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    if ! python3 - <<'PYCHECK'
+import pathlib, sys
+bad = []
+for p in sorted(pathlib.Path("hub").rglob("*.py")):
+    try:
+        compile(p.read_text(encoding="utf-8"), str(p), "exec")
+    except SyntaxError as e:
+        bad.append(f"{p}: {e}")
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PYCHECK
+    then
+      gate_note "hub: a Python module does not compile"
+    fi
+  fi
+  for f in hub/README.md hub/requirements.txt hub/zorderz_hub/__main__.py hub/packs/example/profile.yml \
+           hub/regions/example/region.json; do
+    [ -f "${f}" ] || gate_note "hub: ${f} is missing"
+  done
+fi
+
+# (g) The plugin header's "N apps (…)" names exactly the manifest's apps, in its order, so the
+#     description a site sees on the Plugins screen never drifts from what the bundle loads.
+manifest_labels="$(sed -nE "s/^[[:space:]]*'label'[[:space:]]*=>[[:space:]]*'([^']*)',.*/\1/p" "${manifest}")"
+manifest_count="$(printf '%s\n' "${manifest_labels}" | grep -c . || true)"
+manifest_names="$(printf '%s\n' "${manifest_labels}" | paste -sd ',' - | sed 's/,/, /g')"
+header_desc="$(grep -m1 -E '^ \* Description:' "${manifest}" || true)"
+header_count="$(printf '%s' "${header_desc}" | sed -nE 's/.* - ([0-9]+) apps \(.*/\1/p')"
+header_names="$(printf '%s' "${header_desc}" | sed -nE 's/.* [0-9]+ apps \(([^)]*)\)\..*/\1/p')"
+if [ "${header_count}" != "${manifest_count}" ] || [ "${header_names}" != "${manifest_names}" ]; then
+  gate_note "the plugin header says ${header_count:-?} apps (${header_names:-unreadable}); the manifest lists ${manifest_count}: write \"${manifest_count} apps (${manifest_names}).\" in its Description"
+fi
 
 if [ "${gate_fail}" -ne 0 ]; then
   echo "build.sh: REFUSING to package — ${gate_fail} completeness problem(s) above." >&2
@@ -145,6 +184,19 @@ fi
 
 # 3) The theme, now carrying the bundled apps.
 zip -rq "dist/zorderz-theme-${VER}.zip" zorderz -x '*.git*' -x '*/.DS_Store'
+
+# 4) The reference Charts hub, on its own (no caches).
+if [ -d hub ]; then
+  zip -rq "dist/zorderz-hub-${VER}.zip" hub -x '*.git*' -x '*/.DS_Store' -x '*/__pycache__/*' -x '*.pyc'
+fi
+
+# The hub never rides inside the theme or the apps bundle.
+for z in "dist/zorderz-theme-${VER}.zip" "dist/zorderz-apps-${VER}.zip"; do
+  if unzip -Z1 "${z}" | grep -qE '(^|/)hub/zorderz_hub/'; then
+    echo "build.sh: REFUSING — ${z} contains the hub." >&2
+    exit 1
+  fi
+done
 
 echo "Done:"
 ls -la dist/

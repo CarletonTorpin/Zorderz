@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Zorderz Quick-ID
- * Description: Swipe from the left edge of the homepage to slide in a full-screen, photographable digital business card for the signed-in person. The card face is built from the Business Profile (logo, phone, licence, former-name line, promo banner) and the person's own account.
- * Version: 1.6.0
+ * Description: A deliberate pull-in from the left edge of the homepage slides in a full-screen, photographable digital business card for the signed-in person. The card face is built from the Business Profile (logo, phone, licence, former-name line, promo banner) and the person's own account.
+ * Version: 1.7.0
  * Author: Zorderz
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -12,9 +12,9 @@
  * ── What this is ──────────────────────────────────────────────────────
  * An OUTPUT-ONLY feature: no AJAX, no REST, no admin-post, no nonces in the
  * DOM. The card shows only the CURRENTLY SIGNED-IN person's own identity,
- * rendered server-side into the homepage footer (INV-1: nothing here trusts
- * the client). The shared-device / kiosk tier never shows a personal card
- * (INV-10), resolved through the theme's own kiosk predicate rather than a
+ * rendered server-side into the homepage footer (nothing here trusts the
+ * client). The shared-device / kiosk tier never shows a personal card,
+ * resolved through the theme's own kiosk predicate rather than a
  * hardcoded role slug.
  *
  * ── Why there is no springboard tile ──────────────────────────────────
@@ -41,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ZQID_VERSION', '1.6.0' );
+define( 'ZQID_VERSION', '1.7.0' );
 define( 'ZQID_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZQID_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 
@@ -71,11 +71,10 @@ final class ZQID_Card {
 	private static $instance = null;
 
 	/**
-	 * Per-person card override meta keys, mapped to their deprecated
-	 * predecessors. The new `zqid_*` keys are authoritative; the legacy
-	 * `tsqid_*` keys are read as a fallback and migrated on the next profile
-	 * save, so an install upgraded from the pre-rename lineage keeps its
-	 * per-person card data. (Successor for the deprecated `tsqid_*` keys.)
+	 * Per-person card override meta keys, mapped to their pre-rename keys.
+	 * The `zqid_*` keys are authoritative; the pre-rename `tsqid_*` keys are
+	 * read as a fallback and migrated on the next profile save, so an upgraded
+	 * install keeps its per-person card data.
 	 *
 	 * @var array<string,string>
 	 */
@@ -117,7 +116,7 @@ final class ZQID_Card {
 			return false;
 		}
 		// The shared device / kiosk is never a person and never shows a personal
-		// card (INV-10). Resolved through the theme, not a role literal.
+		// card. Resolved through the theme, not a role literal.
 		if ( $this->is_shared_device( $user ) ) {
 			return false;
 		}
@@ -165,11 +164,10 @@ final class ZQID_Card {
 	/**
 	 * Company-wide card values, read from the Business Profile.
 	 *
-	 * Everything here was a hardcoded literal in the source plugin (phone,
-	 * licence number, an absolute logo URL, a "formerly …" line, a place-specific
-	 * promo banner, the staff email domain). Each now resolves from Core config
-	 * and ships EMPTY, so a fresh install renders a coherent blank-slate card and
-	 * a business lights the fields up by filling in its profile.
+	 * Phone, licence number, logo, a "formerly …" line, a promo banner and the
+	 * staff email domain each resolve from Core config and ship EMPTY, so a
+	 * fresh install renders a coherent blank-slate card and a business lights
+	 * the fields up by filling in its profile.
 	 *
 	 * @return array
 	 */
@@ -343,7 +341,7 @@ final class ZQID_Card {
 		$has_banner  = ( '' !== $d['banner_top'] || '' !== $d['banner_big'] );
 		$card_class  = ( '' === $d['title'] ? ' zqid-no-title' : '' ) . ( '' === $d['cell'] ? ' zqid-no-cell' : '' );
 		?>
-<div class="zqid-overlay zqid-closed" id="zqidOverlay" role="dialog" aria-modal="true"
+<div class="zqid-overlay" id="zqidOverlay" role="dialog" aria-modal="true"
      aria-label="<?php esc_attr_e( 'Business card', 'zorderz' ); ?>" aria-hidden="true">
   <div class="zqid-card<?php echo esc_attr( $card_class ); ?>" id="zqidCard">
 
@@ -409,7 +407,7 @@ final class ZQID_Card {
 
   <button type="button" class="zqid-close" id="zqidClose"
           aria-label="<?php esc_attr_e( 'Close', 'zorderz' ); ?>">&#10005;</button>
-  <div class="zqid-hint"><?php esc_html_e( 'Swipe left or tap \'X\' to close', 'zorderz' ); ?></div>
+  <div class="zqid-hint"><?php esc_html_e( 'Swipe left, tap outside, or tap the X to close', 'zorderz' ); ?></div>
 </div>
 		<?php
 	}
@@ -478,7 +476,7 @@ final class ZQID_Card {
 			} else {
 				update_user_meta( $user_id, $key, $val );
 			}
-			// Retire the deprecated predecessor either way (one-time migration).
+			// Retire the pre-rename key either way (one-time migration).
 			delete_user_meta( $user_id, $legacy );
 		}
 	}
