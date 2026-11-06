@@ -1,5 +1,31 @@
 /**
- * Zorderz Media — shared controller v2.3.3 (v2.3.3 makes the dashboard WIDGET
+ * Zorderz Media - shared controller.
+ *
+ * requests, toasts, the loader and busy buttons are the theme's kit of parts
+ * (ZDZ.ui), and each photo shows its uploader's badge in the lower-right corner.
+ * The bulk upload keeps its own XMLHttpRequest, because it shows each file's upload progress and the
+ * kit's requests have no progress events.
+ *
+ * The LIGHTBOX is built around the photo instead of around the chrome.
+ * The stage is the full viewport; the top bar and the meta panel float over
+ * it, and the meta panel is a collapsed-by-default sheet. A stage squeezed by
+ * the chrome left a phone in portrait with wide black borders, small images
+ * and no useful zoom. The zoom engine was fine -- the stage was not. The meta
+ * panel was a normal-flow flex child running to ~370px of an ~850px viewport,
+ * so a portrait photo was being fitted into a landscape-shaped box and
+ * pillarboxed. Because zoom scale 1 means "fit", the squeezed stage was also
+ * capping how far you could zoom: 4x of an already-shrunken image never reached
+ * 1:1 pixels on a 4000px original. Enlarging the fit raises that ceiling by the
+ * same ratio, with no change to the zoom maths.
+ * Also: real touch double-tap (it previously relied on a synthesised
+ * dblclick that touch-action:none suppresses on phones); progressive paint
+ * (thumbnail first, original swapped in on decode) instead of staring at an
+ * empty stage while 4-8MB streams; an error path for HEIC originals, which
+ * every non-Apple browser fails to decode and which used to fail to silent
+ * black; a pan re-clamp on load, resize and rotate; and an iOS keyboard inset
+ * so the software keyboard cannot cover the note field.
+ *
+ * (v2.3.3 makes the dashboard WIDGET
  * browsable on its own: a larger first page + a "Load more" button that appends
  * pages in place, so users don't have to open "See All" to see beyond the
  * recent slice. v2.3.0 added the admin-only "All" scope: browse every photo
@@ -7,8 +33,8 @@
  * mode + delete: granular or bulk, double-confirmed, owner-or-admin.)
  *
  * ONE controller, TWO surfaces:
- *   • window.TSMedia.mountWidget(rootEl)      → compact dashboard card
- *   • window.TSMedia.mountFullscreen(rootEl)  → roomy #app-body gallery
+ *   • window.ZMLMedia.mountWidget(rootEl)      → compact dashboard card
+ *   • window.ZMLMedia.mountFullscreen(rootEl)  → roomy #app-body gallery
  *
  * Enqueued GLOBALLY on the SPA front page (not injected via innerHTML), so it
  * runs reliably on both surfaces — including the full-screen ajax_html surface,
@@ -29,32 +55,62 @@
   function byId(id) { return document.getElementById(id); }
   function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
   function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
-
-  function ajax(action, data) {
-    var fd = new FormData();
-    fd.append('action', action);
-    fd.append('nonce', cfg().nonce);
-    for (var k in data) if (Object.prototype.hasOwnProperty.call(data, k)) fd.append(k, data[k]);
-    return fetch(cfg().ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
-      .then(function (r) { return r.json(); });
+  // Phone tiles must look sharp. A tile on a 3x phone needs ~360 pixels and the thumb is 300; the theme
+  // also offers a 768-pixel thumb, which high-density screens now pick.
+  function thumbSrcset(it) {
+    if (!it || !it.thumbnail_2x_url || !it.thumbnail_url) return '';
+    return ' srcset="' + escAttr(it.thumbnail_url) + ' 1x, ' + escAttr(it.thumbnail_2x_url) + ' 2x"';
   }
 
-  /* ── v2.2.0: transient toast (top-level, like the lightbox, so transformed
-   * ancestors can't trap it). Used to report delete results. ── */
-  var _toastEl = null, _toastTimer = null;
-  function tsmlToast(msg, isError) {
-    if (!_toastEl) {
-      _toastEl = document.createElement('div');
-      _toastEl.className = 'zml-toast';
-      _toastEl.setAttribute('role', 'status');
-      _toastEl.setAttribute('aria-live', 'polite');
-      document.body.appendChild(_toastEl);
-    }
-    _toastEl.textContent = msg;
-    _toastEl.classList.toggle('zml-toast-err', !!isError);
-    _toastEl.classList.add('zml-toast-show');
-    clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(function () { _toastEl.classList.remove('zml-toast-show'); }, 3200);
+  /* the app now runs on the theme's kit of parts (ZDZ.ui): its
+   * requests, toasts, loader and busy buttons are the kit's, so a 502 page, a timeout or a lost signal
+   * reads as one plain sentence, the same in every app. The kit is looked up when it is used (it loads
+   * in the footer beside this file), and when it is missing the app says so instead of failing silently. */
+  var NEEDS_KIT = 'This app needs a newer Zorderz theme. Reload the app.';
+  function ui() { return (window.ZDZ && window.ZDZ.ui) ? window.ZDZ.ui : null; }
+
+  // admin-ajax through the kit: resolves to the `data` of {success:true}; any failure rejects with a
+  // ZDZ.ui.RequestError whose message a person can read (the server's own words for {success:false}).
+  function ajax(action, data) {
+    if (!ui()) return Promise.reject(new Error(NEEDS_KIT));
+    return ZDZ.ui.ajax(action, Object.assign({ nonce: cfg().nonce }, data || {})).catch(function (err) {
+      // A refusal sent as wp_send_json_error('a sentence', 403) keeps its own words
+      // ("You can only edit notes on your own media."), not the kit's sign-in sentence.
+      if (err && err.kind === 'auth' && err.status === 403 && err.body) {
+        try {
+          var j = JSON.parse(err.body);
+          if (j && typeof j.data === 'string' && j.data) err.message = j.data;
+        } catch (e) { /* not JSON: keep the kit's sentence */ }
+      }
+      throw err;
+    });
+  }
+
+  // The kit's toast (kind: 'success' | 'error'). Without the kit there is no toast; the grid says why
+  // (needKit below).
+  function say(msg, kind) {
+    if (ui()) ZDZ.ui.toast(msg, kind ? { kind: kind } : undefined);
+  }
+  function sayError(err, retry) {
+    if (ui()) ZDZ.ui.toastError(err, retry);
+  }
+  // The kit's busy button: keeps its size, one press at a time.
+  function busy(btn, work) {
+    if (ui()) return ZDZ.ui.busy(btn, work);
+    return Promise.resolve().then(typeof work === 'function' ? work : function () { return work; });
+  }
+  function loaderHtml(label) {
+    return ui() ? ZDZ.ui.loadingHtml(label) : '<div class="zml-empty">' + esc(label) + '</div>';
+  }
+
+  /* A small badge in the lower-right corner of each photo says who uploaded it. The server sends the
+   * uploader's initials only (never an id, name or email); the kit draws that person's badge (their
+   * shape and tone, from zdzData.people). No initials (the shared kiosk, an account without initials,
+   * an older server) means no badge. */
+  function whoBadge(it, cls) {
+    var ini = it && it.uploader_initials ? String(it.uploader_initials) : '';
+    if (!ini || !ui() || typeof ZDZ.ui.personChip !== 'function') return '';
+    return '<span class="' + cls + '">' + ZDZ.ui.personChip(ini, { size: 'sm', title: 'Uploaded by ' + ini }) + '</span>';
   }
 
   /* ── Date grouping (iOS-Photos / Google-Photos style section headers) ──── */
@@ -65,6 +121,19 @@
     if (!ds) return null;
     var d = new Date(String(ds).replace(' ', 'T'));
     return isNaN(d.getTime()) ? null : d;
+  }
+
+  // compact relative time for the My-Photos card footer. Mirrors
+  // zdz-camera's gallery timeAgo so the two surfaces read identically.
+  function timeAgo(ds) {
+    var d = parseDate(ds);
+    if (!d) return '';
+    var s = Math.floor((new Date() - d) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+    return d.toLocaleDateString();
   }
 
   function groupLabel(ds) {
@@ -90,10 +159,29 @@
   }
 
   function sourceBadge(item) {
+    if (item.media_type === 'video') return 'Video';
     if (item.source_app === 'zdz-sketch-pad') return 'Sketch';
     if (item.source_app === 'zdz-camera') return 'Camera';
     if (item.media_type === 'sketch') return 'Sketch';
     return 'Photo';
+  }
+
+  // "M:SS" from milliseconds (clip duration).
+  function fmtDur(ms) {
+    ms = parseInt(ms, 10) || 0;
+    var s = Math.round(ms / 1000), m = Math.floor(s / 60); s = s % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function isVideo(item) { return !!(item && (item.is_video || item.media_type === 'video')); }
+  // the lower-right video badge (camcorder glyph + duration) drawn on a
+  // video cell's thumbnail. Empty for photos/sketches.
+  function videoBadge(item) {
+    if (!isVideo(item)) return '';
+    var dur = item.duration_ms ? ('<span class="zml-cell-vdur">' + esc(fmtDur(item.duration_ms)) + '</span>') : '';
+    return '<span class="zml-cell-video" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M4 6h11a2 2 0 0 1 2 2v1.2l3.3-2.1a.6.6 0 0 1 .95.5v8.8a.6.6 0 0 1-.95.5L17 15.8V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>' +
+      dur +
+    '</span>';
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
@@ -119,7 +207,7 @@
     this.items = [];
     this.io = null;
 
-    /* v2.2.0 — selection mode (granular/bulk delete) */
+    /* selection mode (granular/bulk delete) */
     this.selectMode = false;
     this.selected = {};      // media id -> true
     this.selbar = null;      // lazily-built bottom action bar
@@ -133,7 +221,7 @@
     if (seg) seg.addEventListener('click', function (e) {
       var btn = e.target.closest('.zml-seg-btn'); if (!btn) return;
       if (btn.dataset.scope === self.scope) return;
-      // v2.3.0 — the "All" scope is admin-only. The server also enforces this
+      // the "All" scope is admin-only. The server also enforces this
       // (downgrades a non-admin to 'public'), and the tab is only rendered for
       // admins; this is a belt-and-suspenders guard so a stale/injected button
       // can't drive the client into an unauthorized scope.
@@ -161,7 +249,7 @@
     // carrying the current scope/type so the big view opens where you were.
     var seeall = this.root.querySelector('[data-action="seeall"]');
     if (seeall) seeall.addEventListener('click', function () {
-      TSMedia._pendingFsState = { scope: self.scope, type: self.type };
+      ZMLMedia._pendingFsState = { scope: self.scope, type: self.type };
       var id = cfg().fullscreenAppId || 'zdz-media-all';
       if (window.Bridge && typeof window.Bridge.loadApp === 'function') {
         window.Bridge.loadApp(id);
@@ -172,7 +260,7 @@
     var add = this.root.querySelector('[data-action="add"]');
     if (add) add.addEventListener('click', function () { Uploader.open(self); });
 
-    // v2.2.0 — "Select" toggles selection mode (fullscreen gallery only; the
+    // "Select" toggles selection mode (fullscreen gallery only; the
     // compact widget deletes via the lightbox instead).
     var sel = this.root.querySelector('[data-action="select"]');
     if (sel) sel.addEventListener('click', function () { self.toggleSelectMode(); });
@@ -187,39 +275,43 @@
   };
 
   Surface.prototype.resetAndLoad = function () {
-    if (this.selectMode) this.exitSelectMode();   // v2.2.0 — selection can't survive a reload
+    if (this.selectMode) this.exitSelectMode();   // selection can't survive a reload
     this.offset = 0; this.hasMore = true; this.items = [];
-    if (this.gridWrap) this.gridWrap.innerHTML = '<div class="zml-loading">Loading…</div>';
+    if (this.gridWrap) this.gridWrap.innerHTML = loaderHtml('Loading…');   // the kit's loader
     this.loadMore(true);
   };
 
   Surface.prototype.loadMore = function (isFirst) {
     var self = this;
-    if (this.loading || (!this.hasMore && !isFirst)) return;
+    if (this.loading || (!this.hasMore && !isFirst)) return Promise.resolve();
     this.loading = true;
 
     var req = { scope: this.scope, media_type: this.type, offset: this.offset };
-    // v2.3.3: the widget shows a useful first page (12 ≈ 4 rows on phones) and
+    // the widget shows a useful first page (12 ≈ 4 rows on phones) and
     // a "Load more" button appends further pages IN PLACE, so the widget is
     // browsable on its own without opening the full-screen gallery. (The
     // full-screen surface keeps the theme's larger page size.)
     if (this.kind === 'widget') req.limit = 12;
 
-    ajax('zml_list', req).then(function (resp) {
+    return ajax('zml_list', req).then(function (data) {
       self.loading = false;
-      if (!resp || !resp.success) {
-        if (isFirst && self.gridWrap) self.gridWrap.innerHTML = '<div class="zml-empty">Couldn\u2019t load media. Try again.</div>';
-        return;
-      }
-      var data = resp.data || {};
+      data = data || {};
       var batch = data.items || [];
       self.items = self.items.concat(batch);
       self.hasMore = !!data.has_more;
       self.offset = (typeof data.offset === 'number') ? data.offset : (self.offset + batch.length);
       self.render();
-    }).catch(function () {
+    }).catch(function (err) {
       self.loading = false;
-      if (isFirst && self.gridWrap) self.gridWrap.innerHTML = '<div class="zml-empty">Connection error. Try again.</div>';
+      var msg = (err && err.message) || 'Couldn\u2019t load media. Try again.';
+      // the kit's plain sentence, where the grid would be (first page) - or, for a later page,
+      // a toast with Try again, and the "Load more" button is put back (it used to stay on "Loading\u2026").
+      if (isFirst) {
+        if (self.gridWrap) self.gridWrap.innerHTML = '<div class="zml-empty zml-load-error" role="alert">' + esc(msg) + '</div>';
+      } else {
+        self.render();
+        sayError(err, function () { self.loadMore(false); });
+      }
     });
   };
 
@@ -265,7 +357,7 @@
         groups[index[label]].items.push(it);
       });
       groups.forEach(function (g) {
-        html += '<div class="zml-group"><h2 class="zml-group-h">' + esc(g.label) + '</h2><div class="zml-grid">';
+        html += '<div class="zml-group"><h2 class="zml-group-h">' + esc(g.label) + '</h2><div class="zml-grid zml-grid-cards">';
         g.items.forEach(function (it) { html += self.cellHTML(it); });
         html += '</div></div>';
       });
@@ -274,7 +366,7 @@
       html += '<div class="zml-grid zml-grid-compact">';
       this.items.forEach(function (it) { html += self.cellHTML(it); });
       html += '</div>';
-      // v2.3.3: "Load more" — append the next page in place so the widget is
+      // "Load more" — append the next page in place so the widget is
       // browsable beyond the first slice WITHOUT opening the full-screen view.
       // The card simply grows downward (no nested scroll → honours the theme's
       // WIDGET-OVERFLOW-CONTRACT). Shown only while more pages exist; a "See
@@ -290,27 +382,26 @@
     }
 
     wrap.innerHTML = html;
+    this.outlineCells();   // the outline on each photo with drawings this person sees
 
     wrap.querySelectorAll('.zml-cell').forEach(function (cell) {
       cell.addEventListener('click', function () {
         var pos = parseInt(this.dataset.pos, 10);
-        // v2.2.0 — in selection mode a tap toggles the checkmark instead of
+        // in selection mode a tap toggles the checkmark instead of
         // opening the viewer.
         if (self.selectMode) { self.toggleSelect(pos, this); return; }
         Lightbox.open(self, pos);
       });
     });
 
-    // v2.3.3: wire the widget "Load more" button.
+    // wire the widget "Load more" button.
     var moreBtn = wrap.querySelector('.zml-w-more');
     if (moreBtn) {
       moreBtn.addEventListener('click', function () {
         if (self.loading || !self.hasMore) return;
-        // Reflect a loading state on the button immediately (no full re-render
-        // yet — loadMore() re-renders when the page arrives).
-        this.disabled = true;
-        var lbl = this.querySelector('span'); if (lbl) lbl.textContent = 'Loading…';
-        self.loadMore(false);
+        // the kit's busy button (keeps its size) until the page arrives and
+        // loadMore() re-renders the grid.
+        busy(this, function () { return self.loadMore(false); });
       });
     }
     if (this.selectMode) this.syncSelectionUI();
@@ -325,21 +416,57 @@
       vis = '<span class="zml-cell-vis" title="Visible to everyone" aria-hidden="true">' +
         '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20a15.3 15.3 0 0 1 0-20"/></svg></span>';
     }
-    // v2.2.0 — selection-mode affordances. Photos the viewer may NOT delete
+    // selection-mode affordances. Photos the viewer may NOT delete
     // (not theirs, not an admin) render dimmed and unselectable in select mode.
     var selCls = '';
     if (this.selectMode) {
       selCls = it.can_delete ? (this.selected[it.id] ? ' zml-checked' : '') : ' zml-nodel';
     }
+    // My-Photos parity footer (revealed only by .zml-grid-cards CSS on
+    // the full-screen grid; the compact widget hides it, so its markup is inert
+    // there). Name · time-ago · source pill, mirroring zdz-camera's gallery card.
+    var when = timeAgo(it.captured_at || it.created_at);
+    var foot =
+      '<span class="zml-cell-foot">' +
+        '<span class="zml-cell-title">' + esc(it.title || 'Untitled') + '</span>' +
+        '<span class="zml-cell-metarow">' +
+          '<span class="zml-cell-time">' + esc(when) + '</span>' +
+          '<span class="zml-cell-src">' + esc(sourceBadge(it)) + '</span>' +
+        '</span>' +
+      '</span>';
+    // The THUMB wraps the image + every overlay so the footer can sit beneath it
+    // Overlays stay absolutely positioned against the thumb, not the
+    // card, so the badge/check/note/vis land exactly as before.
+    // v2.10.3: who uploaded it, in the thumb's lower-right corner (drawn before the clip badge,
+    // which steps left of it in CSS).
+    var who = whoBadge(it, 'zml-cell-who');
     return '<button type="button" class="zml-cell' + selCls + '" data-pos="' + pos + '" data-id="' + it.id + '" ' +
-      'aria-label="' + escAttr((it.title || 'Media') + ' — ' + sourceBadge(it)) + '">' +
-      '<img class="zml-cell-img" src="' + escAttr(it.thumbnail_url) + '" alt="' + escAttr(it.title) + '" loading="lazy" />' +
-      '<span class="zml-cell-badge">' + esc(sourceBadge(it)) + '</span>' +
-      vis + note +
-      '<span class="zml-cell-check" aria-hidden="true">' +
-        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+      'aria-label="' + escAttr((it.title || 'Media') + ' — ' + sourceBadge(it) + (who ? ' — uploaded by ' + it.uploader_initials : '')) + '">' +
+      '<span class="zml-cell-thumb">' +
+        '<img class="zml-cell-img" src="' + escAttr(it.thumbnail_url) + '"' + thumbSrcset(it) + ' alt="' + escAttr(it.title) + '" loading="lazy" />' +
+        '<span class="zml-cell-badge">' + esc(sourceBadge(it)) + '</span>' +
+        who +
+        videoBadge(it) +
+        vis + note +
+        '<span class="zml-cell-check" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+        '</span>' +
       '</span>' +
+      foot +
       '</button>';
+  };
+
+  /* 
+     the kit's outline and badge on the thumb of every photo with drawings this person sees (marks_n / notes_n, sent
+     with the list). Nothing on an older theme. */
+  Surface.prototype.outlineCells = function () {
+    if (!this.gridWrap || !window.ZDZ || !ZDZ.ui || !ZDZ.ui.marks || !ZDZ.ui.marks.outline) return;
+    var self = this;
+    this.gridWrap.querySelectorAll('.zml-cell').forEach(function (cell) {
+      var it = self.items[parseInt(cell.getAttribute('data-pos'), 10)];
+      var thumb = cell.querySelector('.zml-cell-thumb') || cell;
+      if (it) ZDZ.ui.marks.outline(thumb, it.marks_n | 0, it.notes_n | 0);
+    });
   };
 
   // Update one item's cell affordances (note dot / visibility dot) in place,
@@ -349,30 +476,34 @@
     var pos = this.items.indexOf(it);
     var cell = this.gridWrap.querySelector('.zml-cell[data-pos="' + pos + '"]');
     if (!cell) return;
+    // overlays now live inside .zml-cell-thumb (falls back to the cell
+    // for any pre-2.7.0 markup that might linger), so create/insert against it.
+    var thumb = cell.querySelector('.zml-cell-thumb') || cell;
 
-    var noteDot = cell.querySelector('.zml-cell-note');
+    var noteDot = thumb.querySelector('.zml-cell-note');
     if (it.note && !noteDot) {
       var n = document.createElement('span');
       n.className = 'zml-cell-note'; n.title = 'Has a note'; n.setAttribute('aria-hidden', 'true'); n.textContent = '\uD83D\uDCDD';
-      cell.appendChild(n);
+      thumb.appendChild(n);
     } else if (!it.note && noteDot) {
       noteDot.remove();
     }
 
-    var visDot = cell.querySelector('.zml-cell-vis');
+    var visDot = thumb.querySelector('.zml-cell-vis');
     var shouldShowVis = it.is_owner && it.privacy === 'public';
     if (shouldShowVis && !visDot) {
       var v = document.createElement('span');
       v.className = 'zml-cell-vis'; v.title = 'Visible to everyone'; v.setAttribute('aria-hidden', 'true');
       v.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20a15.3 15.3 0 0 1 0-20"/></svg>';
-      cell.insertBefore(v, cell.querySelector('.zml-cell-note') || null);
+      thumb.insertBefore(v, thumb.querySelector('.zml-cell-note') || null);
     } else if (!shouldShowVis && visDot) {
       visDot.remove();
     }
+    if (window.ZDZ && ZDZ.ui && ZDZ.ui.marks && ZDZ.ui.marks.outline) ZDZ.ui.marks.outline(thumb, it.marks_n | 0, it.notes_n | 0);   // v2.13.0
   };
 
   /* ─────────────────────────────────────────────────────────────────────────
-   * v2.2.0 — Selection mode + delete (granular or bulk, double-confirmed).
+   * Selection mode + delete (granular or bulk, double-confirmed).
    *
    * Entered via the gallery bar's "Select" toggle. Taps check/uncheck photos
    * (only ones the viewer may delete — can_delete, computed server-side);
@@ -440,17 +571,27 @@
       bar.innerHTML =
         '<span class="zml-selbar-count" data-role="count" aria-live="polite">0 selected</span>' +
         '<button type="button" class="zml-selbar-cancel" data-role="cancel">Cancel</button>' +
+        '<button type="button" class="zml-selbar-tag" data-role="tag" disabled>Tag</button>' +
+        '<button type="button" class="zml-selbar-share" data-role="share" disabled>Share</button>' +
         '<button type="button" class="zml-selbar-del" data-role="del" disabled>Delete</button>';
       this.root.appendChild(bar);
       bar.querySelector('[data-role="cancel"]').addEventListener('click', function () { self.exitSelectMode(); });
+      // bulk-tag: reuse the selection the user already made for delete.
+      bar.querySelector('[data-role="tag"]').addEventListener('click', function () {
+        var ids = self.selectedIds(); if (!ids.length) return;
+        TagPrompt.open(ids.length).then(function (tag) {
+          if (!tag) return;
+          bulkTag(self, ids, tag, bar.querySelector('[data-role="tag"]'));
+        });
+      });
+      // each action passes its button; the kit's busy() shows it working.
+      bar.querySelector('[data-role="share"]').addEventListener('click', function () {
+        var ids = self.selectedIds(); if (!ids.length) return;
+        openShareDialog(ids, bar.querySelector('[data-role="share"]'), function () { self.exitSelectMode(); });
+      });
       bar.querySelector('[data-role="del"]').addEventListener('click', function () {
         var ids = self.selectedIds(); if (!ids.length) return;
-        performDelete(self, ids, {
-          busy: function (on) {
-            var del = bar.querySelector('[data-role="del"]');
-            if (del) { del.disabled = on; del.classList.toggle('zdz-btn-busy', on); }
-          }
-        });
+        performDelete(self, ids, { button: bar.querySelector('[data-role="del"]') });
       });
       this.selbar = bar;
     }
@@ -463,8 +604,12 @@
     var n = this.selectedIds().length;
     var count = this.selbar.querySelector('[data-role="count"]');
     var del = this.selbar.querySelector('[data-role="del"]');
+    var tag = this.selbar.querySelector('[data-role="tag"]');
     if (count) count.textContent = n + ' selected';
     if (del) { del.disabled = (n === 0); del.textContent = n > 1 ? 'Delete (' + n + ')' : 'Delete'; }
+    if (tag) { tag.disabled = (n === 0); tag.textContent = n > 1 ? 'Tag (' + n + ')' : 'Tag'; }
+    var share = this.selbar.querySelector('[data-role="share"]');
+    if (share) { share.disabled = (n === 0); share.textContent = n > 1 ? 'Share (' + n + ')' : 'Share'; }
   };
 
   // Surgically remove deleted ids from this surface (no refetch) and re-render.
@@ -922,6 +1067,189 @@
     }
   };
 
+  /* minimal single-field prompt for bulk-tagging the selected photos.
+   * Same top-level-append reasoning as ConfirmSheet; never window.prompt()
+   * (unreliable in the PWA/webviews). open() resolves the entered tag, or null. */
+  var TagPrompt = {
+    built: false, _resolve: null,
+    build: function () {
+      if (this.built) return;
+      var ov = document.createElement('div');
+      ov.className = 'zml-cf zml-tagprompt'; ov.id = 'zml-tagprompt';
+      ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+      ov.setAttribute('aria-labelledby', 'zml-tp-title');
+      ov.style.display = 'none';
+      ov.innerHTML =
+        '<div class="zml-cf-backdrop"></div>' +
+        '<div class="zml-cf-card" role="document">' +
+          '<h3 class="zml-cf-title" id="zml-tp-title"></h3>' +
+          '<input type="text" class="zml-tp-input" id="zml-tp-input" placeholder="Tag to add…" maxlength="60" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />' +
+          '<div class="zml-cf-actions">' +
+            '<button type="button" class="zml-cf-cancel" id="zml-tp-cancel">Cancel</button>' +
+            '<button type="button" class="zml-cf-confirm" id="zml-tp-apply">Add tag</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      var self = this;
+      byId('zml-tp-cancel').addEventListener('click', function () { self.finish(null); });
+      ov.querySelector('.zml-cf-backdrop').addEventListener('click', function () { self.finish(null); });
+      byId('zml-tp-apply').addEventListener('click', function () { self.submit(); });
+      byId('zml-tp-input').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); self.submit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); self.finish(null); }
+      });
+      this.built = true;
+    },
+    submit: function () {
+      var inp = byId('zml-tp-input');
+      var v = (inp.value || '').trim();
+      if (!v) { inp.focus(); return; }
+      this.finish(v);
+    },
+    open: function (count) {
+      this.build();
+      var self = this;
+      byId('zml-tp-title').textContent = (count === 1) ? 'Tag this photo' : 'Tag ' + count + ' photos';
+      var inp = byId('zml-tp-input'); inp.value = '';
+      return new Promise(function (resolve) {
+        self._resolve = resolve;
+        byId('zml-tagprompt').style.display = '';
+        setTimeout(function () { inp.focus(); }, 30);
+      });
+    },
+    finish: function (val) {
+      var ov = byId('zml-tagprompt'); if (ov) ov.style.display = 'none';
+      var r = this._resolve; this._resolve = null;
+      if (r) r(val);
+    }
+  };
+
+  // Share-to-teammate dialog: pick a recipient (theme's authoritative
+  // roster, kiosk-excluded) + an optional note. Resolves { recipientId,
+  // recipientName, note } or null. The server re-authorizes the share.
+  var SharePrompt = {
+    built: false, _resolve: null, _people: [], _sel: 0,
+    build: function () {
+      if (this.built) return;
+      var ov = document.createElement('div');
+      ov.className = 'zml-cf zml-shareprompt'; ov.id = 'zml-shareprompt';
+      ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+      ov.setAttribute('aria-labelledby', 'zml-sp-title');
+      ov.style.display = 'none';
+      ov.innerHTML =
+        '<div class="zml-cf-backdrop"></div>' +
+        '<div class="zml-cf-card" role="document">' +
+          '<h3 class="zml-cf-title" id="zml-sp-title">Share to a teammate</h3>' +
+          '<input type="text" class="zml-sp-search" id="zml-sp-search" placeholder="Search teammates…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />' +
+          '<div class="zml-sp-list" id="zml-sp-list" role="listbox" aria-label="Teammates"></div>' +
+          '<textarea class="zml-sp-note" id="zml-sp-note" rows="2" placeholder="Add a note (optional)…" maxlength="500"></textarea>' +
+          '<div class="zml-cf-actions">' +
+            '<button type="button" class="zml-cf-cancel" id="zml-sp-cancel">Cancel</button>' +
+            '<button type="button" class="zml-cf-confirm" id="zml-sp-send" disabled>Share</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      var self = this;
+      byId('zml-sp-cancel').addEventListener('click', function () { self.finish(null); });
+      ov.querySelector('.zml-cf-backdrop').addEventListener('click', function () { self.finish(null); });
+      byId('zml-sp-send').addEventListener('click', function () { self.submit(); });
+      var deb;
+      byId('zml-sp-search').addEventListener('input', function () {
+        var q = this.value; clearTimeout(deb); deb = setTimeout(function () { self.load(q); }, 200);
+      });
+      byId('zml-sp-search').addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); self.finish(null); } });
+      this.built = true;
+    },
+    load: function (q) {
+      var self = this;
+      var list = byId('zml-sp-list'); if (list) list.setAttribute('aria-busy', 'true');
+      self._err = '';
+      ajax('zml_recipients', { search: q || '' }).then(function (data) {
+        self._people = (data && data.people) ? data.people : [];
+        self.renderList();
+      }).catch(function (err) {
+        // say why the list is empty (the kit's sentence), not "No teammates found."
+        self._people = []; self._err = (err && err.message) || ''; self.renderList();
+      });
+    },
+    renderList: function () {
+      var self = this;
+      var list = byId('zml-sp-list'); if (!list) return;
+      list.removeAttribute('aria-busy');
+      list.textContent = '';
+      if (!self._people.length) {
+        var e = document.createElement('div'); e.className = 'zml-sp-empty'; e.textContent = self._err || 'No teammates found.';
+        if (self._err) e.setAttribute('role', 'alert');
+        list.appendChild(e); self.syncSend(); return;
+      }
+      self._people.forEach(function (p) {
+        var row = document.createElement('button');
+        row.type = 'button'; row.className = 'zml-sp-person'; row.setAttribute('role', 'option');
+        row.dataset.id = p.id;
+        var av = document.createElement('span'); av.className = 'zml-sp-av'; av.textContent = p.initials || (p.name || '?').charAt(0).toUpperCase();
+        var nm = document.createElement('span'); nm.className = 'zml-sp-nm'; nm.textContent = p.name || ('User ' + p.id);
+        row.appendChild(av); row.appendChild(nm);
+        if (p.id === self._sel) { row.classList.add('is-sel'); row.setAttribute('aria-selected', 'true'); }
+        row.addEventListener('click', function () {
+          self._sel = p.id;
+          Array.prototype.forEach.call(list.querySelectorAll('.zml-sp-person'), function (n) {
+            var on = (Number(n.dataset.id) === self._sel);
+            n.classList.toggle('is-sel', on); n.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          self.syncSend();
+        });
+        list.appendChild(row);
+      });
+      self.syncSend();
+    },
+    syncSend: function () { var b = byId('zml-sp-send'); if (b) b.disabled = !(this._sel > 0); },
+    submit: function () {
+      if (!(this._sel > 0)) return;
+      var name = '';
+      for (var i = 0; i < this._people.length; i++) { if (this._people[i].id === this._sel) { name = this._people[i].name; break; } }
+      var note = (byId('zml-sp-note').value || '').trim();
+      this.finish({ recipientId: this._sel, recipientName: name, note: note });
+    },
+    open: function (count) {
+      this.build();
+      this._sel = 0; this._people = [];
+      byId('zml-sp-title').textContent = (count === 1) ? 'Share this item' : 'Share ' + count + ' items';
+      byId('zml-sp-search').value = ''; byId('zml-sp-note').value = '';
+      this.syncSend();
+      var self = this;
+      return new Promise(function (resolve) {
+        self._resolve = resolve;
+        byId('zml-shareprompt').style.display = '';
+        self.load('');
+        setTimeout(function () { var s = byId('zml-sp-search'); if (s) s.focus(); }, 30);
+      });
+    },
+    finish: function (val) {
+      var ov = byId('zml-shareprompt'); if (ov) ov.style.display = 'none';
+      var r = this._resolve; this._resolve = null; if (r) r(val);
+    }
+  };
+
+  // Open the share dialog for a set of media ids, then POST the share. The
+  // media_ids go as a real array (media_ids[]), which the server reads and the
+  // theme re-authorizes per item; the note + recipient ride along.
+  // through the kit (media_ids as an array is sent as media_ids[], as before); `button`
+  // (optional) shows busy while it runs.
+  function openShareDialog(ids, button, doneCb) {
+    if (!ids || !ids.length) return;
+    SharePrompt.open(ids.length).then(function (pick) {
+      if (!pick) return;
+      busy(button, function () {
+        return ajax('zml_share', { recipient_id: pick.recipientId, note: pick.note || '', media_ids: ids });
+      }).then(function (data) {
+        var n = (data && data.count) ? data.count : ids.length;
+        var to = pick.recipientName || 'your teammate';
+        say(n > 1 ? (n + ' items shared with ' + to) : ('Shared with ' + to), 'success');
+        if (doneCb) doneCb();
+      }).catch(function (err) { sayError(err); });
+    });
+  }
+
   // After a delete, refresh "the other" surface (widget ⇄ fullscreen) so the
   // two never disagree about what exists. The active surface was already
   // updated surgically.
@@ -934,7 +1262,7 @@
   }
 
   /*
-   * v2.2.0 — THE one delete path (bulk select bar AND the lightbox button).
+   * THE one delete path (bulk select bar AND the lightbox button).
    * Double-confirms via ConfirmSheet, POSTs zml_delete, then removes exactly
    * the server-confirmed `deleted` ids from the active surface and refreshes
    * the other one. Partial failures keep their cells and are reported via
@@ -946,32 +1274,55 @@
     opts = opts || {};
     return ConfirmSheet.open(ids.length).then(function (ok) {
       if (!ok) return null;
-      if (opts.busy) opts.busy(true);
-      return ajax('zml_delete', { media_ids: JSON.stringify(ids) }).then(function (resp) {
-        if (opts.busy) opts.busy(false);
-        if (!resp || !resp.success) {
-          tsmlToast((resp && resp.data) ? String(resp.data) : 'Delete failed. Please try again.', true);
-          return null;
-        }
-        var deleted = (resp.data && resp.data.deleted) || [];
-        var failed  = (resp.data && resp.data.failed)  || [];
+      // the kit's busy button + request; a failure is the kit's sentence in a toast.
+      return busy(opts.button || null, function () {
+        return ajax('zml_delete', { media_ids: JSON.stringify(ids) });
+      }).then(function (data) {
+        var deleted = (data && data.deleted) || [];
+        var failed  = (data && data.failed)  || [];
         if (deleted.length) {
           surface.removeItemsByIds(deleted);
           if (surface.selectMode) surface.exitSelectMode();
           refreshOtherSurface(surface);
         }
         if (failed.length) {
-          tsmlToast(failed.length + ' photo' + (failed.length === 1 ? '' : 's') + ' couldn’t be deleted: ' + String((failed[0] && failed[0].reason) || 'unknown reason'), true);
+          say(failed.length + ' photo' + (failed.length === 1 ? '' : 's') + ' couldn’t be deleted: ' + String((failed[0] && failed[0].reason) || 'unknown reason'), 'error');
         } else if (deleted.length) {
-          tsmlToast(deleted.length === 1 ? 'Photo deleted' : deleted.length + ' photos deleted');
+          say(deleted.length === 1 ? 'Photo deleted' : deleted.length + ' photos deleted', 'success');
         }
         return { deleted: deleted, failed: failed };
-      }).catch(function () {
-        if (opts.busy) opts.busy(false);
-        tsmlToast('Connection error. Nothing was deleted.', true);
+      }).catch(function (err) {
+        sayError(err);
         return null;
       });
     });
+  }
+
+  /* apply ONE tag to many selected photos via the batch endpoint.
+   * Per-item owner-or-admin is enforced server-side; skipped items are reported. */
+  function bulkTag(surface, ids, tag, button) {
+    busy(button || null, function () {
+      return ajax('zml_update_tags', {
+        media_ids: JSON.stringify(ids),
+        add: JSON.stringify([tag])
+      });
+    }).then(function (data) {
+      var d = data || {};
+      var n = d.count || 0;
+      var failed = (d.failed || []).length;
+      // Reflect the new tags on the in-memory items so re-opening a photo shows them.
+      (d.tagged || []).forEach(function (t) {
+        for (var i = 0; i < surface.items.length; i++) {
+          if (surface.items[i] && surface.items[i].id === t.id) { surface.items[i].tags = t.tags; break; }
+        }
+      });
+      if (surface.selectMode) surface.exitSelectMode();
+      if (n) {
+        say('Tagged ' + n + ' photo' + (n === 1 ? '' : 's') + ' “' + tag + '”' + (failed ? ' · ' + failed + ' skipped' : ''), 'success');
+      } else {
+        say(failed ? ('Nothing tagged · ' + failed + ' skipped') : 'Nothing tagged', 'error');
+      }
+    }).catch(function (err) { sayError(err); });
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
@@ -987,6 +1338,9 @@
     lastFocus: null,
     hist: false,
     noteDirty: false,
+    metaOpen: false,      // meta sheet collapsed by default
+    _hiRes: null,         // src the progressive paint is upgrading to
+    _triedFallback: false,
 
     build: function () {
       if (this.built) return;
@@ -1003,7 +1357,7 @@
             '<span class="zml-lb-back-label">Back</span>' +
           '</button>' +
           '<span class="zml-lb-title" id="zml-lb-title"></span>' +
-          // v2.0.3: "View full size" = real in-lightbox zoom (pinch + double-tap,
+          // "View full size" = real in-lightbox zoom (pinch + double-tap,
           // drag to pan), driven by a CSS transform on the image. Never navigates
           // the window (a <button>, not an <a href=file_url> — that stranded
           // tab-less desktop/PWA webviews on the raw file). "Back"/Esc/backdrop
@@ -1013,21 +1367,61 @@
             '<svg class="zml-lb-open-in" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>' +
             '<svg class="zml-lb-open-out" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="display:none;"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M8 11h6"/></svg>' +
           '</button>' +
+          '<button type="button" class="zml-lb-btn zml-lb-share" id="zml-lb-share" aria-label="Share to a teammate" title="Share to a teammate" style="display:none;">' +
+            '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>' +
+          '</button>' +
+          // rotate this photo 90°. Tap to
+          // preview instantly; a Save/Reset bar appears over the stage.
+          '<button type="button" class="zml-lb-btn zml-lb-rotate" id="zml-lb-rotate" aria-label="Rotate 90°" title="Rotate 90°" style="display:none;">' +
+            '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>' +
+          '</button>' +
+          // draw on the photo without changing it (the theme's ZDZ.ui.marks
+          // draws and saves). v2.13.0: anyone who sees the photo draws their own drawing, and the eye
+          // is "Drawings" - who drew what, show / hide each, and your own sharing (the kit's list).
+          '<button type="button" class="zml-lb-btn zml-lb-draw" id="zml-lb-draw" aria-label="Draw on this photo" title="Draw on this photo" style="display:none;">' +
+            '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="zml-lb-btn zml-lb-marks" id="zml-lb-marks" aria-label="Drawings on this photo" title="Drawings on this photo" style="display:none;">' +
+            '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18"/><path d="M3 12h18"/><path d="M3 19h12"/></svg>' +
+            '<span class="zml-lb-marks-n" id="zml-lb-marks-n"></span>' +
+          '</button>' +
         '</div>' +
         '<button type="button" class="zml-lb-nav zml-lb-prev" id="zml-lb-prev" aria-label="Previous">' +
           '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>' +
-        '<div class="zml-lb-stage" id="zml-lb-stage"><img class="zml-lb-img" id="zml-lb-img" alt="" draggable="false" /></div>' +
+        '<div class="zml-lb-stage" id="zml-lb-stage">' +
+          '<img class="zml-lb-img" id="zml-lb-img" alt="" draggable="false" />' +
+          // in-browser video player (gated, Range-served; no download).
+          '<video class="zml-lb-video" id="zml-lb-video" playsinline webkit-playsinline controls preload="metadata" style="display:none"></video>' +
+        '</div>' +
+        // rotate action bar (over the stage foot); shown only while a
+        // rotation is pending. Save commits (server re-encode); Reset undoes it.
+        '<div class="zml-lb-rotate-bar" id="zml-lb-rotate-bar" style="display:none;">' +
+          '<span class="zml-lb-rotate-hint" id="zml-lb-rotate-hint">Rotated 90°</span>' +
+          '<button type="button" class="zml-lb-rotate-reset" id="zml-lb-rotate-reset">Reset</button>' +
+          '<button type="button" class="zml-lb-rotate-save" id="zml-lb-rotate-save">Save</button>' +
+        '</div>' +
         '<button type="button" class="zml-lb-nav zml-lb-next" id="zml-lb-next" aria-label="Next">' +
           '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>' +
+        // the meta panel is a COLLAPSED-BY-DEFAULT overlay sheet. It used
+        // to be a normal-flow flex child ~370px tall, which is what crushed the
+        // stage and pillarboxed every portrait photo. The summary line (source +
+        // date) is now the tappable handle; everything else lives in the body.
         '<div class="zml-lb-meta" id="zml-lb-meta">' +
-          '<div class="zml-lb-row" id="zml-lb-info"></div>' +
+          '<button type="button" class="zml-lb-meta-toggle" id="zml-lb-meta-toggle" ' +
+                  'aria-expanded="false" aria-controls="zml-lb-meta-body">' +
+            '<span class="zml-lb-row" id="zml-lb-info"></span>' +
+            // v2.10.3: the uploader's badge, at the right end of the summary line.
+            '<span class="zml-lb-who" id="zml-lb-who"></span>' +
+            '<svg class="zml-lb-meta-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>' +
+          '</button>' +
+          '<div class="zml-lb-meta-body" id="zml-lb-meta-body">' +
 
           // ── Location (tappable "Located" → reveals place/coords/provenance +
           //    user-tap "Open in Maps"). Populated by render() from the theme's
           //    GET /zorderz/v1/media/{id}/exif. Empty (display:none) when no GPS. ──
           '<div class="zml-lb-loc" id="zml-lb-loc" style="display:none;"></div>' +
 
-          // ── Visibility control (owner-only; hidden for non-owners) ──
+          // ── Visibility control ──
           '<div class="zml-lb-vis" id="zml-lb-vis" style="display:none;">' +
             '<div class="zml-lb-vis-seg" role="group" aria-label="Who can see this">' +
               '<button type="button" class="zml-vis-btn" data-visible="me">Visible only to You</button>' +
@@ -1036,7 +1430,7 @@
             '<span class="zml-inline-status" id="zml-lb-vis-status" aria-live="polite"></span>' +
           '</div>' +
 
-          // ── Note (owner edits; others read) ──
+          // ── Note ──
           '<div class="zml-lb-note-wrap">' +
             '<label class="zml-lb-note-label" for="zml-lb-note">Note</label>' +
             '<textarea class="zml-lb-note" id="zml-lb-note" rows="2" placeholder="Add a note about this photo…" maxlength="2000"></textarea>' +
@@ -1047,7 +1441,28 @@
             '<p class="zml-lb-note-ro" id="zml-lb-note-ro" style="display:none;"></p>' +
           '</div>' +
 
-          // ── v2.2.0: Delete (owner or admin only — hidden otherwise). Goes
+          // ── v2.5.0: Tags (chips; owner OR admin can add & remove) ──
+          '<div class="zml-lb-tags-wrap" id="zml-lb-tags-wrap" style="display:none;">' +
+            '<label class="zml-lb-note-label" id="zml-lb-tags-label">Tags</label>' +
+            '<div class="zml-lb-tags" id="zml-lb-tags"></div>' +
+            '<div class="zml-lb-tag-add" id="zml-lb-tag-add" style="display:none;">' +
+              '<input type="text" class="zml-lb-tag-input" id="zml-lb-tag-input" placeholder="Add a tag…" maxlength="60" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />' +
+              '<button type="button" class="zml-lb-tag-btn" id="zml-lb-tag-btn">Add</button>' +
+            '</div>' +
+            '<span class="zml-inline-status" id="zml-lb-tags-status" aria-live="polite"></span>' +
+          '</div>' +
+
+          // ── v2.11.0: Belongs to (administrators only — hidden otherwise). The theme keeps who uploaded it. ──
+          '<div class="zml-lb-owner" id="zml-lb-owner" style="display:none;">' +
+            '<label class="zml-lb-note-label" for="zml-lb-owner-sel">Belongs to</label>' +
+            '<div class="zml-lb-tag-add">' +
+              '<select class="zml-lb-owner-sel" id="zml-lb-owner-sel" aria-label="Who this photo belongs to"></select>' +
+              '<button type="button" class="zml-lb-tag-btn" id="zml-lb-owner-btn">Move</button>' +
+            '</div>' +
+            '<p class="zml-lb-owner-up" id="zml-lb-owner-up"></p>' +
+          '</div>' +
+
+          // ── v2.2.0: Delete. Goes
           //    through the same DOUBLE-confirmed performDelete() path as bulk. ──
           '<div class="zml-lb-danger" id="zml-lb-danger" style="display:none;">' +
             '<button type="button" class="zml-lb-del" id="zml-lb-del">' +
@@ -1055,6 +1470,7 @@
               '<span>Delete photo</span>' +
             '</button>' +
           '</div>' +
+          '</div>' +   // /.zml-lb-meta-body
         '</div>';
       document.body.appendChild(ov);
 
@@ -1063,17 +1479,69 @@
       byId('zml-lb-next').addEventListener('click', function () { Lightbox.step(1); });
       byId('zml-lb-save').addEventListener('click', function () { Lightbox.saveNote(); });
       byId('zml-lb-del').addEventListener('click', function () { Lightbox.deleteCurrent(); });   // v2.2.0
-      // v2.0.3: button does a point-less step zoom (fit ⇄ 2× centered); the
+      // tag add (button + Enter); per-chip removal is bound in renderTags().
+      byId('zml-lb-tag-btn').addEventListener('click', function () { Lightbox.addTagFromInput(); });
+      byId('zml-lb-tag-input').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); Lightbox.addTagFromInput(); }
+      });
+      // button does a point-less step zoom (fit ⇄ 2× centered); the
       // stage hosts the real gesture zoom (pinch / double-tap / drag-pan).
       byId('zml-lb-open').addEventListener('click', function () { Lightbox.buttonZoom(); });
+      var _shb = byId('zml-lb-share'); if (_shb) _shb.addEventListener('click', function () { Lightbox.shareCurrent(); });
+      var _rob = byId('zml-lb-rotate');       if (_rob) _rob.addEventListener('click', function () { Lightbox.rotateStep(); });   // v2.10.0
+      var _ror = byId('zml-lb-rotate-reset'); if (_ror) _ror.addEventListener('click', function () { Lightbox.rotateReset(); });
+      var _ros = byId('zml-lb-rotate-save');  if (_ros) _ros.addEventListener('click', function () { Lightbox.rotateSave(); });
+      var _drb = byId('zml-lb-draw');  if (_drb) _drb.addEventListener('click', function () { Lightbox.drawStart(); });     // v2.12.0
+      var _mkb = byId('zml-lb-marks'); if (_mkb) _mkb.addEventListener('click', function () { Lightbox.marksPanel(this); });  // Drawings
+      byId('zml-lb-meta-toggle').addEventListener('click', function () { Lightbox.toggleMeta(); });
       this.bindZoomGestures(byId('zml-lb-stage'));
+
+      // the image had NO error handler. A HEIC original -- which is what
+      // an iPhone uploads, untouched, by design -- cannot be decoded by Chrome,
+      // Firefox, Edge or Android, so the stage rendered EMPTY BLACK with no way
+      // to tell that apart from "still loading". Fall back to the JPEG
+      // derivative, then to an honest message.
+      var img = byId('zml-lb-img');
+      img.addEventListener('error', function () { Lightbox._onImgError(); });
+      // clampPan() reads img.clientWidth live, so after any src change it would
+      // clamp against the PREVIOUS photo's dimensions until the next transform.
+      img.addEventListener('load', function () { Lightbox._onImgLoad(); });
+
+      // Nothing re-evaluated the pan clamp on rotate or resize, so a zoomed photo
+      // could sit outside the stage after an orientation change.
+      var reflow = function () {
+        var lb = byId('zml-lb');
+        if (lb && lb.style.display !== 'none') Lightbox.applyTransform(false);
+      };
+      window.addEventListener('resize', reflow);
+      window.addEventListener('orientationchange', reflow);
+
+      // iOS keyboard inset. The sheet is position:absolute inside a fixed
+      // overlay, so the software keyboard would otherwise slide up OVER the note
+      // field the user just tapped into. visualViewport is the only reliable way
+      // to learn the keyboard height; --zml-kb feeds the sheet's transform.
+      if (window.visualViewport) {
+        var vv = window.visualViewport;
+        var onVV = function () {
+          var lb = byId('zml-lb'); if (!lb || lb.style.display === 'none') return;
+          var inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          lb.style.setProperty('--zml-kb', Math.round(inset) + 'px');
+        };
+        vv.addEventListener('resize', onVV);
+        vv.addEventListener('scroll', onVV);
+      }
 
       // Backdrop / empty stage closes — but NOT while zoomed in (you're panning),
       // and NOT if this "click" was the tail of a drag (see _movedWhilePanning).
       ov.addEventListener('click', function (e) {
         if (Lightbox.scale > Lightbox.fitScale + 0.01) return; // zoomed → ignore
         if (Lightbox._movedWhilePanning) { Lightbox._movedWhilePanning = false; return; }
-        if (e.target === ov || e.target.id === 'zml-lb-stage') Lightbox.close();
+        if (e.target !== ov && e.target.id !== 'zml-lb-stage') return;
+        // with the meta sheet open, a tap on the photo means "put the
+        // sheet away", not "leave the viewer". Closing the whole lightbox when
+        // someone dismisses a panel would be the wrong-feeling kind of surprise.
+        if (Lightbox.metaOpen) { Lightbox.toggleMeta(false); return; }
+        Lightbox.close();
       });
 
       // Note editing toggles a dirty flag + Save affordance.
@@ -1090,6 +1558,9 @@
         Lightbox.saveVisibility(btn.dataset.visible);
       });
 
+      // an administrator moves the photo to its rightful owner.
+      byId('zml-lb-owner-btn').addEventListener('click', function () { Lightbox.saveOwner(); });
+
       this.built = true;
     },
 
@@ -1098,19 +1569,109 @@
       return (s && this.index >= 0 && this.index < s.items.length) ? s.items[this.index] : null;
     },
 
+    /* -- v2.4.0: the meta sheet ------------------------------------------
+     * Collapsed, it is a slim summary bar. Expanded, it slides up over the
+     * photo, capped and scrollable. `inert` is what actually removes the
+     * collapsed contents from the tab order and the accessibility tree --
+     * max-height:0 with overflow:hidden hides them visually but leaves the note
+     * textarea and every button keyboard-reachable, which is a real a11y bug,
+     * not a cosmetic one. inert is supported in Safari 17+, and the aria-hidden
+     * line keeps older engines honest.
+     */
+    toggleMeta: function (force) {
+      var ov = byId('zml-lb'), body = byId('zml-lb-meta-body'),
+          btn = byId('zml-lb-meta-toggle');
+      if (!ov || !body || !btn) return;
+      var open = (typeof force === 'boolean') ? force : !this.metaOpen;
+      this.metaOpen = open;
+      ov.classList.toggle('zml-meta-open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { body.removeAttribute('inert'); body.removeAttribute('aria-hidden'); }
+      else {
+        // Never strand focus inside a panel we are about to make inert.
+        if (body.contains(document.activeElement)) btn.focus();
+        body.setAttribute('inert', '');
+        body.setAttribute('aria-hidden', 'true');
+      }
+    },
+
+    /* -- v2.4.0: image load / error --------------------------------------- */
+    _onImgLoad: function () {
+      // Re-clamp against the newly loaded photo's real dimensions.
+      this.applyTransform(false);
+      this._clearFallback();
+      // Progressive paint: the thumbnail is up, now pull the full-resolution
+      // original in behind it. Guarded on index so a slow original arriving
+      // after the user has already stepped away can never clobber the new photo.
+      var want = this._hiRes;
+      if (!want) return;
+      var img = byId('zml-lb-img');
+      if (!img || img.getAttribute('src') === want) { this._hiRes = null; return; }
+      var idxAtStart = this.index, L = this;
+      var pre = new Image();
+      pre.onload = function () {
+        if (L.index !== idxAtStart) return;          // user moved on
+        var cur = byId('zml-lb-img'); if (!cur) return;
+        cur.src = want;
+        L._hiRes = null;
+      };
+      pre.onerror = function () { L._hiRes = null; }; // keep the thumbnail
+      pre.src = want;
+    },
+
+    _onImgError: function () {
+      var it = this.current(); if (!it) return;
+      var img = byId('zml-lb-img'); if (!img) return;
+      // One retry against the derivative, then say something true.
+      if (!this._triedFallback && it.thumbnail_url && img.getAttribute('src') !== it.thumbnail_url) {
+        this._triedFallback = true;
+        this._hiRes = null;
+        img.src = it.thumbnail_url;
+        return;
+      }
+      this._showFallback();
+    },
+
+    _showFallback: function () {
+      var stage = byId('zml-lb-stage'); if (!stage) return;
+      this._clearFallback();
+      var box = document.createElement('div');
+      box.className = 'zml-lb-fallback';
+      box.id = 'zml-lb-fallback';
+      var strong = document.createElement('strong');
+      strong.textContent = 'Preview not available';
+      var p = document.createElement('span');
+      p.textContent = 'This browser cannot display the original file format. ' +
+                      'Safari on iPhone or Mac will show it.';
+      box.appendChild(strong); box.appendChild(p);
+      stage.appendChild(box);
+      var img = byId('zml-lb-img'); if (img) img.style.visibility = 'hidden';
+    },
+
+    _clearFallback: function () {
+      var old = byId('zml-lb-fallback'); if (old && old.parentNode) old.parentNode.removeChild(old);
+      var img = byId('zml-lb-img'); if (img) img.style.visibility = '';
+    },
+
     open: function (surface, pos) {
       this.build();
       this.surface = surface;
       this.index = pos;
+      // remember exactly where the gallery was scrolled, so closing the
+      // viewer returns there instead of the top. (Closing goes through
+      // history.back(), and the theme SPA resets the app's scroller to 0 on that
+      // popstate — we restore it in teardown, with retries to beat that reset.)
+      this._savedScroll = this._readScroll();
       this.lastFocus = document.activeElement;
       this.noteDirty = false;
 
       var ov = byId('zml-lb');
       ov.style.display = '';
       document.body.classList.add('zml-lb-open');
+      this.toggleMeta(false);        // always open onto the photo, not the panel
 
       // History entry so phone/browser back closes the viewer.
-      try { history.pushState({ tsmlLB: 1 }, ''); this.hist = true; } catch (e) { this.hist = false; }
+      try { history.pushState({ zmlLB: 1 }, ''); this.hist = true; } catch (e) { this.hist = false; }
 
       this.render();
       var c = byId('zml-lb-close'); if (c) c.focus();
@@ -1120,17 +1681,64 @@
     teardown: function () {
       var ov = byId('zml-lb'); if (!ov) return;
       ov.style.display = 'none';
-      this.resetZoom(false); // v2.0.3: clear zoom transform on close
+      // stop any playing clip so audio never continues under the grid.
+      var vidEl = byId('zml-lb-video');
+      if (vidEl) { try { vidEl.pause(); } catch (e) {} vidEl.removeAttribute('src'); vidEl.onended = null; vidEl.style.display = 'none'; }
+      this.resetZoom(false); // clear zoom transform on close
+      var _mi = byId('zml-lb-img'); if (_mi && _mi._zdzMarks) _mi._zdzMarks.cancel();   // a drawing in progress ends with the viewer
+      this.toggleMeta(false);
+      this._clearFallback();
+      ov.style.removeProperty('--zml-kb');
       document.body.classList.remove('zml-lb-open');
       this.hist = false;
       document.removeEventListener('keydown', this._onKey);
       if (this.lastFocus && typeof this.lastFocus.focus === 'function') this.lastFocus.focus();
+      this._restoreScroll();   // return the gallery to where the user was
     },
 
     close: function () {
       if (byId('zml-lb') && byId('zml-lb').style.display === 'none') return;
       if (this.hist) { history.back(); } // popstate → teardown
       else { this.teardown(); }
+    },
+
+    // preserve the gallery scroll across the viewer. The fullscreen app
+    // scrolls inside #zml-fs-scroll (surface.scrollEl); the widget/dashboard and
+    // "openItems" callers scroll the window. Read on open, restore on teardown.
+    _readScroll: function () {
+      var s = this.surface;
+      if (s && s.scrollEl) { return { el: s.scrollEl, top: s.scrollEl.scrollTop || 0 }; }
+      return { el: null, top: (window.scrollY || document.documentElement.scrollTop || 0) };
+    },
+    _restoreScroll: function () {
+      var saved = this._savedScroll; if (!saved) return;
+      var apply = function () {
+        if (saved.el) { try { saved.el.scrollTop = saved.top; } catch (e) {} }
+        else { try { window.scrollTo(0, saved.top); } catch (e2) {} }
+      };
+      apply();                                             // now
+      if (window.requestAnimationFrame) requestAnimationFrame(apply);
+      setTimeout(apply, 60);
+      setTimeout(apply, 220);                              // beat the SPA's async scroll-to-top
+    },
+
+    // when a reel clip ends, auto-advance to the next clip in the SAME
+    // reel (seq+1) so a multi-clip video plays back-to-back (the Shorts feel).
+    // Grid order may be newest-first, so we match by reel_id+seq, not position.
+    _wireReelAdvance: function (vidEl, it) {
+      var L = this;
+      vidEl.onended = function () {
+        if (!it || !it.reel_id) return;
+        var items = (L.surface && L.surface.items) || [];
+        for (var i = 0; i < items.length; i++) {
+          var n = items[i];
+          if (n && n.reel_id === it.reel_id && (n.media_type === 'video' || n.is_video) && Number(n.seq) === (Number(it.seq) + 1)) {
+            L.index = i; L.render();
+            var nv = byId('zml-lb-video'); if (nv) { try { nv.play(); } catch (e) {} }
+            return;
+          }
+        }
+      };
     },
 
     step: function (dir) {
@@ -1156,6 +1764,15 @@
 
     applyTransform: function (animate) {
       var img = byId('zml-lb-img'); if (!img) return;
+      // while a rotation preview is pending, the image shows rotate()+a
+      // fit-scale instead of the zoom transform (zoom is neutralized until the
+      // rotation is saved or reset). Any reflow re-applies the preview.
+      if (this.pendingCW) {
+        var d = this.pendingCW, rs = this._rotFitScale(d);
+        img.style.transition = animate ? 'transform 0.18s ease' : 'none';
+        img.style.transform = 'rotate(' + d + 'deg) scale(' + rs + ')';
+        return;
+      }
       this.clampPan();
       img.style.transition = animate ? 'transform 0.18s ease' : 'none';
       img.style.transform = 'translate(' + this.tx + 'px,' + this.ty + 'px) scale(' + this.scale + ')';
@@ -1217,10 +1834,21 @@
         if (zin) zin.style.display = zoomedIn ? 'none' : '';
         if (zout) zout.style.display = zoomedIn ? '' : 'none';
       }
-      var prev = byId('zml-lb-prev'), next = byId('zml-lb-next');
-      // Hide arrows when zoomed in; otherwise let step()/disabled logic show them.
-      if (prev) prev.style.display = zoomedIn ? 'none' : '';
-      if (next) next.style.display = zoomedIn ? 'none' : '';
+      // hiding the arrows while zoomed is now purely CSS (opacity +
+      // pointer-events on .zml-zoomed), which lets the same mechanism hide the
+      // top bar and the meta sheet too. Setting style.display here as well would
+      // fight that, and the old `display:none !important` fallback could not
+      // coexist with any second reason to hide chrome. The :disabled rule still
+      // handles the ends of the list.
+      if (zoomedIn && this.metaOpen) this.toggleMeta(false);
+    },
+
+    // one implementation of "toggle zoom at this point", shared by the
+    // desktop dblclick path and the touch double-tap path.
+    _toggleZoomAt: function (clientX, clientY) {
+      var f = this._focalFromClient(clientX, clientY);
+      if (this.scale > this.fitScale + 0.01) this.resetZoom(true);
+      else this.zoomTo(2, f.x, f.y, true);
     },
 
     // Convert a client (px) point to stage-center-relative coords.
@@ -1237,6 +1865,7 @@
 
       // Trackpad pinch (ctrl+wheel) and wheel zoom.
       stage.addEventListener('wheel', function (e) {
+        if (isVideo(L.current())) return;   // video has its own controls
         // Pinch-zoom on macOS trackpads arrives as wheel with ctrlKey.
         if (!e.ctrlKey && Math.abs(e.deltaY) < 1) return;
         e.preventDefault();
@@ -1245,17 +1874,22 @@
         L.zoomTo(L.scale * factor, f.x, f.y, false);
       }, { passive: false });
 
-      // Double-click / double-tap → toggle 2× at the point.
+      // Double-click toggles 2x at the point. On touch this fired only via a
+      // SYNTHESISED dblclick, which touch-action:none on this stage suppresses in
+      // several mobile engines -- so double-tapping a photo on a phone, the
+      // universal idiom, often did nothing at all. _lastTapAt guards against
+      // handling the same gesture twice where the engine does synthesise one.
       stage.addEventListener('dblclick', function (e) {
+        if (isVideo(L.current())) return;   // v2.8.0
+        if (Date.now() - (L._lastTapAt || 0) < 500) return;   // touch path handled it
         e.preventDefault();
-        var f = L._focalFromClient(e.clientX, e.clientY);
-        if (L.scale > L.fitScale + 0.01) L.resetZoom(true);
-        else L.zoomTo(2, f.x, f.y, true);
+        L._toggleZoomAt(e.clientX, e.clientY);
       });
 
       // Mouse drag to pan (only meaningful when zoomed).
       var dragging = false, lastX = 0, lastY = 0;
       stage.addEventListener('mousedown', function (e) {
+        if (isVideo(L.current())) return;   // v2.8.0
         if (L.scale <= L.fitScale + 0.01) return;
         dragging = true; lastX = e.clientX; lastY = e.clientY;
         L._movedWhilePanning = false;
@@ -1280,6 +1914,7 @@
         return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 };
       }
       stage.addEventListener('touchstart', function (e) {
+        if (isVideo(L.current())) return;   // let the video controls own touch
         if (e.touches.length === 2) {
           pinchStartDist = dist(e.touches); pinchStartScale = L.scale;
           e.preventDefault();
@@ -1289,6 +1924,7 @@
         }
       }, { passive: false });
       stage.addEventListener('touchmove', function (e) {
+        if (isVideo(L.current())) return;   // v2.8.0
         if (e.touches.length === 2 && pinchStartDist > 0) {
           e.preventDefault();
           var m = mid(e.touches); var f = L._focalFromClient(m.x, m.y);
@@ -1301,20 +1937,249 @@
           L.applyTransform(false);
         }
       }, { passive: false });
+      // Manual double-tap detection. Implemented HERE, in the same handler that
+      // owns the touch lifecycle, rather than as a second racing source of truth.
+      var lastTapT = 0, lastTapX = 0, lastTapY = 0;
+      var DOUBLE_MS = 300, DOUBLE_SLOP = 32;
       stage.addEventListener('touchend', function (e) {
+        if (isVideo(L.current())) return;   // v2.8.0
         if (e.touches.length < 2) pinchStartDist = 0;
         if (e.touches.length === 0) tPanning = false;
+
+        if (e.touches.length !== 0 || e.changedTouches.length !== 1) return;
+        if (L._movedWhilePanning) return;               // that was a pan, not a tap
+        var t = e.changedTouches[0];
+        // Only on the photo itself. A tap on the surrounding black is the
+        // existing "close the viewer" affordance and must stay that way.
+        if (e.target && e.target.id !== 'zml-lb-img' && L.scale <= L.fitScale + 0.01) {
+          lastTapT = 0; return;
+        }
+        var now = Date.now();
+        if (now - lastTapT < DOUBLE_MS &&
+            Math.abs(t.clientX - lastTapX) < DOUBLE_SLOP &&
+            Math.abs(t.clientY - lastTapY) < DOUBLE_SLOP) {
+          e.preventDefault();                            // suppress the synthesised click
+          L._lastTapAt = now;
+          lastTapT = 0;
+          L._toggleZoomAt(t.clientX, t.clientY);
+          return;
+        }
+        lastTapT = now; lastTapX = t.clientX; lastTapY = t.clientY;
+      }, { passive: false });
+    },
+
+    shareCurrent: function () {
+      var it = this.current(); if (!it || !it.can_share) return;
+      openShareDialog([ it.id ], byId('zml-lb-share'));
+    },
+
+    // ── v2.10.0: rotate a photo 90° at a time — instant local preview, one save ──
+    // Owner/admin, photos only. Each tap adds 90° CW to a preview transform (see
+    // applyTransform); Save re-encodes the file + thumbnails server-side (the new
+    // official orientation, correct everywhere) and swaps in the fresh image.
+    pendingCW: 0,
+    _rotFitScale: function (deg) {
+      if (deg !== 90 && deg !== 270) return 1;   // 180 keeps the same bounding box
+      var img = byId('zml-lb-img'), stage = byId('zml-lb-stage');
+      if (!img || !stage) return 1;
+      var nw = img.naturalWidth || 0, nh = img.naturalHeight || 0;
+      var sw = stage.clientWidth || 1, sh = stage.clientHeight || 1;
+      if (nw <= 0 || nh <= 0) return 1;
+      var fit = Math.min(sw / nw, sh / nh);       // object-fit:contain displayed size
+      var dw = nw * fit, dh = nh * fit;
+      if (dw <= 0 || dh <= 0) return 1;
+      return Math.min(sw / dh, sh / dw);          // scale so the rotated (dh×dw) box fits
+    },
+    rotateStep: function () {
+      var it = this.current(); if (!it || !it.can_rotate || isVideo(it)) return;
+      this.resetZoom(false);                      // preview from fit (no pan/zoom)
+      this.pendingCW = ((this.pendingCW || 0) + 90) % 360;
+      this.applyTransform(true);                  // guard renders the rotate preview
+      this._syncRotateBar();
+    },
+    rotateReset: function () {
+      this.pendingCW = 0;
+      this.applyTransform(true);                  // back to the normal fit
+      this._syncRotateBar();
+    },
+    _syncRotateBar: function () {
+      var bar = byId('zml-lb-rotate-bar'), hint = byId('zml-lb-rotate-hint');
+      if (!bar) return;
+      var d = this.pendingCW || 0;
+      bar.style.display = d ? '' : 'none';
+      if (hint) hint.textContent = 'Rotated ' + d + '°';
+    },
+    rotateSave: function () {
+      var it = this.current(); if (!it) return;
+      var d = this.pendingCW || 0;
+      if (!d) { this._syncRotateBar(); return; }
+      var save = byId('zml-lb-rotate-save');
+      var L = this, id = it.id;
+      // the kit's busy Save + request; a failure is the kit's sentence in a toast.
+      busy(save, function () { return ajax('zml_rotate', { media_id: id, cw: d }); }).then(function (data) {
+        data = data || {};
+        if (data.file_url)      it.file_url = data.file_url;            // fresh, cache-busted
+        if (data.thumbnail_url) it.thumbnail_url = data.thumbnail_url;
+        it.thumbnail_2x_url = data.thumbnail_2x_url || '';   // never keep the pre-rotate 2x
+        if ('marks_n' in data) { it.marks_n = data.marks_n | 0; it.notes_n = data.notes_n | 0; }   // the theme turned every drawing; renderMarks reads them again
+        // The viewer may have moved to another photo while this saved - only the photo still shown is
+        // swapped and has its drawings read again (the grid cell below is updated either way).
+        if (L.current() === it) {
+          L.pendingCW = 0;
+          L._syncRotateBar();
+          // Swap the lightbox to the correctly-oriented image (normal pipeline re-fits).
+          L._hiRes = null;
+          var img = byId('zml-lb-img');
+          if (img && it.file_url) { img.style.transform = ''; img.src = it.file_url; }
+          L.applyTransform(false);
+          L.renderMarks(it);
+        }
+        // Refresh any visible grid cell for this item so it's correct there too.
+        if (data.thumbnail_url) {
+          var cellImg = document.querySelector('.zml-cell[data-id="' + id + '"] .zml-cell-img');
+          if (cellImg) {
+            // the srcset would otherwise keep showing the pre-rotate 2x image.
+            if (it.thumbnail_2x_url) cellImg.setAttribute('srcset', it.thumbnail_url + ' 1x, ' + it.thumbnail_2x_url + ' 2x');
+            else cellImg.removeAttribute('srcset');
+            cellImg.src = data.thumbnail_url;
+          }
+        }
+        say('Rotation saved', 'success');
+      }).catch(function (err) { sayError(err); });
+    },
+
+    // ── v2.12.0: drawings on a photo, apart from the photo ───────────────────
+    // The theme's kit draws them over the image and follows the zoom, the pan and the rotate preview by
+    // itself (ZDZ.ui.marks); on an older theme there is no layer and both buttons stay hidden.
+    // anyone who sees a photo draws on it, each person's drawing is
+    // their own (private until they share it), an arrow can end in a Post-it note. The viewer loads the
+    // drawings THIS person sees when the photo opens; "Drawings" lists them (the kit's panel).
+    _marksLayer: function () {
+      var img = byId('zml-lb-img');
+      if (!img || !window.ZDZ || !ZDZ.ui || !ZDZ.ui.marks || !ZDZ.ui.marks.panel) return null;
+      var layer = ZDZ.ui.marks.attach(img), L = this;
+      if (layer && !layer._zml) {
+        layer._zml = true;
+        layer.on(function () { L.syncMarksToggle(); });   // a load, a save, a show / hide
+      }
+      return layer;
+    },
+    renderMarks: function (it) {
+      var layer = this._marksLayer();
+      var video = !it || isVideo(it);
+      if (layer) {
+        layer.hide(false);
+        if (video) { layer.set(null); }
+        else {
+          var L = this, got = layer.load(it.id);
+          if (got && got.then) got.then(function (v) { if (v && layer.photoId === (it.id | 0)) L._marksCounted(it, layer); });
+        }
+      }
+      this.syncMarksToggle();
+    },
+    /* Counted from the saved view itself, and only for its own photo (the viewer may have moved on) */
+    _viewCounted: function (it, view) {
+      if (!view || (view.id | 0) !== (it.id | 0)) return;
+      var n = 0, notes = 0;
+      (view.layers || []).forEach(function (l) { n++; (l.strokes || []).forEach(function (s) { if (s.n) notes++; }); });
+      it.marks_n = n; it.notes_n = notes;
+      if (this.surface && this.surface.refreshCell) this.surface.refreshCell(it);
+    },
+    /* what the layer shows now, on the item and its tile (its outline and badge) */
+    _marksCounted: function (it, layer) {
+      it.marks_n = layer.count();
+      it.notes_n = layer.notes();
+      if (this.surface && this.surface.refreshCell) this.surface.refreshCell(it);
+    },
+    syncMarksToggle: function () {
+      var it = this.current(), layer = this._marksLayer(), b = byId('zml-lb-marks'), drb = byId('zml-lb-draw');
+      var video = !it || isVideo(it);
+      var here = !!(layer && it && layer.photoId === (it.id | 0));
+      if (drb) {
+        drb.style.display = (layer && !video && (it.can_mark || (here && layer.canMark()))) ? '' : 'none';
+        var dl = here && layer.mine() ? 'Change your drawing' : 'Draw on this photo';
+        drb.setAttribute('aria-label', dl); drb.setAttribute('title', dl);
+      }
+      if (!b) return;
+      var n = here ? layer.count() : 0, v = here ? (layer.view || {}) : {};
+      b.style.display = (layer && !video && (n || (it.marks_n | 0) || (v.is_admin && (v.hidden_n | 0)))) ? '' : 'none';
+      var lbl = 'Drawings on this photo' + (n ? ' (' + n + ')' : '');
+      b.setAttribute('aria-label', lbl); b.setAttribute('title', lbl);
+      var nn = byId('zml-lb-marks-n'); if (nn) nn.textContent = n ? String(n) : '';
+    },
+    marksPanel: function (anchor) {
+      var layer = this._marksLayer(), L = this;
+      if (!layer || this.pendingCW) return;
+      ZDZ.ui.marks.panel(layer, { anchor: anchor || null, onDraw: function () { L.drawStart(); } });
+    },
+    drawStart: function () {
+      var it = this.current(), layer = this._marksLayer();
+      if (!it || !layer || isVideo(it) || this.pendingCW) return;
+      if (!it.can_mark && !(layer.photoId === (it.id | 0) && layer.canMark())) return;
+      this.resetZoom(false);          // draw on the whole photo, at fit
+      this.toggleMeta(false);
+      layer.hide(false);
+      var L = this;
+      layer.edit({ id: it.id,
+        done: function (view, saved) {
+          if (saved) L._viewCounted(it, view);   // the item and its tile, so paging back and the grid agree
+          L.syncMarksToggle();
+        },
+        // someone else saved first: the bar shows what is there now
+        refresh: function (view) { L._viewCounted(it, view); }
       });
     },
 
     render: function () {
       var it = this.current(); if (!it) return;
 
-      byId('zml-lb-img').src = it.file_url;
-      byId('zml-lb-img').alt = it.title || 'Media';
+      // v2.4.0 PROGRESSIVE PAINT. Until now the lightbox went straight at the
+      // full-resolution original -- a 4-8MB iPhone file, streamed by PHP with no
+      // range support -- so every open and every arrow press stared at an empty
+      // stage until the whole thing arrived. Paint the already-cached thumbnail
+      // first, then swap the original in behind it once it has decoded. The
+      // thumbnail is already in the payload, so this costs no server change.
+      var img = byId('zml-lb-img');
+      var vidEl = byId('zml-lb-video');
       byId('zml-lb-title').textContent = it.title || sourceBadge(it);
-      // v2.0.3: each photo (open / prev / next) starts at fit-to-screen.
-      this.resetZoom(false);
+      var _sb = byId('zml-lb-share'); if (_sb) { _sb.style.display = it.can_share ? '' : 'none'; }
+      // rotate is photos-only + owner/admin; reset any pending preview
+      // when the item changes so a rotation never carries to the next photo.
+      var _ro = byId('zml-lb-rotate'); if (_ro) { _ro.style.display = ( it.can_rotate && ! isVideo(it) ) ? '' : 'none'; }
+      this.pendingCW = 0;
+      this._syncRotateBar();
+      this._triedFallback = false;
+      this._clearFallback();
+
+      if (isVideo(it)) {
+        // ── Video: stream it inline (gated, Range-served) — never a download ──
+        if (img) { img.style.display = 'none'; img.removeAttribute('src'); }
+        this._hiRes = null;
+        if (vidEl) {
+          vidEl.style.display = '';
+          try { vidEl.pause(); } catch (e) {}
+          if (it.thumbnail_url && it.thumbnail_url !== it.file_url) vidEl.setAttribute('poster', it.thumbnail_url);
+          else vidEl.removeAttribute('poster');
+          if (vidEl.getAttribute('src') !== it.file_url) { vidEl.setAttribute('src', it.file_url); try { vidEl.load(); } catch (e2) {} }
+          this._wireReelAdvance(vidEl, it);
+        }
+        this.resetZoom(false);
+      } else {
+        if (vidEl) { try { vidEl.pause(); } catch (e) {} vidEl.removeAttribute('src'); vidEl.onended = null; vidEl.style.display = 'none'; }
+        if (img) img.style.display = '';
+        // v2.4.0 PROGRESSIVE PAINT: thumbnail first, full-res swapped in on decode.
+        if (it.thumbnail_url && it.thumbnail_url !== it.file_url) {
+          this._hiRes = it.file_url;
+          img.src = it.thumbnail_url;
+        } else {
+          this._hiRes = null;
+          img.src = it.file_url;
+        }
+        img.alt = it.title || 'Media';
+        // each photo (open / prev / next) starts at fit-to-screen.
+        this.resetZoom(false);
+      }
+      this.renderMarks(it);   // v2.12.0 / v2.13.0: the drawings this person sees on it (a video has none)
 
       // Info row: source · captured/created date. (Location is no longer a
       // dead text label here — it's an interactive control rendered below.)
@@ -1322,12 +2187,17 @@
       var when = it.captured_at || it.created_at;
       if (when) bits.push(prettyDate(when));
       byId('zml-lb-info').textContent = bits.join('  ·  ');
+      var whoEl = byId('zml-lb-who');
+      if (whoEl) { whoEl.innerHTML = whoBadge(it, 'zml-lb-who-in'); whoEl.hidden = !whoEl.innerHTML; }
+      if (it.owner_initials) {   // moved to someone else - say whose it is now, beside who uploaded it
+        byId('zml-lb-info').textContent += '  ·  Belongs to ' + it.owner_initials;
+      }
 
       // ── Location: a tappable "Located" affordance when the photo is geotagged
-      //    (Field review: "Why can't I press that and see where it is?"). ──
+      // ──
       this.renderLocation(it);
 
-      // ── Visibility control (owner only) ──
+      // ── Visibility control ──
       var visWrap = byId('zml-lb-vis');
       if (it.is_owner) {
         visWrap.style.display = '';
@@ -1365,9 +2235,15 @@
         }
       }
 
-      // ── v2.2.0: Delete affordance (owner or admin; double-confirmed) ──
+      // ── v2.2.0: Delete affordance ──
       var danger = byId('zml-lb-danger');
       if (danger) danger.style.display = it.can_delete ? '' : 'none';
+
+      // ── v2.5.0: keyword tags (chips + add/remove for owner or admin) ──
+      this.renderTags();
+
+      // ── v2.11.0: Belongs to (administrators) ──
+      this.renderOwner(it);
 
       // Disable nav at the ends.
       byId('zml-lb-prev').disabled = (this.index <= 0);
@@ -1432,7 +2308,7 @@
     loadLocationInto: function (host, mediaId, it) {
       var self = this;
       host.dataset.built = '1';
-      host.innerHTML = '<div class="zml-lb-loc-loading"><span class="zml-lb-loc-spin" aria-hidden="true"></span>Finding location…</div>';
+      host.innerHTML = loaderHtml('Finding location…');   // the kit's loader
 
       this.fetchExif(mediaId).then(function (report) {
         var loc = report && report.location ? report.location : null;
@@ -1487,28 +2363,15 @@
     // GET /zorderz/v1/media/{id}/exif with the theme's wp_rest nonce. Cached per id
     // for the session so re-opening a photo (or toggling) never refetches. The
     // theme resolves + caches the place name server-side on first call.
+    // through the kit's ZDZ.ui.rest (its base URL and X-WP-Nonce are the theme's zdzData).
     _exifCache: {},
     fetchExif: function (mediaId) {
       if (this._exifCache[mediaId]) return this._exifCache[mediaId];
 
-      var base = (window.zdzData && zdzData.apiUrl)
-        ? String(zdzData.apiUrl).replace(/\/$/, '')
-        : ((window.wpApiSettings && wpApiSettings.root)
-            ? String(wpApiSettings.root).replace(/\/$/, '') + '/zorderz/v1'
-            : '/wp-json/zorderz/v1');
-      var nonce = (window.zdzData && zdzData.nonce) ? zdzData.nonce
-        : ((window.wpApiSettings && wpApiSettings.nonce) ? wpApiSettings.nonce : '');
-
-      var headers = { 'Accept': 'application/json' };
-      if (nonce) headers['X-WP-Nonce'] = nonce;
-
-      var p = fetch(base + '/media/' + encodeURIComponent(mediaId) + '/exif', {
-        headers: headers,
-        credentials: 'same-origin'
-      }).then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      }).then(function (resp) {
+      var p = (ui()
+        ? ZDZ.ui.rest('zorderz/v1/media/' + encodeURIComponent(mediaId) + '/exif', { headers: { 'Accept': 'application/json' } })
+        : Promise.reject(new Error(NEEDS_KIT))
+      ).then(function (resp) {
         return resp && resp.report ? resp.report : null;
       });
 
@@ -1549,32 +2412,147 @@
       var btn = byId('zml-lb-save');
       var note = ta.value;
 
-      // No-shift busy state: keep the button's box, show spinner, lock input.
-      btn.classList.add('zdz-btn-busy');
-      btn.disabled = true;
-      btn.setAttribute('aria-busy', 'true');
-      if (status) status.textContent = 'Saving…';
+      // No-shift busy state (v2.10.3: the kit's busy(), which keeps the button's box
+      // and takes one press at a time); the status slot says what is happening.
+      if (status) { status.textContent = 'Saving…'; status.classList.remove('is-error'); }
 
-      ajax('zml_save_note', { media_id: it.id, note: note }).then(function (resp) {
-        btn.classList.remove('zdz-btn-busy');
-        btn.removeAttribute('aria-busy');
-        if (resp && resp.success) {
-          it.note = resp.data.note;
-          self.noteDirty = false;
-          btn.disabled = true;                 // nothing new to save now
-          if (status) status.textContent = 'Saved \u2713';
-          self.surface.refreshCell(it);
-          setTimeout(function () { if (status) status.textContent = ''; }, 2000);
-        } else {
-          btn.disabled = false;
-          if (status) status.textContent = (resp && resp.data) ? String(resp.data) : 'Save failed';
-        }
-      }).catch(function () {
-        btn.classList.remove('zdz-btn-busy');
-        btn.removeAttribute('aria-busy');
+      busy(btn, function () { return ajax('zml_save_note', { media_id: it.id, note: note }); }).then(function (data) {
+        it.note = (data && typeof data.note === 'string') ? data.note : note;
+        self.noteDirty = false;
+        btn.disabled = true;                 // nothing new to save now
+        if (status) status.textContent = 'Saved \u2713';
+        self.surface.refreshCell(it);
+        setTimeout(function () { if (status) status.textContent = ''; }, 2000);
+      }).catch(function (err) {
         btn.disabled = false;
-        if (status) status.textContent = 'Save failed';
+        // The kit's readable sentence (or the server's own words), in the same status slot.
+        if (status) { status.textContent = (err && err.message) || 'Save failed'; status.classList.add('is-error'); }
       });
+    },
+
+    // ── v2.5.0: keyword tags ────────────────────────────────────────────────
+    renderTags: function () {
+      var it = this.current(); if (!it) return;
+      var wrap = byId('zml-lb-tags-wrap');
+      var box  = byId('zml-lb-tags');
+      var add  = byId('zml-lb-tag-add');
+      var status = byId('zml-lb-tags-status');
+      if (!wrap || !box) return;
+      var tags = (it.tags && it.tags.length) ? it.tags : [];
+      var canTag = !!it.can_tag;
+      if (!tags.length && !canTag) { wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+      if (status) status.textContent = '';
+      box.innerHTML = '';
+      tags.forEach(function (t) {
+        var chip = document.createElement('span');
+        chip.className = 'zml-tag' + (canTag ? ' zml-tag-editable' : '');
+        var label = document.createElement('span');
+        label.className = 'zml-tag-label';
+        label.textContent = t;                     // textContent — tags are user data
+        chip.appendChild(label);
+        if (canTag) {
+          var x = document.createElement('button');
+          x.type = 'button';
+          x.className = 'zml-tag-x';
+          x.setAttribute('aria-label', 'Remove tag ' + t);
+          x.textContent = '×';
+          x.addEventListener('click', function () { Lightbox.removeTag(t); });
+          chip.appendChild(x);
+        }
+        box.appendChild(chip);
+      });
+      if (!tags.length) {
+        var empty = document.createElement('span');
+        empty.className = 'zml-tag-empty';
+        empty.textContent = 'No tags yet';
+        box.appendChild(empty);
+      }
+      if (add) add.style.display = canTag ? '' : 'none';
+    },
+
+    addTagFromInput: function () {
+      var input = byId('zml-lb-tag-input');
+      if (!input) return;
+      var val = (input.value || '').trim();
+      if (!val) return;
+      input.value = '';
+      var parts = val.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      this.applyTagChange(parts, []);
+    },
+
+    removeTag: function (tag) {
+      this.applyTagChange([], [tag]);
+    },
+
+    applyTagChange: function (add, remove) {
+      var it = this.current(); if (!it || !it.can_tag) return;
+      var self = this;
+      var status = byId('zml-lb-tags-status');
+      var btn = byId('zml-lb-tag-btn');
+      if (status) { status.textContent = 'Saving…'; status.classList.remove('is-error'); }
+      busy(btn, function () {
+        return ajax('zml_update_tags', {
+          media_id: it.id,
+          add: JSON.stringify(add || []),
+          remove: JSON.stringify(remove || [])
+        });
+      }).then(function (data) {
+        it.tags = (data && data.tags) || [];
+        self.renderTags();
+        if (self.surface && self.surface.refreshCell) self.surface.refreshCell(it);
+        if (status) { status.textContent = 'Saved ✓'; setTimeout(function () { if (status) status.textContent = ''; }, 1800); }
+      }).catch(function (err) {
+        if (status) { status.textContent = (err && err.message) || 'Could not save tags'; status.classList.add('is-error'); }
+      });
+    },
+
+    /* "Belongs to": an administrator picks the person and taps Move. The list of
+       people is read once, the first time an administrator opens a photo (zml_owner_people). */
+    renderOwner: function (it) {
+      var wrap = byId('zml-lb-owner');
+      if (!wrap) return;
+      if (!it || !it.can_move) { wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+      var up = byId('zml-lb-owner-up');
+      if (up) up.textContent = it.owner_initials && it.uploader_initials ? 'Uploaded by ' + it.uploader_initials + '.' : '';
+      var L = this, sel = byId('zml-lb-owner-sel');
+      var fill = function () {
+        var list = L._people || [];
+        sel.innerHTML = (it.owner_id ? '' : '<option value="">Choose a person…</option>') + list.map(function (p) {
+          return '<option value="' + escAttr(String(p.id)) + '"' + (+p.id === +it.owner_id ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+        }).join('');
+        if (it.owner_id && !list.some(function (p) { return +p.id === +it.owner_id; })) {
+          sel.insertAdjacentHTML('afterbegin', '<option value="' + escAttr(String(it.owner_id)) + '" selected>' + esc(it.owner_initials || it.uploader_initials || 'Current owner') + '</option>');
+        }
+      };
+      if (this._people) { fill(); return; }
+      sel.innerHTML = '<option value="">Loading…</option>';
+      if (this._peopleLoading) return;
+      this._peopleLoading = true;
+      ajax('zml_owner_people', {}).then(function (data) {
+        L._people = (data && data.people) || [];
+        L._peopleLoading = false;
+        var cur = L.current();
+        if (cur && cur.can_move) L.renderOwner(cur);
+      }).catch(function (err) { L._peopleLoading = false; sel.innerHTML = '<option value="">Could not load the people</option>'; sayError(err); });
+    },
+
+    saveOwner: function () {
+      var it = this.current(); if (!it || !it.can_move) return;
+      var sel = byId('zml-lb-owner-sel'), to = sel ? parseInt(sel.value, 10) || 0 : 0;
+      if (!to) { say('Choose who it belongs to first.', 'error'); return; }
+      if (to === +it.owner_id) { say('It already belongs to them.', 'info'); return; }
+      var L = this, id = it.id;
+      busy(byId('zml-lb-owner-btn'), function () { return ajax('zml_set_owner', { media_id: id, user_id: to }); }).then(function (data) {
+        var fresh = data && data.item;
+        if (fresh) {
+          Object.keys(fresh).forEach(function (k) { it[k] = fresh[k]; });
+        }
+        // The grid tile's badge: always the person who uploaded it (unchanged by a move).
+        if (L.current() === it) L.render();
+        say('Moved', 'success');
+      }).catch(function (err) { sayError(err); });
     },
 
     saveVisibility: function (visible) {
@@ -1587,56 +2565,46 @@
       var status = byId('zml-lb-vis-status');
       var btns = wrap.querySelectorAll('.zml-vis-btn');
 
-      btns.forEach(function (b) { b.disabled = true; });
+      // the tapped button shows the kit's busy state; the other one waits.
+      var tapped = null;
+      btns.forEach(function (b) { if (b.dataset.visible === visible) tapped = b; else b.disabled = true; });
       wrap.classList.add('zml-busy');
-      if (status) status.textContent = 'Updating…';
+      if (status) { status.textContent = 'Updating…'; status.classList.remove('is-error'); }
 
-      ajax('zml_save_visibility', { media_id: it.id, visible: visible }).then(function (resp) {
+      busy(tapped, function () { return ajax('zml_save_visibility', { media_id: it.id, visible: visible }); }).then(function (data) {
         btns.forEach(function (b) { b.disabled = false; });
         wrap.classList.remove('zml-busy');
-        if (resp && resp.success) {
-          it.privacy = resp.data.privacy;
-          // Reflect selected state.
-          var isPublic = (it.privacy === 'public');
-          btns.forEach(function (b) {
-            var on = (b.dataset.visible === (isPublic ? 'everyone' : 'me'));
-            b.classList.toggle('zml-active', on);
-            b.setAttribute('aria-pressed', on ? 'true' : 'false');
-          });
-          if (status) status.textContent = isPublic ? 'Shared with everyone \u2713' : 'Now private \u2713';
-          self.surface.refreshCell(it);
-          // If we made it private while viewing the Organization scope, it no
-          // longer belongs there — drop it from that surface's list quietly.
-          if (!isPublic && self.surface.scope === 'public') {
-            self.dropCurrentFromSurface();
-          }
-          setTimeout(function () { if (status) status.textContent = ''; }, 2200);
-        } else {
-          if (status) status.textContent = (resp && resp.data) ? String(resp.data) : 'Update failed';
+        it.privacy = (data && data.privacy) ? data.privacy : targetPrivacy;
+        // Reflect selected state.
+        var isPublic = (it.privacy === 'public');
+        btns.forEach(function (b) {
+          var on = (b.dataset.visible === (isPublic ? 'everyone' : 'me'));
+          b.classList.toggle('zml-active', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        if (status) status.textContent = isPublic ? 'Shared with everyone \u2713' : 'Now private \u2713';
+        self.surface.refreshCell(it);
+        // If we made it private while viewing the Organization scope, it no
+        // longer belongs there — drop it from that surface's list quietly.
+        if (!isPublic && self.surface.scope === 'public') {
+          self.dropCurrentFromSurface();
         }
-      }).catch(function () {
+        setTimeout(function () { if (status) status.textContent = ''; }, 2200);
+      }).catch(function (err) {
         btns.forEach(function (b) { b.disabled = false; });
         wrap.classList.remove('zml-busy');
-        if (status) status.textContent = 'Update failed';
+        if (status) { status.textContent = (err && err.message) || 'Update failed'; status.classList.add('is-error'); }
       });
     },
 
-    // v2.2.0 — delete the photo being viewed. Same double-confirmed path as
+    // delete the photo being viewed. Same double-confirmed path as
     // bulk delete; on success the surface list has already been updated by
     // performDelete(), so we just re-anchor the viewer (next photo, or close
     // when none remain).
     deleteCurrent: function () {
       var it = this.current(); if (!it || !it.can_delete) return;
       var self = this;
-      var btn = byId('zml-lb-del');
-      performDelete(this.surface, [it.id], {
-        busy: function (on) {
-          if (!btn) return;
-          btn.disabled = on;
-          btn.classList.toggle('zdz-btn-busy', on);
-          btn.setAttribute('aria-busy', on ? 'true' : 'false');
-        }
-      }).then(function (result) {
+      performDelete(this.surface, [it.id], { button: byId('zml-lb-del') }).then(function (result) {
         if (!result || !result.deleted || !result.deleted.length) return;  // cancelled or failed
         var s = self.surface;
         if (!s.items.length) { self.close(); return; }
@@ -1660,7 +2628,7 @@
     _onKey: function (e) {
       var lb = byId('zml-lb');
       if (!lb || lb.style.display === 'none') return;
-      if (ConfirmSheet.isOpen()) return;   // v2.2.0 — the sheet owns the keys
+      if (ConfirmSheet.isOpen()) return;   // the sheet owns the keys
       var typing = (e.target && e.target.id === 'zml-lb-note');
       if (e.key === 'Escape') { e.preventDefault(); Lightbox.close(); return; }
       if (typing) return;
@@ -1693,14 +2661,59 @@
   var fsSurface = null;
   var fsObserver = null;
 
-  var TSMedia = {
+  var ZMLMedia = {
     _pendingFsState: null,
+
+    /**
+     * open the shared viewer on an ARBITRARY list of photos.
+     *
+     * Added so the Jobs app can show a job's photos in the SAME viewer as
+     * everything else rather than growing a second, worse one. Two photo
+     * viewers in one product is precisely how a shared standard erodes: they drift, one gets the zoom fix
+     * and the other does not, and the person using them has to remember which
+     * is which.
+     *
+     * `items` need only carry what the lightbox actually reads:
+     *   { id, file_url, thumbnail_url, title, note, captured_at, created_at,
+     *     gps_lat, gps_lng, source_app, is_owner, can_delete, privacy }
+     * Anything missing degrades to a hidden control, not an error.
+     *
+     * The caller's array is COPIED. A borrowed surface must never be able to
+     * mutate the caller's data, and note/visibility edits here are deliberately
+     * inert - the owning app is responsible for its own refresh.
+     *
+     * @param {Array}  items
+     * @param {number} startIndex
+     * @returns {boolean} false if there was nothing to show
+     */
+    openItems: function (items, startIndex) {
+      if (!Array.isArray(items) || !items.length) return false;
+      Lightbox.build();
+      var copy = items.slice();
+      var surface = {
+        kind: 'external',          // NOT 'fullscreen' -- suppresses pagination
+        items: copy,
+        hasMore: false,
+        loadMore: function () {},
+        refreshCell: function () {},          // no grid to refresh
+        removeItemsByIds: function (ids) {    // keep delete coherent if it is ever allowed
+          if (!Array.isArray(ids)) return;
+          for (var i = copy.length - 1; i >= 0; i--) {
+            if (ids.indexOf(copy[i].id) > -1) copy.splice(i, 1);
+          }
+        }
+      };
+      var pos = Math.max(0, Math.min(parseInt(startIndex, 10) || 0, copy.length - 1));
+      Lightbox.open(surface, pos);
+      return true;
+    },
 
     mountWidget: function (rootEl) {
       if (!rootEl) rootEl = byId('zml-w');
       if (!rootEl) return;
-      if (rootEl.dataset.tsmlMounted === '1') return;
-      rootEl.dataset.tsmlMounted = '1';
+      if (rootEl.dataset.zmlMounted === '1') return;
+      rootEl.dataset.zmlMounted = '1';
+      if (!needKit(rootEl.querySelector('#zml-w-grid') || rootEl.querySelector('.zml-w-grid'))) return;
 
       widgetSurface = new Surface({
         kind: 'widget',
@@ -1716,13 +2729,14 @@
     mountFullscreen: function (rootEl) {
       if (!rootEl) rootEl = byId('zml-fs');
       if (!rootEl) return;
-      if (rootEl.dataset.tsmlMounted === '1') return;
-      rootEl.dataset.tsmlMounted = '1';
+      if (rootEl.dataset.zmlMounted === '1') return;
+      rootEl.dataset.zmlMounted = '1';
+      if (!needKit(rootEl.querySelector('#zml-fs-grid-wrap') || rootEl.querySelector('.zml-fs-grid-wrap'))) return;
 
-      var initial = TSMedia._pendingFsState || {};
-      TSMedia._pendingFsState = null;
+      var initial = ZMLMedia._pendingFsState || {};
+      ZMLMedia._pendingFsState = null;
 
-      // v2.3.0 — never start in the admin-only "All" scope for a non-admin
+      // never start in the admin-only "All" scope for a non-admin
       // (e.g. a carried-over state); fall back to the public org view. The
       // server enforces this too; this keeps the UI coherent (a scope whose
       // tab isn't rendered would leave no active segment).
@@ -1748,6 +2762,14 @@
     }
   };
 
+  // the app needs the theme's kit (ZDZ.ui). Without it, say so in the grid
+  // instead of leaving the loader running forever. Returns true when the kit is there.
+  function needKit(gridWrap) {
+    if (ui()) return true;
+    if (gridWrap) gridWrap.innerHTML = '<div class="zml-empty zml-load-error" role="alert">' + esc(NEEDS_KIT) + '</div>';
+    return false;
+  }
+
   // Sync the server-rendered segmented/chip active states to the controller's
   // starting scope/type (when "See All" carried them over).
   function reflectControls(root, scope, type) {
@@ -1769,24 +2791,24 @@
     if (!appBody || fsObserver) return;
     fsObserver = new MutationObserver(function () {
       var host = appBody.querySelector('#zml-fs');
-      if (host && host.dataset.tsmlMounted !== '1') {
-        TSMedia.mountFullscreen(host);
+      if (host && host.dataset.zmlMounted !== '1') {
+        ZMLMedia.mountFullscreen(host);
       }
     });
     fsObserver.observe(appBody, { childList: true, subtree: true });
     // Catch the case where it's already present at install time.
     var existing = appBody.querySelector('#zml-fs');
-    if (existing && existing.dataset.tsmlMounted !== '1') TSMedia.mountFullscreen(existing);
+    if (existing && existing.dataset.zmlMounted !== '1') ZMLMedia.mountFullscreen(existing);
   }
 
-  window.TSMedia = TSMedia;
+  window.ZMLMedia = ZMLMedia;
 
   // Boot: install the #app-body watcher, and mount the widget if it's already
   // on the page. Both are idempotent.
   function boot() {
     watchAppBody();
     var w = byId('zml-w');
-    if (w && w.dataset.tsmlMounted !== '1') TSMedia.mountWidget(w);
+    if (w && w.dataset.zmlMounted !== '1') ZMLMedia.mountWidget(w);
   }
 
   if (document.readyState === 'loading') {

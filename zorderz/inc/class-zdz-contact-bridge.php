@@ -2,8 +2,7 @@
 /**
  * Zorderz Contact Bridge — shared "contact lookup" capability provider.
  *
- * Part of the cross-app orchestrator (Orchestrator Interop Contract §2 — the
- * CAPABILITY layer). Exposes a single read-only verb the operator bot can call
+ * Part of the cross-app orchestrator (its CAPABILITY layer). Exposes a single read-only verb the operator bot can call
  * to answer "give me the contact info for <Name>". Contact identity is SHARED
  * platform data (not owned by any one app), so the bridge lives in the theme
  * alongside the ZDZ_Core_* data clients rather than in a plugin.
@@ -32,18 +31,18 @@
  *   A requester may see a customer's full contact when ANY of:
  *     (a) the requester is admin/owner (sees anyone), OR
  *     (b) the customer is on the requester's OWN lead/job, OR
- *     (c) the requester SHARES the job — determined by the FreshBooks salesperson
- *         INITIALS on the customer's invoices/estimates. Initials like "(GT)" +
- *         "(DT)" (or composite "(GT/DT)", "(GT, DT)", "(GT & DT)") mean both reps
+ *     (c) the requester SHARES the job — determined by the billing system's salesperson
+ *         INITIALS on the customer's invoices/estimates. Initials like "(AB)" +
+ *         "(CD)" (or composite "(AB/CD)", "(AB, CD)", "(AB & CD)") mean both reps
  *         are attached and BOTH may see that customer's data.
- *   The requester's own initials come from their commission profile
- *   (tscc_salesperson_code, with a ZDZ_Core_Settings fallback). When no
+ *   The requester's own initials are their party code (the commission plan's),
+ *   else their profile's salesperson code (ZDZ_Salesperson_Code). When no
  *   relationship exists and the requester isn't admin, the bridge returns
  *   denied:true with a polite message and no data.
  *
  * @package ZorderzTheme
  * @version 1.0.0
- * @since   theme v2.21.4
+ * @since   theme
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -101,7 +100,10 @@ class ZDZ_Contact_Bridge {
 		);
 
 		$query          = trim( (string) ( $payload['query'] ?? '' ) );
-		$requesting_uid = (int) ( $payload['requesting_user_id'] ?? get_current_user_id() );
+		// The signed-in person wins over the payload. Only with no session (a cron run) is the caller's id used, so a
+		// payload can never borrow someone else's rights.
+		$session_uid    = (int) get_current_user_id();
+		$requesting_uid = $session_uid > 0 ? $session_uid : (int) ( $payload['requesting_user_id'] ?? 0 );
 		$is_kiosk       = self::resolve_is_kiosk( $payload, $requesting_uid );
 
 		if ( $query === '' ) {
@@ -125,7 +127,7 @@ class ZDZ_Contact_Bridge {
 			return $result;
 		}
 
-		// ── §133 name-match confidence gate (recall + first-name PRECISION). ──
+		// ── Name-match confidence gate (recall + first-name PRECISION). ──
 		// full_disclosure_ok() decides whether we are confident the resolved record IS the
 		// asked person. If not, we disclose name + city only (below) — never the wrong
 		// person's phone/email/address. See the method for the confidence rule; it closes
@@ -143,7 +145,7 @@ class ZDZ_Contact_Bridge {
 			return $result;
 		}
 
-		// ── §133 PRECISION GATE: a low-confidence match is name + city ONLY. ──
+		// ── PRECISION GATE: a low-confidence match is name + city ONLY. ──
 		if ( ! $full_ok ) {
 			$result['closest_match'] = true;
 			$result['asked']         = $query;
@@ -379,9 +381,9 @@ class ZDZ_Contact_Bridge {
 			$clients = self::fb_search_clients( $fb, $fname, 10 );
 		}
 
-		// §133 recall: when the literal search finds nothing, widen with the curated
+		// Recall: when the literal search finds nothing, widen with the curated
 		// soundalike spellings of the surname (e.g. a client on file under a variant
-		// spelling). Guarded, so a missing matcher simply skips the widening (INV-9);
+		// spelling). Guarded, so a missing matcher simply skips the widening;
 		// precision is still enforced below (unambiguous surname-relation) and by the
 		// caller's tier gate.
 		if ( empty( $clients ) && $lname !== '' && class_exists( 'ZDZ_Name_Match' ) ) {
@@ -427,7 +429,7 @@ class ZDZ_Contact_Bridge {
 		if ( $wantl !== '' ) {
 			$near = array_values( array_filter( $clients, function ( $c ) use ( $wantl ) {
 				$ln = strtolower( trim( (string) ( $c['lname'] ?? '' ) ) );
-				// §133: surname relatedness — exact / anchored prefix / edit<=2, plus the
+				// Surname relatedness — exact / anchored prefix / edit<=2, plus the
 				// curated homophone + metaphone signals when the matcher is present. NOT
 				// sounds_like's substring rule (which would read "Ricks" as "Hendricks").
 				return $ln !== '' && self::surname_related( $ln, $wantl );
@@ -442,7 +444,7 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
-	 * §133 precision gate — may we disclose FULL contact PII for this query, given the
+	 * Precision gate — may we disclose FULL contact PII for this query, given the
 	 * resolver's single resolved record? Full PII requires POSITIVE identity confidence;
 	 * a low-confidence resolution (an unrelated surname from a first-name/near fallback,
 	 * or a near surname with no corroborating first name) returns false so the caller
@@ -495,7 +497,7 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
-	 * §133 — confidence tier for a resolved candidate vs the asked name.
+	 * Confidence tier for a resolved candidate vs the asked name.
 	 *   exact  — surname equal AND first name equal/compatible (or none asked)
 	 *   strong — surname related (typo/soundalike) AND first name compatible
 	 *   weak   — surname related but the first name DIVERGES  → name+city only
@@ -536,7 +538,7 @@ class ZDZ_Contact_Bridge {
 	 * <= 2, and (when ZDZ_Name_Match is present) the curated homophone map + metaphone-key
 	 * equality. Deliberately NOT ZDZ_Name_Match::sounds_like(), whose substring clause
 	 * ("hendricks" contains "ricks") is right for recall but catastrophic as an equality
-	 * gate. Self-contained so the theme runs without the matcher (INV-9).
+	 * gate. Self-contained so the theme runs without the matcher.
 	 */
 	private static function surname_related( string $a, string $b ): bool {
 		$a = strtolower( trim( $a ) );
@@ -690,10 +692,10 @@ class ZDZ_Contact_Bridge {
 	/**
 	 * Pull the salesperson INITIALS attached to a FreshBooks customer by reading
 	 * the codes off their recent invoices/estimates. Reuses the same parenthesized
-	 * "(GT)" / "(GT/DT)" convention Commissions parses for commission splits.
+	 * "(AB)" / "(AB/CD)" convention Commissions parses for commission splits.
 	 *
 	 * @param array $fb_client
-	 * @return array Upper-cased initials, e.g. ['GT','DT'].
+	 * @return array Upper-cased initials, e.g. ['AB','CD'].
 	 */
 	private static function collect_sp_codes_for_client( array $fb_client ): array {
 		$codes = array();
@@ -768,8 +770,8 @@ class ZDZ_Contact_Bridge {
 
 	/**
 	 * Parse parenthesized salesperson codes from free text. A self-contained copy
-	 * of TSCC_FreshBooks::extract_sp_codes() (kept local so the theme has no hard
-	 * dependency on the plugin), with the same 2–4-letter + denylist guard.
+	 * of the Commission app's code harvest (kept local so the theme has no hard
+	 * dependency on the app), with the same 2–4-letter + denylist guard.
 	 *
 	 * @param string $text
 	 * @return array Upper-cased codes.
@@ -826,8 +828,8 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
-	 * The requester's salesperson initials, from their commission profile meta
-	 * (set in Commissions), with a ZDZ_Core_Settings fallback.
+	 * The requester's salesperson initials: their party code (set by the commission
+	 * plan), else the profile's salesperson code (ZDZ_Core_Settings).
 	 *
 	 * @param int $uid
 	 * @return string
@@ -836,7 +838,7 @@ class ZDZ_Contact_Bridge {
 		if ( $uid <= 0 ) {
 			return '';
 		}
-		$code = (string) get_user_meta( $uid, 'tscc_salesperson_code', true );
+		$code = class_exists( 'ZDZ_Salesperson_Code' ) ? ZDZ_Salesperson_Code::party( $uid ) : (string) get_user_meta( $uid, 'zdz_party_code', true );
 		if ( $code === '' && class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_salesperson_code' ) ) {
 			$code = (string) \ZDZ_Core_Settings::get_salesperson_code( $uid );
 		}

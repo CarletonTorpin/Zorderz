@@ -12,7 +12,7 @@
  * retired hardcoded model handle, the in-request sleep()/backoff and the SSE
  * fallback all live in the gateway now, not here.
  *
- * WHY (INV-4 / one-choke): every AI call on the platform must leave through a
+ * WHY (one model gateway): every AI call on the platform must leave through a
  * single repaired client so stream:false, the per-family reasoning knob, the
  * no-sleep retry, the registry remap and the WP_Error+status contract are applied
  * uniformly. This adapter keeps leads' callers unchanged while making that real.
@@ -20,7 +20,7 @@
  * The concrete model is resolved from config (the zl_ai_model option / the model
  * registry) with a NEUTRAL, empty default — a business's model comes from its
  * connections pack; Core ships no dead handle. The credential is read by the
- * gateway from Core settings (plugins never pass a key — INV-4).
+ * gateway from Core settings (apps never pass a key).
  *
  * Reliability: each call is routed past Zdz_Service_Breaker (a sick upstream is
  * short-circuited; three consecutive 401s hit the auth wall WITHOUT tripping the
@@ -45,7 +45,7 @@ class ZL_Poe_Client {
     /**
      * @var string
      * Retained for constructor-signature back-compat only. The gateway reads the
-     * single platform credential from Core settings (INV-4); this is not sent.
+     * single platform credential from Core settings; this is not sent.
      */
     private $api_key;
 
@@ -80,7 +80,7 @@ class ZL_Poe_Client {
         if ( $this->gateway instanceof ZDZ_Core_Poe ) {
             return $this->gateway;
         }
-        // No api_key argument: the gateway owns the single credential (INV-4).
+        // No api_key argument: the gateway owns the single credential.
         $this->gateway = new ZDZ_Core_Poe();
         return $this->gateway;
     }
@@ -140,7 +140,9 @@ class ZL_Poe_Client {
         $messages[] = array( 'role' => 'user', 'content' => (string) $prompt );
 
         $temp  = ( null !== $temperature ) ? (float) $temperature : 0.0;
-        $extra = is_array( $extra_params ) ? $extra_params : array();
+        // Every leads prompt carries lead data (names, purchase history) or works on it, and none
+        // needs the web: no leads call searches it (query_parallel() runs through here too).
+        $extra = self::without_web( is_array( $extra_params ) ? $extra_params : array() );
 
         $t      = microtime( true );
         $result = $this->gateway()->query( $messages, $temp, $extra, $model );
@@ -171,6 +173,23 @@ class ZL_Poe_Client {
             Zdz_Service_Breaker::record_success( $service );
         }
         return $text;
+    }
+
+    /**
+     * Drop web_search from a request's extras. A web-searching model turns what it reads into
+     * search queries nobody can see, and every leads prompt carries lead data. PURE.
+     *
+     * @param array $extra Request extras.
+     * @return array The extras with no web_search.
+     */
+    public static function without_web( array $extra ): array {
+        if ( array_key_exists( 'web_search', $extra ) ) {
+            if ( ! empty( $extra['web_search'] ) && function_exists( 'error_log' ) ) {
+                error_log( '[ZL] web_search dropped from an Ai call: lead data never goes to a web-searching model.' );
+            }
+            unset( $extra['web_search'] );
+        }
+        return $extra;
     }
 
     /**

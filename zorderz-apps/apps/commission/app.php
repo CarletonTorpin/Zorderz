@@ -11,7 +11,7 @@
  *   invoices, ZDZ_Party for the roster, ZDZ_Data_Permissions for tiered
  *   visibility, and publishes a cross-app bridge (ZCC_ZANA_Bridge) so analytics
  *   and the chat orchestrator can ask for a commission figure or a unit tally.
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -36,10 +36,14 @@
  *                    matched case-insensitively.
  *
  * SAFETY FLOOR (never weakened): commission is earned only on collected money
- * and the provider's own paid-filter is never trusted; an inferred rep is never
- * payable; an unresolvable share pays zero-and-flags; the shared kiosk hard-
- * refuses any commission figure. Nothing is silent — every drop is a logged
- * disposition.
+ * and the provider's own paid-filter is never trusted; commission and piece-rate
+ * pay go only to the person the sale or job is attributed to, and an invoice with
+ * nobody (or people its records disagree on) is a review item, never paid to a
+ * default; an inferred rep is never payable; an unresolvable share pays zero-
+ * and-flags; a locked month never changes; costs and margins are shown only to
+ * the administrator tier; an Ai answer is only a proposal a person confirms; the
+ * shared kiosk hard-refuses any commission figure. Nothing is silent — every
+ * drop is a logged disposition.
  *
  * @package Zorderz\Commission
  */
@@ -49,7 +53,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZCC_VERSION', '1.0.0' );
+define( 'ZCC_VERSION', '1.1.0' );
 define( 'ZCC_DB_VERSION', '1.0.0' );
 define( 'ZCC_FILE', __FILE__ );
 define( 'ZCC_DIR', plugin_dir_path( __FILE__ ) );
@@ -59,8 +63,7 @@ define( 'ZCC_APP_ID', 'commission-calculator' ); // matches the theme's label ma
 
 /**
  * The chat/orchestrator commission marker. Protocol tokens live in ONE constant,
- * referenced by the bridge + parser, never typed twice. Replaces '[TSCC_CALC]',
- * which is recorded as a deprecated alias in the bridge format spec.
+ * referenced by the bridge + parser, never typed twice.
  */
 if ( ! defined( 'ZCC_CALC_MARKER' ) ) {
 	define( 'ZCC_CALC_MARKER', '[ZCC_CALC]' );
@@ -129,24 +132,37 @@ function zcc_item_engine_version(): int {
 // class-zcc-app.php implements the theme interface, so it is required later,
 // inside after_setup_theme, once that interface exists.
 require_once ZCC_DIR . 'includes/class-zcc-cost-book.php';
+require_once ZCC_DIR . 'includes/class-zcc-places.php';
+require_once ZCC_DIR . 'includes/class-zcc-line-map.php';
 require_once ZCC_DIR . 'includes/class-zcc-classifier.php';
 require_once ZCC_DIR . 'includes/class-zcc-freshbooks.php';
 require_once ZCC_DIR . 'includes/class-zcc-split.php';
 require_once ZCC_DIR . 'includes/class-zcc-ledger.php';
 require_once ZCC_DIR . 'includes/class-zcc-audit.php';
 require_once ZCC_DIR . 'includes/class-zcc-rep-overrides.php';
+require_once ZCC_DIR . 'includes/class-zcc-visibility.php';
+require_once ZCC_DIR . 'includes/class-zcc-attribution.php';
+require_once ZCC_DIR . 'includes/class-zcc-review.php';
+require_once ZCC_DIR . 'includes/class-zcc-material-cost.php';
+require_once ZCC_DIR . 'includes/class-zcc-cost-recheck.php';
 require_once ZCC_DIR . 'includes/class-zcc-calc-engine.php';
+require_once ZCC_DIR . 'includes/class-zcc-month-lock.php';
+require_once ZCC_DIR . 'includes/class-zcc-invoice-view.php';
+require_once ZCC_DIR . 'includes/class-zcc-ai.php';
 require_once ZCC_DIR . 'includes/class-zcc-coverage.php';
 require_once ZCC_DIR . 'includes/class-zcc-installer-pay.php';
 require_once ZCC_DIR . 'includes/class-zcc-self-test.php';
 require_once ZCC_DIR . 'includes/class-zcc-zana-bridge.php';
+require_once ZCC_DIR . 'includes/class-zcc-items-sold.php';
+ZCC_Items_Sold::init();
 require_once ZCC_DIR . 'includes/class-zcc-rest.php';
 require_once ZCC_DIR . 'includes/class-zcc-admin.php';
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest).
- * Creates SCHEMA ONLY — no COGS, no rates, no plans are ever seeded. Schedules
- * the finalisation cron.
+ * Creates SCHEMA ONLY — no COGS, no rates, no plans are ever seeded. Nothing is
+ * scheduled: a month is locked by the person who pays it (ZCC_Month_Lock). The home
+ * screen's item counts are made by one background event, asked for only when read.
  */
 function zcc_activate() {
 	$migration = ZCC_DIR . 'db/migrate-1.0.0.php';
@@ -157,15 +173,15 @@ function zcc_activate() {
 		}
 	}
 	update_option( 'zcc_db_version', ZCC_DB_VERSION, false );
-	if ( class_exists( 'ZCC_Ledger' ) ) {
-		ZCC_Ledger::schedule_cron();
-	}
 }
 
 /** Deactivation — clear scheduled events (data is preserved; tables are NOT dropped). */
 function zcc_deactivate() {
 	if ( class_exists( 'ZCC_Ledger' ) ) {
 		ZCC_Ledger::unschedule_cron();
+	}
+	if ( class_exists( 'ZCC_Items_Sold' ) ) {
+		ZCC_Items_Sold::unschedule();
 	}
 }
 
@@ -188,29 +204,24 @@ add_action( 'init', function () {
 	if ( class_exists( 'ZCC_Admin' ) ) {
 		ZCC_Admin::init();
 	}
-	if ( class_exists( 'ZCC_Ledger' ) ) {
-		ZCC_Ledger::schedule_cron();
+} );
+
+// Months are locked by the person who pays them, never on a timer. An install that once
+// scheduled the automatic-lock event has it cleared here, and nothing listens to it.
+add_action( 'admin_init', function () {
+	if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( 'zcc_monthly_finalize' ) && class_exists( 'ZCC_Ledger' ) ) {
+		ZCC_Ledger::unschedule_cron();
 	}
 } );
+
+// Recorded attribution from Territories (a confirmed decision for the invoice's estimate).
+add_filter( 'zcc_attribution_people', [ 'ZCC_Attribution', 'territories_people' ], 10, 3 );
 
 add_action( 'rest_api_init', function () {
 	if ( class_exists( 'ZCC_REST' ) ) {
 		ZCC_REST::register_routes();
 	}
 } );
-
-/* ── Monthly finalisation cron ──────────────────────────────────────
- * A calendar-month schedule (period_type from ZDZ_Compensation::pay_calendar()).
- * The legacy 30-day interval that stood in for "monthly" was a defect; we
- * anchor on the WP-configured timezone and finalise the PRIOR calendar month.
- */
-add_filter( 'cron_schedules', function ( $schedules ) {
-	if ( ! isset( $schedules['zcc_monthly'] ) ) {
-		$schedules['zcc_monthly'] = [ 'interval' => 30 * DAY_IN_SECONDS, 'display' => __( 'Once Monthly (Commission)', 'zorderz' ) ];
-	}
-	return $schedules;
-} );
-add_action( 'zcc_monthly_finalize', [ 'ZCC_Ledger', 'cron_finalize_prior_month' ] );
 
 // ── Orchestrator capability registration (chat verbs) ──────────────
 add_action( 'plugins_loaded', function () {
@@ -229,12 +240,12 @@ add_action( 'plugins_loaded', function () {
 	} );
 
 	// Expose this module's marker token to the chat engine via one map (never a
-	// literal). Legacy '[TSCC_CALC]' is recorded as the deprecated alias.
+	// literal).
 	add_filter( 'zdz_chat_markers', function ( $markers ) {
 		if ( ! is_array( $markers ) ) {
 			$markers = [];
 		}
-		$markers['commission.calc'] = [ 'token' => ZCC_CALC_MARKER, 'deprecated' => [ '[TSCC_CALC]' ] ];
+		$markers['commission.calc'] = [ 'token' => ZCC_CALC_MARKER, 'deprecated' => [] ];
 		return $markers;
 	} );
 }, 20 );
@@ -301,7 +312,6 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 		'tscc_split_policy'         => 'zdz_comp_split_policy',
 		'tscc_split_weight'         => 'zdz_comp_split_weight',
 		'tscc_split_own_share'      => 'zdz_comp_split_own_share',
-		'tscc_ember_pct_rep'        => 'zdz_comp_minimum_party',
 		'tscc_is_installer'         => 'zdz_comp_is_piece_worker',
 		'tscc_salesperson_code'     => 'zdz_party_code',
 	] );

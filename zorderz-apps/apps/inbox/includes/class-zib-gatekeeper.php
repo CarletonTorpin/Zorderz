@@ -11,7 +11,7 @@
  * Guarantees enforced here:
  *   - OWNER-ONLY: owner_user_id = <hard-cast int>; for owner_search the subject
  *     is FORCED equal to the actor, so cross-user is unexpressible.
- *   - KIOSK DENIED: the shared device never reads mail (INV-10).
+ *   - KIOSK DENIED: the shared device never reads mail.
  *   - FAIL-CLOSED: uid 0 / feature off / not owned → deny, logged.
  *   - AUDITED: every call (allow or deny) appends to wp_zib_access_log; search
  *     terms are hashed, never stored.
@@ -30,7 +30,7 @@ class ZIB_Gatekeeper {
 
 	const MAX_LIMIT = 50;
 
-	/** owner_chat (P3) — how many messages a single Brain-Bot turn may surface, and
+	/** owner_chat — how many messages a single assistant turn may surface, and
 	 *  how many chars of each body the bot is allowed to see. Bounds how much of the
 	 *  owner's OWN mail enters the model context per turn (small, deliberate egress). */
 	const MAX_CHAT_HITS   = 8;
@@ -70,7 +70,7 @@ class ZIB_Gatekeeper {
 	 * Is this actor allowed to read OTHER people's indexed mail AT ALL? (Necessary, not
 	 * sufficient — the per-mailbox gate is still checked by gate_admin_read.) True when the
 	 * actor can manage_options, OR holds one of the identity plugin's configured reader roles
-	 * (D9). Guarded: with the identity plugin absent, only manage_options qualifies. Pure
+	 * Guarded: with the identity plugin absent, only manage_options qualifies. Pure
 	 * capability check — names no mailbox.
 	 */
 	private static function actor_is_reader( int $actor ): bool {
@@ -218,7 +218,7 @@ class ZIB_Gatekeeper {
 	 * over the SAME columns as the FULLTEXT search, INCLUDING gist + body_clean_text — so a term
 	 * MySQL FULLTEXT cannot tokenise (below its minimum token size, or glued to punctuation / buried
 	 * inside a longer token) is still found when it is genuinely present. A true absence returns an
-	 * empty set, so the honest empty (INV-12) is preserved. Single bounded substring, esc_like'd; a
+	 * empty set, so the honest empty is preserved. Single bounded substring, esc_like'd; a
 	 * term under 2 chars is not worth a full scan. Owner scope is FORCED (owner_user_id = $actor).
 	 */
 	private static function like_recall( int $actor, string $query, string $dir_sql, array $dir_args, int $limit, string $cols ): array {
@@ -340,20 +340,109 @@ class ZIB_Gatekeeper {
 		return array( ' AND (' . implode( ' OR ', $ors ) . ')', $args );
 	}
 
-	private static function sent_to_recipient( int $actor, string $query, int $limit, string $cols, array $aliases = array() ): array {
+	private static function sent_to_recipient( int $actor, string $query, int $limit, string $cols, array $aliases = array(), array $topic_terms = array() ): array {
 		global $wpdb;
 		list( $rsql, $rargs ) = self::recipient_match( $actor, $query, $aliases );
 		if ( '' === $rsql ) {
 			$rsql  = ' AND parties_text LIKE %s';
 			$rargs = array( '%' . $wpdb->esc_like( trim( $query ) ) . '%' );
 		}
-		$args = array_merge( array( $actor, 'out' ), $rargs, array( $limit ) );
-		return (array) $wpdb->get_results( $wpdb->prepare(
+		// "…to Jordan ABOUT Sam's invoice" — every topic word must appear in the message
+		// (subject, preview, gist or text). The addressee still comes from parties_text only.
+		$tsql  = '';
+		$targs = array();
+		$tbool = self::topic_boolean( $topic_terms );
+		if ( '' !== $tbool ) {
+			$tsql  = ' AND MATCH(subject, snippet, parties_text, gist, body_clean_text) AGAINST (%s IN BOOLEAN MODE)';
+			$targs = array( $tbool );
+		}
+		$args = array_merge( array( $actor, 'out' ), $rargs, $targs, array( $limit ) );
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- columns from the caller's fixed list, table from self::t_msg(); the recipient and topic fragments hold placeholders only
+		$rows = (array) $wpdb->get_results( $wpdb->prepare(
 			'SELECT ' . $cols . ' FROM ' . self::t_msg() . '
-			 WHERE owner_user_id = %d AND direction = %s' . $rsql . '
+			 WHERE owner_user_id = %d AND direction = %s' . $rsql . $tsql . '
 			 ORDER BY received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- recipient-scoped: the addressee lives in parties_text, never the body
 			$args
 		) );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+		if ( '' !== $tsql && '' !== (string) $wpdb->last_error ) {
+			// FULLTEXT unavailable → the same AND-of-terms as substrings over the same text columns.
+			$lsql  = '';
+			$largs = array();
+			foreach ( $topic_terms as $t ) {
+				$like   = '%' . $wpdb->esc_like( $t ) . '%';
+				$lsql  .= ' AND (subject LIKE %s OR snippet LIKE %s OR gist LIKE %s OR body_clean_text LIKE %s)';
+				$largs  = array_merge( $largs, array( $like, $like, $like, $like ) );
+			}
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- columns from the caller's fixed list, table from self::t_msg(); the recipient and topic-substring fragments hold placeholders only
+			$rows = (array) $wpdb->get_results( $wpdb->prepare(
+				'SELECT ' . $cols . ' FROM ' . self::t_msg() . '
+				 WHERE owner_user_id = %d AND direction = %s' . $rsql . $lsql . '
+				 ORDER BY received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- recipient-scoped + topic substrings
+				array_merge( array( $actor, 'out' ), $rargs, $largs, array( $limit ) )
+			) );
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+		}
+		return $rows;
+	}
+
+	/**
+	 * Has the owner exchanged mail with someone of this NAME (or address)? Owner-scoped read of the
+	 * participants table (parties only, never a body) — used to split a folded "person + subject" key.
+	 * Kiosk / non-owners get false (gate_owner), so nothing is learned about anyone's mail.
+	 */
+	public static function recipient_resolves( int $actor, string $name ): bool {
+		$name = self::normalize_recipient( $name );
+		if ( strlen( $name ) < 3 || self::is_generic_recipient( $name ) || ! self::gate_owner( $actor ) ) {
+			return false;
+		}
+		global $wpdb;
+		// At the START of a word of the name, or of the address — "home" must not match "Homeowner Ln".
+		$e = $wpdb->esc_like( $name );
+		return (bool) $wpdb->get_var( $wpdb->prepare(
+			'SELECT 1 FROM ' . self::t_party() . ' WHERE owner_user_id = %d AND ( name LIKE %s OR name LIKE %s OR addr LIKE %s ) LIMIT 1', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- parties only
+			$actor, $e . '%', '% ' . $e . '%', $e . '%'
+		) );
+	}
+
+	/**
+	 * The words of a sent-mail TOPIC ("Sam's invoices" -> ['sam','invoice']): lowercase,
+	 * letters/digits only, a possessive or plural "s" dropped from words of 5+ letters (quotes -> quote,
+	 * invoices -> invoice; each term is then a prefix, so "sam*" still matches "Sam's"), filler
+	 * words and words under 3 letters skipped, at most 4 terms. Pure.
+	 *
+	 * @return string[]
+	 */
+	public static function topic_terms( string $topic ): array {
+		$stop  = array( 'the', 'and', 'for', 'with', 'about', 'his', 'her', 'their', 'our', 'your', 'my', 'any', 'some', 'that', 'this', 'from', 'into', 'over', 'what', 'when', 'was', 'were', 'are', 'has', 'have', 'had' );
+		$topic = (string) preg_replace( "/['\u{2019}]s\\b/iu", '', $topic ); // "Morgan's" -> "Morgan", not "morgans"
+		$topic = strtolower( str_replace( array( "'", "\u{2019}" ), '', $topic ) );
+		$out   = array();
+		foreach ( preg_split( '/[^a-z0-9]+/', $topic ) as $w ) {
+			if ( strlen( $w ) < 3 || in_array( $w, $stop, true ) ) {
+				continue;
+			}
+			if ( strlen( $w ) >= 5 && 's' === substr( $w, -1 ) && 'ss' !== substr( $w, -2 ) ) {
+				$w = substr( $w, 0, -1 );
+			}
+			$out[ $w ] = $w;
+			if ( count( $out ) >= 4 ) {
+				break;
+			}
+		}
+		return array_values( $out );
+	}
+
+	/** '+sam* +invoice*' — every term required, as a prefix. '' for no terms. Pure. */
+	public static function topic_boolean( array $terms ): string {
+		$parts = array();
+		foreach ( $terms as $t ) {
+			$t = preg_replace( '/[^a-z0-9]/', '', strtolower( (string) $t ) );
+			if ( strlen( $t ) >= 3 ) {
+				$parts[] = '+' . $t . '*';
+			}
+		}
+		return implode( ' ', $parts );
 	}
 
 	/**
@@ -1192,7 +1281,7 @@ class ZIB_Gatekeeper {
 		return array( 'ok' => true, 'images' => $images, 'heic_capable' => $heic_ok );
 	}
 
-	// ── Phase 2 — owner SEND (INV-SEND) ────────────────────────────────
+	// ── Owner SEND (only the owner sends, after seeing the full text) ───
 	//
 	// The owner-composed WRITE path. Each method re-gates the owner (gate_owner), resolves the target
 	// SERVER-SIDE (owner_msg_ref for reply/forward — the ms_message_id is never taken from the client),
@@ -1255,9 +1344,132 @@ class ZIB_Gatekeeper {
 	 * every newline into <br>, wrap in one plain <div>. No links auto-made, no remote resources, no scripts.
 	 */
 	private static function text_to_html( string $text ): string {
-		$text = str_replace( array( "\r\n", "\r" ), "\n", (string) $text );
-		$html = nl2br( esc_html( $text ), false ); // <br>, not <br />
-		return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;">' . $html . '</div>';
+		// one copy of this rule (ZIB_Compose::text_html), so an email with documents and one without
+		// shape the owner's words identically. The output is byte-for-byte what this method returned before.
+		return ZIB_Compose::text_html( $text );
+	}
+
+	/**
+	 * may this person send from their own mailbox right now? The REST rule (has the app,
+	 * not the kiosk, feature on) plus a connected mailbox. For the chat's preview and handoff, which run outside REST.
+	 */
+	public static function can_send( int $actor ): bool {
+		if ( ! self::gate_owner( $actor ) ) { return false; }
+		if ( function_exists( 'zib_user_has_access' ) && ! zib_user_has_access( $actor ) ) { return false; }
+		// The grant must include Mail.Send - the same rule as /connection's can_send (without it the chat
+		// offered, then Confirm minted links before Graph's 403, and Open in Email lost the email).
+		global $wpdb;
+		$scopes = $wpdb->get_var( $wpdb->prepare(
+			'SELECT scopes FROM ' . $wpdb->prefix . 'zib_accounts WHERE owner_user_id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$actor
+		) );
+		return null !== $scopes && false !== stripos( (string) $scopes, 'Mail.Send' );
+	}
+
+	/**
+	 * the ONE send of an email carrying Knowledge Vault documents, behind both Send buttons:
+	 * the Email app's composer ($via 'email', REST) and the chat's Confirm card ($via 'chat', the zib_compose_send
+	 * filter). Same steps, same body, same Graph calls either way, so the recipient cannot tell which was pressed.
+	 *
+	 * $req: mode (new | reply | replyall | forward), message_id (reply / forward: one of the owner's OWN indexed
+	 * messages, resolved here), to, cc (new), subject (new), body (plain text), docs [{id, how, days}].
+	 *
+	 * Order: gate → (chat: the Confirm press itself) → the target → recipients → the plan (what each document
+	 * becomes, ZIB_Compose::plan) → bytes read, links made (ZIB_Compose::materialize) → draft, body, attachments,
+	 * send (ZIB_Graph::send_with_attachments) → audit. Owner-forced, audited. INV-SEND: an explicit Send, or the
+	 * owner's Confirm press on a held chat action.
+	 *
+	 * @return array { ok:bool, reason?:string, attached?:int, linked?:int }
+	 */
+	public static function owner_send_compose( int $actor, array $req, string $via = 'email' ): array {
+		$via  = ( 'chat' === $via ) ? 'chat' : 'email';
+		$mode = (string) ( $req['mode'] ?? 'new' );
+		$mode = in_array( $mode, array( 'new', 'reply', 'replyall', 'forward' ), true ) ? $mode : 'new';
+		if ( ! self::gate_owner( $actor ) || ( function_exists( 'zib_user_has_access' ) && ! zib_user_has_access( $actor ) ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'compose:' . $mode . ':' . $via . ' not permitted', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		if ( 'chat' === $via && ! ZIB_Compose::chat_press() ) {
+			// INV-SEND: the chat sends only on a person's Confirm press. Anything else asking is refused - and noted.
+			self::log( $actor, $actor, 'owner_send', 'deny', 'compose:' . $mode . ':chat:not-a-confirm-press', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$docs = ZIB_Compose::normalize_docs( $req['docs'] ?? array() );
+		// One shape for both buttons: the subject as the REST route cleans it, the words trimmed.
+		$body = trim( str_replace( array( "\r\n", "\r" ), "\n", (string) ( $req['body'] ?? '' ) ) );
+		$req['subject'] = function_exists( 'sanitize_text_field' ) ? sanitize_text_field( (string) ( $req['subject'] ?? '' ) ) : trim( (string) ( $req['subject'] ?? '' ) );
+		if ( 'chat' === $via && ( 'new' !== $mode || ! $docs ) ) {
+			// The chat's exception is exactly one thing: a NEW email carrying Vault documents.
+			self::log( $actor, $actor, 'owner_send', 'deny', 'compose:' . $mode . ':chat:not-a-document-email', '', 0 );
+			return array( 'ok' => false, 'reason' => 'denied' );
+		}
+		$deadline = ZIB_Compose::deadline();
+
+		$ms_id   = '';
+		$message = array();
+		$label   = '';
+		$count   = 1;
+		if ( 'new' === $mode ) {
+			$acct = self::owner_account_id( $actor );
+			if ( $acct <= 0 ) { return array( 'ok' => false, 'reason' => 'not-connected' ); }
+			$to = self::parse_recipients( (string) ( $req['to'] ?? '' ) );
+			if ( $to['count'] < 1 ) { return array( 'ok' => false, 'reason' => 'no-recipients' ); }
+			$cc      = self::parse_recipients( (string) ( $req['cc'] ?? '' ) );
+			$subject = trim( (string) ( $req['subject'] ?? '' ) );
+			if ( '' === trim( $body ) && '' === $subject && ! $docs ) { return array( 'ok' => false, 'reason' => 'empty' ); }
+			$message = array( 'subject' => $subject, 'toRecipients' => $to['recipients'] );
+			if ( $cc['count'] > 0 ) { $message['ccRecipients'] = $cc['recipients']; }
+			$label = implode( ', ', array_map( function ( $r ) { return $r['emailAddress']['address']; }, $to['recipients'] ) );
+			$count = $to['count'];
+		} else {
+			$ref = self::owner_msg_ref( $actor, (int) ( $req['message_id'] ?? 0 ) );
+			if ( ! $ref ) {
+				self::log( $actor, $actor, 'owner_send', 'deny', 'compose:' . $mode . ':not-owned', '', 0 );
+				return array( 'ok' => false, 'reason' => 'not-found' );
+			}
+			$acct  = (int) $ref->account_id;
+			$ms_id = (string) $ref->ms_message_id;
+			if ( 'forward' === $mode ) {
+				$to = self::parse_recipients( (string) ( $req['to'] ?? '' ) );
+				if ( $to['count'] < 1 ) { return array( 'ok' => false, 'reason' => 'no-recipients' ); }
+				$message = array( 'toRecipients' => $to['recipients'] );
+				$label   = implode( ', ', array_map( function ( $r ) { return $r['emailAddress']['address']; }, $to['recipients'] ) );
+				$count   = $to['count'];
+			} else {
+				if ( '' === trim( $body ) && ! $docs ) { return array( 'ok' => false, 'reason' => 'empty' ); }
+				$label = 'a reply by email';
+			}
+		}
+
+		$plan = ZIB_Compose::plan( $actor, $docs );
+		if ( is_wp_error( $plan ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'compose:' . $mode . ':' . $via . ':' . $plan->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => $plan->get_error_code() );
+		}
+		$out = ZIB_Compose::materialize( $actor, $plan, $label );
+		if ( is_wp_error( $out ) ) {
+			self::log( $actor, $actor, 'owner_send', 'deny', 'compose:' . $mode . ':' . $via . ':' . $out->get_error_code(), '', 0 );
+			return array( 'ok' => false, 'reason' => $out->get_error_code() );
+		}
+		$html = ZIB_Compose::body_html( $body, $out['links'] );
+		$res  = ZIB_Graph::send_with_attachments( $acct, $mode, $ms_id, $message, $html, $out['attachments'], ZIB_Ingest::allfolder_enabled(), $deadline );
+		$ids  = implode( ',', array_map( function ( $p ) { return $p['id'] . ( 'link' === $p['how'] ? 'L' : 'A' ); }, $plan ) );
+		if ( is_wp_error( $res ) ) {
+			$data   = method_exists( $res, 'get_error_data' ) ? $res->get_error_data() : null;
+			$code   = (string) $res->get_error_code();
+			$unsure = is_array( $data ) && 'send' === ( $data['stage'] ?? '' ) && in_array( $code, array( 'zib_net', 'zib_graph_transient' ), true );
+			// Before /send, or a clear refusal of it: nothing went, so the links made for it stop now.
+			// A timeout or a 5xx ON /send may follow a delivery: the links stay, and the owner is told to look in Sent.
+			$stopped = $unsure ? 0 : ZIB_Compose::revoke_links( $actor, $out['links'] );
+			self::log( $actor, $actor, 'owner_send', 'deny', 'compose:' . $mode . ':' . $via . ':graph:' . $code . ':docs=' . $ids
+				. ( $unsure ? ':unsure' : ':links-stopped=' . $stopped ), '', 0 );
+			if ( $unsure ) { return array( 'ok' => false, 'reason' => 'unsure' ); }
+			if ( 'zib_too_slow' === $code ) { return array( 'ok' => false, 'reason' => 'too-slow' ); }
+			return array( 'ok' => false, 'reason' => self::send_reason( $res ) );
+		}
+		self::log( $actor, $actor, 'owner_send', 'allow', 'compose:' . $mode . ':' . $via . ':docs=' . $ids
+			. ( 'new' === $mode ? ':' . substr( sha1( (string) ( $message['subject'] ?? '' ) ), 0, 12 ) : ':' . (int) ( $req['message_id'] ?? 0 ) ), '', $count );
+		return array( 'ok' => true, 'attached' => count( $out['attachments'] ), 'linked' => count( $out['links'] ) );
 	}
 
 	/**
@@ -1279,7 +1491,7 @@ class ZIB_Gatekeeper {
 			return array( 'ok' => false, 'reason' => 'not-found' );
 		}
 		// immutable=false: without all-folder sync, ingest stores the default ms_message_id. Wire
-		// ZIB_Ingest::allfolder_enabled() here once the all-folder sync (immutable ids) is ported.
+		// ZIB_Ingest::allfolder_enabled() here once the all-folder sync (immutable ids) is enabled.
 		$res = ZIB_Graph::send_reply_html( (int) $ref->account_id, (string) $ref->ms_message_id, self::text_to_html( $comment ), $all, false );
 		if ( is_wp_error( $res ) ) {
 			self::log( $actor, $actor, 'owner_send', 'deny', 'reply:graph:' . $res->get_error_code(), '', 0 );
@@ -1591,7 +1803,7 @@ class ZIB_Gatekeeper {
 		return array( 'ok' => ( false !== $n ) );
 	}
 
-	// ── cross-user resolution (P4b — Brain-Bot "search a colleague's mail") ──
+	// ── cross-user resolution (the assistant: "search a colleague's mail") ──
 
 	/**
 	 * Resolve a NAME the reader typed in chat ("Jordan", "Jordan's") to a SINGLE consenting
@@ -1695,7 +1907,84 @@ class ZIB_Gatekeeper {
 		return false;
 	}
 
-	// ── owner_chat (P3 — Brain-Bot owner path) ──────────────────────
+	// ── owner_chat (the assistant's own-mail path) ──────────────────
+
+	/**
+	 * The caller's OWN sent emails that read most like the one they are about to write — voice
+	 * examples for a chat draft, so a drafted email sounds like its sender. Owner path only (gate_owner: the caller's own mailbox, never the kiosk, never
+	 * anyone else's — owner_user_id = actor is in the WHERE). Sent ('out') mail to people outside the
+	 * company ('external'), of a normal email's length, ranked by relevance to $topic (OR-mode FULLTEXT
+	 * over the same columns as owner_chat); topped up with the most recent such emails when fewer match.
+	 * Read-only; logged with a hash of the topic, never the topic.
+	 *
+	 * @return array { ok:bool, related:bool, rows:array[] } rows: { id, subject, body, received_at }
+	 */
+	public static function sent_style_examples( int $actor, string $topic, int $limit = 3 ): array {
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'style_examples', 'deny', 'not permitted', '', 0 );
+			return array( 'ok' => false, 'related' => false, 'rows' => array() );
+		}
+		global $wpdb;
+		$limit = max( 1, min( 5, $limit ) );
+		$topic = trim( substr( $topic, 0, 300 ) );
+		$cols  = 'id, subject, body_clean_text, received_at';
+		$where = "owner_user_id = %d AND direction = 'out' AND class = 'external'
+			AND body_clean_text IS NOT NULL AND CHAR_LENGTH(body_clean_text) BETWEEN 60 AND 1500";
+		$keep  = function ( $rows, array $seen, int $want ) {
+			$out = array();
+			foreach ( (array) $rows as $r ) {
+				$id   = (int) ( $r->id ?? 0 );
+				$body = trim( (string) ( $r->body_clean_text ?? '' ) );
+				// A forward or a pasted thread is not the person's own voice.
+				if ( $id <= 0 || isset( $seen[ $id ] ) || '' === $body
+					|| preg_match( '/^(?:-{2,}\s*)?(?:forwarded message|original message|begin forwarded)/im', $body )
+					|| preg_match( '/^\s*(?:fwd?|fw)\s*:/i', (string) ( $r->subject ?? '' ) ) ) {
+					continue;
+				}
+				$out[ $id ] = array(
+					'id'          => $id,
+					'subject'     => (string) ( $r->subject ?? '' ),
+					'body'        => $body,
+					'received_at' => (string) ( $r->received_at ?? '' ),
+				);
+				if ( count( $out ) >= $want ) {
+					break;
+				}
+			}
+			return $out;
+		};
+
+		$rows    = array();
+		$related = false;
+		$bool    = '' !== $topic ? self::build_boolean_query( $topic, false ) : '';
+		if ( '' !== $bool ) {
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- columns, table and WHERE are fixed strings set above; every value is a placeholder
+			$hit = $wpdb->get_results( $wpdb->prepare(
+				'SELECT ' . $cols . ', MATCH(subject, snippet, parties_text, gist, body_clean_text) AGAINST (%s IN BOOLEAN MODE) AS score
+				 FROM ' . self::t_msg() . ' WHERE ' . $where . ' AND MATCH(subject, snippet, parties_text, gist, body_clean_text) AGAINST (%s IN BOOLEAN MODE)
+				 ORDER BY score DESC, received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$bool, $actor, $bool, 4 * $limit
+			) );
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+			if ( '' === (string) $wpdb->last_error ) {
+				$rows    = $keep( $hit, array(), $limit );
+				$related = ! empty( $rows );
+			}
+		}
+		if ( count( $rows ) < $limit ) {
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- columns, table and WHERE are fixed strings set above; every value is a placeholder
+			$recent = $wpdb->get_results( $wpdb->prepare(
+				'SELECT ' . $cols . ' FROM ' . self::t_msg() . ' WHERE ' . $where . ' AND CHAR_LENGTH(body_clean_text) <= 900
+				 ORDER BY received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$actor, 6 * $limit
+			) );
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+			$rows = $rows + $keep( $recent, $rows, $limit - count( $rows ) );
+		}
+		$rows = array_values( $rows );
+		self::log( $actor, $actor, 'style_examples', 'allow', $related ? 'related' : 'recent', '' !== $topic ? substr( sha1( $topic ), 0, 16 ) : '', count( $rows ) );
+		return array( 'ok' => true, 'related' => $related, 'rows' => $rows );
+	}
 
 	/**
 	 * The owner asks the assistant about their OWN indexed mail. Egress path #1.
@@ -1705,7 +1994,7 @@ class ZIB_Gatekeeper {
 	 *   - SUBJECT FORCED == ACTOR. owner_user_id = %d = the real caller. There is
 	 *     no parameter by which another user's mailbox could be named — a bot (or a
 	 *     crafted marker) literally cannot express "search someone else's mail".
-	 *   - KIOSK DENIED. The shared device never reaches this path (INV-10).
+	 *   - KIOSK DENIED. The shared device never reaches this path.
 	 *   - BOUNDED. At most MAX_CHAT_HITS messages, each excerpt capped to
 	 *     CHAT_EXCERPT_CH chars — a small, deliberate slice, never a mailbox dump.
 	 *   - SAFE TEXT. Bodies are decrypted then reduced to plain text (no email HTML,
@@ -1718,7 +2007,7 @@ class ZIB_Gatekeeper {
 	 *
 	 * @return array { ok:bool, reason?:string, results:array[] }
 	 */
-	public static function owner_chat( int $actor, string $query, int $limit = self::MAX_CHAT_HITS, string $mode = 'list', string $direction = 'any' ): array {
+	public static function owner_chat( int $actor, string $query, int $limit = self::MAX_CHAT_HITS, string $mode = 'list', string $direction = 'any', string $topic = '', string $match = 'recipient' ): array {
 		if ( ! self::gate_owner( $actor ) ) {
 			self::log( $actor, $actor, 'owner_chat', 'deny', 'not permitted', '', 0 );
 			return array( 'ok' => false, 'reason' => 'not_permitted', 'results' => array() );
@@ -1761,6 +2050,9 @@ class ZIB_Gatekeeper {
 		}
 
 		$recipient_scoped = false;
+		$topic_terms      = ( 'sent' === $direction && '' !== $query ) ? self::topic_terms( $topic ) : array();
+		$topic_state      = ''; // '' (no topic) | 'hit' (rows match the topic) | 'missed' (none do; rows are all mail to that person)
+		$content_search   = false; // match=any and nothing was addressed to the term -> searched the text of sent mail instead
 		if ( ! empty( $sender['addresses'] ) ) {
 			// Sender-filtered recency: the newest message from that person is the answer.
 			$addrs = array_values( $sender['addresses'] );
@@ -1775,10 +2067,42 @@ class ZIB_Gatekeeper {
 		} elseif ( 'sent' === $direction && '' !== $query ) {
 			// SENT to a NAMED person: the person is the RECIPIENT (in parties_text), not a body term.
 			// Match the addressee specifically so "sent to Alex" cannot return a message that only
-			// MENTIONS Alex while sent to someone else. Empty stays empty (INV-12) — we do NOT broaden
+			// MENTIONS Alex while sent to someone else. Empty stays empty — we do NOT broaden
 			// to the body-matching FULLTEXT / fuzzy / LIKE tiers below.
 			$recipient_scoped = true;
-			$rows = self::sent_to_recipient( $actor, $query, $limit, $cols );
+			if ( ! empty( $topic_terms ) ) {
+				// "…to Jordan about Sam's invoice" — the person AND the topic. When no email to
+				// them mentions it, say so and show what WAS sent to them (the render labels it honestly).
+				$rows        = self::sent_to_recipient( $actor, $query, $limit, $cols, array(), $topic_terms );
+				$topic_state = empty( $rows ) ? 'missed' : 'hit';
+				if ( empty( $rows ) ) {
+					$rows = self::sent_to_recipient( $actor, $query, $limit, $cols );
+				}
+			} else {
+				$rows = self::sent_to_recipient( $actor, $query, $limit, $cols );
+			}
+			if ( empty( $rows ) && 'any' === $match ) {
+				// "search my sent emails for <X>" — X may be a topic, not a person. Nothing was
+				// addressed to it, so search the TEXT of sent mail (direction still 'out'); the fuzzy and
+				// substring tiers below then run as for any content search. Labelled in the render.
+				$recipient_scoped = false;
+				$content_search   = true;
+				$bool             = self::build_boolean_query( $query );
+				if ( '' !== $bool ) {
+					// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- columns are this method's fixed list, table from self::t_msg(); every value is a placeholder
+					$rows = $wpdb->get_results( $wpdb->prepare(
+						'SELECT ' . $cols . ', MATCH(subject, snippet, parties_text, gist, body_clean_text) AGAINST (%s IN BOOLEAN MODE) AS score
+						 FROM ' . self::t_msg() . '
+						 WHERE owner_user_id = %d AND direction = %s AND MATCH(subject, snippet, parties_text, gist, body_clean_text) AGAINST (%s IN BOOLEAN MODE)
+						 ORDER BY received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- sent-mail text search
+						$bool, $actor, 'out', $bool, $limit
+					) );
+					// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+					if ( '' !== (string) $wpdb->last_error ) {
+						$rows = array();
+					}
+				}
+			}
 		} elseif ( '' === $query ) {
 			// A contentless ask ("what's in my inbox?" / "the last email I sent") →
 			// most-recent in the requested direction, still capped.
@@ -1836,7 +2160,7 @@ class ZIB_Gatekeeper {
 		// to punctuation or buried inside a longer token. One last owner-scoped,
 		// direction-filtered, capped, recency-first SUBSTRING pass over the SAME columns
 		// — INCLUDING gist + body_clean_text — recovers those. A genuine absence still
-		// returns nothing, so the honest empty (INV-12) is preserved.
+		// returns nothing, so the honest empty is preserved.
 		if ( empty( $rows ) && '' !== $query && ! $recipient_scoped ) {
 			$lrows = self::like_recall( $actor, $query, $dir_sql, $dir_args, $limit, $cols );
 			if ( ! empty( $lrows ) ) {
@@ -1867,6 +2191,8 @@ class ZIB_Gatekeeper {
 		}
 		$audit = ( '' !== $sender['label'] ) ? 'latest:sender' : $mode;
 		if ( '' !== $dir_val ) { $audit .= ':' . $direction; }
+		if ( '' !== $topic_state ) { $audit .= ':topic-' . $topic_state; }
+		if ( $content_search ) { $audit .= ':text'; }
 		self::log( $actor, $actor, 'owner_chat', 'allow', $audit, substr( sha1( $query ), 0, 16 ), count( $out ) );
 		$ret = array( 'ok' => true, 'results' => $out, 'mode' => $mode, 'direction' => $direction );
 		if ( '' !== $sender['label'] ) {
@@ -1874,6 +2200,16 @@ class ZIB_Gatekeeper {
 		}
 		if ( $fuzzy_used ) {
 			$ret['fuzzy'] = true;
+		}
+		if ( $content_search ) {
+			$topic_state = ''; // the rows came from the text search, not from mail sent to that person
+		}
+		if ( '' !== $topic_state ) {
+			$ret['topic']       = implode( ' ', $topic_terms );
+			$ret['topic_state'] = $topic_state;
+		}
+		if ( $content_search && ! empty( $out ) ) {
+			$ret['content_search'] = true;
 		}
 		return $ret;
 	}
@@ -1982,8 +2318,8 @@ class ZIB_Gatekeeper {
 					continue;
 				}
 				// "Every real human": drop only AUTOMATED senders (no class arg passed), so a real
-				// internal / staff person is KEPT — the owner asked to see partners + internal folks
-				// in "who haven't I answered" and judge for themselves. Automated addresses still go.
+				// internal / staff person is KEPT — "who haven't I answered" shows partners and internal
+				// people so the mailbox owner judges for themselves. Automated addresses still go.
 				if ( empty( $opts['include_nonhuman'] ) && self::is_nonhuman_sender( (string) $r->from_addr ) ) {
 					continue;
 				}
@@ -2046,7 +2382,7 @@ class ZIB_Gatekeeper {
 	 * BODY-FREE and OWNER-FORCED: it aggregates ONLY the structured wp_zib_extracts derived at
 	 * ingest (never a body), and every row is scoped `e.owner_user_id = <actor>` — cross-user is
 	 * unexpressible, exactly like owner_chat / owner_followups. Returns the computed value AND the
-	 * source messages, so the render can GROUND the number in specific mail (BEST-PRACTICES §4).
+	 * source messages, so the render can GROUND the number in specific mail.
 	 *
 	 * @param array $spec { metric: sum_qty|sum_amount|count, kind?: product|money|order_ref,
 	 *                      label?, unit?, from?, since?, until? } — a REQUEST only; identity is
@@ -2624,7 +2960,7 @@ class ZIB_Gatekeeper {
 
 		// Group by ADDRESS — the stable identity key. (Grouping by display name splits
 		// a single address that appears both WITH and WITHOUT a from_name into two
-		// phantom people — "Morgan Blake <f@x>" + "<f@x>" → "morgan blake" and "f x com" —
+		// duplicate people — "Morgan Blake <f@x>" + "<f@x>" → "morgan blake" and "f x com" —
 		// which made "latest from Morgan" a permanent, un-resolvable "which did you
 		// mean?". One address = one contact, whatever names it carried.)
 		$by_addr = array();
@@ -2923,7 +3259,7 @@ class ZIB_Gatekeeper {
 	//
 	// The audit trail is WRITTEN by log() below and, until now, never read back in code.
 	// These readers surface it two ways — a manage_options admin table (access_log_recent)
-	// and grouped day-counts for the ts-dot-plot sources (access_dotplot_counts). Both read
+	// and grouped day-counts for the Dot Plot sources (access_dotplot_counts). Both read
 	// ONLY the log (metadata: who/whose/when/how-many + a hashed query), never mail content.
 
 	/**
@@ -3018,7 +3354,7 @@ class ZIB_Gatekeeper {
 	}
 
 	/**
-	 * Grouped day-counts of one access CATEGORY, keyed by actor or subject, for the ts-dot-plot
+	 * Grouped day-counts of one access CATEGORY, keyed by actor or subject, for the Dot Plot
 	 * source callback. Returns raw {rk, d, n} rows (the callback maps them to the grid shape). The
 	 * WHERE is built from a whitelisted category (no injection) + int-cast ids; row-scoping to the
 	 * viewer's tier is the grid's job (it passes only permitted row_keys). Metadata only.
@@ -3051,6 +3387,117 @@ class ZIB_Gatekeeper {
 	}
 
 	// ── audit ───────────────────────────────────────────────────────
+
+	/**
+	 * - "Look in my email" from Stock: the ACTOR'S OWN indexed mail, received in the last
+	 * $days (1-60), from a sender on Stock's supplier list, handed to Stock one message at a time through
+	 * ZIB_Supplier_Feed::emit() -- which passes the order number and lines only (never the body or the subject).
+	 * Owner-forced, kiosk-denied, capped, audited (path owner_supplier_scan). The same message seen in two folders is
+	 * sent once (the RFC Message-ID); Stock de-duplicates again on its side.
+	 *
+	 * @return array { ok, scanned, created, already, skipped, reason? }
+	 */
+	public static function owner_supplier_scan( int $actor, array $senders, int $days = 30 ): array {
+		$out = array( 'ok' => false, 'scanned' => 0, 'created' => 0, 'already' => 0, 'skipped' => 0, 'why' => array() );
+		if ( ! self::gate_owner( $actor ) ) {
+			self::log( $actor, $actor, 'owner_supplier_scan', 'deny', 'not permitted', '', 0 );
+			$out['reason'] = 'not-permitted';
+			return $out;
+		}
+		if ( ! $senders ) {
+			$out['reason'] = 'no-suppliers';
+			return $out;
+		}
+		global $wpdb;
+		// Say so when there is nothing to look in, rather than "nothing new".
+		$modes = (array) $wpdb->get_col( $wpdb->prepare(
+			'SELECT index_mode FROM ' . $wpdb->prefix . 'zib_accounts WHERE owner_user_id = %d AND status <> %s', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$actor, 'disabled'
+		) );
+		if ( ! $modes ) {
+			$out['reason'] = 'no-mailbox';
+			return $out;
+		}
+		if ( ! array_intersect( $modes, array( 'external', 'all' ) ) ) {
+			$out['reason'] = 'mode-excludes-external'; // supplier mail is external; this mailbox does not keep it
+			return $out;
+		}
+		$days  = max( 1, min( 60, $days ) );
+		$since = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+		$conds = array();
+		$args  = array( $actor, 'in', $since );
+		foreach ( $senders as $sn ) {
+			if ( '@' === $sn[0] ) {
+				$conds[] = 'm.from_addr LIKE %s OR m.from_addr LIKE %s';
+				$args[]  = '%' . $wpdb->esc_like( $sn );
+				$args[]  = '%.' . $wpdb->esc_like( substr( $sn, 1 ) );
+			} else {
+				$conds[] = 'm.from_addr = %s';
+				$args[]  = $sn;
+			}
+		}
+		$args[] = ZIB_Supplier_Feed::SCAN_MAX;
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- table names are fixed; each sender condition holds placeholders only
+		$rows   = $wpdb->get_results( $wpdb->prepare(
+			'SELECT m.id, m.account_id, MD5(m.ms_message_id) AS ms_message_hash, m.ms_internet_message_id, m.folder, m.folder_name, m.class, m.from_addr, m.received_at, m.subject, m.body_enc, m.body_format, f.well_known
+			 FROM ' . self::t_msg() . ' m LEFT JOIN ' . $wpdb->prefix . 'zib_folders f ON f.account_id = m.account_id AND f.folder_hash = m.folder_hash AND m.folder_hash <> \'\'
+			 WHERE m.owner_user_id = %d AND m.direction = %s AND m.received_at >= %s AND (' . implode( ' OR ', $conds ) . ')
+			 ORDER BY m.received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- every value is a placeholder
+			$args
+		) );
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+		$seen = array();
+		foreach ( (array) $rows as $r ) {
+			if ( ! ZIB_Supplier_Feed::sender_matches( (string) $r->from_addr, $senders ) ) {
+				continue; // the LIKE is a pre-filter; the exact rule decides
+			}
+			if ( 'internal' === (string) $r->class || ZIB_Supplier_Feed::skip_folder( (string) $r->folder, (string) $r->folder_name, (string) ( $r->well_known ?? '' ) ) ) {
+				continue; // never Junk / Deleted Items (a spoofed "supplier" lands there)
+			}
+			$mid = strtolower( trim( (string) $r->ms_internet_message_id ) );
+			if ( '' !== $mid ) {
+				if ( isset( $seen[ $mid ] ) ) {
+					continue;
+				}
+				$seen[ $mid ] = true;
+			}
+			$out['scanned']++;
+			$clean = class_exists( 'ZIB_Enrich' )
+				? ZIB_Enrich::clean_body( ZIB_Crypto::decrypt( (string) $r->body_enc ), (string) $r->body_format )
+				: '';
+			$res = ZIB_Supplier_Feed::emit(
+				$actor,
+				ZIB_Supplier_Feed::message_key( (int) $r->account_id, (string) $r->ms_message_hash, (string) $r->ms_internet_message_id ),
+				array( 'from_addr' => (string) $r->from_addr, 'received_at' => (string) $r->received_at, 'subject' => (string) $r->subject ),
+				$clean,
+				'scan'
+			);
+			$what = is_array( $res ) ? (string) ( $res['result'] ?? '' ) : '';
+			if ( 'created' === $what ) {
+				$out['created']++;
+			} elseif ( 'duplicate' === $what ) {
+				$out['already']++;
+			} else {
+				$out['skipped']++;
+				// Why, per reason, so the toast does not give one reason for every skip.
+				$w = is_array( $res ) ? preg_replace( '/[^a-z\-]/', '', strtolower( (string) ( $res['why'] ?? '' ) ) ) : '';
+				$w = '' !== $w ? substr( $w, 0, 40 ) : 'other';
+				$out['why'][ $w ] = ( $out['why'][ $w ] ?? 0 ) + 1;
+			}
+		}
+		$out['ok'] = true;
+		self::log( $actor, $actor, 'owner_supplier_scan', 'allow', 'days=' . $days . ';created=' . $out['created'], '', $out['scanned'] );
+		return $out;
+	}
+
+	/**
+	 * Door 1 (ingest) is audited too: one row per supplier message handed to Stock, with
+	 * Stock's answer. The owner is both actor and subject (the ingest runs for the message's own owner).
+	 */
+	public static function audit_supplier_feed( int $owner, string $result ): void {
+		$result = preg_replace( '/[^a-z\-]/', '', strtolower( $result ) );
+		self::log( $owner, $owner, 'supplier_feed_ingest', 'allow', 'result=' . ( '' !== $result ? $result : 'none' ), '', 1 );
+	}
 
 	private static function log( int $actor, int $subject, string $path, string $decision, string $reason, string $query_hash, int $count ): void {
 		global $wpdb;

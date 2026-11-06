@@ -1,12 +1,12 @@
 <?php
 /**
  * Module: Zorderz - Receipts
- * Description: AI-assisted installation / service receipt generator for the Zorderz dashboard.
+ * Description: Ai-assisted installation / service receipt generator for the Zorderz dashboard.
  *   Look up a job by customer name, document number, phone or email through the configured
  *   billing provider + CRM, attach the install photos from the shared media store, render a
  *   NEUTRAL letterhead template, and publish a token-gated public receipt page behind a
  *   reviewer Approve-&-Send gate. Ships with NO business data.
- * Version:     3.11.0
+ * Version:     3.13.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -25,20 +25,23 @@
  *                          through ZDZ_Item_Engine::classify()/count_phrase() (mirrored
  *                          filters zdz_item_classify / zdz_item_count_categories). An empty
  *                          catalog degrades to a neutral all-priced-line count.
- *   - Document Conventions: the closing line ("Tax and Installation Included"), price
+ *   - Document Conventions: the closing line (for example "Tax included."), price
  *                          rounding, the reference-code grammar and the invoice receipt-link
  *                          line resolve through `zrcpt_document_convention` with neutral
- *                          fallbacks. The Core Document Conventions service is NOT built yet
- *                          (crosswalk 03-D); this filter is the documented seam.
+ *                          fallbacks; this filter is the documented seam.
  *   - Business Profile    : letterhead + email identity (name, colours, logo, address,
  *                          sender) come from ZDZ_Business_Profile. NO production hostname is
  *                          compiled in; the image CDN base + app-domain rewrite come from
  *                          web.asset_cdn_host / web.app_domain.
  *   - Connections/Billing : billing OAuth resolves through ZDZ_Core_FreshBooks /
  *                          ZDZ_Token_Service (single-flight refresh); the module no longer
- *                          POSTs the token endpoint itself (crosswalk 03-B13).
- *   - AI gateway          : the receipt-writer bot handle is a setting; prompts are assembled
- *                          at runtime and sent through ZDZ_Core_Poe when available.
+ *                          POSTs the token endpoint itself.
+ *   - Ai                  : the receipt's words come from the platform's one Ai router
+ *                          (ZDZ_Core_LLM, caller 'receipts', through ZRCPT_Writer): the business's
+ *                          models and budgets, customer details coded before anything leaves the
+ *                          site. The writer's instructions are this app's own; the page around the
+ *                          words (letterhead, photos, invoice panel) is built here. Every photo is
+ *                          checked against the job's house before the call (ZRCPT_Houses).
  *   - Media / Party       : install photos come from ZDZ_User_Media; access from ZDZ roles.
  *
  * SAFETY FLOOR: a receipt is never emailed to a customer without a human reviewer's recorded
@@ -52,7 +55,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZRCPT_VERSION', '3.11.0' );
+define( 'ZRCPT_VERSION', '3.13.0' );
 define( 'ZRCPT_FILE', __FILE__ );
 define( 'ZRCPT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZRCPT_URL', plugin_dir_url( __FILE__ ) );
@@ -114,7 +117,7 @@ function zrcpt_count_classify( string $text ): string {
 
 /**
  * Is the catalog non-empty for counting purposes? When empty, every consumer falls back to
- * its own neutral default (INV-3 ship-empty guarantee).
+ * its own neutral default (the catalog ships empty).
  */
 function zrcpt_catalog_has_kinds(): bool {
     $pre = apply_filters( 'zdz_item_count_categories', null );
@@ -158,17 +161,16 @@ function zrcpt_unit_noun( bool $plural = false ): string {
 /* ══════════════════════════════════════════════════════════════════════
    DOCUMENT CONVENTIONS BINDING
    The receipt writes a fixed closing line, rounds prices, and formats a
-   reference code / invoice receipt-link line. Those are per-tenant paper rules
-   (crosswalk 03 §D). Until the Core Document Conventions service lands, they
-   bind here through ONE filter with neutral, safe fallbacks.
+   reference code / invoice receipt-link line. Those are each business's paper
+   rules; they bind here through ONE filter with neutral, safe fallbacks.
    ══════════════════════════════════════════════════════════════════════ */
 
 /**
  * Resolve a named document-convention value. Neutral fallbacks:
- *   - closing_line      : '' (no forced closing line)  [D10]
- *   - price_round_mode  : 'none'                        [D13]
+ *   - closing_line      : '' (no forced closing line)
+ *   - price_round_mode  : 'none'
  *   - price_round_step  : 0
- *   - receipt_link_label: 'Receipt - Link'             [D20]  (no product/brand word)
+ *   - receipt_link_label: 'Receipt - Link'             (no product/brand word)
  *
  * @param string $key
  * @param mixed  $default
@@ -191,11 +193,16 @@ require_once ZRCPT_DIR . 'includes/class-zrcpt-heic.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-media.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-nutshell.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-freshbooks.php';
+require_once ZRCPT_DIR . 'includes/class-zrcpt-sanitize.php';
+require_once ZRCPT_DIR . 'includes/class-zrcpt-guards.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-finalize.php';
+require_once ZRCPT_DIR . 'includes/class-zrcpt-writer.php';
 require_once ZRCPT_DIR . 'includes/class-zrcpt-receipt.php';
+require_once ZRCPT_DIR . 'includes/class-zrcpt-houses.php';
 
 // Boot the engine (registers post type, admin, AJAX, routes, template hooks).
 ZRCPT_Receipt::get_instance();
+ZRCPT_Houses::init();
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry — a bundled
@@ -211,6 +218,7 @@ function zrcpt_activate() {
     if ( method_exists( $inst, 'maybe_set_token_cutover' ) ) {
         $inst->maybe_set_token_cutover();
     }
+    ZRCPT_Houses::ensure_table(); // the "Which house?" filings
     flush_rewrite_rules();
 }
 
@@ -271,9 +279,16 @@ add_action( 'after_setup_theme', function() {
                     ZRCPT_Receipt::VERSION
                 );
                 wp_enqueue_script(
+                    'zrcpt-houses-js',
+                    plugin_dir_url( __FILE__ ) . 'assets/js/houses.js',
+                    [],
+                    ZRCPT_Receipt::VERSION,
+                    true
+                );
+                wp_enqueue_script(
                     'zrcpt-widget-js',
                     plugin_dir_url( __FILE__ ) . 'assets/js/widget.js',
-                    [],
+                    [ 'zrcpt-houses-js' ],
                     ZRCPT_Receipt::VERSION,
                     true
                 );
@@ -315,7 +330,7 @@ add_action( 'after_setup_theme', function() {
                                 <label class="zrcpt-w-label">Find the job</label>
                                 <p class="zrcpt-w-hint">Customer name, invoice/estimate #, phone, or email — just like Prep.</p>
                                 <div class="zrcpt-w-lookup-row">
-                                    <input type="text" id="zrcpt-w-lookup-input" class="zrcpt-w-input" placeholder="e.g. Jordan Blake, 15217, or 858-555-1212" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                                    <input type="text" id="zrcpt-w-lookup-input" class="zrcpt-w-input" placeholder="e.g. Jordan Blake, 15217, or 555-555-0123" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
                                     <button type="button" id="zrcpt-w-lookup-btn" class="zrcpt-w-btn zrcpt-w-btn-sm">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                         Find
@@ -748,6 +763,10 @@ add_filter( 'zdz_rename_map', function ( $map ) {
     // migrated to the tagged mode by the class on read (see ZRCPT_Receipt::receipt_mode()).
     $map['post_meta'] = array_merge( $map['post_meta'] ?? array(), array(
         '_receipt_mode' => '_receipt_mode',
+    ) );
+    // "Which house?" filings (same columns), so the answers people already gave are kept.
+    $map['tables'] = array_merge( $map['tables'] ?? array(), array(
+        'tser_photo_house' => 'zrcpt_photo_house',
     ) );
     // A tenant upgrading from a differently-named legacy receipt app maps its old
     // brand-named CPT slug and app-id to the current ones (ZRCPT_APP_ID / the

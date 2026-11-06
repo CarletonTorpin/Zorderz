@@ -17,7 +17,7 @@
  * TWO MODES, TWO NAMED METHODS (not a stringly-typed flag — a typo'd mode
  * would silently mis-scope; a typo'd method name is a fatal caught by php -l):
  *
- *   sql_where_chat( $uid, $alias )  — party-only. THE BRAIN-BOT BRIDGE USES
+ *   sql_where_chat( $uid, $alias )  — party-only. THE ASSISTANT'S BRIDGE USES
  *       THIS. Shares are never consulted: a share lends a *view*, not a chat
  *       seat, so sharing can never widen who the bot answers for.
  *   sql_where_view( $uid, $alias )  — party OR active, unexpired, unrevoked
@@ -78,7 +78,9 @@ class ZKV_ACL {
 	 */
 	public static function sql_where_chat( $uid, $alias = 'd' ) {
 		$ids = self::party_doc_ids( (int) $uid );
-		return self::build_fragment( (int) $uid, $alias, $ids );
+		// The chat rule never admits a Private document - not to anyone, admins included.
+		$a = preg_replace( '/[^A-Za-z0-9_]/', '', (string) $alias );
+		return self::build_fragment( (int) $uid, $alias, $ids ) . ' AND ' . ( '' !== $a ? $a : 'd' ) . '.is_private = 0';
 	}
 
 	/**
@@ -323,6 +325,23 @@ class ZKV_ACL {
 			return ZDZ_User_Roles::is_admin_role( $role );
 		}
 		return user_can( $uid, 'manage_options' );
+	}
+
+	/**
+	 * Is this account the shared device? The platform's trait (ZDZ_User_Roles::is_shared_device(): the shared-device
+	 * capability, whichever role carries it, or the shared-device role); the role slug alone only on an older theme.
+	 * The shared device never files knowledge, is never a party to a private document and never receives one.
+	 *
+	 * @param WP_User|object|int $user
+	 */
+	public static function is_shared_device( $user ) {
+		$uid = is_object( $user ) ? (int) ( $user->ID ?? 0 ) : (int) $user;
+		if ( $uid <= 0 ) { return false; }
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $uid ) ) {
+			return true;
+		}
+		$u = is_object( $user ) ? $user : get_userdata( $uid );
+		return $u && in_array( 'zdz_general', (array) ( $u->roles ?? array() ), true );
 	}
 
 	// ──────────────────────────────────────────────────────────────

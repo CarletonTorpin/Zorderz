@@ -137,7 +137,7 @@ class ZIB_Classifier {
 
 	/**
 	 * Does this address belong to a registered, active, NON-kiosk WP user?
-	 * Former employees (ts_inactive) still count as internal — they were staff
+	 * Former employees (zdz_inactive) still count as internal — they were staff
 	 * when the historical mail was sent. The shared kiosk is never a person.
 	 */
 	public static function wp_is_registered_internal( string $addr ): bool {

@@ -24,7 +24,7 @@
  * Provider error payloads are never echoed to the browser; failures log one
  * line and land on the dashboard with a neutral "didn't complete" flag.
  *
- * @since 1.6.0 (Connected Calendars Phase 0)
+ * @since 1.6.0 (Connected Calendars)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

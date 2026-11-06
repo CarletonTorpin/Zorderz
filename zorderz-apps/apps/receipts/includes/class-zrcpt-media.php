@@ -6,7 +6,7 @@
  * types a name / number / phone, and everything else is pulled in for them —
  * including the installation photos. We do NOT ask them to upload anything by
  * default; we assume the photos are already in Zorderz (captured via the
- * ts-camera app, which writes every shot into the shared ZDZ_User_Media store
+ * Camera app, which writes every shot into the shared ZDZ_User_Media store
  * with EXIF provenance — capture time + GPS — preserved).
  *
  * This class is the bridge to that store. It:
@@ -24,7 +24,7 @@
  *      tagged photos never mix with untagged ones. This kills the bug where
  *      two different installs photographed at the same TIME OF DAY (duplicate
  *      EXIF timestamps from different installers) fused into one set and
- *      dragged unrelated photos into a receipt. Untagged photos (live ts-camera
+ *      dragged unrelated photos into a receipt. Untagged photos (live Camera
  *      shots, legacy rows) keep the time/GPS heuristic below, unchanged.
  *   3. Applies the business rule the shop actually uses:
  *
@@ -42,7 +42,7 @@
  *
  * Everything is scoped to the current user and is therefore kiosk-safe by the
  * same logic the Media app relies on: under the V9.9 kiosk model the request
- * genuinely *is* the ts_general user, so "your photos" is correctly empty/limited.
+ * genuinely *is* the zdz_general user, so "your photos" is correctly empty/limited.
  *
  * Degrades gracefully: if the theme's ZDZ_User_Media class is not present (older
  * theme), every method returns an empty result and the caller falls back to the
@@ -258,7 +258,7 @@ class ZRCPT_Media {
 	}
 
 	/* ================================================================
-	 * LOCATION INTEGRITY (geo-PII boundary) — S5-07 / §78
+	 * LOCATION INTEGRITY (geo-PII boundary)
 	 *
 	 * The picker classifies each capture set against the job anchor and hands
 	 * the CLIENT ONLY a categorical status. get_sessions_for_user() returns raw

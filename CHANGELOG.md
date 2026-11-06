@@ -7,7 +7,95 @@ All notable changes to Zorderz are recorded here. The format follows
 Zorderz ships as two artifacts that upgrade together: the theme
 (`zorderz-theme-<version>.zip`, the platform kernel and Core services) and the
 apps bundle (`zorderz-apps-<version>.zip`). **Install or upgrade the theme first,
-then the apps**: the ordering matters and is not enforced by WordPress.
+then the apps**: the ordering matters and is not enforced by WordPress. From 2.0
+there is a third, optional download: the reference Charts hub
+(`zorderz-hub-<version>.zip`), a Python service for a separate computer.
+
+---
+
+## [2.0.0] - 2026-11-06
+
+A major release. Zorderz grows from 20 to 30 apps, gains a shared Ai router with customer-detail coding and spend
+limits, a Credentials screen, a staging guard, and an optional self-hosted Charts hub (a third download). Install the
+theme first, then the apps; the hub is optional and installs on a separate computer. Every new app and every Ai feature
+is off or empty until an administrator sets it up: a fresh site sends nothing to an Ai provider until models, prices, a
+monthly budget and a zero-retention workspace are set (Zorderz → Ai usage → Setup).
+
+### Upgrade notes
+- **Secrets move to Zorderz → Credentials.** The Ai gateway, CRM and billing secret fields leave Zorderz → Settings.
+  Stored values carry over; set each service once on the new screen and retire the app copies when everything works.
+- **Estimates are sent as approved.** An estimate can only be sent in the form that was approved; estimates approved
+  before 2.0 must be approved again.
+- **Receipt links need approval** once 2.0 is installed. Links created before the upgrade keep working.
+- **Usage records consent is asked again** (notice version 2): the notice now states how long records are kept.
+- **Phone notifications** reach only the known browser push services; a stored subscription to anything else is
+  dropped and the person is asked to turn notifications on again.
+- **Staging copies stay quiet.** A copy of the live site (recognised from WordPress' environment type, a listed host,
+  or a changed address) holds e-mail, CRM and billing writes, Ai calls and hub calls.
+
+### Added — platform
+- **Credentials screen:** one key per service (Ai gateway, Anthropic, CRM, billing, Google calendar, Microsoft 365,
+  Stripe, Google Business Profile, the vulnerability feed, the Charts hub), with undo, expiry dates and retiring old
+  copies. Secrets are sealed at rest and never printed back into a page.
+- **Ai router:** every Ai call goes through roles mapped to models an administrator chooses, with customer details
+  coded before anything leaves the site, a zero-data-retention guard, spend booked before a call, a per-call ledger
+  (numbers only), monthly budgets, fail-over rules and an Ai usage page.
+- **Privacy:** a private-detail coder, a sealed vault for gate, lockbox and door codes (with a printed recovery code),
+  Privacy View accounts that see only what is made safe for them, and "Ask chat about this" with private details removed.
+- **Usage records** follow each person's consent, keep no IP address, and turn into daily totals after the retention
+  period. Each person can see their own.
+- **Alerts and phone notifications:** a bell, per-role alert categories, quiet hours (the person's, the business's, or
+  overnight), and one phone-notification switch in Settings.
+- **Home screen:** apps arranged in five coloured groups, a "needs you" badge, apps that open as pages with Back and
+  Pin to Home, and tiles that answer from each app's own counts.
+- **Identity Pack:** one registry through which a business's pack fills every new setting — preview, apply, revert —
+  including territories, team abilities, rules, connections (by reference only, never a secret) and the price book.
+- **Price book** on top of the Item Engine; costs are visible to administrators only.
+- **Verbs:** every app action is a registered verb with its tier and side effect; writes asked for in chat wait for a
+  Confirm card that runs once.
+- **Contact log, sign-in return to the page you asked for, drawings on photos, photo shares, Google Business Profile
+  reviews (read-only).**
+
+### Added — apps
+- **Agreements:** the customer's online agreement with the right to cancel and its real deadline, signing behind an
+  e-mailed code, a signed PDF, change orders, paper signing with a photo, and an append-only record. Ships two law
+  packs: a national pack (the FTC Cooling-Off Rule, the default in the USA) and a California pack layered on it. The
+  packs are not legal advice; the app starts in test mode and a business's lawyer should review its terms.
+- **Team Roles** (who can sell, install or repair each item), **Territories** (who gets a new estimate or a won job, by
+  zones and rules that run in shadow before they go live), **Hours** (clock in and out, time-sheet photos read as
+  proposals a person confirms), **Doorhangers** and **Route Planner**, **Charts** (with the optional self-hosted hub),
+  **Ai Workspace**, **Security Monitor** (update and vulnerability checks; the vulnerability feed is an optional
+  connection).
+- **Estimates:** deposit rule tied to the agreement pack, sale form, line options, two-person estimates, a Documents
+  tab, batch re-assign with undo, customer lookup as you type.
+- **Jobs and Projects:** a Projects hub, material orders with PO numbers on the supplier's own form, repairs, install
+  dates that follow the calendar, "My next".
+- **Prep and Receipts:** cut state, remakes, long runs, upcoming production; receipts sanitised at write, a strict
+  content policy, approval before a link works, and a same-customer guard.
+- **Assistant:** answers from a read-only copy of the billing system and CRM (home figures, quick answers, lead
+  sources, money owed), mail questions through the Email app, "About you", app answers by rule, and a rebuilt chat.
+- **Commission:** pay goes only to the person a sale or job is attributed to; unclear cases become review items; a
+  locked month never changes; a private cost book.
+- **Scheduler, Messaging, Surveys, Knowledge, Stock, Email, Leads, Media and Camera** updates (repeating appointments
+  across time zones, notices held to quiet hours, private documents, incoming supplier orders, forwarded-lead alerts,
+  drawing on photos).
+
+### Security
+- Web-push endpoints are limited to known push services; responses are never shown back.
+- The activity log records the connecting address, not a client-supplied header.
+- Every shared-device check uses the shared-device capability.
+- Camera video uploads have a per-person quota and an hourly clean-up.
+- The people search matches names only for non-administrators.
+- Leads' billing sign-in has a signed, single-use state; the Invoices screen no longer prints stored secrets.
+- Outbound requests to administrator-set addresses use WordPress' safe HTTP API.
+
+### Removed
+- The older Sketch Pad action names and the older chat-marker aliases that 1.10.2 kept for one release. A page left
+  open from a 1.x build needs a reload.
+
+### Changed
+- Theme and apps bundle move to 2.0.0 in lockstep; the hub carries the same version.
+- Unit tests grow from 43 to more than 1,300.
 
 ---
 
@@ -665,8 +753,7 @@ hardening); and the manual PDF import front end is designed but not yet built.
 ### Verification
 
 Both zips rebuilt at 1.2.0; PHP files parse clean; the REST surface stays under the
-single `zorderz/v1` namespace; the release string-scan is clean of company, roster,
-customer and brand strings; and the estimate, invoice and payment lifecycle (create,
+single `zorderz/v1` namespace; the release privacy gate is clean; and the estimate, invoice and payment lifecycle (create,
 convert, record payment through to paid) was exercised on a live install through the
 console UI.
 
@@ -772,8 +859,7 @@ Named honestly rather than shipped half-done:
 - **283 PHP files** parsed with `php -l`, zero failures.
 - REST surface consolidated under the single `zorderz/v1` namespace (referenced
   from one `ZDZ_REST_NS` constant), the sole exception being the deferred Team app.
-- The release string-scan gate is **clean** of company, roster, customer, brand,
-  PII and license-conflict strings across both zips.
+- The release privacy and licence gate is **clean** across both zips.
 - Acceptance is exercised against the WordPress kernel harness scenarios: boot,
   fresh install, upgrade path, the Identity Pack lifecycle, and the packaging
   gate. The harness proves nothing fatals, that data migrates, that apps register
@@ -815,14 +901,11 @@ difference between the app working and every server call silently failing.
 - **The pack reader mangled quoted values followed by comments**, and did not
   understand the inline `{ all: true }` map a pack uses to grant a role every app.
   Both fixed.
-- **Nine employee first names were shipping** in code comments, one of them in a
-  visible admin string. All replaced with neutral placeholders; the scan gate was
-  widened to catch a roster, not just the company name and contact details.
 - **Four duplicate module files were shipping** in the bundle, a plain recursive
   copy had left each module's original entry file beside its renamed `app.php`.
   Removed; packaging now renames explicitly via a script.
-- **The static `manifest.json` was still shipping** with a company name, colours
-  and dead icon paths. Removed, the manifest is now generated from the Business
+- **A stale static `manifest.json` was still shipping**, with a fixed name and
+  colours that ignored the profile, and dead icon paths. Removed, the manifest is now generated from the Business
   Profile and served at `/zdz-manifest.json`.
 
 ### Added
@@ -863,8 +946,7 @@ won't resolve.
 Four scenarios against the WordPress kernel harness, all clean (upgrade path,
 fresh install, the full Identity Pack lifecycle, the packaging gate): 71 PHP files
 parsed with zero failures; 49 REST routes under `zorderz/v1` with the browser base
-asserted to match a registered namespace; zero company or roster strings in either
-zip. The harness proves the kernel boots, data migrates, apps register and routes
+asserted to match a registered namespace; the privacy gate clean on both zips. The harness proves the kernel boots, data migrates, apps register and routes
 and tables are created, it does not prove the browser UI, which is how the
 namespace bug reached a real install in the first place.
 

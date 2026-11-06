@@ -1,52 +1,65 @@
 <?php
 /**
- * ZRCPT Nutshell — embedded CRM client for the Receipts app.
+ * ZRCPT Nutshell — CRM client for the Receipts app.
  *
- * Delegates to ZPREP_Nutshell when present (same rationale as
- * ZRCPT_FreshBooks — reuse production-tested credentials + API client).
+ * Credentials come from Zorderz Core (Zorderz → Credentials / Settings, read through
+ * ZDZ_Core_Settings and ZDZ_Core_Nutshell); this app stores none of its own. The lead lookup
+ * uses Prep's CRM adapter (ZPREP_Crm) when the Prep app is loaded, so both apps read a lead
+ * the same way.
  *
- * Adds one Receipts-specific behavior: find_install_notes_for_lead().
- * the Prep module pulls the pre-work full-measurements note;
- * Receipts needs post-work install content (Trap 3): activities of
- * type "On-Site Installation" + notes matching install keywords.
+ * Adds one Receipts-specific behaviour: find_install_notes_for_lead(). Prep reads the
+ * pre-work measurement note; Receipts reads post-work install content (notes that mention
+ * the install).
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class ZRCPT_Nutshell {
 
-	/** @var ZPREP_Nutshell|null */
+	/** @var object|null Prep's CRM adapter (ZPREP_Crm) when the Prep app is loaded. */
 	private $delegate = null;
 
 	private array $last_trace = [];
 
 	public function __construct() {
-		if ( class_exists( 'ZPREP_Nutshell' ) ) {
-			$this->delegate = new ZPREP_Nutshell();
+		if ( class_exists( 'ZPREP_Crm' ) ) {
+			$this->delegate = new ZPREP_Crm();
 		}
+	}
+
+	/** The Core CRM client, or null when Core is absent or the CRM is not configured. */
+	private static function core_client() {
+		if ( ! class_exists( 'ZDZ_Core_Nutshell' ) ) {
+			return null;
+		}
+		$ns = new ZDZ_Core_Nutshell();
+		return ( method_exists( $ns, 'is_configured' ) && $ns->is_configured() ) ? $ns : null;
 	}
 
 	public function is_ready(): bool {
-		if ( $this->delegate ) return $this->delegate->is_ready();
-		return (bool) ( get_option( 'tsec_ns_api_key' ) || get_option( 'ts_surveys_ns_api_key' ) );
+		if ( $this->delegate && method_exists( $this->delegate, 'is_ready' ) ) {
+			return (bool) $this->delegate->is_ready();
+		}
+		return null !== self::core_client();
 	}
 
+	/** Where the CRM credentials are read from: Core's store, or '' when none is configured. */
 	public function get_active_prefix(): string {
-		if ( $this->delegate ) return $this->delegate->get_active_prefix();
-		foreach ( [ 'tsec_', 'ts_surveys_', 'tsa_', 'tsl_', 'ts_core_' ] as $p ) {
-			if ( get_option( $p . 'ns_api_key' ) ) return $p;
-		}
-		return '';
+		return null !== self::core_client() ? 'zdz_core_' : '';
 	}
 
 	public function get_last_trace(): array {
-		if ( $this->delegate ) return $this->delegate->get_last_trace();
+		if ( $this->delegate && method_exists( $this->delegate, 'get_last_trace' ) ) {
+			return array_merge( $this->last_trace, (array) $this->delegate->get_last_trace() );
+		}
 		return $this->last_trace;
 	}
 
 	public function find_lead_for_customer( array $customer ): ?array {
-		if ( $this->delegate ) return $this->delegate->find_lead_for_customer( $customer );
-		$this->last_trace[] = 'CRM lookup unavailable — configure the CRM connection in Zorderz settings.';
+		if ( $this->delegate && method_exists( $this->delegate, 'find_lead_for_customer' ) ) {
+			return $this->delegate->find_lead_for_customer( $customer );
+		}
+		$this->last_trace[] = 'CRM lookup unavailable — turn on the Prep app and configure the CRM connection in Zorderz → Credentials.';
 		return null;
 	}
 
@@ -78,9 +91,8 @@ class ZRCPT_Nutshell {
 		//      find_lead_for_customer() already populated it (each entry is a
 		//      note body string). This is the normal path and needs no API call.
 		//   2. Else, only if the delegate actually exposes get_notes_for_lead(),
-		//      call it. (Older/newer the Prep module builds may not — guarding with
-		//      method_exists() is what prevents the "Call to undefined method
-		//      ZPREP_Nutshell::get_notes_for_lead()" fatal we hit in production.)
+		//      call it (guarded with method_exists(): a Prep build without the
+		//      accessor must not fatal the receipt).
 		//   3. Otherwise degrade gracefully to empty — per the contract below,
 		//      "zero install content" is not an error; the receipt still builds.
 		$notes   = [];
@@ -139,8 +151,8 @@ class ZRCPT_Nutshell {
 		}
 
 		// (2) and (3) — activity feed + activity-attached notes — would require
-		// extending ZPREP_Nutshell with findActivities + getActivity wrappers.
-		// For v2.9.0 we rely on the note-keyword path; activity-based discovery
+		// extending the CRM adapter with findActivities + getActivity wrappers.
+		// For now the note-keyword path is used; activity-based discovery
 		// is a documented follow-up. The spec is explicit that "zero install
 		// content found" is not a blocker — receipt still generates.
 
@@ -153,11 +165,14 @@ class ZRCPT_Nutshell {
 	}
 
 	public function test_connection(): array {
-		if ( $this->delegate ) return $this->delegate->test_connection();
+		if ( $this->delegate && method_exists( $this->delegate, 'test_connection' ) ) {
+			return $this->delegate->test_connection();
+		}
+		$ok = $this->is_ready();
 		return [
-			'ok'      => false,
-			'message' => '',
-			'error'   => 'CRM connection not configured — configure it in Zorderz settings.',
+			'ok'      => $ok,
+			'message' => $ok ? 'CRM credentials found in Zorderz Core.' : '',
+			'error'   => $ok ? '' : 'CRM connection not configured — configure it in Zorderz → Credentials.',
 			'log'     => [],
 		];
 	}

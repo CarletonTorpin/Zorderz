@@ -2,11 +2,13 @@
 /**
  * Module: Zorderz - Stock (Inventory)
  * Description: OPTIONAL (beta) inventory app for the Zorderz dashboard. Tracks raw-material
- *   and parts stock against an immutable ledger (event sourcing), parses supplier invoices
- *   with the shared AI client, and auto-deducts stock from billed jobs via each catalog item's
- *   Bill-of-Materials (its Item Engine `consumes[]`). Low-stock alerts, cycle counts and usage
- *   forecasting round it out. Ships EMPTY: no catalog, no SKUs, no supplier costs, no seeds.
- * Version:     1.2.0-beta
+ *   and parts stock against an immutable ledger (event sourcing). Supplier orders arrive as
+ *   Incoming — typed in, from an uploaded invoice, or from supplier order mail — and stock goes
+ *   up only when a person taps Received. Auto-deducts stock from billed jobs via each catalog
+ *   item's Bill-of-Materials (its Item Engine `consumes[]`). Low-stock alerts, counts, usage
+ *   forecasting and an ask-bar lookup (quantities only) round it out. Ships EMPTY: no catalog,
+ *   no SKUs, no supplier list, no supplier costs, no seeds.
+ * Version:     1.3.0-beta
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -34,8 +36,7 @@
  *   - EVERY endpoint gates on REAL app-access (ZDZ_Plugin_API::user_can_access_app), not the
  *     blanket zdz_access_app cap that every role (incl. the shared kiosk) holds — the v1.1.6
  *     build already moved this way; it is preserved.
- *   - Renamed off tssc/TSSC_ → zstock/ZSTOCK_. Tables/options/cron carry deprecated-alias
- *     rename-map entries so an existing install upgrades in place; the item_id columns are
+ *   - Tables/options/cron carry rename-map entries so an existing install upgrades in place; the item_id columns are
  *     widened by a real guarded migration (see ZSTOCK_DB). No REST routes exist in this module
  *     (admin-ajax only), so there is no namespace to move.
  *   - REPAIR: the earlier build did not actually run — the consumption query used non-existent columns
@@ -71,8 +72,8 @@ if ( defined( 'ZSTOCK_DISABLE' ) && ZSTOCK_DISABLE ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZSTOCK_VERSION', '1.2.0-beta' );
-define( 'ZSTOCK_DB_VERSION', '1.0.0' );
+define( 'ZSTOCK_VERSION', '1.3.0-beta' );
+define( 'ZSTOCK_DB_VERSION', '1.3.0' );
 define( 'ZSTOCK_FILE', __FILE__ );
 define( 'ZSTOCK_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZSTOCK_URL', plugin_dir_url( __FILE__ ) );
@@ -80,7 +81,7 @@ define( 'ZSTOCK_APP_ID', 'stock' );
 define( 'ZSTOCK_NONCE', 'zstock_nonce' );
 
 /**
- * The brain-bot answer sentinel. Protocol/marker tokens live in ONE constant, referenced by the
+ * The assistant's answer sentinel. Protocol/marker tokens live in ONE constant, referenced by the
  * engine — never typed twice. The legacy sentinel `YABADABA` is recorded as a
  * deprecated alias and stripped for backward compatibility.
  */
@@ -125,16 +126,22 @@ function zstock_asset_ver( $rel ) {
 }
 
 /**
- * The AI model to use as the platform default (central registry, never a hardcoded per-plugin
- * model). Reads the theme's shared AI-model setting; falls back to a neutral default.
+ * The Ai model to use: the platform's model registry (its `chat` slot), else the theme's shared
+ * Ai-model setting. No model name is written here; '' means none is configured, and the callers
+ * then say the Ai is not set up rather than guessing a model.
  */
 function zstock_default_model() {
-	$m = (string) get_option( 'zdz_core_ai_model', '' );
-	return '' !== $m ? $m : 'Gemini-3.1-Pro';
+	if ( class_exists( 'ZDZ_Model_Registry' ) && is_callable( array( 'ZDZ_Model_Registry', 'model_for' ) ) ) {
+		$m = (string) ZDZ_Model_Registry::model_for( 'chat' );
+		if ( '' !== $m ) {
+			return $m;
+		}
+	}
+	return (string) get_option( 'zdz_core_ai_model', '' );
 }
 
 /**
- * The inventory brain-bot name. A SETTING — never a hardcoded bot name. Blank (the shipped
+ * The inventory assistant's name. A SETTING — never a hardcoded bot name. Blank (the shipped
  * default) means "use the platform's default model with the in-repo prompt template", so the
  * intelligence never depends on a baked-in catalog.
  */
@@ -166,6 +173,9 @@ function zstock_business_descriptor() {
 $zstock_includes = array(
 	'includes/class-zstock-db.php',
 	'includes/class-zstock-catalog.php',
+	'includes/class-zstock-orders.php',
+	'includes/class-zstock-suppliers.php',
+	'includes/class-zstock-lookup.php',
 	'includes/class-zstock-engine.php',
 	'includes/class-zstock-admin.php',
 	'includes/class-zstock-dashboard.php',
@@ -233,6 +243,12 @@ add_action(
 			}
 			if ( class_exists( 'ZSTOCK_Admin' ) ) {
 				ZSTOCK_Admin::init();
+			}
+			if ( class_exists( 'ZSTOCK_Suppliers' ) ) {
+				ZSTOCK_Suppliers::register(); // the supplier list for the Email app, and supplier mail -> Incoming
+			}
+			if ( class_exists( 'ZSTOCK_Lookup' ) ) {
+				ZSTOCK_Lookup::register(); // stock.lookup for the ask bar (quantities only)
 			}
 		}
 	),

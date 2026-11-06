@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Leads — Nutshell CRM adapter for the recovery port (D-03 / S6-01)
+ * Zorderz Leads — Nutshell CRM adapter for the recovery port
  *
  * Binds {@see ZL_Crm_Port} to the concrete CRM client ({@see ZL_Nutshell}). This is the
  * ONLY place the recovery flow touches the network. It uses only the CRM's read and

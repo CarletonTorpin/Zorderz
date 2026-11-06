@@ -4,9 +4,9 @@
  *
  * Idempotent, additive only. dbDelta handles schema diffs; the v1.0.0 / v1.6.0
  * tables are untouched. Ships the write-back bookkeeping table NOW even though the
- * write-back engine ships OFF (`zsch_writeback_enabled` default 'no'), so Phase 2
+ * write-back engine ships OFF (`zsch_writeback_enabled` default 'no'), so write-back
  * needs no further migration — the same "ship the schema now" discipline as the
- * v1.6.0 Phase-1 sync columns.
+ * v1.6.0 sync columns.
  *
  * TABLE INVENTORY (new):
  *   wp_zsch_participants    an appointment carries REAL party accounts, not a JSON
@@ -15,13 +15,13 @@
  *                           remove yourself — the owner is included by every reader
  *                           implicitly). UNIQUE(appointment, user) makes re-adding a
  *                           removed party a revive, never a duplicate.
- *   wp_zsch_writeback_map   per-copy bookkeeping for the reverse-sync (Phase 2, OFF):
+ *   wp_zsch_writeback_map   per-copy bookkeeping for the reverse-sync (write-back, OFF):
  *                           appointment × feed, the provider event id + etag, a
  *                           content_hash (skip no-op PATCHes), and the state machine
  *                           off→pending→synced|error|orphan. It is ALSO the INV-Loop
  *                           "belt": the inbound puller looks a pulled event up here to
  *                           refuse re-ingesting our own write (the owner's calendar is
- *                           their own conflict feed). Empty until Phase 2 is enabled.
+ *                           their own conflict feed). Empty until write-back is enabled.
  *
  * @since 1.9.0
  */
@@ -42,7 +42,7 @@ class ZSCH_Migrate_1_9_0 {
 		// ── participants ───────────────────────────────────────────────
 		// A calendar event carries real staff accounts. Soft `removed_at`
 		// (removing a party keeps the row so a re-add is a revive, and so a
-		// future write-back can PURGE the party's copy — INV-Orphan). The owner
+		// future write-back can PURGE the party's copy — the no-orphan rule). The owner
 		// is NEVER stored here; every reader folds the owner in implicitly.
 		dbDelta( "CREATE TABLE {$p}zsch_participants (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -57,7 +57,7 @@ class ZSCH_Migrate_1_9_0 {
 			KEY idx_part_user (user_id, removed_at)
 		) {$charset};" );
 
-		// ── write-back map (Phase 2 — engine ships OFF) ────────────────
+		// ── write-back map (write-back — engine ships OFF) ────────────────
 		// state = off | pending | synced | error | orphan. One row per copy
 		// (appointment × the target's single two_way feed). content_hash lets a
 		// re-push skip a no-op PATCH. external_event_id is the INV-Loop belt: a

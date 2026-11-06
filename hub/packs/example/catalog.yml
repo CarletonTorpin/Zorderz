@@ -1,0 +1,42 @@
+# Products, work types and detail tags: the words Charts groups invoice lines by.
+charts:
+  bundle_product: Window film (type not stated)
+  other_product: Other
+  products:
+    - {name: Solar window film, color: "#2f6fab", units: true, words: [solar window film, solar film, heat film]}
+    - {name: Privacy window film, color: "#5b8fc7", units: true, words: [privacy window film, privacy film, frosted film]}
+    - {name: Window film (type not stated), color: "#8fb3dc", units: true, words: [window film, film]}
+    - {name: Shade sails, color: "#d08c2e", units: true, words: [shade sails, shade sail, sail]}
+    - {name: Gutter guards, color: "#4f9a5b", words: [gutter guards, gutter guard, gutter]}
+    - {name: Chimney caps, color: "#b4553a", units: true, words: [chimney caps, chimney cap, spark guard]}
+    - {name: Patio lights, color: "#8a63b0", units: true, words: [patio lights, patio light, string lights]}
+    - {name: Other, color: "#9a9a9a"}
+  # several products people often name together ("window film" = its three kinds)
+  families:
+    - name: Window film
+      words: [window film, films]
+      products: [Solar window film, Privacy window film, Window film (type not stated)]
+  work_types:
+    - {name: New / install, color: "#2f6fab", default: true, words: [install, installation, new]}
+    - {name: Repair / service, color: "#d08c2e", words: [repair, service, fix, replace, replacement]}
+    - {name: Mixed, color: "#9a9a9a", words: [mixed]}
+  tag_groups:
+    - key: brand
+      name: Brand
+      words: [brand, brands, manufacturer, maker]
+      tags:
+        - {name: Brightline, color: "#1f77b4", words: [brightline]}
+        - {name: Northstar, color: "#ff7f0e", words: [northstar]}
+        - {name: Classic, color: "#2ca02c", words: [classic]}
+    - key: purpose
+      name: Purpose
+      words: [purpose, purposes]
+      tags:
+        - {name: Heat, color: "#d62728", words: [heat, solar, cooling]}
+        - {name: Privacy, color: "#9467bd", words: [privacy, frosted]}
+        - {name: Safety, color: "#8c564b", words: [safety, spark]}
+  # a line with one of these is not work (it isn't counted as a job)
+  not_work_words: [deposit, discount, payment, refund, credit]
+  other_color: "#9a9a9a"
+  fallback_colors: ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7",
+                    "#9c755f", "#bab0ac"]

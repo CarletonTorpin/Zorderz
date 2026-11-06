@@ -1,0 +1,89 @@
+/* Settings -> Notifications (zdz-push.js). Tokens only, so light / dark / system / sunlight follow the theme; the row
+   is the shell's .settings-row, the buttons the kit's .zdz-btn. */
+
+.zdz-push-section[hidden]{display:none}
+
+/* the row: icon, two lines of text, the switch */
+.zdz-push-row{gap:var(--ref-space-3,12px);align-items:center}
+.zdz-push-row .sr-left{min-width:0;flex:1 1 auto;align-items:flex-start}
+.zdz-push-row .sr-right{flex:0 0 auto}
+.zdz-push-ico{display:flex;color:var(--sys-text-sec);padding-top:2px}
+.zdz-push-ico svg{width:20px;height:20px}
+.zdz-push--on .zdz-push-ico{color:var(--sys-brand)}
+.zdz-push-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.zdz-push-sub{font-size:var(--ref-font-xs,13px);color:var(--sys-text-sec);line-height:1.35;overflow-wrap:anywhere}
+
+/* the switch: 51 x 31 like the phone's own, 44px tall to tap */
+.zdz-push-switch{position:relative;flex:0 0 auto;width:51px;height:31px;margin:6px 0;padding:0;border-radius:16px;cursor:pointer;
+  border:2px solid var(--sys-border-strong,var(--sys-border));background:var(--sys-surface-subtle,var(--sys-border));
+  transition:background var(--ref-dur-fast,150ms) var(--ref-ease,ease),border-color var(--ref-dur-fast,150ms) var(--ref-ease,ease);
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.zdz-push-switch::before{content:"";position:absolute;inset:-8px -4px}   /* a 44px target around the track */
+.zdz-push-knob{position:absolute;top:2px;left:2px;width:23px;height:23px;border-radius:50%;
+  background:var(--sys-surface,#FFFFFF);box-shadow:0 1px 3px rgba(0,0,0,.3);
+  transition:transform var(--ref-dur-fast,150ms) var(--ref-ease,ease)}
+/* Off must be seen. The outline and the knob take --sys-text-ter, at least 3:1 against the row in every mode
+   (WCAG 1.4.11); a lighter outline or a knob in the row's own colour reads as nothing there. */
+.zdz-push-switch[aria-checked="false"]{border-color:var(--sys-text-ter)}
+.zdz-push-switch[aria-checked="false"] .zdz-push-knob{background:var(--sys-text-ter);box-shadow:none}
+.zdz-push-switch[aria-checked="true"]{background:var(--sys-brand);border-color:var(--sys-brand)}
+.zdz-push-switch[aria-checked="true"] .zdz-push-knob{transform:translateX(20px);background:var(--sys-text-brand,#FFFFFF)}
+.zdz-push-switch:focus-visible{outline:3px solid var(--sys-brand,#2563EB);outline-offset:3px}
+.zdz-push-switch.is-busy{opacity:.6;cursor:progress}
+@media (prefers-reduced-motion:reduce){.zdz-push-switch,.zdz-push-knob{transition:none}}
+
+/* a state that is not a switch */
+.zdz-push-pill{display:inline-flex;align-items:center;padding:var(--ref-space-1,4px) var(--ref-space-3,12px);
+  border-radius:var(--ref-radius-full,999px);font-size:var(--ref-font-xs,13px);font-weight:var(--sys-font-wt-md,500);
+  white-space:nowrap;background:var(--sys-tint-neutral-bg);color:var(--sys-tint-neutral-fg)}
+.zdz-push-pill--blocked,.zdz-push-pill--error{background:var(--sys-tint-warning-bg);color:var(--sys-tint-warning-fg)}
+.zdz-push-pill--a2hs,.zdz-push-pill--ios-old{background:var(--sys-tint-info-bg);color:var(--sys-tint-info-fg)}
+
+/* how to fix it, steps, partial */
+.zdz-push-detail{margin:0 0 var(--ref-space-2,8px);padding:var(--ref-space-3,12px) var(--ref-space-4,16px);
+  border:1px solid var(--sys-border);border-radius:var(--ref-radius-md,12px);background:var(--sys-surface);
+  color:var(--sys-text);font-size:var(--ref-font-sm,15px);line-height:1.45}
+.zdz-push-detail p{margin:0 0 var(--ref-space-2,8px)}
+.zdz-push-detail p:last-child{margin-bottom:0}
+.zdz-push-steps{margin:0;padding-left:1.4em}
+.zdz-push-steps li{margin:0 0 var(--ref-space-1,4px)}
+.zdz-push-detail .zdz-btn{margin-top:var(--ref-space-1,4px)}
+
+.zdz-push-actions{display:flex;gap:var(--ref-space-2,8px);margin:0 0 var(--ref-space-2,8px)}
+.zdz-push-actions .zdz-btn{flex:1 1 auto}
+.zdz-push-status{min-height:0;margin:0 0 var(--ref-space-2,8px);font-size:var(--ref-font-sm,15px);color:var(--sys-text-sec)}
+.zdz-push-status:empty{margin:0}
+.zdz-push-status.is-error{color:var(--sys-error,var(--sys-text))}
+
+/* the two links: rows like the shell's */
+.zdz-push-link{width:100%;text-align:left;font:inherit;color:var(--sys-text);cursor:pointer}
+.zdz-push-link:hover{border-color:var(--sys-brand)}
+.zdz-push-link:focus-visible{outline:3px solid var(--sys-brand,#2563EB);outline-offset:2px}
+.zdz-push-link .sr-right{display:flex;align-items:center;gap:var(--ref-space-2,8px)}
+.zdz-push-chev{color:var(--sys-text-ter);flex:0 0 auto}
+.zdz-push-link .sr-label{white-space:nowrap}
+.zdz-push-quiet{text-align:right}
+.zdz-push-quiet>span{white-space:nowrap}
+
+/* the quiet-hours sheet */
+.zdz-push-sheet-hint{margin:0 0 var(--ref-space-3,12px);color:var(--sys-text-sec);font-size:var(--ref-font-sm,15px)}
+.zdz-push-times{display:grid;grid-template-columns:1fr 1fr;gap:var(--ref-space-3,12px)}
+.zdz-push-times label{display:flex;flex-direction:column;gap:var(--ref-space-1,4px);font-size:var(--ref-font-sm,15px);color:var(--sys-text-sec)}
+.zdz-push-times input{min-height:44px;padding:0 var(--ref-space-3,12px);font:inherit;font-size:16px;color:var(--sys-text);
+  background:var(--sys-surface);border:1px solid var(--sys-border);border-radius:var(--ref-radius-md,12px)}
+
+/* the bell sheet's one line */
+.zdz-push-nudge{display:flex;align-items:center;gap:var(--ref-space-2,8px);margin:0 0 var(--ref-space-3,12px);
+  padding:0 0 0 var(--ref-space-3,12px);border-radius:var(--ref-radius-md,12px);
+  background:var(--sys-tint-info-bg);color:var(--sys-tint-info-fg)}
+.zdz-push-nudge-go{flex:1 1 auto;min-height:44px;padding:0;text-align:left;background:none;border:0;color:inherit;
+  font:inherit;font-weight:var(--sys-font-wt-md,500);cursor:pointer}
+.zdz-push-nudge-x{flex:0 0 44px;width:44px;height:44px;background:none;border:0;color:inherit;font-size:22px;line-height:1;cursor:pointer}
+.zdz-push-nudge-go:focus-visible,.zdz-push-nudge-x:focus-visible{outline:3px solid currentColor;outline-offset:-3px}
+
+/* Sunlight: monochrome edges */
+[data-theme="sunlight"] .zdz-push-switch{border-color:#000}
+[data-theme="sunlight"] .zdz-push-switch[aria-checked="true"]{background:#000;border-color:#000}
+[data-theme="sunlight"] .zdz-push-switch[aria-checked="true"] .zdz-push-knob{background:#FFF}
+[data-theme="sunlight"] .zdz-push-detail,[data-theme="sunlight"] .zdz-push-link,[data-theme="sunlight"] .zdz-push-nudge{border:2px solid #000}
+[data-theme="sunlight"] .zdz-push-pill{border:2px solid #000}

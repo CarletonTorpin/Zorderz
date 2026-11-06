@@ -39,7 +39,7 @@ class ZDZ_Rest_API {
 			'permission_callback' => [ $this, 'check_permission' ],
 		] );
 
-		// v2.11.0: Front-end OAuth authorize flow — allow non-admin app users
+		// Front-end OAuth authorize flow — allow non-admin app users
 		// (zdz_sales / zdz_operator / zdz_mfg / zdz_tech) to authorize FreshBooks
 		// from the Settings view without needing wp-admin access.
 		register_rest_route( 'zorderz/v1', '/fb-auth-start', [
@@ -57,7 +57,7 @@ class ZDZ_Rest_API {
 			'permission_callback' => [ $this, 'check_authorize_permission' ],
 		] );
 
-		// v2.13.0: Nutshell is now COMPANY-WIDE. Only administrators may
+		// Nutshell is now COMPANY-WIDE. Only administrators may
 		// set/update the company credentials. Regular app users just inherit
 		// the connection — they never hit this endpoint.
 		register_rest_route( 'zorderz/v1', '/ns-auth-save', [
@@ -71,7 +71,7 @@ class ZDZ_Rest_API {
 		] );
 
 		// ──────────────────────────────────────────────────────────────
-		// v2.13.0: purely additive endpoints.
+		// purely additive endpoints.
 		// Do NOT add args or behavior to /kpi-metrics here — that
 		// endpoint belongs to class-zdz-kpi-metrics.php and we're
 		// deliberately leaving it alone for this release.
@@ -82,14 +82,14 @@ class ZDZ_Rest_API {
 			'permission_callback' => [ $this, 'check_authorize_permission' ],
 		] );
 
-		// v2.13.1: per-user all-time bests for the Personal Records strip.
+		// per-user all-time bests for the Personal Records strip.
 		register_rest_route( 'zorderz/v1', '/user-records', [
 			'methods'             => WP_REST_Server::READABLE,
 			'callback'            => [ $this, 'handle_user_records' ],
 			'permission_callback' => [ $this, 'check_authorize_permission' ],
 		] );
 
-		// v2.20.0 r4: Dashboard action items — aggregated from all plugins.
+		// Dashboard action items — aggregated from all plugins.
 		// Plugins register pending tasks via the zdz_dashboard_action_items filter.
 		register_rest_route( 'zorderz/v1', '/dashboard-items', [
 			'methods'             => WP_REST_Server::READABLE,
@@ -97,14 +97,14 @@ class ZDZ_Rest_API {
 			'permission_callback' => [ $this, 'check_authorize_permission' ],
 		] );
 
-		// v2.20.0 r4: User profile data (phone, email name, territories, etc.)
+		// User profile data (phone, email name, territories, etc.)
 		register_rest_route( 'zorderz/v1', '/user-profile', [
 			'methods'             => WP_REST_Server::READABLE,
 			'callback'            => [ $this, 'handle_user_profile' ],
 			'permission_callback' => [ $this, 'check_authorize_permission' ],
 		] );
 
-		// v2.21.5: Contact lookup — powers the dashboard "ask" field's inline
+		// Contact lookup — powers the dashboard "ask" field's inline
 		// contact card. Proxies ZDZ_Contact_Bridge::lookup_for_zana() so the result
 		// renders in-place on the dashboard (no Poe round-trip, no chat switch).
 		// All disclosure (kiosk = name+city) and scope (relationship / shared-job)
@@ -121,7 +121,7 @@ class ZDZ_Rest_API {
 			),
 		] );
 
-		// v2.22.0: Orchestrate — the dashboard "ask" field's deterministic, Poe-free
+		// Orchestrate — the dashboard "ask" field's deterministic, Poe-free
 		// intent classifier. Returns either inline read-verb data (contact / document
 		// lookup, resolved via the capability bridges) or route:'chat' to hand the
 		// query to the full assistant. Replaces the brittle JS-only intent detection
@@ -135,17 +135,22 @@ class ZDZ_Rest_API {
 					'required'          => true,
 					'sanitize_callback' => 'sanitize_text_field',
 				),
+				// mode=answer: only the quick answer (the ask bar asks while the person types; no lookup runs)
+				'mode'  => array(
+					'required'          => false,
+					'sanitize_callback' => 'sanitize_key',
+				),
 			),
 		] );
 
-		// v2.20.2: Field Preferences — save per-salesperson notation and estimation habits
+		// Field Preferences — save per-salesperson notation and estimation habits
 		register_rest_route( 'zorderz/v1', '/user-profile/field-preferences', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ $this, 'handle_field_preferences_save' ],
 			'permission_callback' => [ $this, 'check_authorize_permission' ],
 		] );
 
-		// v2.20.2: Field Preferences schema — single source of truth for the front-end form
+		// Field Preferences schema — single source of truth for the front-end form
 		register_rest_route( 'zorderz/v1', '/user-profile/field-preferences-schema', [
 			'methods'             => WP_REST_Server::READABLE,
 			'callback'            => [ $this, 'handle_field_preferences_schema' ],
@@ -166,6 +171,8 @@ class ZDZ_Rest_API {
 					'card_order'   => array( 'required' => false ),
 					'widget_order' => array( 'required' => false ),
 					'app_order'    => array( 'required' => false ),
+					'home_pins'    => array( 'required' => false ),
+					'focus_view'   => array( 'required' => false ),
 					'card_scope'   => array( 'required' => false ),
 					'global_range' => array( 'required' => false ),
 					'reset'        => array( 'required' => false, 'sanitize_callback' => 'rest_sanitize_boolean' ),
@@ -173,7 +180,7 @@ class ZDZ_Rest_API {
 			),
 		] );
 
-		// v2.14.5: Review Bridge — check whether a customer left a review
+		// Review Bridge — check whether a customer left a review
 		// on the marketing site. Proxies through ZDZ_Core_ReviewBridge so the
 		// frontend never touches the remote API key.
 		register_rest_route( 'zorderz/v1', '/review-check', [
@@ -203,7 +210,7 @@ class ZDZ_Rest_API {
 	}
 
 	/**
-	 * v2.11.0: Permission for front-end authorize endpoints.
+	 * Permission for front-end authorize endpoints.
 	 * Admins always pass; everyone else needs the Zorderz access cap.
 	 */
 	public function check_authorize_permission() {
@@ -214,7 +221,7 @@ class ZDZ_Rest_API {
 	}
 
 	/**
-	 * v2.13.0: Admin-only permission for mutating company-wide credentials
+	 * Admin-only permission for mutating company-wide credentials
 	 * (Nutshell is shared across the whole Zorderz workspace).
 	 */
 	public function check_authorize_admin_permission() {
@@ -225,11 +232,9 @@ class ZDZ_Rest_API {
 	/**
 	 * Start a FreshBooks connection from the dashboard's Settings card.
 	 *
-	 * 1.10.2: these handlers used to delegate to a credential class from the private
-	 * predecessor plugin that Zorderz does not ship, so they always answered 503 "plugin is
-	 * not active". Credentials now come from the Core store (ZDZ_Core_Settings). Core does not
-	 * yet run its own FreshBooks OAuth callback, so this route says exactly where the
-	 * connection is made instead of pretending to start a flow that cannot complete.
+	 * Credentials come from the Core store (ZDZ_Core_Settings). Core does not yet run its own
+	 * FreshBooks OAuth callback, so this route says exactly where the connection is made
+	 * instead of pretending to start a flow that cannot complete.
 	 */
 	public function handle_fb_auth_start( WP_REST_Request $request ) {
 		$configured = class_exists( 'ZDZ_Core_Settings' )
@@ -330,8 +335,19 @@ class ZDZ_Rest_API {
 			return new WP_Error( 'short_key', 'That API key looks too short. Double-check the value from Nutshell → Setup → API Keys.', [ 'status' => 400 ] );
 		}
 
-		update_option( ZDZ_Core_Settings::OPTION_PREFIX . 'ns_email', $email, false );
-		update_option( ZDZ_Core_Settings::OPTION_PREFIX . 'ns_api_key', $api_key, false );
+		// One write path: the credentials layer writes Core's rows and every app's copy, each
+		// in the format that app reads, and makes this login the one every app uses. A
+		// direct option write would be refused by its guard once the CRM is managed there,
+		// while this endpoint still answered "connected".
+		if ( class_exists( 'ZDZ_Core_Credentials' ) ) {
+			$err = ZDZ_Core_Credentials::apply( 'nutshell', [ 'email' => $email, 'api_key' => $api_key ], get_current_user_id() );
+			if ( '' !== $err ) {
+				return new WP_Error( 'save_failed', 'The CRM key was not saved: ' . $err, [ 'status' => 500 ] );
+			}
+		} else {
+			update_option( ZDZ_Core_Settings::OPTION_PREFIX . 'ns_email', $email, false );
+			update_option( ZDZ_Core_Settings::OPTION_PREFIX . 'ns_api_key', $api_key, false );
+		}
 
 		return rest_ensure_response( [
 			'success' => true,
@@ -393,7 +409,7 @@ class ZDZ_Rest_API {
 	}
 
 	/* ================================================================
-	 *  v2.13.0 — Purely additive endpoints
+	 *  Purely additive endpoints
 	 *  These do not affect /kpi-metrics or any existing route.
 	 * ================================================================ */
 
@@ -438,6 +454,29 @@ class ZDZ_Rest_API {
 		) );
 	}
 
+	/**
+	 * Is the focus view on for this person? It is unless they turned it off in Settings
+	 * (user meta zdz_focus_view '0'); a site changes the default with the 'zdz_focus_view_default' filter.
+	 */
+	public static function focus_view_for( $user_id ) {
+		$v = (string) get_user_meta( (int) $user_id, 'zdz_focus_view', true );
+		if ( '' === $v ) {
+			return (bool) apply_filters( 'zdz_focus_view_default', true );
+		}
+		return '1' === $v;
+	}
+
+	/** The widgets this person keeps on home (app ids only). */
+	public static function home_pins_for( $user_id ) {
+		$pins = get_user_meta( (int) $user_id, 'zdz_home_pins', true );
+		if ( ! is_array( $pins ) ) {
+			return array();
+		}
+		return array_values( array_filter( $pins, function ( $id ) {
+			return is_string( $id ) && 1 === preg_match( '/^[a-z0-9_\-]{1,64}$/', $id );
+		} ) );
+	}
+
 	public function handle_user_prefs_get( WP_REST_Request $request ) {
 		$user_id = get_current_user_id();
 		return rest_ensure_response( array(
@@ -446,6 +485,8 @@ class ZDZ_Rest_API {
 				'card_order'   => get_user_meta( $user_id, 'zdz_dash_card_order', true ) ?: array(),
 				'widget_order' => get_user_meta( $user_id, 'zdz_dash_widget_order', true ) ?: array(),
 				'app_order'    => get_user_meta( $user_id, 'zdz_app_order', true ) ?: array(),
+				'home_pins'    => self::home_pins_for( $user_id ),
+				'focus_view'   => self::focus_view_for( $user_id ),
 				'card_scope'   => get_user_meta( $user_id, 'zdz_dash_card_scope', true ) ?: array(),
 				'global_range' => get_user_meta( $user_id, 'zdz_dash_global_range', true ) ?: 'month',
 			),
@@ -459,18 +500,33 @@ class ZDZ_Rest_API {
 			delete_user_meta( $user_id, 'zdz_dash_card_order' );
 			delete_user_meta( $user_id, 'zdz_dash_widget_order' );
 			delete_user_meta( $user_id, 'zdz_app_order' );
+			delete_user_meta( $user_id, 'zdz_home_pins' );
 			delete_user_meta( $user_id, 'zdz_dash_card_scope' );
 			delete_user_meta( $user_id, 'zdz_dash_global_range' );
 			return rest_ensure_response( array( 'success' => true, 'reset' => true ) );
 		}
 
-		// v2.17.2: App dock/sticky bar order — persists across devices.
+		// App dock/sticky bar order — persists across devices.
 		$app_order = $request->get_param( 'app_order' );
 		if ( is_array( $app_order ) ) {
 			$clean = array_values( array_filter( array_map( function( $id ) {
 				return preg_match( '/^[a-z0-9_\-]{1,64}$/', (string) $id ) ? (string) $id : null;
 			}, $app_order ) ) );
 			update_user_meta( $user_id, 'zdz_app_order', $clean );
+		}
+
+		// The widgets this person keeps on home with the focus view (app ids, at most 40).
+		$home_pins = $request->get_param( 'home_pins' );
+		if ( is_array( $home_pins ) ) {
+			$clean = array_slice( array_values( array_unique( array_filter( array_map( function( $id ) {
+				return ( is_string( $id ) && preg_match( '/^[a-z0-9_\-]{1,64}$/', $id ) ) ? $id : null;
+			}, $home_pins ) ) ) ), 0, 40 );
+			update_user_meta( $user_id, 'zdz_home_pins', $clean );
+		}
+
+		// Settings → "Apps as pages". Stored as '1' or '0'; absent = the site default (on).
+		if ( null !== $request->get_param( 'focus_view' ) ) {
+			update_user_meta( $user_id, 'zdz_focus_view', rest_sanitize_boolean( $request->get_param( 'focus_view' ) ) ? '1' : '0' );
 		}
 
 		$card_order = $request->get_param( 'card_order' );
@@ -481,7 +537,7 @@ class ZDZ_Rest_API {
 			update_user_meta( $user_id, 'zdz_dash_card_order', $clean );
 		}
 
-		// v2.14.3.1: Widget order — same sanitization pattern as card_order.
+		// Widget order — same sanitization pattern as card_order.
 		$widget_order = $request->get_param( 'widget_order' );
 		if ( is_array( $widget_order ) ) {
 			$clean = array_values( array_filter( array_map( function( $id ) {
@@ -512,7 +568,7 @@ class ZDZ_Rest_API {
 	}
 
 	/* ------------------------------------------------------------------ */
-	/*  v2.14.5: Review Bridge Proxy                                       */
+	/* Review Bridge Proxy                                       */
 	/* ------------------------------------------------------------------ */
 
 	/**
@@ -556,7 +612,7 @@ class ZDZ_Rest_API {
 	/**
 	 * GET /zorderz/v1/dashboard-items
 	 *
-	 * v2.20.0 r4: Returns aggregated action items from all plugins.
+	 * Returns aggregated action items from all plugins.
 	 * Plugins hook into the zdz_dashboard_action_items filter to register
 	 * their pending tasks. Each item should be an array with:
 	 *   - plugin:  (string) Plugin ID (e.g. 'zdz-sales-leads')
@@ -609,7 +665,7 @@ class ZDZ_Rest_API {
 	/**
 	 * GET /zorderz/v1/contact-lookup?query=<name>
 	 *
-	 * v2.21.5: Backs the dashboard "ask" field's inline contact card. Calls the
+	 * Backs the dashboard "ask" field's inline contact card. Calls the
 	 * shared ZDZ_Contact_Bridge with the CURRENT user's context; the bridge does
 	 * all disclosure (kiosk = name+city) and scope (relationship / shared-job)
 	 * enforcement server-side. Returns the bridge's structured result verbatim,
@@ -666,7 +722,7 @@ class ZDZ_Rest_API {
 	/**
 	 * GET /zorderz/v1/orchestrate?query=<text>
 	 *
-	 * v2.22.0: Deterministic, Poe-free intent classification for the dashboard
+	 * Deterministic, Poe-free intent classification for the dashboard
 	 * "ask" field. Delegates to ZDZ_Orchestrator::classify(), which detects the
 	 * read verbs we can answer in place (contact / document lookup) and resolves
 	 * them through the capability bridges, or returns route:'chat' for everything
@@ -683,6 +739,12 @@ class ZDZ_Rest_API {
 			return rest_ensure_response( array( 'verb' => 'chat', 'route' => 'chat' ) );
 		}
 
+		// The ask bar's look-ahead while typing: the quick answer alone, never a contact or document lookup.
+		if ( 'answer' === (string) $request->get_param( 'mode' ) ) {
+			$quick = method_exists( 'ZDZ_Orchestrator', 'quick' ) ? ZDZ_Orchestrator::quick( $query ) : null;
+			return rest_ensure_response( null !== $quick ? $quick : array( 'verb' => 'chat', 'route' => 'chat' ) );
+		}
+
 		$out = ZDZ_Orchestrator::classify( $query, get_current_user_id() );
 		return rest_ensure_response( $out );
 	}
@@ -690,7 +752,7 @@ class ZDZ_Rest_API {
 	/**
 	 * GET /zorderz/v1/user-profile
 	 *
-	 * v2.20.0 r4: Returns the current user's extended profile fields
+	 * Returns the current user's extended profile fields
 	 * for cross-plugin use (phone, email name, territories, etc.).
 	 */
 	public function handle_user_profile( WP_REST_Request $request ): WP_REST_Response {
@@ -700,6 +762,10 @@ class ZDZ_Rest_API {
 		if ( ! $user ) {
 			return new WP_REST_Response( [ 'success' => false, 'error' => 'Not authenticated' ], 401 );
 		}
+
+		$notation = get_user_meta( $user_id, 'zdz_notation_profile', true );
+		$notation = is_array( $notation ) ? $notation : json_decode( (string) $notation, true );
+		$notation = is_array( $notation ) ? $notation : [];
 
 		$profile = [
 			'user_id'            => $user_id,
@@ -714,8 +780,9 @@ class ZDZ_Rest_API {
 			'company_phone'      => ZDZ_Core_Settings::get_company_phone(),
 			'office_hours'       => ZDZ_Core_Settings::get_receptionist_hours(),
 			'field_preferences'  => json_decode( get_user_meta( $user_id, 'zdz_field_preferences', true ) ?: '{}', true ),
-			// v2.20.2: Expose Estimates notation profile (read-only) for front-end migration offer
-			'tsec_notation_profile' => json_decode( get_user_meta( $user_id, 'tsec_notation_profile', true ) ?: '{}', true ),
+			// The person's Estimates notation profile (read-only), so the field-preferences form can offer to
+			// start from it. Only a JSON object is offered; free-text notes stay in Estimates.
+			'notation_profile'   => $notation,
 		];
 
 		return rest_ensure_response( [
@@ -727,7 +794,7 @@ class ZDZ_Rest_API {
 	/**
 	 * POST /zorderz/v1/user-profile/field-preferences
 	 *
-	 * v2.20.2: Save the current user's field preferences JSON blob.
+	 * Save the current user's field preferences JSON blob.
 	 * Validates against the canonical schema from ZDZ_Core_Settings, sanitizes
 	 * each field, and bumps the zdz_field_prefs_version counter so consuming
 	 * plugins (Analytics, Estimates) can cache-bust.
@@ -808,7 +875,7 @@ class ZDZ_Rest_API {
 	/**
 	 * GET /zorderz/v1/user-profile/field-preferences-schema
 	 *
-	 * v2.20.2: Returns the canonical field preferences schema so the front-end
+	 * Returns the canonical field preferences schema so the front-end
 	 * can render the form dynamically. Adding a field to
 	 * ZDZ_Core_Settings::get_field_preferences_schema() automatically makes it
 	 * appear in the Settings UI, validate on save, and render in AI prompts —

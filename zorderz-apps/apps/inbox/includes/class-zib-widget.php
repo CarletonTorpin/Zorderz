@@ -9,7 +9,7 @@
  * mailbox" opt-in. The card shell is server-rendered; assets/js/zib-connections.js
  * fills it from GET the connection route.
  *
- * KIOSK: the widget renders nothing for the read-only kiosk (INV-10) — mail is
+ * KIOSK: the widget renders nothing for the read-only kiosk — mail is
  * personal, and Inbox has no read-only seat.
  *
  * @since 0.1.0 (P0 — Connect)
@@ -49,16 +49,22 @@ class ZIB_Widget {
 		$js  = ZIB_PLUGIN_DIR . 'assets/js/zib-connections.js';
 		$css = ZIB_PLUGIN_DIR . 'assets/css/zib-connections.css';
 
+		/* the app is built on the theme's kit (ZDZ.ui), so it loads after it. Named
+		   as a dependency only when the theme registered it: an unregistered dependency would stop WordPress
+		   printing this script at all, and then the card could not even say that the kit is missing. */
+		$kit_js  = wp_script_is( 'zdz-kit-js', 'registered' ) ? array( 'zdz-kit-js' ) : array();
+		$kit_css = wp_style_is( 'zdz-kit-css', 'registered' ) ? array( 'zdz-kit-css' ) : array();
+
 		wp_enqueue_style(
 			'zib-connections',
 			ZIB_PLUGIN_URL . 'assets/css/zib-connections.css',
-			array(),
+			$kit_css,
 			ZIB_VERSION . ( file_exists( $css ) ? '.' . filemtime( $css ) : '' )
 		);
 		wp_enqueue_script(
 			'zib-connections',
 			ZIB_PLUGIN_URL . 'assets/js/zib-connections.js',
-			array(),
+			$kit_js,
 			ZIB_VERSION . ( file_exists( $js ) ? '.' . filemtime( $js ) : '' ),
 			true
 		);
@@ -97,7 +103,8 @@ class ZIB_Widget {
 			. ' data-zib-nonce="' . esc_attr( wp_create_nonce( 'wp_rest' ) ) . '"'
 			. ' data-zib-start="' . esc_attr( $start ) . '"'
 			. ' data-zib-modeopts="' . esc_attr( $opts ) . '">'
-			. '<div class="zib-loading">Loading your email connection…</div>'
+			// the kit's loader markup, the same dots the script shows next.
+			. '<div class="zdz-loading" role="status" aria-live="polite"><span class="zdz-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="zdz-loading-label">Loading your email connection…</span></div>'
 			. '</div>';
 	}
 

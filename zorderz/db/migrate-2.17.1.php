@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Theme — v2.17.1 Database Migration
+ * Zorderz Theme — Database Migration
  *
  * Creates/patches the shared user media table.
  * Cached via option so it only runs ONCE, not on every request.

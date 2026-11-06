@@ -1,0 +1,31 @@
+# Identity Pack · parties.yml — EXAMPLE, entirely fictional.
+#
+# The people a pack says something about, named by their initials on this
+# site. No personal contact details: a pack describes the shape of a business,
+# not its people's private information. `name` is for whoever reads the file.
+
+pack:
+  schema: 1
+  tenant_key: example-business
+
+people:
+  - initials: AE
+    name: "Alex (example)"
+    # Team Roles marks: can, learning or cannot. Items by their catalog id with
+    # sell / install / repair; abilities by their key in Team Roles. A cell's
+    # note and date are kept; cells not named are left as they are.
+    team_roles:
+      items:
+        ex-pump: { sell: can, install: learning }
+  - initials: SE
+    name: "Sam (example)"
+    team_roles:
+      items:
+        ex-pump: { install: can, repair: can }
+      abilities:
+        roof-access: learning
+  - initials: JE
+    name: "Jordan (example)"
+    team_roles:
+      items:
+        ex-pump: { sell: can }

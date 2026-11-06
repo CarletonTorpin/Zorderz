@@ -1,5 +1,5 @@
 /*!
- * Zorderz Theme — Dashboard Personalization (v2.13.1)
+ * Zorderz Theme — Dashboard Personalization
  *
  * Narrow scope for this release:
  *   (1) Drag-to-reorder KPI cards — order persists via /user-prefs
@@ -131,10 +131,10 @@
 	/* ── Drag handle per card ─────────────────────────────────── */
 
 	function augmentCard( card ) {
-		if ( card.__tsAugmented ) { return; }
+		if ( card.__zdzAugmented ) { return; }
 		var cid = cardId( card );
 		if ( ! cid ) { return; }
-		card.__tsAugmented = true;
+		card.__zdzAugmented = true;
 		card.setAttribute( 'data-zdz-card-id', cid );
 
 		var handle = document.createElement( 'button' );
@@ -166,8 +166,8 @@
 	}
 
 	function bindDrag( grid ) {
-		if ( grid.__tsDragBound ) { return; }
-		grid.__tsDragBound = true;
+		if ( grid.__zdzDragBound ) { return; }
+		grid.__zdzDragBound = true;
 
 		var dragging = null;
 		var placeholder = null;
@@ -256,7 +256,7 @@
 	function renderRecords() {
 		var el = document.querySelector( '[data-zdz-personal-records]' );
 		if ( ! el ) { return; }
-		// v2.20.0: Work-achievement focused records (not financial)
+		// Work-achievement focused records (not financial)
 		var order = [
 			[ 'most_jobs_in_week',          'Most Jobs/Week',       function ( v ) { return Math.round( v ); } ],
 			[ 'most_estimates_in_month',    'Most Estimates/Mo',    function ( v ) { return Math.round( v ); } ],
@@ -280,7 +280,7 @@
 		var strip = document.querySelector( '.zdz-records-strip' );
 		if ( strip ) {
 			strip.classList.toggle( 'is-empty', ! any );
-			// v2.20.0: Show friendly message when no records exist yet
+			// Show friendly message when no records exist yet
 			if ( ! any ) {
 				el.innerHTML = '<div class="personal-records-empty">' +
 					'<div class="personal-records-empty-icon">🏆</div>' +
@@ -299,8 +299,8 @@
 	/* ── Orchestration ────────────────────────────────────────── */
 
 	function personalizeGrid( grid ) {
-		if ( grid.__tsPersonalized ) { return; }
-		grid.__tsPersonalized = true;
+		if ( grid.__zdzPersonalized ) { return; }
+		grid.__zdzPersonalized = true;
 
 		var cards = grid.querySelectorAll( '.kpi-card' );
 		for ( var i = 0; i < cards.length; i++ ) { augmentCard( cards[ i ] ); }

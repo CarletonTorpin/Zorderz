@@ -12,7 +12,7 @@
  *     Downtown - (AB) Scheduled 8/4
  *     Westside / CD Scheduled 8-7-26
  *     Lakeview - (EF) Scheduled 8-14-26
- *     Hillcrest - (GH) Sched. Wed 8/18/26 10 am        (invoice — with a time)
+ *     Midvale - (AM) Sched. Wed 8/18/26 10 am        (invoice — with a time)
  *
  * So this parses that line: anchored on "Sched"/"Scheduled" (also install/appt),
  * it reads a M/D, M-D-YY, M/D/YY or ISO date and an optional "10 am" time. The
@@ -47,7 +47,7 @@ class ZPREP_Install_Fallback {
 	 *
 	 * @return array{date:string,hour:?int,minute:int}|null  date is Y-m-d.
 	 */
-	public static function parse( $text ): ?array {
+	public static function parse( $text, ?int $ref_ts = null ): ?array {
 		$text = self::flatten_notes( $text );
 		if ( $text === '' ) return null;
 
@@ -57,8 +57,8 @@ class ZPREP_Install_Fallback {
 		// bookkeeping edit note (e.g. "Rev 2: … full-installation … (8/13/2026)") — which
 		// matches the weak "install" anchor and, since notes precede line items, would be
 		// read first — from overriding the real "Location … Scheduled 8/27" line.
-		return self::parse_anchored( $text, '/\bsched/i', false )
-			?? self::parse_anchored( $text, '/\b(install(?:ation)?|appt|appointment)/i', true );
+		return self::parse_anchored( $text, '/\bsched/i', false, $ref_ts )
+			?? self::parse_anchored( $text, '/\b(install(?:ation)?|appt|appointment)/i', true, $ref_ts );
 	}
 
 	/**
@@ -68,7 +68,7 @@ class ZPREP_Install_Fallback {
 	 *
 	 * @return array{date:string,hour:?int,minute:int,assignee:string}|null
 	 */
-	private static function parse_anchored( string $text, string $anchor, bool $skip_rev ): ?array {
+	private static function parse_anchored( string $text, string $anchor, bool $skip_rev, ?int $ref_ts = null ): ?array {
 		$months = 'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec';
 
 		foreach ( preg_split( '/[\r\n]+/', $text ) as $line ) {
@@ -92,16 +92,13 @@ class ZPREP_Install_Fallback {
 					$yr = (int) $m[3];
 					if ( $yr < 100 ) $yr += 2000;
 				} else {
-					// No year written ("8/4"): assume this year, but roll to next year
-					// if that date is already well in the past (a Dec estimate → Jan job).
-					$yr    = (int) gmdate( 'Y' );
-					$guess = mktime( 12, 0, 0, $mo, $day, $yr );
-					if ( $guess && $guess < time() - 180 * 86400 ) $yr++;
+					$yr = self::year_for( $mo, $day, $ref_ts ); // no year written ("8/4")
 				}
 				$date = self::ymd( $yr, $mo, $day );
 			} elseif ( preg_match( '/\b(' . $months . ')[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/i', $tail, $m ) ) {
-				$ts = strtotime( $m[0] );
-				if ( $ts ) $date = gmdate( 'Y-m-d', $ts );
+				$mo   = (int) date( 'n', (int) strtotime( $m[1] . ' 1 2000' ) );
+				$yr   = ( isset( $m[3] ) && $m[3] !== '' ) ? (int) $m[3] : self::year_for( $mo, (int) $m[2], $ref_ts );
+				$date = self::ymd( $yr, $mo, (int) $m[2] );
 			}
 			if ( ! $date ) continue;
 
@@ -149,6 +146,32 @@ class ZPREP_Install_Fallback {
 		return '';
 	}
 
+	/**
+	 * The year for a date written without one ("Scheduled 10/7").
+	 *
+	 * With $ref_ts (the date of the billing document the line was read from — the later of
+	 * its issue and update dates): the document's own year, rolled forward one year if that
+	 * lands more than 60 days BEFORE the document (a December invoice saying "Sched 1/12"
+	 * means next January). A scheduled date is written for a job that is coming up, so it
+	 * never sits months before the paper it is written on.
+	 *
+	 * Without $ref_ts (text with no document date, such as CRM notes): this year, rolled
+	 * forward if that is more than 180 days past.
+	 */
+	public static function year_for( int $mo, int $day, ?int $ref_ts = null, ?int $now = null ): int {
+		if ( $ref_ts !== null && $ref_ts > 0 ) {
+			$yr    = (int) gmdate( 'Y', $ref_ts );
+			$guess = mktime( 12, 0, 0, $mo, $day, $yr );
+			if ( $guess && $guess < $ref_ts - 60 * 86400 ) $yr++;
+			return $yr;
+		}
+		$now   = $now ?? time();
+		$yr    = (int) gmdate( 'Y', $now );
+		$guess = mktime( 12, 0, 0, $mo, $day, $yr );
+		if ( $guess && $guess < $now - 180 * 86400 ) $yr++;
+		return $yr;
+	}
+
 	private static function ymd( int $y, int $mo, int $d ): ?string {
 		if ( $mo < 1 || $mo > 12 || $d < 1 || $d > 31 ) return null;
 		$ts = mktime( 0, 0, 0, $mo, $d, $y );
@@ -156,8 +179,8 @@ class ZPREP_Install_Fallback {
 	}
 
 	/** Convenience / test helper: just the Y-m-d, or null. */
-	public static function scheduled_date_from_text( $text ): ?string {
-		$p = self::parse( $text );
+	public static function scheduled_date_from_text( $text, ?int $ref_ts = null ): ?string {
+		$p = self::parse( $text, $ref_ts );
 		return $p ? $p['date'] : null;
 	}
 
@@ -167,8 +190,8 @@ class ZPREP_Install_Fallback {
 	 * scheduled LOCAL time (or local midnight when no time is written) → UTC, so the
 	 * widget's atLocalMidnight() heuristic shows a time only when there is one.
 	 */
-	public static function from_text( $text ): ?array {
-		$p = self::parse( $text );
+	public static function from_text( $text, ?int $ref_ts = null ): ?array {
+		$p = self::parse( $text, $ref_ts );
 		if ( ! $p ) return null;
 		try {
 			$tz   = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
@@ -183,6 +206,8 @@ class ZPREP_Install_Fallback {
 				'spread'    => false,
 				'source'    => 'estimate',
 				'assignee'  => $p['assignee'] ?? '',
+				'date'      => $p['date'],
+				'has_time'  => $p['hour'] !== null,
 			];
 		} catch ( Exception $e ) {
 			return null;

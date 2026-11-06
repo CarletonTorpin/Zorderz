@@ -94,7 +94,7 @@ class ZL_Lead_Generator {
 
 	/**
 	 * v1.8.0 — 429-aware concurrency cap for subsequent AI calls in this batch.
-	 * Starts at TSLG_POE_PARALLEL (default 4); on the first 429 response this
+	 * Starts at the zlg_poe_parallel filter (default 4); on the first 429 response this
 	 * is halved (min 1). Resets per batch via {@see clear_batch_caches()}.
 	 *
 	 * @since 1.8.0
@@ -368,10 +368,10 @@ class ZL_Lead_Generator {
 	public function init_clients() {
 		// ── FreshBooks ───────────────────────────────────────
 		// Retrieve shared options, falling back to the legacy Surveys plugin if needed
-		$fb_client_id     = ZL_Admin::get_shared_option( 'zl_fb_client_id', 'ts_surveys_fb_client_id' );
-		$fb_client_secret = ZL_Admin::decrypt_shared( 'zl_fb_client_secret', 'ts_surveys_fb_client_secret' );
-		$fb_account_id    = ZL_Admin::get_shared_option( 'zl_fb_account_id', 'ts_surveys_fb_account_id' );
-		$fb_access_token  = ZL_Admin::get_shared_option( 'zl_fb_access_token', 'ts_surveys_fb_access_token' );
+		$fb_client_id     = ZL_Admin::get_shared_option( 'zl_fb_client_id', 'zdz_surveys_fb_client_id' );
+		$fb_client_secret = ZL_Admin::decrypt_shared( 'zl_fb_client_secret', 'zdz_surveys_fb_client_secret' );
+		$fb_account_id    = ZL_Admin::get_shared_option( 'zl_fb_account_id', 'zdz_surveys_fb_account_id' );
+		$fb_access_token  = ZL_Admin::get_shared_option( 'zl_fb_access_token', 'zdz_surveys_fb_access_token' );
 
 		if ( empty( $fb_access_token ) ) {
 			throw new Exception( 'FreshBooks is not connected. Please connect FreshBooks in Settings.' );
@@ -381,8 +381,8 @@ class ZL_Lead_Generator {
 		$this->fb->set_access_token( $fb_access_token );
 
 		// ── Nutshell ────────────────────────────────────────
-		$ns_email   = ZL_Admin::get_shared_option( 'zl_ns_email', 'ts_surveys_ns_email' );
-		$ns_api_key = ZL_Admin::decrypt_shared( 'zl_ns_api_key', 'ts_surveys_ns_api_key' );
+		$ns_email   = ZL_Admin::get_shared_option( 'zl_ns_email', 'zdz_surveys_ns_email' );
+		$ns_api_key = ZL_Admin::decrypt_shared( 'zl_ns_api_key', 'zdz_surveys_ns_api_key' );
 
 		if ( empty( $ns_email ) || empty( $ns_api_key ) ) {
 			throw new Exception( 'Nutshell CRM is not configured. Please add credentials in Settings.' );
@@ -391,20 +391,13 @@ class ZL_Lead_Generator {
 		$this->ns = new ZL_Nutshell( $ns_email, $ns_api_key );
 
 		// ── Poe AI (optional) ───────────────────────────────
-		// Try multiple approaches to find the Poe API key
-		$poe_api_key = '';
+		// The platform's credential first (decrypt_shared() asks Core before anything of this app's), then this
+		// app's own copy, then the copy an earlier surveys app kept (carried across under its zdz_ name).
+		$poe_api_key = ZL_Admin::decrypt_shared( 'zl_poe_api_key', 'zdz_surveys_poe_api_key' );
 
-		// 1. Try our own option (decrypted)
-		$poe_api_key = ZL_Admin::decrypt_shared( 'zl_poe_api_key', 'ts_surveys_poe_api_key' );
-
-		// 2. If empty, try common survey-plugin option names (encrypted)
+		// If empty, the surveys copy may have been kept without encryption.
 		if ( empty( $poe_api_key ) ) {
-			$survey_key_names = array(
-				'ts_surveys_poe_api_key',
-				'ts_surveys_poe_key',
-				'ts_survey_poe_api_key',
-				'tss_poe_api_key',
-			);
+			$survey_key_names = array( 'zdz_surveys_poe_api_key' );
 			foreach ( $survey_key_names as $opt_name ) {
 				$raw = get_option( $opt_name, '' );
 				if ( ! empty( $raw ) ) {
@@ -424,10 +417,10 @@ class ZL_Lead_Generator {
 			}
 		}
 
-		// 3. If still empty, try the raw option value (might be stored unencrypted)
+		// If still empty, try the raw option value (might be stored unencrypted)
 		if ( empty( $poe_api_key ) ) {
 			$raw_own    = get_option( 'zl_poe_api_key', '' );
-			$raw_survey = get_option( 'ts_surveys_poe_api_key', '' );
+			$raw_survey = get_option( 'zdz_surveys_poe_api_key', '' );
 			$raw_val    = ! empty( $raw_own ) ? $raw_own : $raw_survey;
 			if ( ! empty( $raw_val ) && strlen( $raw_val ) > 10 ) {
 				$poe_api_key = $raw_val;
@@ -452,8 +445,8 @@ class ZL_Lead_Generator {
 	 * @throws Exception If Nutshell credentials are missing.
 	 */
 	public function init_nutshell_only() {
-		$ns_email   = ZL_Admin::get_shared_option( 'zl_ns_email', 'ts_surveys_ns_email' );
-		$ns_api_key = ZL_Admin::decrypt_shared( 'zl_ns_api_key', 'ts_surveys_ns_api_key' );
+		$ns_email   = ZL_Admin::get_shared_option( 'zl_ns_email', 'zdz_surveys_ns_email' );
+		$ns_api_key = ZL_Admin::decrypt_shared( 'zl_ns_api_key', 'zdz_surveys_ns_api_key' );
 
 		if ( empty( $ns_email ) || empty( $ns_api_key ) ) {
 			throw new Exception( 'Nutshell CRM is not configured. Please add credentials in Settings.' );
@@ -544,7 +537,7 @@ class ZL_Lead_Generator {
 		$org   = isset( $client['organization'] )  ? trim( $client['organization'] ) : '';
 
 		// v1.3.0 — FreshBooks sometimes stores full name in fname with lname empty.
-		// Split intelligently: "Laura Mansell" → fname="Laura", lname="Mansell"
+		// Split intelligently: "Alex Example" → fname="Alex", lname="Example"
 		if ( empty( $lname ) && ! empty( $fname ) && strpos( $fname, ' ' ) !== false ) {
 			$name_parts = explode( ' ', $fname );
 			$fname      = array_shift( $name_parts ); // First word = first name
@@ -552,7 +545,7 @@ class ZL_Lead_Generator {
 		}
 
 		// FreshBooks auto-fills organization with the person's name when no company is set.
-		// Clear it so we don't display "Megan Biffar (Megan Biffar)" on the dashboard
+		// Clear it so we don't display "Jordan Sample (Jordan Sample)" on the dashboard
 		// or pass a false company name to Nutshell.
 		$person_name = strtolower( trim( $fname . ' ' . $lname ) );
 		if ( ! empty( $org ) && strtolower( $org ) === $person_name ) {
@@ -1041,7 +1034,7 @@ class ZL_Lead_Generator {
 	 *
 	 * BUSINESS CONTEXT:
 	 * Some FreshBooks invoices store the customer's phone number on the second
-	 * address line (e.g., "555-572-2948") instead of in the dedicated phone fields.
+	 * address line (e.g., "555-555-0148") instead of in the dedicated phone fields.
 	 * This helper detects if p_street2 looks like a phone number so we can capture
 	 * it for the salesperson's call list.
 	 * This is the last resort in the phone extraction cascade after all
@@ -1087,11 +1080,11 @@ class ZL_Lead_Generator {
 	 * Normalize a phone number to a clean format for Nutshell.
 	 *
 	 * Handles various FreshBooks phone formats:
-	 *   "(555)612-9190"  → "(555) 612-9190"
-	 *   "555-612-9190"   → "(555) 612-9190"
-	 *   "5556129190"     → "(555) 612-9190"
-	 *   "15556129190"    → "(555) 612-9190"
-	 *   "+1 5556129190"  → "(555) 612-9190"
+	 *   "(555)555-0190"  → "(555) 555-0190"
+	 *   "555-555-0190"   → "(555) 555-0190"
+	 *   "5555550190"     → "(555) 555-0190"
+	 *   "15555550190"    → "(555) 555-0190"
+	 *   "+1 5555550190"  → "(555) 555-0190"
 	 *
 	 * @since 1.3.0
 	 * @param string $phone Raw phone number string.
@@ -1202,7 +1195,7 @@ class ZL_Lead_Generator {
 	 *
 	 * v1.2.9: Split from ai_expand_product_filter() so that ajax_expand_filter()
 	 * can pass pre-extracted names instead of the full grouped invoices array.
-	 * Decompressing 9,000+ customers' invoice data (~4+ MB) in ajax_expand_filter()
+	 * Decompressing several thousand customers' invoice data (several MB) in ajax_expand_filter()
 	 * was exceeding PHP memory_limit on 15-year lookbacks, causing a fatal error
 	 * that silently killed the AJAX handler with no HTTP response.
 	 *
@@ -1276,7 +1269,7 @@ class ZL_Lead_Generator {
 		try {
 			$response = $this->poe->query( $prompt, null, '', 0.0, array(
 				'thinking_budget' => 32768,
-				'web_search'      => true,
+				'web_search'      => false, // lead data; none of this needs the web
 			) );
 			$result   = trim( $response );
 
@@ -1817,7 +1810,7 @@ class ZL_Lead_Generator {
 		try {
 			$response = $this->poe->query( $prompt, null, '', 0.0, array(
 				'thinking_budget' => 32768,
-				'web_search'      => true,
+				'web_search'      => false, // lead data; none of this needs the web
 			) );
 			$result = trim( $response );
 
@@ -2167,7 +2160,7 @@ class ZL_Lead_Generator {
 		try {
 			$response = $this->poe->query( $prompt, null, '', 0.0, array(
 				'thinking_budget' => 32768,
-				'web_search'      => true,
+				'web_search'      => false, // lead data; none of this needs the web
 			) );
 			$result = trim( $response );
 
@@ -2247,7 +2240,7 @@ class ZL_Lead_Generator {
 	/**
 	 * Detect the CRM sales pipeline for a lead from its purchase history.
 	 *
-	 * CRM pipeline routing is a tenant Mapping (crosswalk C1/C10), NOT code. The rules —
+	 * CRM pipeline routing is a tenant Mapping, NOT code. The rules —
 	 * which purchase keywords route to which pipeline name/id — are supplied by the tenant
 	 * via the `zl_crm_pipeline_rules` filter; Core ships EMPTY, so no product or pipeline
 	 * name is hardcoded. Each rule: [ 'pipeline' => string, 'keywords' => string[],
@@ -3118,7 +3111,7 @@ class ZL_Lead_Generator {
 		try {
 			return $this->poe->query( $prompt, null, '', 0.0, array(
 				'thinking_budget' => 32768,
-				'web_search'      => true,
+				'web_search'      => false, // lead data; none of this needs the web
 			) );
 		} catch ( \Throwable $e ) {
 			error_log( 'ZL AI summary error: ' . $e->getMessage() );

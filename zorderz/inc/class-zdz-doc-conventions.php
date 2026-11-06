@@ -1,7 +1,7 @@
 <?php
 /**
- * ZDZ_Doc_Conventions — the tenant "house style" for customer-facing documents,
- * applied ON OUTPUT (BID-9).
+ * ZDZ_Doc_Conventions — the business's "house style" for customer-facing documents,
+ * applied ON OUTPUT.
  *
  * A business writes its own conventions onto every estimate/invoice it produces:
  * which metadata lines lead the document, which closing line trails it, how a
@@ -11,12 +11,11 @@
  * code. They live here as CONFIGURABLE strings/flags and are applied by the
  * document producer (the Estimate app) as a final overlay on its output.
  *
- * The old estimate creator baked these as a "mode": the location-line-first rule,
- * the "{City} - ({Initials})" sub-description, the "Submitted by: {initials}"
- * provenance line, the closing "$0 Tax and Installation Included" line and the
- * round-up-to-nearest-ten were compiled into the prompt and the engine. That made
- * one tenant's paperwork the platform's behaviour, and it put a company's roster,
- * places and brand into AI prompt text. This service replaces the mode.
+ * Compiled into a prompt or an engine, rules such as a location-line-first rule, a
+ * "{City} - ({Initials})" sub-description, a "Submitted by: {initials}" provenance
+ * line, a closing "$0 Tax included" line or rounding up to the nearest ten would make
+ * one business's paperwork the platform's behaviour, and would put its roster,
+ * places and brand into AI prompt text. This service keeps them as data instead.
  *
  * SHIP NEUTRAL. With nothing configured every overlay is a no-op: no forced
  * leading/trailing line, no provenance line, no rounding, no forced casing. The
@@ -26,13 +25,13 @@
  * without the platform ever asserting a place, a person or a price.
  *
  * The initials short code is the party's code published by ZDZ_Party under the
- * key `initials` and matched case-insensitively (§13); reserved tokens that must
+ * key `initials` and matched case-insensitively; reserved tokens that must
  * never be read as a rep code are DERIVED from the pack (territory place aliases +
  * mapping codes) via a filter, on top of a neutral accounting/English core set.
  *
  * One parser. parse_location_line() is the single reader every consumer
  * (attribution, analytics, commissions) shares, so the two-parsers-disagree
- * defect (a multi-rep "(GT & DM)" line splitting for pay but reading as one junk
+ * defect (a multi-rep "(AB & CD)" line splitting for pay but reading as one junk
  * token in analytics) cannot recur.
  *
  * Exposure:
@@ -41,7 +40,6 @@
  *   - Filter: zdz_document_conventions (merge/override the config)
  *   - REST : GET /wp-json/zorderz/v1/doc-conventions   (publishes to JS)
  *
- * Crosswalk: 03-geo-connections.md · Document Conventions D1–D24.
  *
  * @since   1.1.0
  * @package Zorderz
@@ -87,20 +85,20 @@ class ZDZ_Doc_Conventions {
 	public static function defaults(): array {
 		return array(
 
-			// D18 — casing. Default 'none' = passthrough (standard behaviour).
+			// Casing. Default 'none' = passthrough (standard behaviour).
 			'casing' => array(
 				'mode'            => 'none',              // none | title | sentence
 				'sentence_fields' => array( 'notes', 'sub_description' ),
 				'preserve_tokens' => array(),             // derived; merged with codes at read time
 			),
 
-			// D17 — phone. Off by default (format => '' = passthrough).
+			// Phone. Off by default (format => '' = passthrough).
 			'phone' => array(
 				'format' => '',                           // e.g. "{area}-{prefix}-{line}"
 				'strip'  => array( ' ', '(', ')', '.', '+1' ),
 			),
 
-			// D13/D14 — rounding. increment 0 / unit '' = no rounding.
+			// Rounding. increment 0 / unit '' = no rounding.
 			'rounding' => array(
 				'price' => array(
 					'mode'        => 'ceil',              // ceil | round | floor
@@ -113,14 +111,14 @@ class ZDZ_Doc_Conventions {
 				),
 			),
 
-			// D3/D4 — initials parenthetical. Delimiters are neutral punctuation.
+			// Initials parenthetical. Delimiters are neutral punctuation.
 			'initials' => array(
 				'open'                  => '(',
 				'close'                 => ')',
 				'case'                  => 'upper',       // upper | as_is
 				'multi_separator'       => ' & ',         // writer form
 				'omit_when_empty'       => true,          // never "( )"
-				'stored_with_delimiters' => false,        // pack stores GT, not "(GT)"
+				'stored_with_delimiters' => false,        // pack stores AB, not "(AB)"
 				'token_len'             => array( 'min' => 2, 'max' => 4 ),
 				'parse'                 => array(
 					'accept_separators'  => array( '/', ',', '&', '+', 'and' ),
@@ -130,21 +128,21 @@ class ZDZ_Doc_Conventions {
 				),
 			),
 
-			// D1/D2/D5/D6/D8/D10 — estimate line + location conventions.
+			// Estimate line + location conventions.
 			'estimate' => array(
-				// D1 — leading metadata lines (default none). Each: id, description,
+				// Leading metadata lines (default none). Each: id, description,
 				// description_synonyms[], price, quantity, required, position.
 				'leading'  => array(),
-				// D10 — trailing metadata lines (default none). Each: id, text, price,
+				// Trailing metadata lines (default none). Each: id, text, price,
 				// quantity, only_if (has_priced_line|always), normalize_variants[].
 				'trailing' => array(),
-				// D2 — location line. Placeholder-only template; a producer opts in by
+				// Location line. Placeholder-only template; a producer opts in by
 				// declaring a leading line whose builder is 'location_line'.
 				'location_line' => array(
 					'format'   => '{locality} - ({initials}){note_sep}{note}',
 					'note_sep' => ' ',
 				),
-				// D8 — provenance ("Submitted by: …"). Disabled by default.
+				// Provenance ("Submitted by: …"). Disabled by default.
 				'provenance_line' => array(
 					'enabled'         => false,
 					'template'        => 'Submitted by: {initials}{ parenthetical}',
@@ -152,7 +150,7 @@ class ZDZ_Doc_Conventions {
 					'omit_when_unset' => true,
 					'dedupe'          => 'first_wins',
 				),
-				// D22 — line policy.
+				// Line policy.
 				'line_policy' => array(
 					'merge'            => 'never',
 					'drop'             => 'never',
@@ -160,7 +158,7 @@ class ZDZ_Doc_Conventions {
 				),
 			),
 
-			// D7/D21 — the ONE definition of a $0 non-product metadata line and the
+			// The ONE definition of a $0 non-product metadata line and the
 			// phrase allowlist derived from it. Ships with generic ids only.
 			'metadata_lines' => array(
 				'price'            => 0,
@@ -171,7 +169,7 @@ class ZDZ_Doc_Conventions {
 				),
 			),
 
-			// D11/D12 — reference code. Placeholder-only templates.
+			// Reference code. Placeholder-only templates.
 			'reference_code' => array(
 				'write_template'             => '{postal}-{category}',
 				'write_template_with_source' => '{postal}-{category}-{source}',
@@ -186,7 +184,7 @@ class ZDZ_Doc_Conventions {
 				),
 			),
 
-			// D9 — customer-facing notes discipline (enforced deterministically).
+			// Customer-facing notes discipline (enforced deterministically).
 			'notes' => array(
 				'forbidden_phrases' => array(),           // pack supplies cost/markup words
 				'revision_stamp'    => array(
@@ -196,7 +194,7 @@ class ZDZ_Doc_Conventions {
 				),
 			),
 
-			// D15 — per-party measurement notation. Default empty; overrides on Party.
+			// Per-party measurement notation. Default empty; overrides on Party.
 			'measurement_notation' => array(
 				'default' => '',
 			),
@@ -304,7 +302,7 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  LEADING / TRAILING LINES  (D1, D10)
+	 *  LEADING / TRAILING LINES
 	 * ============================================================== */
 
 	/** Ensure every configured leading line is present, in order, at the front. */
@@ -393,14 +391,14 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  LOCATION LINE  (D2, D5, D6 — one parser)
+	 *  LOCATION LINE  (one parser)
 	 * ============================================================== */
 
 	/** Build a location sub-description: "{locality} - ({initials}) {note}". */
 	public static function build_location_line( string $locality, array $codes = array(), string $note = '' ): string {
 		$fmt      = (string) self::get( 'estimate.location_line.format', '{locality} - ({initials}){note_sep}{note}' );
 		$note_sep = (string) self::get( 'estimate.location_line.note_sep', ' ' );
-		$paren    = self::format_initials( $codes ); // "(GT & DM)" or ''
+		$paren    = self::format_initials( $codes ); // "(AB & CD)" or ''
 
 		// The template writes "({initials})"; format_initials already includes the
 		// delimiters, so collapse the template's literal parens around it.
@@ -431,7 +429,7 @@ class ZDZ_Doc_Conventions {
 	/**
 	 * THE shared location-line parser. Returns the locality, the resolved rep
 	 * codes, and any trailing note. Every consumer (attribution, analytics,
-	 * commissions) reads through this, so a multi-rep "(GT & DM)" line can never
+	 * commissions) reads through this, so a multi-rep "(AB & CD)" line can never
 	 * split one way for pay and another for analytics.
 	 *
 	 * @return array{locality:string,party_codes:array,note:string}
@@ -462,10 +460,10 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  INITIALS  (D3, D4, A16)
+	 *  INITIALS
 	 * ============================================================== */
 
-	/** Format a list of rep codes as the writer form, e.g. "(GT & DM)" or ''. */
+	/** Format a list of rep codes as the writer form, e.g. "(AB & CD)" or ''. */
 	public static function format_initials( array $codes ): string {
 		$codes = array_values( array_filter( array_map( 'trim', $codes ), 'strlen' ) );
 		if ( 'upper' === self::get( 'initials.case', 'upper' ) ) {
@@ -535,7 +533,7 @@ class ZDZ_Doc_Conventions {
 		/**
 		 * Filter the reserved-token set. The pack loader adds place aliases and
 		 * source/product codes here so adding a neighbourhood cannot silently
-		 * create a spurious rep (crosswalk A16).
+		 * create a spurious rep.
 		 *
 		 * @param string[] $merged
 		 */
@@ -544,7 +542,7 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  PROVENANCE LINE  (D8)
+	 *  PROVENANCE LINE
 	 * ============================================================== */
 
 	/**
@@ -597,7 +595,7 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  ROUNDING  (D13, D14)
+	 *  ROUNDING
 	 * ============================================================== */
 
 	/** Round a price per config. increment 0 = passthrough. Discounts pass raw. */
@@ -645,7 +643,7 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  REFERENCE CODE  (D11, D12 — one writer, many readers)
+	 *  REFERENCE CODE  (one writer, many readers)
 	 * ============================================================== */
 
 	/**
@@ -705,7 +703,7 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  METADATA LINES  (D7, D21)
+	 *  METADATA LINES
 	 * ============================================================== */
 
 	/** The configured ids of $0 non-product metadata lines. */
@@ -717,7 +715,7 @@ class ZDZ_Doc_Conventions {
 	 * Is this a $0 metadata line rather than a product/service? A $0 line whose
 	 * description matches the derived phrase allowlist, or a marked leading/trailing
 	 * line, is metadata. Consumers read this instead of re-deriving "is this a
-	 * product?" from text (crosswalk D7/D21).
+	 * product?" from text.
 	 */
 	public static function is_metadata_line( string $description, $unit_price = 0 ): bool {
 		if ( (float) $unit_price > 0 ) {
@@ -759,7 +757,7 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  CASING  (D18)
+	 *  CASING
 	 * ============================================================== */
 
 	/** Title-case a string while preserving the reserved/brand/code tokens. */
@@ -838,7 +836,7 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  PHONE  (D17)
+	 *  PHONE
 	 * ============================================================== */
 
 	/** Normalise a phone number per config. Empty format = passthrough. */
@@ -862,13 +860,13 @@ class ZDZ_Doc_Conventions {
 	}
 
 	/* ============================================================== *
-	 *  MEASUREMENT NOTATION  (D15 — per-party)
+	 *  MEASUREMENT NOTATION  (per-party)
 	 * ============================================================== */
 
 	/**
 	 * The measurement-notation text for a user: the platform default overlaid with
-	 * the party's own override. The override lives on the party (user meta, renamed
-	 * from the legacy key, read-time aliased).
+	 * the party's own override. The override lives on the party (user meta
+	 * zdz_notation_profile, edited on the user's profile screen by Estimates).
 	 */
 	public static function measurement_notation( int $user_id = 0 ): string {
 		$default = (string) self::get( 'measurement_notation.default', '' );
@@ -876,9 +874,6 @@ class ZDZ_Doc_Conventions {
 			return $default;
 		}
 		$override = (string) get_user_meta( $user_id, 'zdz_notation_profile', true );
-		if ( '' === $override ) {
-			$override = (string) get_user_meta( $user_id, 'tsec_notation_profile', true ); // legacy read-time alias
-		}
 		return '' !== $override ? $override : $default;
 	}
 

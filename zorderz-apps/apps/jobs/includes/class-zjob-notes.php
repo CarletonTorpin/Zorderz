@@ -84,6 +84,10 @@ class ZJOB_Notes {
 		// Plain-text notes: strip tags/scripts on the way in (defence in depth — the
 		// render side escapes too), keep line breaks. Never store markup.
 		$body = sanitize_textarea_field( (string) wp_unslash( $body ) );
+		// An access code in a note is sealed under the job; the note keeps "[gate code sealed]".
+		if ( class_exists( 'ZJOB_Sealed' ) ) {
+			$body = (string) ZJOB_Sealed::seal( $body, array( 'job', $job_id ) );
+		}
 		if ( '' === trim( $body ) ) {
 			return 0;
 		}

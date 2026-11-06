@@ -1,0 +1,157 @@
+/* Route Planner — the app's own styles on the theme's tokens (light, dark, system and sunlight all
+   come from --sys-*; no [data-theme] rules). Scoped to .zrp-app. The survey panel is self-colored (white on deep green,
+   ~8:1, the same pair as Doorhangers' navigation banner) and carries .zdz-pair so the theme's force-paint leaves it alone.
+   Group color: Field. Vermilion is never used (reserved: "needs you"). */
+
+.zrp-app, .zrp-app * { box-sizing: border-box; }
+.zrp-app {
+	--zrp-brand: var(--sys-brand, #0072B2);
+	--zrp-text: var(--sys-text, #1F2328);
+	--zrp-muted: var(--sys-text-muted, #4B5563);
+	--zrp-border: var(--sys-border, #AEB6C2);
+	--zrp-band: var(--sys-bg-subtle, #F5F5F5);
+	--zrp-surface: var(--sys-surface, #FFFFFF);
+	--zrp-on-brand: var(--sys-text-inv, #FFFFFF);
+	--zrp-ok-bg: var(--sys-tint-success-bg, #E6F6EE); --zrp-ok-fg: var(--sys-tint-success-fg, #0B5A3E);
+	--zrp-warn-bg: var(--sys-tint-warning-bg, #FFF3CD); --zrp-warn-fg: var(--sys-tint-warning-fg, #7A5A00);
+	--zrp-drive-bg: #0B5A3E; --zrp-drive-fg: #FFFFFF; --zrp-drive-soft: #D8F3E6;
+	font-family: var(--sys-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+	font-size: 16px; line-height: 1.5; color: var(--zrp-text); background: var(--zrp-band); margin: 0;
+}
+.zrp-app p, .zrp-app li, .zrp-app label { color: var(--zrp-text); font-family: inherit; }
+.zrp-app p { margin: 0 0 .6rem !important; font-size: 16px !important; line-height: 1.5 !important; }
+.zrp-app h2 { font-size: 1.2rem !important; line-height: 1.3 !important; margin: 0 0 .5rem !important; color: var(--zrp-text) !important; font-weight: 700 !important; text-transform: none !important; letter-spacing: 0 !important; text-align: left !important; }
+.zrp-app button, .zrp-app input, .zrp-app select, .zrp-app textarea { font-family: inherit; text-transform: none !important; letter-spacing: 0 !important; }
+
+/* header + tabs */
+.zrp-head { background: var(--zrp-surface); padding: .9rem 1rem .4rem; border-bottom: 1px solid var(--zrp-border); }
+.zrp-app .zrp-title { font-size: 1.35rem !important; margin: 0 0 .1rem !important; }
+.zrp-app .zrp-sub { font-size: .88rem !important; color: var(--zrp-muted) !important; margin: 0 0 .5rem !important; }
+.zrp-tabs { display: flex; gap: .35rem; flex-wrap: wrap; }
+.zrp-app .zrp-tab { flex: 1 1 0; min-height: 44px; border: 0 !important; border-bottom: 3px solid transparent !important; background: transparent !important; color: var(--zrp-muted) !important; font-weight: 700 !important; font-size: .95rem !important; padding: .4rem .5rem !important; cursor: pointer; border-radius: 0 !important; box-shadow: none !important; }
+.zrp-app .zrp-tab[aria-selected="true"] { color: var(--zrp-text) !important; border-bottom-color: var(--zrp-brand) !important; }
+.zrp-badge { display: inline-block; min-width: 1.4em; padding: 0 .35em; margin-left: .3em; border-radius: 999px; background: var(--zrp-warn-bg); color: var(--zrp-warn-fg); font-size: .8rem; }
+.zrp-main { padding: .9rem 1rem 1.2rem; }
+.zrp-card { background: var(--zrp-surface); border: 1px solid var(--zrp-border); border-radius: 12px; padding: .9rem 1rem; margin: 0 0 .8rem; }
+.zrp-help { color: var(--zrp-muted) !important; font-size: .92rem !important; }
+
+/* buttons */
+.zrp-app .zrp-btn { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 48px; padding: .7rem 1.1rem !important; border-radius: 10px !important; border: 2px solid var(--zrp-brand) !important; background: var(--zrp-surface) !important; color: var(--zrp-brand) !important; font-weight: 700 !important; font-size: 1rem !important; cursor: pointer; box-shadow: none !important; line-height: 1.2 !important; }
+.zrp-app .zrp-btn-primary { background: var(--zrp-brand) !important; color: var(--zrp-on-brand) !important; }
+.zrp-app .zrp-btn-quiet { border-color: var(--zrp-border) !important; color: var(--zrp-text) !important; }
+.zrp-app .zrp-btn:disabled { opacity: .55; cursor: default; }
+.zrp-app .zrp-btn-start { width: 100%; min-height: 88px; font-size: 1.35rem !important; border-radius: 16px !important; }
+.zrp-row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+
+/* the survey panel: one big surface, voice-first */
+.zrp-drive { background: var(--zrp-drive-bg); color: var(--zrp-drive-fg); border-radius: 16px; padding: 1rem; margin: 0 0 .8rem; }
+.zrp-drive * { color: var(--zrp-drive-fg) !important; }
+.zrp-drive-state { display: flex; align-items: center; gap: .6rem; font-size: 1.05rem; font-weight: 700; }
+.zrp-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--zrp-drive-soft); flex: 0 0 auto; }
+.zrp-dot { transition: transform .12s linear; }
+.zrp-dot.is-live { background: #FFFFFF; box-shadow: 0 0 0 0 rgba(255,255,255,.7); animation: zrp-pulse 1.6s infinite; }
+@keyframes zrp-pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.6); } 70% { box-shadow: 0 0 0 12px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+@media (prefers-reduced-motion: reduce) { .zrp-dot.is-live { animation: none; } }
+.zrp-heard { font-size: 1.5rem; line-height: 1.3; font-weight: 700; margin: .7rem 0 .2rem; min-height: 2.6em; overflow-wrap: anywhere; }
+.zrp-noted { font-size: 1.05rem; margin: 0 0 .7rem; min-height: 1.5em; }
+.zrp-drive-meta { font-size: .9rem; opacity: .92; margin: 0 0 .8rem; }
+.zrp-drive-btns { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.zrp-app .zrp-big { min-height: 96px; border-radius: 16px !important; font-size: 1.3rem !important; font-weight: 800 !important; border: 3px solid #FFFFFF !important; background: transparent !important; color: #FFFFFF !important; cursor: pointer; padding: .5rem !important; }
+.zrp-app .zrp-big.is-on { background: #FFFFFF !important; color: var(--zrp-drive-bg) !important; }
+.zrp-app .zrp-big.is-on * { color: var(--zrp-drive-bg) !important; }
+.zrp-voice-only { margin: .8rem 0 0; font-size: .95rem; font-weight: 700; text-align: center; }
+.zrp-says { font-size: .88rem; opacity: .92; margin: .6rem 0 0; }
+
+/* the safety note */
+.zrp-safety { border: 2px solid var(--zrp-warn-fg); background: var(--zrp-warn-bg); }
+.zrp-safety p, .zrp-safety li, .zrp-safety h2 { color: var(--zrp-warn-fg) !important; }
+.zrp-safety ul { margin: .3rem 0 .8rem 1.1rem; padding: 0; }
+
+/* a note */
+.zrp-note { background: var(--zrp-surface); border: 1px solid var(--zrp-border); border-radius: 12px; padding: .8rem .9rem; margin: 0 0 .7rem; }
+.zrp-note-said { font-size: 1.05rem; font-weight: 700; margin: 0 0 .25rem; overflow-wrap: anywhere; }
+.zrp-note-where { font-size: .9rem; color: var(--zrp-muted); margin: 0 0 .5rem; }
+.zrp-note-where.is-unknown { color: var(--zrp-warn-fg); }
+.zrp-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 .6rem; }
+.zrp-app .zrp-chip { min-height: 40px; padding: .35rem .75rem !important; border-radius: 999px !important; border: 2px solid var(--zrp-border) !important; background: var(--zrp-surface) !important; color: var(--zrp-text) !important; font-size: .92rem !important; font-weight: 600 !important; cursor: pointer; box-shadow: none !important; }
+.zrp-app .zrp-chip[aria-pressed="true"] { border-color: var(--zrp-ok-fg) !important; background: var(--zrp-ok-bg) !important; color: var(--zrp-ok-fg) !important; }
+.zrp-app .zrp-chip[aria-pressed="true"]::before { content: "\2713\00a0"; font-weight: 800; } /* a cue that is not color: sunlight paints tints black on white */
+.zrp-app .zrp-chip[aria-pressed="false"] { opacity: .8; }
+.zrp-app .zrp-chip small { font-weight: 400; opacity: .85; }
+.zrp-app select.zrp-scope, .zrp-app input.zrp-type { min-height: 44px; border: 1px solid var(--zrp-border); border-radius: 8px; padding: .4rem .6rem; background: var(--zrp-surface); color: var(--zrp-text); font-size: 1rem; }
+.zrp-app input.zrp-type { flex: 1 1 14rem; }
+.zrp-empty { color: var(--zrp-muted); text-align: center; padding: 1.4rem .5rem; }
+.zrp-pull { background: var(--zrp-warn-bg); color: var(--zrp-warn-fg); border-radius: 12px; padding: 1rem; font-weight: 700; text-align: center; }
+
+/* map */
+.zrp-map { height: min(62vh, 520px); border-radius: 12px; border: 1px solid var(--zrp-border); background: var(--zrp-band); }
+.zrp-legend { display: flex; flex-wrap: wrap; gap: .35rem; margin: .6rem 0 0; }
+.zrp-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: .35rem; vertical-align: -1px; border: 2px solid rgba(0,0,0,.25); }
+.zrp-app .leaflet-popup-content { color: #1F2328; font-size: .92rem; }
+
+.zrp-toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 100000; max-width: min(92vw, 520px); background: #1F2328; color: #FFFFFF; padding: .7rem 1rem; border-radius: 10px; font-size: .95rem; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+.zrp-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* recordings, glass-or-screen, codes, words taken back */
+.zrp-app .zrp-rec { font-size: .95rem !important; border-top: 1px solid var(--zrp-border); padding-top: .5rem; }
+.zrp-app .zrp-rec small { color: var(--zrp-warn-fg); }
+.zrp-ask { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0 0 .6rem; padding: .5rem .6rem; border-radius: 10px; background: var(--zrp-warn-bg); color: var(--zrp-warn-fg); font-weight: 700; }
+.zrp-ask span { color: var(--zrp-warn-fg); }
+.zrp-app .zrp-src { font-weight: 400; font-size: .8rem; color: var(--zrp-muted); border: 1px solid var(--zrp-border); border-radius: 999px; padding: 0 .45em; white-space: nowrap; }
+.zrp-codeform { margin: 0 0 .6rem; }
+.zrp-app .zrp-taken { font-size: .95rem !important; color: var(--zrp-muted) !important; text-decoration: line-through; text-decoration-thickness: 1px; }
+.zrp-app .zrp-taken small, .zrp-app .zrp-taken button { text-decoration: none; display: inline-block; }
+.zrp-app .zrp-code-shown { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0 !important; margin: 0 !important; }
+.zrp-app .zrp-code-shown.is-on { font-size: 2rem !important; font-weight: 800; letter-spacing: .15em !important; margin: .2rem 0 .6rem !important; color: var(--zrp-text) !important; }
+@media print { .zrp-code-shown, .zrp-codeform { display: none !important; } } /* never printed */
+.zrp-app .zrp-secret { -webkit-text-security: disc; text-security: disc; font-family: ui-monospace, Menlo, monospace; } /* typed out of sight, not a password a manager offers to save */
+
+/* the Plan tab -- the form, the day's forecast, the map of routes, a card per route, the send step. A route's
+   color is Okabe-Ito (told apart by most eyes) and never the only cue: each route is also numbered, on the map (its start
+   dot's tooltip) and on its card. The number badge is self-colored with its own ink (.zdz-pair), so sunlight leaves it. */
+.zrp-planform { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem .7rem; align-items: end; }
+.zrp-app .zrp-field { display: flex; flex-direction: column; gap: .25rem; font-weight: 700; font-size: .92rem; color: var(--zrp-text); min-width: 0; }
+.zrp-app .zrp-field input.zrp-type, .zrp-app .zrp-field select.zrp-scope { width: 100%; flex: none; font-weight: 400; }
+.zrp-field-wide { grid-column: 1 / -1; }
+@media (max-width: 560px) { .zrp-planform { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.zrp-wx { border-radius: 12px; padding: .8rem 1rem; margin: 0 0 .8rem; border: 2px solid transparent; }
+.zrp-wx p { margin: 0 0 .35rem !important; }
+.zrp-wx-ok { background: var(--zrp-ok-bg); border-color: var(--zrp-ok-fg); }
+.zrp-wx-ok p, .zrp-wx-ok strong, .zrp-wx-ok small { color: var(--zrp-ok-fg) !important; }
+.zrp-wx-flag { background: var(--zrp-warn-bg); border-color: var(--zrp-warn-fg); }
+.zrp-wx-flag p, .zrp-wx-flag strong, .zrp-wx-flag small { color: var(--zrp-warn-fg) !important; }
+.zrp-wx-none { background: var(--zrp-surface); border-color: var(--zrp-border); }
+/* a good day with gusts over their limit -- the warning pair, as a flagged day's, but a dashed edge */
+.zrp-wx-gust { background: var(--zrp-warn-bg); border-color: var(--zrp-warn-fg); border-style: dashed; }
+.zrp-wx-gust p, .zrp-wx-gust strong, .zrp-wx-gust small { color: var(--zrp-warn-fg) !important; }
+.zrp-app .zrp-rgust { background: var(--zrp-warn-bg); color: var(--zrp-warn-fg) !important; border-radius: 8px; padding: .3rem .55rem; display: inline-block; }
+.zrp-app .zrp-rgust strong { color: var(--zrp-warn-fg) !important; }
+.zrp-app .zrp-wx .zrp-help { opacity: .9; font-size: .85rem !important; }
+.zrp-pmap { height: min(56vh, 460px); margin-top: .4rem; }
+.zrp-pmapcard[hidden] { display: none; }
+.zrp-perr p, .zrp-app p.zrp-perr { color: var(--zrp-warn-fg) !important; font-weight: 700; }
+.zrp-perr { border-color: var(--zrp-warn-fg); background: var(--zrp-warn-bg); }
+.zrp-routes { display: grid; gap: .8rem; }
+.zrp-route { background: var(--zrp-surface); border: 1px solid var(--zrp-border); border-left: 8px solid var(--rc, var(--zrp-brand)); border-radius: 12px; padding: .8rem .9rem; }
+.zrp-route.is-picked { border-width: 2px 2px 2px 8px; border-color: var(--rc, var(--zrp-brand)); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+.zrp-rhead { display: flex; align-items: center; gap: .6rem; margin: 0 0 .4rem; }
+.zrp-app .zrp-rhead h3 { flex: 1 1 auto; margin: 0 !important; font-size: 1.05rem !important; line-height: 1.3 !important; font-weight: 700 !important; color: var(--zrp-text) !important; text-transform: none !important; letter-spacing: 0 !important; overflow-wrap: anywhere; }
+.zrp-rnum { flex: 0 0 auto; width: 2rem; height: 2rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1rem; border: 2px solid rgba(0,0,0,.35); }
+.zrp-score { flex: 0 0 auto; min-width: 2.6rem; text-align: center; font-weight: 800; font-size: 1rem; border-radius: 8px; padding: .15rem .4rem; background: var(--zrp-band); color: var(--zrp-text); border: 1px solid var(--zrp-border); }
+.zrp-app .zrp-rfacts { font-size: 1rem !important; }
+.zrp-app .zrp-rline { font-size: .94rem !important; margin: 0 0 .35rem !important; }
+.zrp-rlabel { display: inline-block; min-width: 6.5rem; font-weight: 700; color: var(--zrp-muted); font-size: .85rem; text-transform: uppercase; letter-spacing: .03em; }
+.zrp-blocks { display: flex; flex-wrap: wrap; gap: .4rem; margin: .7rem 0 .2rem; padding-top: .6rem; border-top: 1px dashed var(--zrp-border); }
+.zrp-blocks .zrp-help { flex: 1 1 100%; margin: 0 !important; }
+.zrp-send { margin-top: .7rem; padding-top: .7rem; border-top: 1px solid var(--zrp-border); display: grid; gap: .5rem; }
+.zrp-preview { background: var(--zrp-band); border-radius: 10px; padding: .7rem .8rem; border-top: 0; }
+.zrp-preview ul { margin: 0 0 .4rem 1.1rem; padding: 0; }
+.zrp-sent { background: var(--zrp-ok-bg); border-radius: 10px; padding: .7rem .8rem; border-top: 0; }
+.zrp-sent p, .zrp-sent strong { color: var(--zrp-ok-fg) !important; }
+.zrp-modeseg { display: inline-flex; border: 2px solid var(--zrp-brand); border-radius: 10px; overflow: hidden; margin: 0 0 .4rem; }
+.zrp-app .zrp-modeseg button { min-height: 44px; padding: .4rem .9rem !important; border: 0 !important; border-radius: 0 !important; background: var(--zrp-surface) !important; color: var(--zrp-brand) !important; font-weight: 700 !important; cursor: pointer; box-shadow: none !important; }
+.zrp-app .zrp-modeseg button[aria-pressed="true"] { background: var(--zrp-brand) !important; color: var(--zrp-on-brand) !important; }
+.zrp-drawing { cursor: crosshair; outline: 3px solid #F2812A; outline-offset: -3px; }
+.zrp-app .zdz-loading-spinner { display: inline-block; width: 1em; height: 1em; vertical-align: -2px; border: 2px solid var(--zrp-border); border-top-color: var(--zrp-brand); border-radius: 50%; animation: zrp-spin .8s linear infinite; }
+@keyframes zrp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .zrp-app .zdz-loading-spinner { animation: none; } }

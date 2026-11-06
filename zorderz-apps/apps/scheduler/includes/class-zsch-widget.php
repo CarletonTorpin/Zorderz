@@ -293,6 +293,17 @@ class ZSCH_Widget {
 								</select>
 							</label>
 						</div>
+						<?php /* Repeats: the options are rebuilt in the browser from the chosen
+						  * START date, and each option's value is the RRULE itself, so what
+						  * the browser sends is exactly what the server validates. A rule
+						  * none of the presets match is shown as "Custom" and preserved. */ ?>
+						<label class="zsch-w-field">
+							<span>Repeats</span>
+							<select id="zsch-f-repeat">
+								<option value="">Does not repeat</option>
+							</select>
+							<p class="zsch-w-hint" id="zsch-f-repeat-note" hidden></p>
+						</label>
 						<label class="zsch-w-field">
 							<span>Notes</span>
 							<textarea id="zsch-f-body" rows="2" placeholder="Optional details"></textarea>

@@ -8,7 +8,7 @@
  *   configures it, the roster resolves through ZDZ_Party, product vocabulary binds through
  *   a filter with a neutral fallback, and the outbound email voice is a neutral default.
  *   Consumes Business Profile, Party, Core settings and the theme geocoder.
- * Version:     2.8.0
+ * Version:     2.11.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -32,31 +32,11 @@
  *   - Mappings     : CRM pipeline/stage/tag/source names resolve through `zl_crm_*`
  *                    filters (tenant Mappings), never hardcoded product/pipeline strings.
  *   - Voice        : the check-in email voice binds through `zl_email_voice`; Core ships a
- *                    neutral default (the statistically-derived house voice is private).
+ *                    neutral default (a business's own voice comes from its pack).
  *
  * SAFETY FLOOR: lead scoring carries no trade-season assumption by default, and the
  * name-based gender demographic classifier is DISABLED by default (ethics/product review —
  * see zl_gender_demographic_enabled).
- *
- * v2.6.0 (interop L3 — shared Nutshell credentials). ZL_Nutshell now sources its
- *   Nutshell email/API-key from the theme's shared ZDZ_Core_Settings when not
- *   explicitly passed (the SAME single source the shared ZDZ_Core_Nutshell uses),
- *   so ZL no longer keeps an independent credential copy that could drift or
- *   revoke a sibling's token (CONTRACT §1.2). Explicitly-passed creds still win,
- *   so existing callers are unaffected; the constructor params now default to ''
- *   (also making the documented no-arg construction safe). The Nutshell transport
- *   (discovery + descriptive exceptions) is unchanged — this only unifies WHERE
- *   the credential comes from. The bridge already registers lead.lookup/find/create
- *   via zdz_register_capabilities (v2.5.1).
- *
- * v2.5.1: No nested scrolling at ANY width (widget.css only; pairs with theme
- *   v2.25.0). The plugin already eliminated internal scroll containers, but
- *   only under @media (max-width:480/768px) — on desktop the lead lists / panel
- *   bodies / "All Leads" still trapped a scrollbar. Those caps are now lifted at
- *   every width, so the widget grows to its natural height and the dashboard
- *   page scrolls as one document; "All Leads" expands in-flow and grows the
- *   widget downward. Only the transient build/progress console keeps an inner
- *   scroll (it's a live log, not dashboard content).
  *
  * ============================================================================
  * PROGRAMMER NOTES & ARCHITECTURE OVERVIEW
@@ -65,7 +45,7 @@
  * and loads all class files.
  * 
  * MODEL:
- * Leads are generated for the tenant's own salespeople. Each salesperson owns one or
+ * Leads are generated for the business's own salespeople. Each salesperson owns one or
  * more territory codes; a territory is a set of postal codes (admin-configured, empty by
  * default). Ownership resolves through ZDZ_Party — there is no built-in roster.
  *
@@ -84,65 +64,12 @@
  * 5. AI refine (Rewrite descriptions to <101 chars for Nutshell limits)
  * 6. Create Nutshell (Creates Contacts, Leads, Notes)
  * 7. Finalize (AI batch summary, mark complete)
- * v1.5.0 — Full-parity inline widget, permission system (role + username gating).
- * v2.3.0 — Orchestrator interop (L1 read bridge). Adds ZL_ZANA_Bridge so the
- *          cross-app operator bot (the assistant) can look up a person's
- *          leads/pipeline status and find leads by filter, server-side, with
- *          tier/kiosk redaction enforced in the bridge (never by the model).
- *          Read-only; conforms to ORCHESTRATOR-INTEROP-CONTRACT-v1.md. Verbs are
- *          shaped as future zdz_register_capabilities callbacks and registered
- *          additively below (harmless until the Stage-1 resolver lands). See the
- *          bridge class header and INTEROP-ZL-sales-leads-v1.md for the full map.
- * v2.3.1 — Fix: check-in email body lost its line breaks in the mail client. The
- *          mailto: body is built with blank lines between sentences (the house
- *          voice's one-thought-per-line shape), but a lone LF (%0A) is dropped by
- *          many mail clients (incl. iOS/macOS Mail), collapsing the email into one
- *          run-on block. Now normalized to CRLF before encoding (widget.js). Copy
- *          unchanged — transport-encoding fix only.
- * v2.3.2 — Email BODY brought fully on-voice. The v2.3.x line had carried the OLD
- *          check-in body (throat-clearing openers "I was thinking about you" / "You
- *          crossed my mind this week", run-on middles, filler closers "let me know
- *          if there's anything I can do"). Ported the house-voice body from the
- *          parallel v2.2.2 work: bare-fact openers (no narrated intent — "our
- *          actions communicate our desires"), one substantive offer line naming a
- *          concrete deliverable (on-site look + same-day price), and NO closing
- *          filler line. Added the `installedThing` grammar normalizer so every
- *          humanizeProduct form reads correctly (verified: 162 opener×time×product
- *          combos, 0 issues). Intentional departures documented in-code: no ask
- *          (RULE 6) + name+phone signature (RULE 8) — do not "fix" back. The v2.3.1
- *          mailto CRLF fix and v2.3.0 orchestrator bridge are preserved; subject
- *          lines remain the on-voice v2.2.1 set.
- * v2.4.0 — Per-user lead assignment (Phase 1 of the per-user-leads program). Adds an
- *          explicit, authoritative per-lead owner (assigned_user_id/assigned_at/assigned_by
- *          on wp_zl_leads) so an app USER — not a fuzzy code — owns a lead, as the
- *          platform's own checkable data usable with NO CRM account. New ZL_Lead_Assignment:
- *          explicit assign()/unassign (admin/operator only, audited), a hardened code→user
- *          resolver (exact-meta first, fuzzy only as a backfill seed), an ownership GATE
- *          (current_user_can_act_on_lead — a salesperson may act ONLY on leads assigned to
- *          them; kiosk denied), and assigned-count helpers for the dashboard tile. The
- *          contact-status handler now enforces that gate (closes the prior "any app user
- *          could act on any lead" gap). Idempotent migration backfills ownership from each
- *          lead's batch salesperson code; unresolved rows stay NULL (admin-only). New AJAX:
- *          zl_assign_leads, zl_get_assignable_users, zl_my_leads_count. Nutshell stays
- *          DECOUPLED — assignment is app-owned; the CRM is enrichment only. (Dashboard tile +
- *          rep-mode widget = Phase 2; WP↔Nutshell user mapping = Phase 3; rigorous
- *          stage-advance engine = Phase 4. See ZL-PER-USER-LEADS-AND-PIPELINE-PLAN-v1.md.)
- * v2.5.0 — Salesperson dashboard tile + rep-mode widget (Phase 2). The plugin SIDE:
- *          (a) ZL_Dashboard_Tile registers a "N leads to contact (M new today)" item
- *          into the theme's unified zdz_dashboard_action_items feed — server-authoritative,
- *          cached in a short transient with a safe-zero fallback, kiosk-excluded, and
- *          cache-busted on assign + status-change so counts stay truthful. (b) Rep mode in
- *          widget.js: when the server marks the user a rep (zlWidgetData.isRepMode), the
- *          widget hides the generate/batch machinery and shows ONLY their assigned leads,
- *          wires the server-rendered "new leads today" banner, honors the dashboard tile's
- *          { view:'my-leads' } launch option (via zdz_app_launch detail.options), and
- *          refreshes counts after each action through a single rep-mode branch in
- *          reloadBatchLeads. (c) New server handler ajax_my_leads returns the signed-in
- *          rep's ASSIGNED leads — hard-scoped to self (admins may view a rep's queue),
- *          permission-scrubbed, actionable-first ordering. The frontend tile itself lives
- *          in the theme (v2.21.3): renderLeadsTile() + #leads-tile + .leads-tile CSS,
- *          deep-linking here. Still Nutshell-DECOUPLED end to end. (Phase 3 = WP↔Nutshell
- *          user mapping; Phase 4 = stage-advance engine.)
+ *
+ * ASSIGNMENT: each lead has an explicit owner (assigned_user_id) — an app user, not a
+ * fuzzy code. ZL_Lead_Assignment assigns (admin/operator only, audited) and gates action
+ * (a salesperson acts ONLY on leads assigned to them; kiosk denied). Rep mode shows a
+ * salesperson only their assigned leads; ZL_Dashboard_Tile feeds the dashboard's
+ * "N leads to contact" item. The orchestrator reads leads through ZL_ZANA_Bridge.
  *
  * DATABASE SCHEMA (Created in zl_activate):
  * 1. wp_zl_batches: Tracks generation jobs and their settings/filters.
@@ -156,17 +83,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants for versioning and path resolution
-// v2.8.0 (Wave D) — recover-a-failed-lead (duplicate-safe, CRM-only, read-only resolve)
+// v2.8.0 — recover-a-failed-lead (duplicate-safe, CRM-only, read-only resolve)
 //   + leads legibility: "no matches is a result" and per-batch rejection accounting so
 //   the funnel balances (matched + Σ rejections == scanned). Legibility only — NO count
 //   moves, no new money/count authority; territory names in messages come from config.
-define( 'ZL_VERSION', '2.8.0' );
+define( 'ZL_VERSION', '2.11.0' );
 define( 'ZL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 // Transient TTL for inter-step state (customers, candidates, options, etc.).
-// 4 hours — enrichment of 9,000+ customers at ~6s per 10 can take 90+ minutes,
-// plus fetch time (4-5 min) and slow-chunk retries can stretch the total runtime.
+// 4 hours — enriching several thousand customers at ~6s per 10 can take over an
+// hour, plus fetch time and slow-chunk retries can stretch the total runtime.
 define( 'ZL_TRANSIENT_TTL', 14400 );
 
 /**
@@ -320,7 +247,7 @@ function zl_log_disposition( string $disposition, array $context = array() ): vo
  * Outbound check-in email voice (Voice binding).
  *
  * Core ships a NEUTRAL, minimal default — plain, provider-agnostic, with no trade nouns and
- * no house-voice styling. The statistically-derived company house voice is private and is
+ * no house-voice styling. A business's own house voice comes from its pack and is
  * NOT shipped; a tenant supplies its own by returning a populated structure from the
  * `zl_email_voice` filter. Tokens: {name} {product} {time} {signName} {phone}.
  *
@@ -760,7 +687,7 @@ function zl_maybe_upgrade() {
         }
     }
 
-    // v2.4.0 migration — Per-user lead assignment (Phase 1).
+    // v2.4.0 migration — per-user lead assignment.
     // The new assigned_user_id/assigned_at/assigned_by columns were added by the
     // dbDelta above. Here we BACKFILL ownership for existing rows by resolving
     // each lead's batch salesperson CODE (zl_batches.assigned_to, e.g. "NW")
@@ -821,10 +748,15 @@ function zl_load_includes() {
         ZL_Dashboard_Tile::init();
     }
 
-    // v2.8.0 (Wave D / D-03): register the recover-a-failed-lead AJAX endpoint
+    // v2.8.0: register the recover-a-failed-lead AJAX endpoint
     // (wp_ajax_zl_retry_lead). Duplicate-safe, CRM-only, read-only contact resolve.
     if ( class_exists( 'ZL_Lead_Recovery' ) ) {
         ZL_Lead_Recovery::init();
+    }
+
+    // lead.counts, the home screen's lead figures through the registry.
+    if ( class_exists( 'ZL_Counts' ) ) {
+        ZL_Counts::init();
     }
 }
 
@@ -909,6 +841,14 @@ add_action( 'after_setup_theme', function() {
                     $user_role = 'sales';
                 }
 
+                // the Team leads panel, moved from the Estimate Creator. Same audience as its old tab
+                // (ZEST_Dashboard::lead_queue_gate): admin tier, subject to the theme's view_others_data. Shown only
+                // when the Estimate Creator is active, since its endpoints do the work.
+                $show_team_leads = $is_admin_user && class_exists( 'ZEST_Dashboard' )
+                    && has_action( 'wp_ajax_zest_list_assigned_leads' ) && has_action( 'wp_ajax_zest_list_ns_leads' )
+                    && ( ! class_exists( 'ZDZ_Data_Permissions' )
+                        || ZDZ_Data_Permissions::can( (int) $current_user->ID, 'view_others_data' ) );
+
                 // v2.0.0: Resolve current user's salesperson code for auto-assignment
                 $resolved_sp_code = '';
                 $territory_zips   = array();
@@ -952,17 +892,17 @@ add_action( 'after_setup_theme', function() {
 
                 // Outbound email voice (Voice binding) + product humanization map (Item
                 // Engine binding). Core ships a NEUTRAL default voice and an EMPTY product
-                // map (the statistically-derived house voice is private). A tenant overrides
+                // map (a business's own voice comes from its pack). A tenant overrides
                 // via the zl_email_voice / zl_product_humanize_map filters.
                 $email_voice   = zl_email_voice();
                 $product_human = (array) apply_filters( 'zl_product_humanize_map', array() );
                 // Name-based gender demographic classifier is OFF by default (ethics review).
                 $gender_demographic = zl_gender_demographic_enabled();
 
-                // v2.5.0 — Rep mode + assigned-lead counts (Phase 2).
+                // v2.5.0 — Rep mode + assigned-lead counts.
                 // Rep mode = a salesperson who sees ONLY their assigned leads and
                 // NOT the generate controls. Determined server-side (authoritative).
-                // Counts come from the Phase-1 assignment data, rendered into the
+                // Counts come from the lead-assignment data, rendered into the
                 // banner HTML below so it appears INSTANTLY with no layout shift
                 // (no fetch-then-pop). The numbers also ride in zlWidgetData so the
                 // JS can refresh them after the rep acts on a lead.
@@ -999,6 +939,12 @@ add_action( 'after_setup_theme', function() {
                     'isRepMode'      => (bool) $is_rep_mode,
                     'myLeadsOnly'    => (bool) $is_rep_mode, // reps see only their leads
                     'myLeadCounts'   => $lead_counts,
+                    // the Estimate Creator's nonce, only for someone shown the Team leads panel.
+                    'teamLeads'      => $show_team_leads ? array(
+                        'nonce'    => wp_create_nonce( 'zest_nonce' ),
+                        'currency' => class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency', 'USD' ) : 'USD',
+                        'locale'   => str_replace( '_', '-', (string) get_locale() ),
+                    ) : null,
                 ] );
 
                 ob_start();
@@ -1184,6 +1130,31 @@ add_action( 'after_setup_theme', function() {
                         </div>
                     </div>
 
+                    <?php if ( $show_team_leads ) : ?>
+                    <!-- ═══ PANEL 3: TEAM LEADS (the work runs in the Estimate Creator) ═══ -->
+                    <div class="zl-w-panel collapsed" id="zl-panel-team">
+                        <div class="zl-w-panel-header" id="zl-panel-team-header">
+                            <span class="zl-w-panel-title">Team leads</span>
+                            <span class="zl-w-panel-toggle">▼</span>
+                        </div>
+                        <div class="zl-w-panel-body" id="zl-panel-team-body">
+                            <div class="zl-tl-modebar" role="group" aria-label="Which leads">
+                                <button type="button" class="zl-tl-mode zl-tl-mode-active" data-mode="team" aria-pressed="true">By salesperson</button>
+                                <button type="button" class="zl-tl-mode" data-mode="ns" aria-pressed="false">Nutshell queue</button>
+                            </div>
+                            <div class="zl-tl-head">
+                                <div class="zl-tl-title" id="zl-tl-title">Assigned leads by salesperson</div>
+                                <div class="zl-tl-controls">
+                                    <select id="zl-tl-sp" class="zl-tl-select" aria-label="Salesperson" style="display:none;"><option value="">All salespeople</option></select>
+                                    <label class="zl-tl-toggle" id="zl-tl-showlinked-wrap" style="display:none;"><input type="checkbox" id="zl-tl-showlinked"> Show linked</label>
+                                    <button type="button" id="zl-tl-refresh" class="zl-tl-refresh" title="Refresh" aria-label="Refresh">↻</button>
+                                </div>
+                            </div>
+                            <div id="zl-tl-list" class="zl-tl-list" aria-live="polite"></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
                     <!-- Full Dashboard Link (admin only) -->
                     <?php if ( $is_admin_user ) : ?>
                     <a id="zl-admin-link" href="<?php echo esc_url( admin_url( 'admin.php?page=zl-dashboard' ) ); ?>"
@@ -1239,23 +1210,16 @@ add_action( 'after_setup_theme', function() {
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * v2.3.0 — Capability registry registration (registry-ready; additive)
+ * Capability registry registration
  * ─────────────────────────────────────────────────────────────────────────────
- * Per ORCHESTRATOR-INTEROP-CONTRACT-v1.md §2.3 / §6 and the staging plan in
- * INTEROP-LAYER-ARCHITECTURE-v1.md §7 (Stage 1), each app declares its verbs via
- * the `zdz_register_capabilities` filter. The Stage-1 resolver
- * (`ZDZ_Capabilities::invoke`) will then enforce tier/kiosk/side_effect centrally
- * and call these same bridge methods unchanged.
+ * Each app declares its verbs on the `zdz_register_capabilities` filter. The
+ * resolver (`ZDZ_Capabilities::invoke`) enforces tier/kiosk/side_effect centrally
+ * and calls these same bridge methods. The security posture is declared here
+ * (kiosk + side_effect) so the central gate is correct.
  *
- * This registration is intentionally SAFE TO SHIP NOW: until the resolver exists,
- * the filter simply adds rows nobody reads. When the resolver lands, ZL is
- * already L4-native with zero further code. We declare the security posture
- * honestly here (kiosk + side_effect) so the central gate is correct from day one.
- *
- * NOTE: the orchestrator HOST side — the `[ZL_LOOKUP]` marker handler in Analytics's
- * engine and the bot's two-signal intent rule — is owned by the Analytics maintainer
- * (CONTRACT §2.2). It is documented as a coordination hand-off in
- * INTEROP-ZL-sales-leads-v1.md; this plugin ships everything that belongs to ZL.
+ * The orchestrator HOST side — the `[ZL_LOOKUP]` marker handler in the Analytics
+ * engine and the assistant's two-signal intent rule — belongs to the Analytics app;
+ * this app ships everything that belongs to Leads.
  */
 add_filter( 'zdz_register_capabilities', function( $caps ) {
     if ( ! class_exists( 'ZL_ZANA_Bridge' ) ) {
@@ -1327,6 +1291,11 @@ add_filter( 'zdz_rename_map', function ( $map ) {
         'tsl_fb_client_secret'           => 'zl_fb_client_secret',
         'tsl_fb_account_id'              => 'zl_fb_account_id',
         'tsl_assignment_backfill_pending' => 'zl_assignment_backfill_pending',
+        // The CRM login and the Ai key an earlier surveys app kept, which this app still reads after the
+        // platform's own credentials and its own copies (ZL_Admin::get_shared_option / decrypt_shared).
+        'ts_surveys_ns_email'            => 'zdz_surveys_ns_email',
+        'ts_surveys_ns_api_key'          => 'zdz_surveys_ns_api_key',
+        'ts_surveys_poe_api_key'         => 'zdz_surveys_poe_api_key',
     ) );
     $map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
         'tsl_salesperson_code' => 'zl_salesperson_code',
@@ -1336,7 +1305,34 @@ add_filter( 'zdz_rename_map', function ( $map ) {
     ) );
     $map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array(
         'ts-sales-leads' => 'leads',
+        'lead-generator' => 'leads',
         'leads' => 'leads',
     ) );
     return $map;
 } );
+
+
+/*
+ * this app's main actions, counted in the theme's Usage view (wp-admin -> User Management ->
+ * Usage, "What people do inside the apps"). Each is recorded on the server where the action succeeded, never on a
+ * click that failed, through ZDZ_Usage::record(), which applies the
+ * usage-records consent (ZDZ_Consent::may_record), keeps no IP and stores the item's number only, never a name.
+ */
+add_filter( 'zdz_register_usage_actions', function ( $a ) {
+	$a['leads'] = array(
+		'leads_generated' => 'Generated a lead batch',
+		'lead_contacted' => 'Contacted a lead',
+		'lead_forwarded' => 'Forwarded a lead',
+		'forward_completed' => 'Completed a forwarded task',
+		'leads_assigned' => 'Assigned leads',
+	);
+	return $a;
+} );
+if ( ! function_exists( 'zl_usage' ) ) {
+	/** Record one of this app's actions; $ref a number (the item's id) or 0. Nothing at all without the usage service. */
+	function zl_usage( $key, $ref = 0, $opts = array() ) {
+		if ( class_exists( 'ZDZ_Usage' ) && method_exists( 'ZDZ_Usage', 'record' ) ) {
+			ZDZ_Usage::record( 'leads', (string) $key, $ref, (array) $opts );
+		}
+	}
+}

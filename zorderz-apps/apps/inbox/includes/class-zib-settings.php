@@ -9,7 +9,7 @@
  * the posture ZSCH_Settings uses for `zsch_ms_delegated_secret`.
  *
  * Single-tenant by configuration: only the configured tenant's mailboxes
- * complete the flow. `tenant_id` is [IDENTITY] / BID-7 Connection config — it
+ * complete the flow. `tenant_id` is [IDENTITY] Connection config — it
  * lives in an option, never in code.
  *
  * Feature flag `zib_enabled` is default 'no': with it down every surface
@@ -31,7 +31,7 @@ class ZIB_Settings {
 	const OPT_FLAG    = 'zib_enabled';          // 'yes' | 'no' (default no) — connect feature
 	const OPT_INGEST  = 'zib_ingest_enabled';   // 'yes' | 'no' (default no) — the dark ingestion switch
 	const OPT_ENRICH  = 'zib_enrich_enabled';   // 'yes' | 'no' (default no) — the dark enrichment switch (P6a)
-	const OPT_DOMAINS = 'zib_internal_domains'; // comma/space list; [IDENTITY]/BID-6
+	const OPT_DOMAINS = 'zib_internal_domains'; // comma/space list; [IDENTITY]
 	const OPT_WRITE   = 'zib_write_enabled';    // 'yes' | 'no' (default no) — allow human-confirmed send + triage
 
 	/**
@@ -95,7 +95,7 @@ class ZIB_Settings {
 	}
 
 	/**
-	 * The internal ("employee") email domains — [IDENTITY] / BID-6. Read from
+	 * The internal ("employee") email domains — [IDENTITY]. Read from
 	 * an option, never hardcoded. Ships EMPTY: when the option is unset, this
 	 * falls through to Identity config / the Business Profile (the tenant's
 	 * primary email domain, else its app domain) instead of any built-in

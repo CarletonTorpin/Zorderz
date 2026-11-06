@@ -2,7 +2,7 @@
 /**
  * Module: Zorderz — Inbox
  * Description: Per-user mailbox connect + assistant for the Zorderz dashboard; dark by default.
- * Version:     0.20.0
+ * Version:     0.23.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -48,7 +48,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIB_VERSION', '0.20.0' );
+define( 'ZIB_VERSION', '0.23.0' );
 define( 'ZIB_PLUGIN_FILE', __FILE__ );
 define( 'ZIB_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIB_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -61,7 +61,7 @@ define( 'ZIB_APP_ID', 'inbox' );
 //
 // Unlike the Scheduler — which admits the read-only kiosk for busy-only reads —
 // Inbox admits NOBODY who cannot write. A mailbox is personal; the shared
-// kiosk (zdz_general) is a device, not a person (INV-10). So zib_user_has_access
+// kiosk (zdz_general) is a device, not a person. So zib_user_has_access
 // itself excludes the kiosk, and there is no read-only path anywhere.
 
 /** Roles that may see the Email tile (non-kiosk). Filterable. */
@@ -81,6 +81,9 @@ function zib_user_is_read_only( $user_id = null ) {
 	$user_id = ( $user_id && (int) $user_id > 0 ) ? (int) $user_id : get_current_user_id();
 	if ( $user_id <= 0 ) {
 		return false;
+	}
+	if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $user_id ) ) {
+		return true;   // the shared device, by the platform's trait, whichever role carries it (no filter lifts this)
 	}
 	$u = get_userdata( $user_id );
 	if ( ! $u ) {
@@ -299,6 +302,12 @@ function zib_boot() {
 	if ( class_exists( 'ZIB_REST' ) ) {
 		ZIB_REST::register();
 	}
+	if ( class_exists( 'ZIB_Compose' ) ) {
+		ZIB_Compose::boot(); // the chat's send / plan / handoff filters for an email with Vault documents
+	}
+	if ( class_exists( 'ZIB_Supplier_Feed' ) ) {
+		ZIB_Supplier_Feed::boot(); // Stock's "Look in my email", and the internal domains Stock refuses
+	}
 	if ( class_exists( 'ZIB_Widget' ) ) {
 		ZIB_Widget::register();
 	}
@@ -353,8 +362,8 @@ function zib_boot() {
 		set_transient( 'zib_active_logged', 1, HOUR_IN_SECONDS );
 	}
 
-	// NOTE: if the theme exposes a hardcoded component-version beacon (some
-	// predecessor themes did, as a plain array with no plugin filter), add
+	// NOTE: if the theme exposes a hardcoded component-version beacon (a plain
+	// array with no app filter), add
 	//   'inbox' => 'ZIB_VERSION'
 	// to it. ZIB_VERSION is defined above.
 }

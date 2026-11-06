@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Zorderz Apps
  * Plugin URI:  https://zorderz.org
- * Description: The Zorderz app bundle - 20 apps (Camera, Media, Sketch Pad, Messaging, Quick-ID, Game, Invoices, Knowledge Base, Scheduler, Jobs, Surveys, Stock, Leads, Prep, Receipts, Estimates, Commission, Dot Plot, Email, and the Chat assistant). Requires the Zorderz theme, which provides the dashboard, roles, permissions, shared media store, Item Engine and Core services these apps register into.
- * Version:     1.10.2
+ * Description: The Zorderz app bundle - 30 apps (Camera, Media, Sketch Pad, Messaging, Quick-ID, Game, Invoices, Knowledge, Scheduler, Jobs, Surveys, Stock, Leads, Prep, Receipts, Estimates, Agreements, Commission, Chat, Dot Plot, Email, Mailbox Identity, Charts, Ai Workspace, Doorhangers, Route Planner, Hours, Security Monitor, Team Roles, Territories). Requires the Zorderz theme, which provides the dashboard, roles, permissions, shared media store, Item Engine and Core services these apps register into.
+ * Version:     2.0.0
  * Author:      Zorderz
  * Author URI:  https://zorderz.com
  * License:     GPL-2.0-or-later
@@ -11,6 +11,7 @@
  * Text Domain: zorderz
  * Requires at least: 6.0
  * Requires PHP: 8.0
+ * Update URI:  https://zorderz.org/
  *
  * ── What this is ──────────────────────────────────────────────────────
  * The apps ship as one plugin rather than many, so an install is two
@@ -50,7 +51,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * for the rare boot where get_file_data() is not yet available.
  */
 if ( ! defined( 'ZDZ_APPS_VERSION' ) ) {
-	$zdz_apps_ver = '1.10.2';
+	$zdz_apps_ver = '2.0.0';
 	if ( function_exists( 'get_file_data' ) ) {
 		$zdz_apps_hdr = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
 		if ( ! empty( $zdz_apps_hdr['Version'] ) ) {
@@ -117,7 +118,7 @@ function zdz_apps_manifest() {
 			'label'      => 'Camera',
 			'file'       => 'apps/camera/app.php',
 			'activate'   => null,
-			'deactivate' => null,
+			'deactivate' => 'zcam_deactivate',
 		],
 		'media' => [
 			'label'      => 'Media',
@@ -209,6 +210,12 @@ function zdz_apps_manifest() {
 			'activate'   => 'zest_activate',
 			'deactivate' => 'zest_deactivate',
 		],
+		'agreements' => [
+			'label'      => 'Agreements',
+			'file'       => 'apps/agreements/app.php',
+			'activate'   => 'zagr_activate',
+			'deactivate' => 'zagr_deactivate',
+		],
 		'commission' => [
 			'label'      => 'Commission',
 			'file'       => 'apps/commission/app.php',
@@ -238,6 +245,54 @@ function zdz_apps_manifest() {
 			'file'       => 'apps/mailbox-identity/app.php',
 			'activate'   => null,
 			'deactivate' => null,
+		],
+		'charts' => [
+			'label'      => 'Charts',
+			'file'       => 'apps/charts/app.php',
+			'activate'   => 'zch_activate',
+			'deactivate' => 'zch_deactivate',
+		],
+		'ai-workspace' => [
+			'label'      => 'Ai Workspace',
+			'file'       => 'apps/ai-workspace/app.php',
+			'activate'   => 'zaw_activate',
+			'deactivate' => 'zaw_deactivate',
+		],
+		'doorhangers' => [
+			'label'      => 'Doorhangers',
+			'file'       => 'apps/doorhangers/app.php',
+			'activate'   => 'zdh_activate',
+			'deactivate' => null,
+		],
+		'route-planner' => [
+			'label'      => 'Route Planner',
+			'file'       => 'apps/route-planner/app.php',
+			'activate'   => 'zrp_activate',
+			'deactivate' => 'zrp_deactivate',
+		],
+		'hours' => [
+			'label'      => 'Hours',
+			'file'       => 'apps/hours/app.php',
+			'activate'   => 'zhr_activate',
+			'deactivate' => 'zhr_deactivate',
+		],
+		'security-monitor' => [
+			'label'      => 'Security Monitor',
+			'file'       => 'apps/security-monitor/app.php',
+			'activate'   => 'zsm_activate',
+			'deactivate' => 'zsm_deactivate',
+		],
+		'team-roles' => [
+			'label'      => 'Team Roles',
+			'file'       => 'apps/team-roles/app.php',
+			'activate'   => 'zro_activate',
+			'deactivate' => 'zro_deactivate',
+		],
+		'territories' => [
+			'label'      => 'Territories',
+			'file'       => 'apps/territories/app.php',
+			'activate'   => 'zter_activate',
+			'deactivate' => 'zter_deactivate',
 		],
 	];
 }

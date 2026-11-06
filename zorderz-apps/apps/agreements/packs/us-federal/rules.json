@@ -1,0 +1,183 @@
+{
+  "business_days": {
+    "excluded_weekdays": [
+      7
+    ],
+    "observed": "also",
+    "holidays": [
+      {
+        "name": "New Year's Day",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "name": "Birthday of Martin Luther King, Jr.",
+        "month": 1,
+        "weekday": 1,
+        "nth": 3,
+        "from_year": 1986
+      },
+      {
+        "name": "Washington's Birthday",
+        "month": 2,
+        "weekday": 1,
+        "nth": 3
+      },
+      {
+        "name": "Memorial Day",
+        "month": 5,
+        "weekday": 1,
+        "nth": -1
+      },
+      {
+        "name": "Juneteenth National Independence Day",
+        "month": 6,
+        "day": 19,
+        "from_year": 2021
+      },
+      {
+        "name": "Independence Day",
+        "month": 7,
+        "day": 4
+      },
+      {
+        "name": "Labor Day",
+        "month": 9,
+        "weekday": 1,
+        "nth": 1
+      },
+      {
+        "name": "Columbus Day",
+        "month": 10,
+        "weekday": 1,
+        "nth": 2
+      },
+      {
+        "name": "Veterans Day",
+        "month": 11,
+        "day": 11
+      },
+      {
+        "name": "Thanksgiving Day",
+        "month": 11,
+        "weekday": 4,
+        "nth": 4
+      },
+      {
+        "name": "Christmas Day",
+        "month": 12,
+        "day": 25
+      }
+    ],
+    "note": "A business day is any calendar day except Sunday or any federal holiday. The federal holidays are those of 5 U.S.C. 6103(a). A holiday on a Saturday also takes the Friday before out of the count, and one on a Sunday the Monday after, which never gives an earlier deadline.",
+    "citation": "16 CFR 429.0(f); 5 U.S.C. 6103(a)",
+    "effective_from": "2015-03-13",
+    "last_checked": "2026-11-05"
+  },
+  "windows": [
+    {
+      "id": "standard",
+      "days": 3,
+      "word": "three",
+      "ordinal": "third",
+      "title": "Three-Day",
+      "when": {},
+      "citation": "16 CFR 429.1(a), (b), (c)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    }
+  ],
+  "questions": [],
+  "count_from": {
+    "value": "transaction",
+    "note": "The rule counts from the date of the transaction. The app counts from the later of that day and the day the buyer received the signed copy, so its deadline is never earlier than the rule's.",
+    "citation": "16 CFR 429.1(a), (c)",
+    "effective_from": "2015-03-13",
+    "last_checked": "2026-11-05"
+  },
+  "refund": {
+    "days": 10,
+    "unit": "business days",
+    "citation": "16 CFR 429.1(g)",
+    "effective_from": "2015-03-13",
+    "last_checked": "2026-11-05"
+  },
+  "deposit_cap": null,
+  "language": {
+    "rule": "The agreement, the statement and the Notice of Cancellation are in the same language as the oral sales presentation.",
+    "citation": "16 CFR 429.1(a), (b)",
+    "effective_from": "2015-03-13",
+    "last_checked": "2026-11-05"
+  },
+  "notices": {
+    "statement": {
+      "file": "statement.html",
+      "what": "The statement next to the buyer's signature, in bold of at least 10 points.",
+      "citation": "16 CFR 429.1(a)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    "cancellation_form": {
+      "file": "cancellation-form.html",
+      "what": "The completed Notice of Cancellation, given in duplicate and easily detachable.",
+      "citation": "16 CFR 429.1(b), (c)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    }
+  },
+  "replaces_notices": null,
+  "applies": {
+    "rule": "A sale of consumer goods or services of $25 or more made at the buyer's residence, or of $130 or more at another place that is not the seller's place of business, where the seller personally solicits it.",
+    "thresholds": {
+      "residence_cents": 2500,
+      "other_place_cents": 13000
+    },
+    "citation": "16 CFR 429.0(a)",
+    "effective_from": "2015-03-13",
+    "last_checked": "2026-11-05"
+  },
+  "exemptions": {
+    "rule": "Some sales are outside the rule: for example real property, insurance and securities; sales made entirely by mail or telephone; a bona fide emergency where the buyer waives the right in their own handwriting; and a sale after prior negotiations at the seller's fixed place of business. These are listed for your lawyer, never applied by the app on its own.",
+    "citation": "16 CFR 429.0(a)(1)-(6); 16 CFR 429.3",
+    "effective_from": "2015-03-13",
+    "last_checked": "2026-11-05"
+  },
+  "flags": [
+    {
+      "id": "oral_notice",
+      "text": "Tell the buyer out loud about the right to cancel at the time they sign.",
+      "citation": "16 CFR 429.1(e)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "no_waiver",
+      "text": "The agreement may not include a confession of judgment or any waiver of the buyer's rights under the rule, including the right to cancel.",
+      "citation": "16 CFR 429.1(d)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "after_cancel",
+      "text": "After a valid cancellation: within 10 business days refund every payment, return any trade-in, cancel any security interest, and tell the buyer whether you will pick up delivered goods.",
+      "citation": "16 CFR 429.1(g), (i)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "note_sale",
+      "text": "Don't sell or assign the buyer's note or other evidence of debt before midnight of the fifth business day after the sale.",
+      "citation": "16 CFR 429.1(h)",
+      "effective_from": "2015-03-13",
+      "last_checked": "2026-11-05"
+    },
+    {
+      "id": "home_security_interest",
+      "optional": true,
+      "text": "Only when you finance a sale and take a security interest in the buyer's principal dwelling: a separate right of rescission for 3 business days, with a notice to each owner, may apply.",
+      "citation": "12 CFR 1026.23",
+      "effective_from": "2011-12-30",
+      "last_checked": "2026-11-05"
+    }
+  ]
+}

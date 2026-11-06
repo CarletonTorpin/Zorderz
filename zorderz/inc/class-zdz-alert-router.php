@@ -9,12 +9,22 @@
  * Channel matrix is resolved by merging:
  *   1. Alert type defaults (set by the plugin registering the type)
  *   2. Admin channel overrides (zdz_alert_channel_config option)
- *   3. Per-user preferences (zdz_alert_prefs user meta) — future
+ *   3. Per-user preferences (zdz_alert_prefs user meta) — the bell's "Notices you get"
  *
  * Delivery channels:
- *   - in_app   : Writes to wp_zdz_notifications (badge + SPA inbox)
+ *   - in_app   : Writes to wp_zdz_notifications (the bell's badge and list)
  *   - email    : Sends via wp_mail() with branded template
+ *   - push     : Hands {title, body, url, tag} to the messaging app's quiet-hours seam,
+ *                apply_filters( 'zim_queue_notice', null, $uid, $payload ). It is a filter,
+ *                never a class of that app. With nobody answering it the channel is
+ *                "not used" and in_app still works. The push carries the TITLE ONLY plus
+ *                $source['push_body'] (default "Tap to open."), because it shows on a lock
+ *                screen: a type's title must never name a customer.
  *   - disabled : Logged but not delivered
+ *
+ * Never the shared device: send() refuses a recipient that is_kiosk_user() says is the
+ * shared device, whatever other roles it holds, and the REST routes answer it an empty
+ * list and 0.
  *
  * All plugins consume this via:
  *   ZDZ_Alert_Router::send( 'survey_note_forwarded', $recipient_id, $title, $message, $source )
@@ -40,7 +50,16 @@ class ZDZ_Alert_Router {
 	// ═══════════════════════════════════════════════════════════════════
 
 	/** All supported delivery channels. */
-	const CHANNELS = [ 'in_app', 'email' ];
+	const CHANNELS = [ 'in_app', 'email', 'push' ];
+
+	/**
+	 * Option an org pack writes: per role, extra channels for one category of alert, added to
+	 * what ROLE_CHANNEL_DEFAULTS allows. Shape: [ role => [ category => [ channel, ... ] ] ].
+	 * Example: [ 'zdz_tech' => [ 'jobs' => [ 'in_app', 'push' ] ] ] lets field staff get the bell
+	 * and push for job notices without opening every other kind to them.
+	 * Core ships none: a role gets exactly what its row below allows.
+	 */
+	const OPT_ROLE_CATEGORY_GRANTS = 'zdz_alert_role_category_grants';
 
 	/**
 	 * Role-based defaults: which channels are available per role.
@@ -52,29 +71,79 @@ class ZDZ_Alert_Router {
 	const ROLE_CHANNEL_DEFAULTS = [
 		'zdz_owner' => [
 			'in_app' => 'allow',
+			'push'   => 'allow',
 			'email'  => 'allow',
 		],
 		'zdz_admin' => [
 			'in_app' => 'allow',
+			'push'   => 'allow',
 			'email'  => 'allow',
 		],
 		'zdz_sales' => [
 			'in_app' => 'allow',
+			'push'   => 'allow',
 			'email'  => 'deny',
 		],
 		'zdz_operator' => [
 			'in_app' => 'allow',
+			'push'   => 'allow',
 			'email'  => 'deny',
 		],
 		'zdz_mfg' => [
 			'in_app' => 'deny',
 			'email'  => 'deny',
+			'push'   => 'deny',
 		],
 		'zdz_tech' => [
 			'in_app' => 'deny',
 			'email'  => 'deny',
+			'push'   => 'deny',
 		],
 	];
+
+	/**
+	 * Per role, the extra channels each alert category opens (see OPT_ROLE_CATEGORY_GRANTS).
+	 * Read from the option, then the `zdz_alert_role_category_grants` filter, then cleaned:
+	 * only the platform's own role slugs, category keys, and known channels survive, and the
+	 * shared device's role never gets a grant.
+	 *
+	 * @return array<string,array<string,string[]>>
+	 */
+	public static function role_category_grants(): array {
+		$raw = function_exists( 'get_option' ) ? get_option( self::OPT_ROLE_CATEGORY_GRANTS, [] ) : [];
+		$raw = is_array( $raw ) ? $raw : [];
+		if ( function_exists( 'apply_filters' ) ) {
+			$f   = apply_filters( 'zdz_alert_role_category_grants', $raw );
+			$raw = is_array( $f ) ? $f : $raw;
+		}
+		return self::clean_role_category_grants( $raw );
+	}
+
+	/**
+	 * Category grants as stored or as a pack writes them, cleaned by the one rule every reader uses:
+	 * only the platform's own role slugs with a channel row (never the shared device's role), category
+	 * keys, and known channels. Pure.
+	 *
+	 * @param mixed $raw [ role => [ category => [ channel, ... ] ] ]
+	 * @return array<string,array<string,string[]>>
+	 */
+	public static function clean_role_category_grants( $raw ): array {
+		$out = [];
+		foreach ( is_array( $raw ) ? $raw : [] as $role => $cats ) {
+			$role = (string) $role;
+			if ( ! isset( self::ROLE_CHANNEL_DEFAULTS[ $role ] ) || ! is_array( $cats ) ) {
+				continue;
+			}
+			foreach ( $cats as $cat => $chs ) {
+				$cat = sanitize_key( (string) $cat );
+				$chs = array_values( array_intersect( array_map( 'strval', (array) $chs ), self::CHANNELS ) );
+				if ( '' !== $cat && $chs ) {
+					$out[ $role ][ $cat ] = $chs;
+				}
+			}
+		}
+		return $out;
+	}
 
 	// ═══════════════════════════════════════════════════════════════════
 	//  Singleton
@@ -128,11 +197,11 @@ class ZDZ_Alert_Router {
 		// Let plugins register their types
 		do_action( 'zdz_register_alert_types', $this );
 
-		// Built-in types (Satisfaction Surveys v2.9.0)
+		// Built-in types (Satisfaction Surveys)
 		if ( ! isset( $this->types['survey_note_forwarded'] ) ) {
 			$this->register_type( 'survey_note_forwarded', [
 				'label'            => 'Survey Note Forwarded',
-				'description'      => 'A Nutshell note was forwarded from the Surveys widget.',
+				'description'      => 'A CRM note was forwarded from the Surveys widget.',
 				'default_channels' => [ 'in_app' ],
 				'source_plugin'    => 'zdz-satisfaction-surveys',
 				'category'         => 'surveys',
@@ -167,6 +236,25 @@ class ZDZ_Alert_Router {
 		return $this->types;
 	}
 
+	/**
+	 * The categories the registered alert types use, sorted; [] before the types are collected (they are, on init).
+	 * A category grant naming none of these opens nothing, so a pack's preview names it (a likely typo).
+	 *
+	 * @return string[]
+	 */
+	public static function categories_in_use(): array {
+		$out = [];
+		foreach ( null !== self::$instance ? self::$instance->types : [] as $t ) {
+			$c = sanitize_key( (string) ( $t['category'] ?? '' ) );
+			if ( '' !== $c ) {
+				$out[ $c ] = true;
+			}
+		}
+		$out = array_keys( $out );
+		sort( $out );
+		return $out;
+	}
+
 	// ═══════════════════════════════════════════════════════════════════
 	//  Channel Configuration (3-Tier Resolution)
 	// ═══════════════════════════════════════════════════════════════════
@@ -181,11 +269,12 @@ class ZDZ_Alert_Router {
 	 *
 	 * Then filtered by role channel eligibility (ROLE_CHANNEL_DEFAULTS).
 	 *
-	 * @param string $type    Alert type key.
-	 * @param int    $user_id Recipient user ID.
+	 * @param string $type            Alert type key.
+	 * @param int    $user_id         Recipient user ID.
+	 * @param bool   $with_user_prefs False: as if the person had made no choices of their own.
 	 * @return string[] Enabled channels for this type+user.
 	 */
-	public function resolve_channels( string $type, int $user_id ): array {
+	public function resolve_channels( string $type, int $user_id, bool $with_user_prefs = true ): array {
 		// Step 1: Start with type defaults
 		$type_config = $this->types[ $type ] ?? null;
 		$channels = $type_config ? $type_config['default_channels'] : [ 'in_app' ];
@@ -196,8 +285,8 @@ class ZDZ_Alert_Router {
 			$channels = $admin_config[ $type ];
 		}
 
-		// Step 3: Apply per-user overrides (future — initially empty)
-		$user_prefs = get_user_meta( $user_id, 'zdz_alert_prefs', true );
+		// Step 3: Apply the person's own choices (the bell's "Notices you get")
+		$user_prefs = $with_user_prefs ? get_user_meta( $user_id, 'zdz_alert_prefs', true ) : [];
 		if ( is_array( $user_prefs ) && isset( $user_prefs[ $type ] ) && is_array( $user_prefs[ $type ] ) ) {
 			$channels = $user_prefs[ $type ];
 		}
@@ -218,6 +307,15 @@ class ZDZ_Alert_Router {
 			// WP administrator gets zdz_admin defaults
 			if ( 'administrator' === $role ) {
 				$role_channels = self::ROLE_CHANNEL_DEFAULTS['zdz_admin'];
+			}
+
+			// A category grant from the org's settings. Only for someone who really holds that
+			// role: an account with no platform role falls back to zdz_tech's row above and must
+			// not pick up that role's grants with it.
+			$category = (string) ( $type_config['category'] ?? '' );
+			$grants   = in_array( $role, (array) $user->roles, true ) ? ( self::role_category_grants()[ $role ][ $category ] ?? [] ) : [];
+			foreach ( (array) $grants as $granted ) {
+				$role_channels[ $granted ] = 'allow';
 			}
 
 			// Remove channels the role doesn't allow
@@ -281,6 +379,12 @@ class ZDZ_Alert_Router {
 	public static function send( string $type, int $recipient_id, string $title, string $message, array $source = [] ): array {
 		$instance = self::get_instance();
 
+		// Never the shared device, whatever other roles the account holds.
+		if ( self::is_kiosk_user( $recipient_id ) ) {
+			error_log( sprintf( 'Zorderz Alert Router: Alert [%s] refused for user %d - the shared device never gets alerts.', $type, $recipient_id ) );
+			return [];
+		}
+
 		// Resolve which channels to use for this type + user combo
 		$channels = $instance->resolve_channels( $type, $recipient_id );
 
@@ -307,6 +411,11 @@ class ZDZ_Alert_Router {
 			if ( $success ) $channels_used[] = 'email';
 		}
 
+		if ( in_array( 'push', $channels, true ) ) {
+			$success = $instance->deliver_push( $recipient_id, $type, $title, $source );
+			if ( $success ) $channels_used[] = 'push';
+		}
+
 		// ── Audit log ──
 		if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
 			ZDZ_Admin_Dashboard::log_action(
@@ -323,6 +432,88 @@ class ZDZ_Alert_Router {
 		}
 
 		return $channels_used;
+	}
+
+	/** Is this account the shared device? Never a person. */
+	public static function is_kiosk_user( int $user_id ): bool {
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		if ( class_exists( 'ZDZ_Hierarchy' ) && method_exists( 'ZDZ_Hierarchy', 'is_kiosk' ) && ZDZ_Hierarchy::is_kiosk( $user_id ) ) {
+			return true;
+		}
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $user_id ) ) {
+			return true;
+		}
+		$u = get_userdata( $user_id );
+		return $u && in_array( 'zdz_general', (array) $u->roles, true );
+	}
+
+	/**
+	 * A link on this site, or ''. The bell and the push open only same-site links: a path
+	 * ("/x", never "//x"), or an absolute URL whose scheme, host and port are this site's
+	 * (an explicit default port counts as none). No credentials, backslashes, spaces or
+	 * control characters; at most 500 characters.
+	 */
+	public static function same_site_url( $url ): string {
+		$url = is_string( $url ) ? trim( $url ) : '';
+		if ( '' === $url || strlen( $url ) > 500 || false !== strpos( $url, '\\' ) || preg_match( '/[\x00-\x20\x7F]/', $url ) ) {
+			return '';
+		}
+		$home = wp_parse_url( home_url( '/' ) );
+		if ( '/' === $url[0] ) {
+			return ( isset( $url[1] ) && '/' === $url[1] ) ? '' : $url;
+		}
+		$u = wp_parse_url( $url );
+		if ( ! is_array( $u ) || ! is_array( $home ) || isset( $u['user'] ) || isset( $u['pass'] ) ) {
+			return '';
+		}
+		$scheme = strtolower( (string) ( $home['scheme'] ?? 'https' ) );
+		$dport  = 'http' === $scheme ? 80 : 443;
+		$same = strtolower( (string) ( $u['scheme'] ?? '' ) ) === $scheme
+			&& strtolower( (string) ( $u['host'] ?? '' ) ) === strtolower( (string) ( $home['host'] ?? '' ) )
+			&& (int) ( $u['port'] ?? $dport ) === (int) ( $home['port'] ?? $dport );
+		return $same ? $url : '';
+	}
+
+	// ═══════════════════════════════════════════════════════════════════
+	//  Channel: Push (through the messaging app's quiet-hours seam)
+	// ═══════════════════════════════════════════════════════════════════
+
+	/**
+	 * The push payload for one alert: the title and a short body only, never the message,
+	 * which may name a customer. Pure, so it can be checked without sending anything.
+	 *
+	 * @return array{title:string,body:string,url:string,tag:string}
+	 */
+	public static function push_payload( string $type, string $title, array $source ): array {
+		$cut  = function ( $s, $n ) { return function_exists( 'mb_substr' ) ? mb_substr( $s, 0, $n ) : substr( $s, 0, $n ); };
+		$scal = function ( $v ) { return is_scalar( $v ) ? (string) $v : ''; };   // never "Array"
+		$body = trim( $scal( $source['push_body'] ?? '' ) );
+		$url  = self::same_site_url( $source['url'] ?? '' );
+		$sid  = preg_replace( '/[^0-9A-Za-z_-]/', '', $scal( $source['source_id'] ?? '' ) );
+		return [
+			'title' => $cut( trim( $title ), 120 ),
+			'body'  => '' !== $body ? $cut( $body, 120 ) : __( 'Tap to open.', 'zorderz' ),
+			'url'   => '' !== $url ? $url : home_url( '/' ),
+			'tag'   => substr( 'zdz-alert-' . sanitize_key( $type ) . ( '' !== $sid ? '-' . $sid : '' ), 0, 64 ),
+		];
+	}
+
+	/**
+	 * Hand a push to the messaging app, held to the person's quiet hours. Nothing answered
+	 * the filter = "not used" (false), and in_app still works.
+	 */
+	private function deliver_push( int $user_id, string $type, string $title, array $source ): bool {
+		$r = apply_filters( 'zim_queue_notice', null, $user_id, self::push_payload( $type, $title, $source ) );
+		if ( null === $r ) {
+			return false;   // no seam: the messaging app is absent or does not queue notices
+		}
+		if ( is_wp_error( $r ) ) {
+			error_log( sprintf( 'Zorderz Alert Router: push [%s] for user %d not queued (%s).', $type, $user_id, $r->get_error_code() ) );
+			return false;
+		}
+		return (int) $r > 0;
 	}
 
 	// ═══════════════════════════════════════════════════════════════════
@@ -463,11 +654,13 @@ class ZDZ_Alert_Router {
 
 		// Build email content
 		$sender      = isset( $source['sender_id'] ) ? get_userdata( $source['sender_id'] ) : null;
-		$sender_name = $sender ? $sender->display_name : 'Zorderz';
+		$brand       = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::name() : get_bloginfo( 'name' );
+		$brand       = '' !== trim( (string) $brand ) ? (string) $brand : 'Zorderz';
+		$sender_name = $sender ? $sender->display_name : $brand;
 		$type_config = $this->types[ $type ] ?? [];
 		$type_label  = $type_config['label'] ?? $type;
 
-		$subject = sprintf( '[Zorderz] %s', $title );
+		$subject = sprintf( '[%s] %s', $brand, $title );
 
 		// Plain text email body (HTML can be added later)
 		$body  = sprintf( "Hi %s,\n\n", $user->display_name );
@@ -478,7 +671,7 @@ class ZDZ_Alert_Router {
 		if ( ! empty( $source['lead_name'] ) ) {
 			$body .= sprintf( "Lead: %s\n", $source['lead_name'] );
 		}
-		$body .= "\nLog in to Zorderz to take action.\n";
+		$body .= sprintf( "\nLog in to %s to take action.\n", $brand );
 		$body .= home_url( '/' ) . "\n";
 
 		$headers = [ 'Content-Type: text/plain; charset=UTF-8' ];
@@ -497,10 +690,10 @@ class ZDZ_Alert_Router {
 	// ═══════════════════════════════════════════════════════════════════
 
 	/**
-	 * Register REST API routes under ts/v1 namespace.
+	 * Register REST API routes under the platform namespace.
 	 */
 	public function register_routes(): void {
-		$ns = 'zorderz/v1';
+		$ns = ZDZ_REST_NS;
 
 		// ── User-facing: Notification inbox ──
 
@@ -525,6 +718,25 @@ class ZDZ_Alert_Router {
 			'methods'             => 'POST',
 			'callback'            => [ $this, 'rest_mark_read' ],
 			'permission_callback' => function() { return is_user_logged_in(); },
+		] );
+
+		// The bell's "Notices you get": one on/off per alert type this person can receive.
+		register_rest_route( $ns, '/notifications/prefs', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'rest_get_prefs' ],
+				'permission_callback' => function() { return is_user_logged_in(); },
+			],
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'rest_set_prefs' ],
+				'permission_callback' => function() { return is_user_logged_in() && ! self::is_kiosk_user( get_current_user_id() ); },
+				// Both required: a POST without "on" must never turn a type off.
+				'args'                => [
+					'type' => [ 'required' => true, 'type' => 'string' ],
+					'on'   => [ 'required' => true, 'type' => 'boolean' ],
+				],
+			],
 		] );
 
 		register_rest_route( $ns, '/notifications/read-all', [
@@ -558,11 +770,21 @@ class ZDZ_Alert_Router {
 
 	public function rest_get_notifications( \WP_REST_Request $request ): \WP_REST_Response {
 		$user_id = get_current_user_id();
+		if ( self::is_kiosk_user( $user_id ) ) {
+			return rest_ensure_response( [ 'success' => true, 'data' => [], 'unread_count' => 0 ] );
+		}
 		$unread  = (bool) $request->get_param( 'unread' );
 		$limit   = min( (int) $request->get_param( 'limit' ), 100 );
 		$offset  = (int) $request->get_param( 'offset' );
 
 		$notifications = self::get_notifications( $user_id, $unread, $limit, $offset );
+		// The bell opens only same-site links: it gets the checked one, and the type's label.
+		$types = $this->get_types();
+		foreach ( $notifications as $i => $n ) {
+			$meta = json_decode( (string) ( $n['source_meta'] ?? '' ), true );
+			$notifications[ $i ]['link']       = self::same_site_url( is_array( $meta ) ? ( $meta['url'] ?? '' ) : '' );
+			$notifications[ $i ]['type_label'] = (string) ( $types[ $n['alert_type'] ?? '' ]['label'] ?? '' );
+		}
 		$unread_count  = self::get_unread_count( $user_id );
 
 		return rest_ensure_response( [
@@ -573,15 +795,84 @@ class ZDZ_Alert_Router {
 	}
 
 	public function rest_get_unread_count( \WP_REST_Request $request ): \WP_REST_Response {
+		$uid = get_current_user_id();
 		return rest_ensure_response( [
 			'success' => true,
-			'count'   => self::get_unread_count( get_current_user_id() ),
+			'count'   => self::is_kiosk_user( $uid ) ? 0 : self::get_unread_count( $uid ),
 		] );
+	}
+
+	/** The alert types this person can receive at all (before their own choices), each with on/off. */
+	public function prefs_for( int $user_id ): array {
+		$prefs = get_user_meta( $user_id, 'zdz_alert_prefs', true );
+		$prefs = is_array( $prefs ) ? $prefs : [];
+		$out   = [];
+		foreach ( $this->get_types() as $key => $t ) {
+			if ( ! $this->resolve_channels( $key, $user_id, false ) ) {
+				continue;   // a type this person can never get is not offered
+			}
+			$out[] = [
+				'type'     => $key,
+				'label'    => (string) ( $t['label'] ?? $key ),
+				'category' => (string) ( $t['category'] ?? '' ),
+				'on'       => ! ( isset( $prefs[ $key ] ) && is_array( $prefs[ $key ] ) && [] === $prefs[ $key ] ),
+			];
+		}
+		return $out;
+	}
+
+	public function rest_get_prefs( \WP_REST_Request $request ): \WP_REST_Response {
+		$uid = get_current_user_id();
+		return rest_ensure_response( [ 'success' => true, 'types' => self::is_kiosk_user( $uid ) ? [] : $this->prefs_for( $uid ) ] );
+	}
+
+	/**
+	 * The stored choices after turning one type off (no channel) or back on (the defaults).
+	 * Only known types and known channels survive, so a hand-edited meta value never widens
+	 * anything. Pure.
+	 */
+	public static function apply_pref( array $prefs, string $type, bool $on, array $known_types ): array {
+		if ( $on ) {
+			unset( $prefs[ $type ] );   // back to the defaults (the admin's and the type's)
+		} else {
+			$prefs[ $type ] = [];       // no channel for this type
+		}
+		$prefs = array_intersect_key( $prefs, array_flip( $known_types ) );
+		foreach ( $prefs as $k => $chs ) {
+			$prefs[ $k ] = array_values( array_intersect( (array) $chs, self::CHANNELS ) );
+		}
+		return $prefs;
+	}
+
+	/**
+	 * POST { type, on } - turn one alert type off or back on. Only types this person can
+	 * receive; never the shared device (the route's permission refuses it).
+	 */
+	public function rest_set_prefs( \WP_REST_Request $request ): \WP_REST_Response {
+		$uid  = get_current_user_id();
+		$tp   = $request->get_param( 'type' );
+		$type = is_scalar( $tp ) ? sanitize_key( (string) $tp ) : '';
+		$onp  = $request->get_param( 'on' );
+		if ( null === $onp || ! is_scalar( $onp ) ) {
+			return new \WP_REST_Response( [ 'success' => false, 'error' => 'missing_on' ], 400 );
+		}
+		$on      = rest_sanitize_boolean( $onp );
+		$offered = wp_list_pluck( $this->prefs_for( $uid ), 'type' );
+		if ( '' === $type || ! in_array( $type, $offered, true ) ) {
+			return new \WP_REST_Response( [ 'success' => false, 'error' => 'unknown_type' ], 400 );
+		}
+		$prefs = get_user_meta( $uid, 'zdz_alert_prefs', true );
+		$prefs = self::apply_pref( is_array( $prefs ) ? $prefs : [], $type, $on, array_keys( $this->get_types() ) );
+		update_user_meta( $uid, 'zdz_alert_prefs', $prefs );
+		return rest_ensure_response( [ 'success' => true, 'types' => $this->prefs_for( $uid ) ] );
 	}
 
 	public function rest_mark_read( \WP_REST_Request $request ): \WP_REST_Response {
 		$id      = (int) $request->get_param( 'id' );
 		$user_id = get_current_user_id();
+		if ( self::is_kiosk_user( $user_id ) ) {
+			return rest_ensure_response( [ 'success' => false, 'unread_count' => 0 ] );
+		}
 		$success = self::mark_read( $id, $user_id );
 
 		return rest_ensure_response( [
@@ -592,6 +883,9 @@ class ZDZ_Alert_Router {
 
 	public function rest_mark_all_read( \WP_REST_Request $request ): \WP_REST_Response {
 		$user_id = get_current_user_id();
+		if ( self::is_kiosk_user( $user_id ) ) {
+			return rest_ensure_response( [ 'success' => true, 'marked_count' => 0, 'unread_count' => 0 ] );
+		}
 		$count   = self::mark_all_read( $user_id );
 
 		return rest_ensure_response( [
@@ -624,6 +918,7 @@ class ZDZ_Alert_Router {
 			'success'           => true,
 			'config'            => $this->get_admin_config(),
 			'role_defaults'     => self::ROLE_CHANNEL_DEFAULTS,
+			'role_category_grants' => self::role_category_grants(),
 			'available_channels' => self::CHANNELS,
 		] );
 	}

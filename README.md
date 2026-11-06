@@ -17,7 +17,7 @@ The fastest path from a blank WordPress site to a working Zorderz:
 3. **Get your data in, one of two ways.**
    - *Have a Company Data bundle?* **Tools → Zorderz Data**, and import it. A whole business (catalog, roster, estimates, orders, chats, knowledge base, media, even the site title and timezone) lands ready to use, and you stay logged in through it. Run the dry run first to preview counts.
    - *Starting fresh?* **Zorderz → Business Profile** to name the business, then **Item Engine** for your catalog. Nothing is seeded; you add what is yours.
-4. **Reconnect your keys.** In wp-admin, open **Zorderz** (the Core settings page). Connection secrets (Poe, billing, CRM, calendar) are never carried in a bundle, by design, so re-enter them here; the dashboard's **Settings → App Authorizations** card shows what is connected. Then the Ai and billing-backed apps light up.
+4. **Reconnect your keys.** In wp-admin, open **Zorderz → Credentials**. Connection secrets (Ai, billing, CRM, calendar) are never carried in a bundle, by design, so re-enter them here; Ai stays off until **Zorderz → Ai usage → Setup** has models, prices and a budget; the dashboard's **Settings → App Authorizations** card shows what is connected. Then the Ai and billing-backed apps light up.
 
 That is the whole thing. The sections below explain what each piece is; [`docs/INSTALL-FOR-AI.md`](docs/INSTALL-FOR-AI.md) is the same procedure written for an autonomous agent.
 
@@ -35,14 +35,15 @@ Most business software wants to *be* your invoicing, your CRM, your calendar. Zo
 
 ---
 
-## How it's built: two artifacts
+## How it's built: two artifacts, plus an optional hub
 
 A release is two files. The theme carries a copy of the apps, so a **first install is a single upload**: activate the theme and it installs and activates the apps for you. The two files still exist separately, and their order still matters when you install or update them by hand:
 
 | Artifact | Zip | What it is |
 |---|---|---|
 | **Theme** | `zorderz-theme-<version>.zip` | The platform kernel and all Core services: the dashboard, roles, permissions, the shared media store, and the services below. This is the part that makes a WordPress site *be* an app. |
-| **Apps** | `zorderz-apps-<version>.zip` | The 20 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
+| **Apps** | `zorderz-apps-<version>.zip` | The 30 apps, bundled as one plugin. Each app lives in its own directory, keeps its own version and assets, and registers itself with the theme. |
+| **Charts hub** (optional) | `zorderz-hub-<version>.zip` | A small Python service for a separate computer the business controls. It keeps a de-identified copy of the business's numbers and public region data and answers the Charts app and Ai Workspace over sealed, signed messages. Never inside the theme or apps zips; see `hub/README.md`. |
 
 The theme is the platform; the plugin is the apps that plug into it. **The theme must be active first**: it defines the roles, the shared media store, the plugin registration API and the `zorderz/v1` REST namespace that every app builds on. Install the plugin first and the apps load but have nowhere to appear (you'll get a plain admin notice telling you so).
 
@@ -62,10 +63,16 @@ Everything below ships empty or neutral. A fresh install names no business anywh
 - **Model Registry**: configurable model slots. You decide which Ai model handles which task, and swap models without touching code.
 - **Compensation**: commission structures, piece rates and pay floors, as configuration. Never seeded, sampled or shipped with data.
 - **Document Conventions**: how a business writes and numbers its paperwork (reference-code formats, line ordering, notation), applied on output rather than baked into any engine.
+- **Credentials**: one screen for every service key (Ai gateway, Anthropic, CRM, billing, calendars, Microsoft 365, Stripe, Google Business Profile, the Charts hub). One key per service, sealed at rest, never printed back into a page, with undo and expiry dates.
+- **Ai router**: every Ai call goes through roles an administrator maps to models, with customer details coded before anything leaves the site, a zero-data-retention check, spend booked before the call, a monthly budget and a per-call ledger of numbers only. Nothing is sent until models, prices and a budget are set.
+- **Privacy**: a private-detail coder, a sealed vault for gate and door codes, Privacy View accounts that see only what is made safe for them, and usage records that follow each person's consent.
+- **Staging guard**: a copy of the live site holds e-mail, CRM and billing writes, Ai calls and hub calls, so testing never reaches a customer.
+- **Alerts and notifications**: the bell, per-role alert categories, phone notifications through the browser's own push service, and quiet hours.
+- **Price book and verbs**: prices on top of the Item Engine (costs for administrators only), and every app action registered as a verb with its permission tier, so the assistant asks before it writes.
 
 ---
 
-## The 20 apps
+## The 30 apps
 
 Bundled in `zorderz-apps-<version>.zip`. An app whose dependencies aren't present declines to register rather than failing, so a partial install degrades to fewer tiles, never a broken dashboard.
 
@@ -90,6 +97,16 @@ Bundled in `zorderz-apps-<version>.zip`. An app whose dependencies aren't presen
 | **Commission** | Compensation and commission calculation. Ships no pay data. |
 | **Chat** | The Ai assistant, gated by Answer Authority and grounded in the Business Profile, catalog, roster and rule set. |
 | **Dot Plot** | Plots work-item history from the Flow event log, behind a report-spec validator and an Answer-Authority entitlement gate. Renders whatever sources a business registers; ships with none. |
+| **Mailbox Identity** | Which mailbox and sender each person's mail goes out from. |
+| **Agreements** | The customer's online agreement: terms from an approved template, the payment schedule, the right to cancel with its real deadline, signing behind an e-mailed code, a signed PDF and change orders. Ships a national law pack (the default in the USA) and a California pack; not legal advice, and it starts in test mode. |
+| **Team Roles** | Who can sell, install or repair each catalog item. |
+| **Territories** | Who gets a new estimate or a won job, by zones and rules that run in shadow before they go live. An empty setup assigns nobody. |
+| **Hours** | Clock in and out, breaks, and time-sheet photos read as proposals a person confirms. |
+| **Doorhangers** | Plan and record door-hanger walks; no-soliciting addresses are always left out. |
+| **Route Planner** | Routes over door-hanger areas and the day's stops. |
+| **Charts** | Charts of the business's own numbers and its region, answered by the optional Charts hub (local mode without one). |
+| **Ai Workspace** | A longer Ai working session for an owner, through the Charts hub, with spend held before each step. |
+| **Security Monitor** | Update, version-drift and code checks, plus an optional vulnerability feed. |
 | **Inbox** | An email assistant and in-app mail client: connect your own mailbox (Microsoft 365) and it reads to surface and tag work-related mail. Read-only by default. An administrator can turn on sending and triage, after which a user can compose, reply, forward and file mail; every send is the user confirming the composer, never automatic. Off until you connect an account. |
 
 ---
@@ -139,7 +156,7 @@ Then fill the catalog (**Zorderz → Item Engine**), the roster (Party), and the
 
 ### 5. Connect your providers
 
-In wp-admin, open **Zorderz** (the Core settings page) and enter the Ai gateway key and the billing and CRM credentials there. Credentials live in one place and the apps read them from it. The dashboard's **Settings → App Authorizations** card shows what is connected, and lets an administrator save the company CRM credentials; per-user calendars connect from the Scheduler, and mailboxes from the Inbox.
+In wp-admin, open **Zorderz → Credentials** and enter the Ai key and the billing and CRM credentials there. Credentials live in one place, sealed at rest, and the apps read them from it. Then set models, prices and a monthly budget under **Zorderz → Ai usage → Setup**; nothing is sent to an Ai provider before that. The dashboard's **Settings → App Authorizations** card shows what is connected, and lets an administrator save the company CRM credentials; per-user calendars connect from the Scheduler, and mailboxes from the Inbox.
 
 ### Bring your own intelligence
 

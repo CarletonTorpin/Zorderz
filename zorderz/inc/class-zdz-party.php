@@ -9,12 +9,12 @@
  * email address — and NOTHING else gates them. In particular, selectability is
  * NOT filtered by whether the user happens to hold a given app's access grant.
  * That incidental-capability filter is exactly the bug this class exists to
- * kill: a real, registered, emailable user (the "Ron" case) was invisible in
+ * kill: a real, registered, emailable user (the unlisted-recipient case) was invisible in
  * an app's share/participant picker because an admin had never granted them
- * that app — so a transcript "shared with Ron" silently reached no one.
+ * that app — so a transcript shared with them silently reached no one.
  *
- * This is the first concrete shape of the Zorderz **Party** core service
- * (BID-2): who counts as a selectable party must not depend on an incidental
+ * This is the Zorderz **Party** core service:
+ * who counts as a selectable party must not depend on an incidental
  * grant. Consumers (a share picker, a Jobs assignee, a Surveys owner, future
  * @-mentions) READ this list instead of rolling their own get_users() /
  * capability filter.
@@ -23,12 +23,14 @@
  *   - PHP  : ZDZ_Party::selectable_people( $args )   (canonical)
  *   - Filter: apply_filters( 'zdz_selectable_people', $people, $args )
  *   - REST : GET /wp-json/zorderz/v1/party/people[?search=&exclude=1,2]
+ *            (signed in; never the shared device or a device in Demo Mode)
  *
  * Privacy: the returned rows carry id / name / initials / role only. Raw email
  * is the eligibility signal and stays server-side; a caller that must actually
  * email a party resolves the address itself (it already holds the user id).
- *
- * Contract: PARTY-ROSTER-CONTRACT-v1.md
+ * A search matches names only. Matching on e-mail is asked for with
+ * `search_email` and honoured for an administrator only: otherwise the list
+ * answered "whose address contains this?" one character at a time.
  *
  * @since   1.1.0
  * @package Zorderz
@@ -61,7 +63,9 @@ class ZDZ_Party {
 	 * @param array $args {
 	 *     @type int[]  $exclude      User ids to omit (e.g. the current user).
 	 *     @type bool   $include_self Include the current user. Default true.
-	 *     @type string $search       Optional case-insensitive name/email filter.
+	 *     @type string $search       Optional case-insensitive name filter.
+	 *     @type bool   $search_email Also match the e-mail address. Honoured for an administrator
+	 *                               (manage_options) only. Default false.
 	 * }
 	 * @return array[] List of rows: array{ id:int, name:string, initials:string, role:string }.
 	 */
@@ -72,8 +76,11 @@ class ZDZ_Party {
 				'exclude'      => array(),
 				'include_self' => true,
 				'search'       => '',
+				'search_email' => false,
 			)
 		);
+		$me       = (int) get_current_user_id();
+		$by_email = ! empty( $args['search_email'] ) && $me > 0 && user_can( $me, 'manage_options' );
 
 		$exclude = array_map( 'intval', (array) $args['exclude'] );
 		if ( empty( $args['include_self'] ) ) {
@@ -89,11 +96,8 @@ class ZDZ_Party {
 			if ( in_array( (int) $row['id'], $exclude, true ) ) {
 				continue;
 			}
-			if ( '' !== $search ) {
-				$hay = strtolower( $row['name'] . ' ' . $row['_email'] );
-				if ( false === strpos( $hay, $search ) ) {
-					continue;
-				}
+			if ( ! self::matches( $row, $search, $by_email ) ) {
+				continue;
 			}
 			// Drop the private _email before handing the row out.
 			unset( $row['_email'] );
@@ -112,6 +116,37 @@ class ZDZ_Party {
 		 * @param array   $args The resolved query args.
 		 */
 		return apply_filters( 'zdz_selectable_people', $out, $args );
+	}
+
+	/**
+	 * Does a row match a (lower-cased) search? Its name always; its e-mail only when $by_email. Empty search: yes.
+	 *
+	 * @param array $row a base-list row (name, _email)
+	 */
+	public static function matches( array $row, string $search, bool $by_email = false ): bool {
+		if ( '' === $search ) {
+			return true;
+		}
+		$hay = strtolower( (string) ( $row['name'] ?? '' ) );
+		if ( $by_email ) {
+			$hay .= ' ' . strtolower( (string) ( $row['_email'] ?? '' ) );
+		}
+		return false !== strpos( $hay, $search );
+	}
+
+	/** May this account read the people list over REST? Signed in; never the shared device or Demo Mode. */
+	public static function may_list( int $uid ): bool {
+		if ( $uid <= 0 ) {
+			return false;
+		}
+		if ( class_exists( 'ZDZ_Kiosk_Demo' ) && method_exists( 'ZDZ_Kiosk_Demo', 'is_active' ) && ZDZ_Kiosk_Demo::is_active() ) {
+			return false;
+		}
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) ) {
+			return ! ZDZ_User_Roles::is_shared_device( $uid );
+		}
+		$u = get_userdata( $uid );
+		return $u && ! array_intersect( (array) $u->roles, self::NEVER_PARTY_ROLES );
 	}
 
 	/**
@@ -185,8 +220,8 @@ class ZDZ_Party {
 		if ( get_user_meta( (int) $user->ID, 'zdz_inactive', true ) ) {
 			return false;
 		}
-		// Read-time alias: honor the pre-rename key on installs upgraded from the
-		// earlier version that set it before ZDZ_Rename_Migration ran.
+		// The pre-rename key, read until ZDZ_Rename_Migration has copied it (an
+		// inactive person must never reappear in a picker in between).
 		if ( get_user_meta( (int) $user->ID, 'ts_inactive', true ) ) {
 			return false;
 		}
@@ -226,7 +261,7 @@ class ZDZ_Party {
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'rest_people' ),
 				'permission_callback' => function () {
-					return is_user_logged_in();
+					return is_user_logged_in() && self::may_list( (int) get_current_user_id() );
 				},
 				'args'                => array(
 					'search'  => array( 'sanitize_callback' => 'sanitize_text_field' ),
@@ -245,8 +280,9 @@ class ZDZ_Party {
 
 		$people = self::selectable_people(
 			array(
-				'search'  => (string) $request->get_param( 'search' ),
-				'exclude' => $exclude,
+				'search'       => (string) $request->get_param( 'search' ),
+				'search_email' => true,   // honoured for an administrator only
+				'exclude'      => $exclude,
 			)
 		);
 

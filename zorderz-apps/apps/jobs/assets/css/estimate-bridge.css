@@ -87,7 +87,7 @@
 .zjobx-sub { color: var(--sys-text-sec, #475569); }
 .zjobx-meta { display: block; font-size: var(--ref-font-xs, 11px); color: var(--sys-text-ter, #64748B); margin-top: 2px; }
 
-/* Phase 5.1: already-sent line badge + estimate rollup summary. */
+/* Already-sent line badge + estimate rollup summary. */
 .zjobx-row.is-sent { opacity: 0.72; }
 .zjobx-sent {
 	display: inline-block; margin-left: 8px;

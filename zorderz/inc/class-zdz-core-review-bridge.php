@@ -3,15 +3,19 @@
  * Shared Review Bridge Client
  *
  * Calls the Zorderz Review Bridge REST API on the marketing site to check whether
- * a customer left a Thrive Ovation testimonial. This is a read-only client —
- * it never writes to either site's database.
+ * a customer left a review (a testimonial published on the website). This is a
+ * read-only client — it never writes to either site's database.
+ *
+ * The key travels in the X-Review-Bridge-Key header (KEY_HEADER). A website whose
+ * bridge plugin expects another header name is answered with the
+ * `zdz_review_bridge_header` filter (header_name()).
  *
  * Pattern: mirrors ZDZ_Core_FreshBooks / ZDZ_Core_Nutshell. Any plugin on
  * this site can call ZDZ_Core_ReviewBridge methods without knowing
  * anything about the remote API contract.
  *
  * Caching: individual lookups are cached for 15 minutes per email hash.
- * The overall Ovation testimonial count is cached for 1 hour.
+ * The published review count (count()) is cached for 1 hour.
  *
  * @since  2.14.5
  * @package Zorderz
@@ -26,11 +30,17 @@ class ZDZ_Core_ReviewBridge {
 	/** @var string Remote bridge base URL (e.g. https://zorderz.org/wp-json/zdz-review-bridge/v1) */
 	private string $bridge_url;
 
-	/** @var string API key sent in X-TS-Bridge-Key header */
+	/** The header the bridge key travels in, unless the zdz_review_bridge_header filter names another. */
+	const KEY_HEADER = 'X-Review-Bridge-Key';
+
+	/** @var string API key sent in the key header (header_name()) */
 	private string $api_key;
 
 	/** @var int Per-email cache TTL in seconds (15 minutes) */
 	private int $cache_ttl = 900;
+
+	/** Injected in tests ("now" as a unix time, for count()'s asked_at). */
+	public static $now = null;
 
 	/* ------------------------------------------------------------------ */
 	/*  Constructor                                                        */
@@ -86,9 +96,7 @@ class ZDZ_Core_ReviewBridge {
 		], $this->bridge_url . '/check' );
 
 		$response = wp_remote_get( $url, [
-			'headers' => [
-				'X-TS-Bridge-Key' => $this->api_key,
-			],
+			'headers' => $this->auth_headers(),
 			'timeout' => 10,
 		] );
 
@@ -148,6 +156,66 @@ class ZDZ_Core_ReviewBridge {
 		}
 
 		return $results;
+	}
+
+	/**
+	 * The name of the header the bridge key travels in: KEY_HEADER, or the name the zdz_review_bridge_header filter
+	 * gives, for a website whose bridge plugin checks another one. Only a plain header name (a letter, then letters,
+	 * digits and dashes, at most 64) is taken; anything else falls back to KEY_HEADER, so a filter can never smuggle a
+	 * second header or a line break into the request.
+	 */
+	public static function header_name(): string {
+		$name = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_review_bridge_header', self::KEY_HEADER ) : self::KEY_HEADER;
+		return ( is_string( $name ) && 1 === preg_match( '/^[A-Za-z][A-Za-z0-9-]{0,63}$/D', $name ) ) ? $name : self::KEY_HEADER;
+	}
+
+	/** The bridge's key header, as header_name() names it. */
+	private function auth_headers(): array {
+		return array( self::header_name() => $this->api_key );
+	}
+
+	/**
+	 * How many reviews the website has published (the bridge's GET /count, with the same key as /check). Kept an
+	 * hour; a failure is kept five minutes, so the bridge's rate limit (shared with /check, per calling address) is
+	 * never spent on retries. A failure is null, never 0.
+	 *
+	 * @return array|null { published:int, total:int|null, newest:string|null, asked_at:int (unix, when the site was asked) }
+	 */
+	public function count( bool $bypass_cache = false ): ?array {
+		if ( ! $this->is_configured() ) {
+			return null;
+		}
+		$key = 'zdz_rb_count_v1';
+		if ( ! $bypass_cache ) {
+			$hit = get_transient( $key );
+			if ( is_array( $hit ) ) {
+				return $hit;
+			}
+			if ( get_transient( $key . '_fail' ) ) {
+				return null;
+			}
+		}
+		$response = wp_remote_get( $this->bridge_url . '/count', array(
+			'headers' => $this->auth_headers(),
+			'timeout' => 4, // asked inside a person's home-screen request, at most once an hour
+		) );
+		$code = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		$data = 200 === $code ? json_decode( (string) wp_remote_retrieve_body( $response ), true ) : null;
+		if ( ! is_array( $data ) || ! isset( $data['published'] ) || ! is_numeric( $data['published'] ) || (int) $data['published'] < 0 ) {
+			// 404 = a bridge without /count; 401 = the key; 429 = the rate limit; 500 = its own failed read
+			error_log( 'Zorderz Review Bridge /count: ' . ( is_wp_error( $response ) ? 'request failed' : 'HTTP ' . $code ) . '.' );
+			set_transient( $key . '_fail', 1, 300 );
+			return null;
+		}
+		$out = array(
+			'published' => (int) $data['published'],
+			'total'     => isset( $data['total'] ) && is_numeric( $data['total'] ) ? (int) $data['total'] : null,
+			'newest'    => isset( $data['newest'] ) && is_string( $data['newest'] ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $data['newest'] ) ? $data['newest'] : null,
+			'asked_at'  => null !== self::$now ? (int) self::$now : time(),
+		);
+		set_transient( $key, $out, HOUR_IN_SECONDS );
+		delete_transient( $key . '_fail' );
+		return $out;
 	}
 
 	/**

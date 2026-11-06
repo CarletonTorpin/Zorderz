@@ -63,17 +63,20 @@ class ZL_FreshBooks {
 	 *
 	 * @return string Authorization URL.
 	 */
-	public function get_auth_url() {
+	public function get_auth_url( $state = '' ) {
 		// v1.5.3 — Fixed: must match ZL_Admin::handle_oauth_callback() which listens on zl-callback.
-		// Previously used 'ts-surveys-callback' which routed to the Surveys plugin's handler instead,
-		// causing tokens to be stored in ts_surveys_fb_* options rather than zl_fb_* options.
+		// Pointing it at the Surveys callback would route to that app's handler instead, storing
+		// tokens in the surveys app's billing options rather than zl_fb_* options.
 		// NOTE: The redirect URI must also be registered in the FreshBooks Developer Portal.
 		$redirect_uri = admin_url( 'admin.php?page=zl-callback' );
 		$params       = array(
 			'client_id'     => $this->client_id,
 			'response_type' => 'code',
-			'redirect_uri'  => $redirect_uri,
+			'redirect_uri'  => rawurlencode( $redirect_uri ),
 		);
+		if ( '' !== (string) $state ) {
+			$params['state'] = rawurlencode( (string) $state ); // checked by ZL_OAuth_State::verify() on the callback
+		}
 
 		return add_query_arg( $params, self::AUTH_URL );
 	}
@@ -447,7 +450,8 @@ class ZL_FreshBooks {
 				error_log( "ZL FreshBooks [{$tag}]: 401 Unauthorized on page {$page} — attempting token refresh..." );
 				if ( $this->refresh_access_token() ) {
 					error_log( "ZL FreshBooks [{$tag}]: Token refreshed, retrying page {$page}..." );
-					// Don't count as a retry — just re-enter the loop with fresh token
+					// Re-enter the loop with the fresh token. `continue` in this for-loop still
+					// counts the attempt, so a token that keeps 401ing stops at $max_retries.
 					continue;
 				}
 				throw new Exception(
@@ -581,7 +585,30 @@ class ZL_FreshBooks {
 		// Try ZL's own refresh token first, fall back to Surveys plugin
 		$refresh_token = get_option( 'zl_fb_refresh_token', '' );
 		if ( empty( $refresh_token ) ) {
-			$refresh_token = get_option( 'ts_surveys_fb_refresh_token', '' );
+			$refresh_token = get_option( 'zdz_surveys_fb_refresh_token', '' );
+		}
+
+		// ── One refresher for the whole platform ──
+		// FreshBooks refresh tokens are single-use: a refresh here would revoke the
+		// token every other app is holding, outside the ZDZ_Token_Service lock.
+		// When the service is present, it does the refresh (and owns the app's
+		// client id and secret); Leads never posts to the token endpoint itself,
+		// not even when the service says no. The old path below runs only on a
+		// site without the service.
+		if ( class_exists( 'ZDZ_Token_Service' ) ) {
+			$new_access = ZDZ_Token_Service::refresh( array(
+				'client_id'     => (string) $this->client_id,
+				'client_secret' => (string) $this->client_secret,
+				'refresh_token' => (string) $refresh_token,
+				'redirect_uris' => array( admin_url( 'admin.php?page=zl-callback' ) ),
+			) );
+			if ( '' === (string) $new_access ) {
+				error_log( 'ZL FreshBooks: token refresh via ZDZ_Token_Service failed — not retrying on our own.' );
+				return false;
+			}
+			$this->access_token = $new_access;
+			error_log( 'ZL FreshBooks: Token refreshed via ZDZ_Token_Service.' );
+			return true;
 		}
 
 		if ( empty( $refresh_token ) ) {

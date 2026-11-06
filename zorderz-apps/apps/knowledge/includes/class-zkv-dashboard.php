@@ -26,6 +26,7 @@ class ZKV_Dashboard {
 		add_action( 'wp_ajax_zkv_save_settings',    array( $this, 'ajax_save_settings' ) );
 		add_action( 'wp_ajax_zkv_get_settings',     array( $this, 'ajax_get_settings' ) );
 		add_action( 'wp_ajax_zkv_update_context',   array( $this, 'ajax_update_context' ) );
+		add_action( 'wp_ajax_zkv_update_details',   array( $this, 'ajax_update_details' ) );   // rename / re-file
 		add_action( 'wp_ajax_zkv_diagnostic',       array( $this, 'ajax_diagnostic' ) );
 		add_action( 'wp_ajax_zkv_toggle_pricing',   array( $this, 'ajax_toggle_pricing' ) );
 		add_action( 'wp_ajax_zkv_list_pricing',     array( $this, 'ajax_list_pricing' ) );
@@ -39,7 +40,7 @@ class ZKV_Dashboard {
 		// v1.5.0: Private transcripts — admin queue (suggested + latent) and
 		// party-initiated sharing. Every handler re-derives authority
 		// server-side (admin capability / ZKV_ACL::is_party) — the UI hiding
-		// a button is never the enforcement (INV-1).
+		// a button is never the enforcement.
 		add_action( 'wp_ajax_zkv_transcript_queue',   array( $this, 'ajax_transcript_queue' ) );
 		add_action( 'wp_ajax_zkv_transcript_confirm', array( $this, 'ajax_transcript_confirm' ) );
 		add_action( 'wp_ajax_zkv_transcript_detected',        array( $this, 'ajax_transcript_detected' ) );
@@ -54,6 +55,15 @@ class ZKV_Dashboard {
 		add_action( 'wp_ajax_zkv_transcript_lines',   array( $this, 'ajax_transcript_lines' ) );
 		add_action( 'wp_ajax_zkv_share_create',       array( $this, 'ajax_share_create' ) );
 		add_action( 'wp_ajax_zkv_share_revoke',       array( $this, 'ajax_share_revoke' ) );
+		// Private documents, the recovery code, outside links.
+		add_action( 'wp_ajax_zkv_set_private',        array( $this, 'ajax_set_private' ) );
+		add_action( 'wp_ajax_zkv_private_status',     array( $this, 'ajax_private_status' ) );
+		add_action( 'wp_ajax_zkv_private_code',       array( $this, 'ajax_private_code' ) );
+		add_action( 'wp_ajax_zkv_private_saved',      array( $this, 'ajax_private_saved' ) );
+		add_action( 'wp_ajax_zkv_private_unlock',     array( $this, 'ajax_private_unlock' ) );
+		add_action( 'wp_ajax_zkv_link_create',        array( $this, 'ajax_link_create' ) );
+		add_action( 'wp_ajax_zkv_link_revoke',        array( $this, 'ajax_link_revoke' ) );
+		add_action( 'wp_ajax_zkv_discard_temp',       array( $this, 'ajax_discard_temp' ) );
 
 		// CRITICAL: Explicitly deny non-logged-in access.
 		add_action( 'wp_ajax_nopriv_zkv_preanalyze',       array( $this, 'deny_nopriv' ) );
@@ -82,6 +92,9 @@ class ZKV_Dashboard {
 		add_action( 'wp_ajax_nopriv_zkv_transcript_lines',   array( $this, 'deny_nopriv' ) );
 		add_action( 'wp_ajax_nopriv_zkv_share_create',       array( $this, 'deny_nopriv' ) );
 		add_action( 'wp_ajax_nopriv_zkv_share_revoke',       array( $this, 'deny_nopriv' ) );
+		foreach ( array( 'set_private', 'private_status', 'private_code', 'private_saved', 'private_unlock', 'link_create', 'link_revoke', 'discard_temp' ) as $a ) {
+			add_action( 'wp_ajax_nopriv_zkv_' . $a, array( $this, 'deny_nopriv' ) );
+		}
 
 		// Hide vault files from media library.
 		add_filter( 'ajax_query_attachments_args', array( $this, 'filter_media_library' ) );
@@ -194,6 +207,19 @@ class ZKV_Dashboard {
 			wp_send_json_error( 'File exceeds 50 MB limit.' );
 		}
 
+		// Keep private - this step does nothing with the file at all: it is not stored
+		// here (a plain copy would wait in the Vault folder for the form), not read, not sent anywhere. The form gets
+		// the file name as its title, and the upload sends the file itself, straight to encryption.
+		if ( '1' === sanitize_text_field( wp_unslash( $_POST['private'] ?? '' ) ) ) {
+			ob_end_clean();
+			wp_send_json_success( array(
+				'temp_key'    => '',
+				'suggestions' => array( 'title' => $this->filename_to_title( (string) ( $file['name'] ?? '' ) ), 'category' => '', 'description' => '' ),
+				'duplicate'   => null,
+				'private'     => true,
+			) );
+		}
+
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/media.php';
 		require_once ABSPATH . 'wp-admin/includes/image.php';
@@ -211,7 +237,7 @@ class ZKV_Dashboard {
 			return $uploads;
 		};
 		add_filter( 'upload_dir', $vault_filter );
-		$result = wp_handle_upload( $file, array( 'test_form' => false, 'mimes' => $this->allowed_mimes() ) );
+		$result = wp_handle_upload( $file, array( 'test_form' => false, 'mimes' => $this->allowed_mimes(), 'unique_filename_callback' => array( 'ZKV_File_Names', 'upload_name_cb' ) ) ); // a random name
 		remove_filter( 'upload_dir', $vault_filter );
 
 		if ( ! empty( $result['error'] ) ) {
@@ -225,7 +251,7 @@ class ZKV_Dashboard {
 		// Check for duplicate — same content hash = exact same file.
 		global $wpdb;
 		$existing = $wpdb->get_row( $wpdb->prepare(
-			"SELECT id, title, original_name FROM {$wpdb->prefix}zkv_documents WHERE file_hash = %s LIMIT 1",
+			"SELECT id, title, original_name FROM {$wpdb->prefix}zkv_documents WHERE file_hash = %s AND is_private = 0 LIMIT 1",
 			$file_hash
 		), ARRAY_A );
 
@@ -248,6 +274,8 @@ class ZKV_Dashboard {
 			'size'      => filesize( $result['file'] ),
 			'file_hash' => $file_hash,
 		), 30 * MINUTE_IN_SECONDS );
+		// Noted, so an abandoned form's file is removed (ZKV_Private::sweep, hourly) or Cleared at once.
+		if ( class_exists( 'ZKV_Private' ) ) { ZKV_Private::temp_add( $result['file'] ); }
 
 		// Quick text extraction (first 4K chars for speed).
 		$text = '';
@@ -297,15 +325,13 @@ class ZKV_Dashboard {
 		$report = array();
 
 		// 1. Check exec() availability.
-		$report['exec_available'] = function_exists( 'exec' ) && ! in_array( 'exec', array_map( 'trim', explode( ',', ini_get( 'disable_functions' ) ) ), true );
+		$report['exec_available'] = ZKV_Indexer::exec_allowed();
 
 		// 2. Check pdftotext.
-		if ( $report['exec_available'] ) {
-			$out = array(); $ret = -1;
-			@exec( 'which pdftotext 2>/dev/null', $out, $ret );
-			$report['pdftotext_path'] = $ret === 0 ? implode( '', $out ) : 'NOT FOUND';
-		} else {
-			$report['pdftotext_path'] = 'exec() disabled — cannot check';
+		$bin = ZKV_Indexer::pdftotext_bin();
+		$report['pdftotext_path'] = '' !== $bin ? $bin : 'not at a fixed path (indexing tries "pdftotext" on the PATH)';
+		if ( '' !== $bin && ! $report['exec_available'] ) {
+			$report['pdftotext_path'] .= ' (installed, but exec() is disabled so it cannot run)'; // sentinel:allow diagnostic text only; nothing is executed here
 		}
 
 		// 3. Check ZDZ_Core_Poe.
@@ -315,17 +341,26 @@ class ZKV_Dashboard {
 		$has_key = false;
 		$key = self::get_poe_api_key();
 		$has_key = ! empty( $key );
-		$report['poe_api_key'] = $has_key ? 'SET (' . strlen( $key ) . ' chars, starts with ' . substr( $key, 0, 6 ) . '...)' : 'EMPTY';
-		$report['poe_key_source'] = ! empty( get_option( 'zkv_poe_api_key', '' ) ) ? "this app's key" : ( class_exists( 'ZDZ_Core_Settings' ) ? 'platform shared key (ZDZ_Core_Settings)' : 'none' );
+		if ( self::poe_managed() ) {
+			// Managed on Zorderz → Credentials: report it as set, print no part of it.
+			$report['poe_api_key'] = $has_key ? 'SET (managed)' : 'EMPTY';
+		} else {
+			$report['poe_api_key'] = $has_key ? 'SET (' . strlen( $key ) . ' chars, starts with ' . substr( $key, 0, 6 ) . '...)' : 'EMPTY';
+		}
+		$report['poe_key_source'] = self::key_source();
 
-		// 5. Check AI model.
-		$report['ai_model'] = self::get_ai_model();
+		// 5. The model calls really use (the stored choice through approved_model(), else the
+		// registry's slot), and the live test below uses it too.
+		$stored = (string) get_option( 'zkv_ai_model', '' );
+		$report['ai_model'] = ( '' !== self::get_ai_model() ? self::get_ai_model() : 'none configured' )
+			. ' (stored: ' . ( '' !== $stored ? $stored : 'none, platform model' )
+			. '; roster: ' . ( self::model_choices() ? count( self::model_choices() ) . ' model(s)' : 'not set, any handle' ) . ')';
 
 		// 6. Live Poe test (direct call with stream:false — bypasses broken ZDZ_Core_Poe).
 		if ( $has_key ) {
 			try {
 				$start = microtime( true );
-				$test_response = self::poe_query( $key, 'Reply with exactly: {"status":"ok"}' );
+				$test_response = self::poe_query( $key, 'Reply with exactly: {"status":"ok"}', self::get_ai_model() );
 				$elapsed = round( ( microtime( true ) - $start ) * 1000 );
 				$report['poe_test_response'] = substr( $test_response, 0, 200 );
 				$report['poe_test_ms'] = $elapsed;
@@ -367,7 +402,8 @@ class ZKV_Dashboard {
 		// 9. Try to find and test a real PDF in the vault.
 		global $wpdb;
 		$test_doc = $wpdb->get_row(
-			"SELECT * FROM {$wpdb->prefix}zkv_documents WHERE mime_type = 'application/pdf' ORDER BY id DESC LIMIT 1",
+			// Page 1 goes to the AI service below - only a document every employee may see, never a Private one.
+			"SELECT * FROM {$wpdb->prefix}zkv_documents WHERE mime_type = 'application/pdf' AND visibility = 'all_employees' AND is_private = 0 ORDER BY id DESC LIMIT 1",
 			ARRAY_A
 		);
 
@@ -468,6 +504,9 @@ class ZKV_Dashboard {
 		// v1.5.2 (KV3): a document may be ENABLED as a pricing authority ONLY when it
 		// lives in a designated pricing folder. Turning it OFF is always allowed, so a
 		// mis-marked doc can always be cleared. Default stays "not pricing".
+		if ( 1 === $new_value && class_exists( 'ZKV_Private' ) && ZKV_Private::is_private( $doc_id ) ) {
+			wp_send_json_error( 'A Private document is never read by the chat, so it can\'t be a pricing source.' );
+		}
 		if ( 1 === $new_value && ! self::doc_in_pricing_folder( $doc_id ) ) {
 			wp_send_json_error( 'This document isn’t in a pricing folder, so it can’t be a pricing source. Move it into the “Pricing Documents” folder first, then mark it.' );
 		}
@@ -669,12 +708,11 @@ class ZKV_Dashboard {
 			zkv_create_secure_vault_dir();
 		}
 
-		// Write file to vault, under an unguessable per-file random subdirectory so the raw
-		// file URL cannot be guessed on servers that ignore the .htaccess deny (e.g. nginx).
-		$vault_sub = ZKV_VAULT_DIR . '/' . bin2hex( random_bytes( 16 ) );
-		wp_mkdir_p( $vault_sub );
-		$safe_name = wp_unique_filename( $vault_sub, $filename );
-		$file_path = $vault_sub . '/' . $safe_name;
+		// Write file to vault under a random name (ZKV_File_Names), so the raw file cannot be
+		// fetched by guessing its name on servers that ignore the .htaccess deny (e.g. nginx).
+		// The row keeps $filename as the name a person sees and downloads.
+		$safe_name = ZKV_File_Names::random_name( $filename );
+		$file_path = ZKV_VAULT_DIR . '/' . $safe_name;
 		$written   = file_put_contents( $file_path, $decoded );
 
 		if ( false === $written ) {
@@ -847,18 +885,82 @@ Respond with ONLY the JSON object.";
 	}
 
 	/**
-	 * Get the Poe API key.
+	 * Is the Ai gateway key managed on Zorderz → Credentials? While it is, the settings
+	 * screens show a note instead of the key field and saving never touches zkv_poe_api_key
+	 * (the Credentials screen writes that row itself and refuses other writes). False when
+	 * the credentials layer is absent.
+	 */
+	public static function poe_managed(): bool {
+		return self::cred_managed( 'poe' );
+	}
+
+	/**
+	 * Did this submit come from a form opened while $svc was managed (its hidden
+	 * zdz_cred_managed[$svc] marker)? Then the stored rows are left alone even if the
+	 * administrator pressed Undo on the Credentials screen since. A presence check only;
+	 * no other POST value is read.
+	 */
+	public static function managed_posted( string $svc ): bool {
+		return isset( $_POST['zdz_cred_managed'] ) && is_array( $_POST['zdz_cred_managed'] ) // phpcs:ignore WordPress.Security.NonceVerification -- the caller verified the form's nonce
+			&& ! empty( $_POST['zdz_cred_managed'][ $svc ] ); // phpcs:ignore WordPress.Security.NonceVerification
+	}
+
+	/** Is $svc managed on Zorderz → Credentials? */
+	public static function cred_managed( string $svc ): bool {
+		return class_exists( 'ZDZ_Core_Credentials' )
+			&& is_callable( array( 'ZDZ_Core_Credentials', 'engaged' ) )
+			&& ZDZ_Core_Credentials::engaged( $svc );
+	}
+
+	/**
+	 * The mail-in Microsoft 365 app (zkv_mail_config[tenant_id], [client_id],
+	 * zkv_mail_secret) belongs to the Credentials screen while ms_vault_mail is managed
+	 * there, or when the submit came from a form that showed it managed.
+	 */
+	public static function mail_app_locked(): bool {
+		return self::cred_managed( 'ms_vault_mail' ) || self::managed_posted( 'ms_vault_mail' );
+	}
+
+	/** Where the Credentials screen lives. */
+	private static function credentials_url(): string {
+		$page = ( class_exists( 'ZDZ_Core_Credentials' ) && is_callable( array( 'ZDZ_Core_Credentials', 'page_url' ) ) )
+			? (string) ZDZ_Core_Credentials::page_url() : '';
+		return '' !== $page ? $page : admin_url( 'admin.php?page=zdz-core-credentials' );
+	}
+
+	/** The one line shown in place of the mail-in app fields while they are managed. */
+	public static function managed_app_note_html(): string {
+		return sprintf(
+			/* translators: %s: link to the Credentials screen */
+			esc_html__( 'Managed in %s — one set for every app.', 'zorderz' ),
+			'<a href="' . esc_url( self::credentials_url() ) . '">' . esc_html__( 'Zorderz → Credentials', 'zorderz' ) . '</a>'
+		);
+	}
+
+	/** The one line shown in place of the Ai gateway key field while it is managed. */
+	public static function managed_note_html(): string {
+		return sprintf(
+			/* translators: %s: link to the Credentials screen */
+			esc_html__( 'Managed in %s — one key for every app.', 'zorderz' ),
+			'<a href="' . esc_url( self::credentials_url() ) . '">' . esc_html__( 'Zorderz → Credentials', 'zorderz' ) . '</a>'
+		);
+	}
+
+	/**
+	 * Get the Ai gateway (Poe) key.
 	 *
-	 * CONFIGURABLE (was: scavenge three other plugins' option families + reach
-	 * into a legacy admin class). Now:
-	 *   1. This app's own key (zkv_poe_api_key option — encrypted or plaintext).
-	 *   2. The platform's shared credential store (ZDZ_Core_Settings), which is
-	 *      the one place a Zorderz install keeps the Poe key.
-	 * No cross-plugin class-scavenging; a missing key returns '' and callers
-	 * degrade honestly (AI suggestions skipped).
+	 *   1. The platform's credential store first (ZDZ_Core_Settings::get_credential) —
+	 *      the key Zorderz → Credentials and Zorderz → Settings keep for every app.
+	 *   2. This app's own copy (zkv_poe_api_key — encrypted or plaintext) only when the
+	 *      platform holds none. While the key is managed on Credentials this copy is
+	 *      kept equal to the platform's, so the order never changes the key in use.
+	 * A missing key returns '' and callers degrade honestly (Ai suggestions skipped).
+	 * Never logged, printed or sent to a browser.
 	 */
 	public static function get_poe_api_key() {
-		// 1) This app's own dedicated key (highest priority).
+		$key = self::platform_key();
+		if ( '' !== $key ) { return $key; }
+
 		$own_key = get_option( 'zkv_poe_api_key', '' );
 		if ( ! empty( $own_key ) ) {
 			$decrypted = self::decrypt_key( $own_key );
@@ -867,13 +969,32 @@ Respond with ONLY the JSON object.";
 			if ( strlen( $own_key ) > 30 ) { return $own_key; }
 		}
 
-		// 2) The platform's shared credential store.
-		if ( class_exists( 'ZDZ_Core_Settings' ) ) {
-			$key = ZDZ_Core_Settings::get_poe_api_key();
-			if ( ! empty( $key ) ) { return $key; }
-		}
-
 		return '';
+	}
+
+	/** The platform's Ai gateway key (Zorderz → Credentials / Settings), or ''. Server-side only. */
+	private static function platform_key(): string {
+		if ( ! class_exists( 'ZDZ_Core_Settings' ) ) {
+			return '';
+		}
+		if ( is_callable( array( 'ZDZ_Core_Settings', 'get_credential' ) ) ) {
+			return trim( (string) ZDZ_Core_Settings::get_credential( 'poe_api_key' ) );
+		}
+		if ( is_callable( array( 'ZDZ_Core_Settings', 'get_poe_api_key' ) ) ) {
+			return trim( (string) ZDZ_Core_Settings::get_poe_api_key() );
+		}
+		return '';
+	}
+
+	/** Where the key in use comes from, in words for the settings screens (never the key). */
+	public static function key_source(): string {
+		if ( self::poe_managed() ) {
+			return __( 'Zorderz → Credentials', 'zorderz' );
+		}
+		if ( '' !== self::platform_key() ) {
+			return __( 'the platform key', 'zorderz' );
+		}
+		return ! empty( get_option( 'zkv_poe_api_key', '' ) ) ? __( "this app's own key", 'zorderz' ) : __( 'none', 'zorderz' );
 	}
 
 	public static function encrypt_key( $plaintext ) {
@@ -900,21 +1021,15 @@ Respond with ONLY the JSON object.";
 	 * and whenever the Core client is unavailable or returns an error. api.poe.com
 	 * is a third-party API host.
 	 */
-	public static function poe_query( $api_key, $prompt, $model = 'Gemini-3.1-Pro', $temperature = 0.0 ) {
-		// A STORED zkv_ai_model carrying a retired/older handle still calls a live
-		// model, without needing settings re-saved.
-		$aliases = array(
-			'Gemini-2.5-Flash'  => 'Gemini-3.6-Flash',
-			'Gemini-3-Flash'    => 'Gemini-3.6-Flash',
-			'Gemini-3.5-Flash'  => 'Gemini-3.6-Flash',
-			'Gemini-3-Pro'      => 'Gemini-3.1-Pro',
-			'Claude-Opus-4.7'   => 'Claude-Opus-4.8',
-			'Claude-Opus-4.6'   => 'Claude-Opus-4.8',
-			'Claude-Sonnet-4.5' => 'Claude-Sonnet-4.6',
-			'GPT-5.2'           => 'GPT-5.5',
-		);
-		if ( isset( $aliases[ $model ] ) ) {
-			$model = $aliases[ $model ];
+	public static function poe_query( $api_key, $prompt, $model = '', $temperature = 0.0 ) {
+		// Only a model the business offers is called; '' or one outside the roster means the
+		// app's own resolved model (get_ai_model()). Retired handles move to their successor.
+		$model = self::approved_model( (string) $model );
+		if ( '' === $model ) {
+			$model = self::get_ai_model();
+		}
+		if ( '' === $model ) {
+			return 'Error: no Ai model is configured (Zorderz → Settings, or the Knowledge settings).';
 		}
 
 		// Preferred path: the platform's shared Poe client (plain-text prompts).
@@ -1030,7 +1145,18 @@ Respond with ONLY the JSON object.";
 			$temp_data = get_transient( $temp_key );
 			if ( $temp_data ) {
 				delete_transient( $temp_key );
+				if ( class_exists( 'ZKV_Private' ) ) { ZKV_Private::temp_claim( (string) ( $temp_data['file'] ?? '' ) ); }
 			}
+		}
+		// Keep private needs a usable key BEFORE anything is stored - a locked key must
+		// not leave a plain file and a failed row behind.
+		if ( '1' === sanitize_text_field( wp_unslash( $_POST['private'] ?? '' ) ) && 'transcript_private' !== sanitize_text_field( wp_unslash( $_POST['visibility'] ?? '' ) )
+			&& ( ! class_exists( 'ZKV_Private' ) || ! ZKV_Private::available() || null === ZKV_Private::key( true ) ) ) {
+			if ( $temp_data && ! empty( $temp_data['file'] ) && class_exists( 'ZKV_Private' ) ) { ZKV_Private::temp_discard( (string) $temp_data['file'] ); }
+			ob_end_clean();
+			wp_send_json_error( class_exists( 'ZKV_Private' ) && ZKV_Private::available()
+				? 'The Private key is locked. An administrator must enter the recovery code (Knowledge settings) first. Nothing was saved.'
+				: 'This server cannot keep documents Private. Nothing was saved.' );
 		}
 
 		// If no preanalyzed file, handle fresh upload.
@@ -1050,7 +1176,7 @@ Respond with ONLY the JSON object.";
 			if ( function_exists( 'zkv_create_secure_vault_dir' ) ) { zkv_create_secure_vault_dir(); }
 			$vf = function( $u ) { $u['path'] = ZKV_VAULT_DIR; $u['url'] = ZKV_VAULT_URL; $u['subdir'] = ''; return $u; };
 			add_filter( 'upload_dir', $vf );
-			$result = wp_handle_upload( $file, array( 'test_form' => false, 'mimes' => $this->allowed_mimes() ) );
+			$result = wp_handle_upload( $file, array( 'test_form' => false, 'mimes' => $this->allowed_mimes(), 'unique_filename_callback' => array( 'ZKV_File_Names', 'upload_name_cb' ) ) ); // a random name
 			remove_filter( 'upload_dir', $vf );
 			if ( ! empty( $result['error'] ) ) { ob_end_clean(); wp_send_json_error( $result['error'] ); }
 			$temp_data = array(
@@ -1063,6 +1189,15 @@ Respond with ONLY the JSON object.";
 			);
 		}
 
+		// Private - no media attachment and no image sizes (each would be a plain copy); the file is
+		// encrypted before this request answers (below). A private transcript cannot also be Private yet.
+		$want_private = '1' === sanitize_text_field( wp_unslash( $_POST['private'] ?? '' ) );
+		if ( $want_private && 'transcript_private' === sanitize_text_field( wp_unslash( $_POST['visibility'] ?? '' ) ) ) {
+			ob_end_clean();
+			wp_send_json_error( 'A private transcript cannot also be Private yet. Choose one.' );
+		}
+		$att_id = 0;
+		if ( ! $want_private ) {
 		// Create WP attachment (private).
 		$att_id = wp_insert_attachment( array(
 			'guid'           => $temp_data['url'] ?? '',
@@ -1080,22 +1215,29 @@ Respond with ONLY the JSON object.";
 
 		wp_generate_attachment_metadata( $att_id, $temp_data['file'] );
 		update_post_meta( $att_id, '_zkv_vault_document', '1' );
+		} // end of the ordinary (not Private) media attachment
 
 		// Use user-provided (AI-suggested) metadata.
-		$title = sanitize_text_field( $_POST['title'] ?? '' );
+		// what the person submitted is theirs: the form showed the AI's suggestion and they sent it (or their
+		// own words), so the later deep index must not replace it. Only a blank title is left for the index to fill.
+		// The form also says whether the person CHANGED what the machine suggested - an untouched
+		// suggestion stays the index's to improve. An older client that does not say is taken at its word.
+		$title        = sanitize_text_field( $_POST['title'] ?? '' );
+		$title_locked = ( '' !== trim( $title ) && ( ! isset( $_POST['title_edited'] ) || '1' === sanitize_text_field( wp_unslash( $_POST['title_edited'] ) ) ) ) ? 1 : 0;
 		if ( empty( $title ) ) {
 			$title = $this->filename_to_title( $temp_data['name'] );
 		}
 
-		$category_id = null;
+		$category_id     = null;
+		$category_locked = 0;
 		$cat_slug = sanitize_text_field( $_POST['category'] ?? '' );
 		if ( ! empty( $cat_slug ) && class_exists( 'ZKV_Categories' ) ) {
 			$cat = ZKV_Categories::get_by_slug( $cat_slug );
-			if ( $cat ) { $category_id = (int) $cat['id']; }
+			if ( $cat ) { $category_id = (int) $cat['id']; $category_locked = ( ! isset( $_POST['category_edited'] ) || '1' === sanitize_text_field( wp_unslash( $_POST['category_edited'] ) ) ) ? 1 : 0; }
 		}
 
 		// v1.5.0: 'transcript_private' is the uploader's OPT-IN assertion — the
-		// only signal that auto-privatizes a document (D4). It takes effect AT
+		// only signal that auto-privatizes a document. It takes effect AT
 		// INSERT, before any index/chunk content exists, so there is no instant
 		// at which the text is both indexed-visible and unscoped.
 		$visibility = in_array( $_POST['visibility'] ?? '', array( 'all_employees', 'admin_only', 'transcript_private' ), true )
@@ -1126,7 +1268,10 @@ Respond with ONLY the JSON object.";
 			'category_id'   => $category_id,
 			'status'        => 'pending',
 			'visibility'    => $visibility,
+			'is_private'    => $want_private ? 1 : 0,
 			'transcript_status' => $transcript_status,
+			'title_locked'    => $title_locked,
+			'category_locked' => $category_locked,
 			'version'       => 1,
 			'created_at'    => current_time( 'mysql' ),
 			'updated_at'    => current_time( 'mysql' ),
@@ -1142,6 +1287,23 @@ Respond with ONLY the JSON object.";
 				array( 'id' => $doc_id ),
 				array( '%s' ), array( '%d' )
 			);
+		}
+
+		// Private - encrypt now and index from the person's own words; no AI job is scheduled.
+		if ( $want_private && $doc_id > 0 ) {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}zkv_documents WHERE id = %d", $doc_id ), ARRAY_A );
+			$r   = $row ? ZKV_Private::finish_private( $row ) : 'Not saved.';
+			if ( true !== $r ) {
+				// Nothing half-made stays: the row and the plain file go.
+				$wpdb->delete( $wpdb->prefix . 'zkv_index', array( 'document_id' => $doc_id ), array( '%d' ) );
+				$wpdb->delete( $wpdb->prefix . 'zkv_documents', array( 'id' => $doc_id ), array( '%d' ) );
+				ZKV_Private::temp_discard( (string) $temp_data['file'] );
+				ob_end_clean();
+				wp_send_json_error( (string) $r . ' Nothing was saved.' );
+			}
+			ZKV_Private::log( 'uploaded_private', $doc_id, get_current_user_id() );
+			ob_end_clean();
+			wp_send_json_success( array( 'document_id' => $doc_id, 'title' => $title, 'status' => 'indexed', 'private' => true ) );
 		}
 
 		// Schedule deep AI indexing for the next page load.
@@ -1173,7 +1335,7 @@ Respond with ONLY the JSON object.";
 
 		$results = $wpdb->get_results( $wpdb->prepare(
 			"SELECT d.id, d.slug, d.title, d.original_name, d.mime_type, d.file_size,
-			        d.file_url, d.status, d.visibility, d.uploaded_by, d.created_at,
+			        d.file_url, d.status, d.visibility, d.is_private, d.uploaded_by, d.created_at,
 			        i.synopsis, i.document_type, i.tags,
 			        MATCH(i.search_text) AGAINST(%s IN NATURAL LANGUAGE MODE) as relevance
 			 FROM {$wpdb->prefix}zkv_index i
@@ -1225,13 +1387,13 @@ Respond with ONLY the JSON object.";
 			}
 		}
 
-		$where = "WHERE d.status IN ('indexed','pending','processing') {$vis} {$cat_clause}";
+		$where = "WHERE d.status IN ('indexed','pending','processing','encrypting') {$vis} {$cat_clause}"; // + encrypting
 
 		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$d} d {$where}" );
 
 		$rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT d.id, d.slug, d.title, d.original_name, d.mime_type, d.file_size,
-			        d.file_url, d.status, d.uploaded_by, d.created_at, d.category_id,
+			        d.file_url, d.status, d.is_private, d.uploaded_by, d.created_at, d.category_id,
 			        i.synopsis, i.document_type, i.tags
 			 FROM {$d} d
 			 LEFT JOIN {$i} i ON i.document_id = d.id AND i.is_current = 1
@@ -1285,8 +1447,20 @@ Respond with ONLY the JSON object.";
 		$uploaded_by_id    = (int) $doc['uploaded_by'];                    // v1.5.2 (KV2) capture before sanitize
 		$transcript_status = (string) ( $doc['transcript_status'] ?? '' ); // v1.5.2 (KV2)
 		$doc = $this->sanitize_for_frontend( $doc ); // Strip private paths
+		unset( $doc['file_hash'], $doc['summary_json'] ); // never needed by the screen
 
-		// v1.5.0: transcript extras for the detail view. The ACL in the query
+		// Private and outside links.
+		$me = get_current_user_id();
+		$doc['is_private']      = ! empty( $doc['is_private'] ) ? 1 : 0;
+		$doc['can_set_private'] = ( $uploaded_by_id === $me || $this->is_admin_user() )
+			&& ! ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_transcript_visibility( $doc['visibility'] ?? '' ) ) ? 1 : 0;
+		$doc['can_share_out']   = ( class_exists( 'ZKV_Ext_Links' ) && null !== ZKV_Ext_Links::shareable_doc( $id, $me ) ) ? 1 : 0;
+		$doc['links']           = ( $doc['can_share_out'] || $uploaded_by_id === $me || $this->is_admin_user() ) && class_exists( 'ZKV_Ext_Links' )
+			? ZKV_Ext_Links::for_document( $id, $me ) : array();
+		$doc['link_days']       = class_exists( 'ZKV_Ext_Links' ) ? array_map( 'intval', (array) apply_filters( 'zkv_ext_link_days', ZKV_Ext_Links::DAYS ) ) : array();
+		$doc['key_state']       = ( $doc['is_private'] && class_exists( 'ZKV_Private' ) ) ? ZKV_Private::key_state() : '';
+
+		// Transcript extras for the detail view. The ACL in the query
 		// above already guaranteed the caller is a party or an active
 		// whole-doc sharee — this block only decides which UI they get.
 		if ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_transcript_visibility( $doc['visibility'] ?? '' ) ) {
@@ -1393,6 +1567,9 @@ Respond with ONLY the JSON object.";
 			wp_delete_attachment( (int) $doc['attachment_id'], true );
 		}
 		$wpdb->delete( $wpdb->prefix . 'zkv_documents', array( 'id' => $id ), array( '%d' ) );
+		// The file goes too when it sits in the Vault folder and no other document names it
+		// (a document with no media attachment used to keep its file on disk after "delete").
+		ZKV_File_Names::delete_file( (string) ( $doc['file_url'] ?? '' ) );
 
 		// v1.5.0: transcript ancillary rows go with the document. Chunks too
 		// (pre-existing gap — deleting a doc left its chunk text sitting in
@@ -1401,6 +1578,7 @@ Respond with ONLY the JSON object.";
 		$wpdb->delete( $wpdb->prefix . 'zkv_doc_parties', array( 'document_id' => $id ), array( '%d' ) );
 		$wpdb->delete( $wpdb->prefix . 'zkv_doc_shares', array( 'document_id' => $id ), array( '%d' ) );
 		$wpdb->delete( $wpdb->prefix . 'zkv_transcript_lines', array( 'document_id' => $id ), array( '%d' ) );
+		if ( class_exists( 'ZKV_Ext_Links' ) ) { ZKV_Ext_Links::delete_for_document( $id ); } // its outside links stop
 		if ( $is_transcript && class_exists( 'ZKV_ACL' ) ) {
 			ZKV_ACL::log( 'transcript_deleted', $id, $user_id );
 			ZKV_ACL::reset_cache();
@@ -1444,6 +1622,59 @@ Respond with ONLY the JSON object.";
 	//  AJAX: Update Context — edit user_context on an existing doc
 	// ──────────────────────────────────────────────────────────────
 
+	/**
+	 * Rename a document or move it to another category, so a title the index got wrong (two different forms
+	 * given the same title, say) can be put right. The uploader or an administrator - the same rule
+	 * as editing its context. A title or category set here is the person's, so a re-index keeps it. The link
+	 * (/vault/<slug>) does not change, so links already shared keep working.
+	 */
+	public function ajax_update_details() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! $this->check_access() ) { wp_send_json_error( 'Access denied.' ); }
+		$doc_id = (int) ( $_POST['document_id'] ?? 0 );
+		if ( $doc_id < 1 ) { wp_send_json_error( 'Invalid document ID.' ); }
+		global $wpdb;
+		// Only a document this person may see (one "not found" for missing and hidden alike), and then the uploader or an
+		// admin - the Vault's own admin rule, the one that shows the button.
+		$vis = $this->visibility_sql( 'd' );
+		// Phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $vis is the Vault's own fixed fragment.
+		$doc = $wpdb->get_row( $wpdb->prepare( "SELECT d.id, d.uploaded_by, d.visibility FROM {$wpdb->prefix}zkv_documents d WHERE d.id = %d {$vis}", $doc_id ), ARRAY_A );
+		if ( ! $doc ) { wp_send_json_error( 'Document not found.' ); }
+		if ( (int) $doc['uploaded_by'] !== get_current_user_id() && ! $this->is_admin_user() ) {
+			wp_send_json_error( 'Only the uploader or admins can rename or re-file a document.' );
+		}
+		$set = array();
+		if ( isset( $_POST['title'] ) ) {
+			$title = sanitize_text_field( wp_unslash( (string) $_POST['title'] ) );
+			if ( function_exists( 'mb_substr' ) ) { $title = mb_substr( $title, 0, 200 ); }
+			if ( '' === trim( $title ) ) { wp_send_json_error( 'A title cannot be blank.' ); }
+			$set['title']        = $title;
+			$set['title_locked'] = 1;
+		}
+		if ( isset( $_POST['category'] ) ) {
+			$slug = sanitize_title( wp_unslash( (string) $_POST['category'] ) );
+			$cat  = ( '' !== $slug && class_exists( 'ZKV_Categories' ) ) ? ZKV_Categories::get_by_slug( $slug ) : null;
+			if ( '' !== $slug && ! $cat ) { wp_send_json_error( 'Unknown category.' ); }
+			$set['category_id']     = $cat ? (int) $cat['id'] : null;
+			$set['category_locked'] = $cat ? 1 : 0;   // "General" (blank) hands the choice back to the index
+		}
+		if ( ! $set ) { wp_send_json_error( 'Nothing to change.' ); }
+		$set['updated_at'] = current_time( 'mysql' );
+		$ok = false !== $wpdb->update( $wpdb->prefix . 'zkv_documents', $set, array( 'id' => $doc_id ) );
+		if ( ! $ok ) { wp_send_json_error( 'That could not be saved.' ); }
+		// Searchable by its new name at once (search reads the index, not the document row) - as editing context does.
+		if ( isset( $set['title'] ) ) {
+			$idx = $wpdb->get_row( $wpdb->prepare( "SELECT id, search_text FROM {$wpdb->prefix}zkv_index WHERE document_id = %d AND is_current = 1", $doc_id ), ARRAY_A );
+			if ( $idx ) {
+				$wpdb->update( $wpdb->prefix . 'zkv_index', array( 'search_text' => $set['title'] . ' ' . $idx['search_text'] ), array( 'id' => (int) $idx['id'] ), array( '%s' ), array( '%d' ) );
+			}
+		}
+		// The chat's cached Vault inventory carries titles: drop it so the next answer uses the new one.
+		if ( class_exists( 'ZKV_ZANA_Bridge' ) && method_exists( 'ZKV_ZANA_Bridge', 'invalidate_cache' ) ) { ZKV_ZANA_Bridge::invalidate_cache(); }
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT title, category_id, title_locked, category_locked FROM {$wpdb->prefix}zkv_documents WHERE id = %d", $doc_id ), ARRAY_A );
+		wp_send_json_success( $row );
+	}
+
 	public function ajax_update_context() {
 		check_ajax_referer( ZKV_NONCE, 'nonce' );
 		if ( ! $this->check_access() ) { wp_send_json_error( 'Access denied.' ); }
@@ -1461,7 +1692,7 @@ Respond with ONLY the JSON object.";
 
 		if ( ! $doc ) { wp_send_json_error( 'Document not found.' ); }
 
-		if ( (int) $doc['uploaded_by'] !== get_current_user_id() && ! current_user_can( 'manage_options' ) ) {
+		if ( (int) $doc['uploaded_by'] !== get_current_user_id() && ! $this->is_admin_user() ) {   // the Vault's own admin rule, as the button
 			wp_send_json_error( 'Only the uploader or admins can edit context.' );
 		}
 
@@ -1552,10 +1783,15 @@ Respond with ONLY the JSON object.";
 		check_ajax_referer( ZKV_NONCE, 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) { wp_send_json_error( 'Admin only.' ); }
 
-		$api_key = sanitize_text_field( $_POST['api_key'] ?? '' );
-		$model   = sanitize_text_field( $_POST['ai_model'] ?? 'Gemini-3.1-Pro' );
+		$api_key = sanitize_text_field( wp_unslash( $_POST['api_key'] ?? '' ) );
+		// Only a model the business offers is stored; '' means "the platform's model".
+		$model   = self::approved_model( sanitize_text_field( wp_unslash( $_POST['ai_model'] ?? '' ) ) );
 
-		if ( ! empty( $api_key ) ) {
+		if ( self::poe_managed() || self::managed_posted( 'poe' ) ) {
+			// Managed on Zorderz → Credentials, or sent from a screen that showed it managed:
+			// the row is the Credentials screen's (an empty field here would delete it, and a
+			// write would be refused there).
+		} elseif ( ! empty( $api_key ) ) {
 			// Encrypt and store.
 			$encrypted = self::encrypt_key( $api_key );
 			update_option( 'zkv_poe_api_key', $encrypted ?: $api_key );
@@ -1569,12 +1805,13 @@ Respond with ONLY the JSON object.";
 		$test_key = self::get_poe_api_key();
 		$test = '';
 		if ( ! empty( $test_key ) ) {
-			$test = self::poe_query( $test_key, 'Reply with exactly: OK', $model );
+			$test = self::poe_query( $test_key, 'Reply with exactly: OK', self::get_ai_model() );
 		}
 
 		wp_send_json_success( array(
 			'saved'       => true,
 			'key_set'     => ! empty( $test_key ),
+			'key_source'  => self::key_source(),
 			'test_result' => substr( $test, 0, 100 ),
 		) );
 	}
@@ -1583,26 +1820,84 @@ Respond with ONLY the JSON object.";
 		check_ajax_referer( ZKV_NONCE, 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) { wp_send_json_error( 'Admin only.' ); }
 
-		$key = self::get_poe_api_key();
-		$masked = '';
-		if ( ! empty( $key ) ) {
+		$key     = self::get_poe_api_key();
+		$managed = self::poe_managed();
+		$masked  = '';
+		if ( ! $managed && ! empty( $key ) ) {
 			$masked = substr( $key, 0, 8 ) . '...' . substr( $key, -4 );
 		}
 
+		// Managed: no part of the key leaves the server.
 		wp_send_json_success( array(
 			'api_key_masked' => $masked,
 			'api_key_set'    => ! empty( $key ),
-			'ai_model'       => get_option( 'zkv_ai_model', 'Gemini-3.1-Pro' ),
-			'has_own_key'    => ! empty( get_option( 'zkv_poe_api_key', '' ) ),
-			'key_source'     => ! empty( get_option( 'zkv_poe_api_key', '' ) ) ? "this app's key" : ( class_exists( 'ZDZ_Core_Settings' ) ? 'platform shared key' : 'none' ),
+			'ai_model'       => (string) get_option( 'zkv_ai_model', '' ),
+			'ai_model_used'  => self::get_ai_model(),
+			'model_choices'  => self::model_choices(),
+			'has_own_key'    => ! $managed && ! empty( get_option( 'zkv_poe_api_key', '' ) ),
+			'key_source'     => self::key_source(),
+			'managed'        => $managed,
 		) );
 	}
 
+	/** The Model Registry slot this app's calls resolve through. */
+	const MODEL_SLOT = 'knowledge';
+
 	/**
-	 * Get the configured AI model name.
+	 * The models the business offers, handle => label, from the Model Registry's roster
+	 * (`zdz_model_choices`, filled by a connections pack). Empty = no roster: any handle
+	 * the gateway accepts may be typed.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function model_choices(): array {
+		$raw = class_exists( 'ZDZ_Model_Registry' ) ? ZDZ_Model_Registry::choices() : array();
+		$out = array();
+		foreach ( (array) $raw as $k => $v ) {
+			$handle = is_int( $k ) ? (string) $v : (string) $k;
+			$handle = trim( $handle );
+			if ( '' !== $handle ) {
+				$out[ $handle ] = is_int( $k ) ? $handle : (string) $v;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Only a model the business offers is ever stored or called. A retired handle is
+	 * moved to its successor (the registry's remap); with a roster configured, a handle
+	 * outside it becomes '' — "use the platform's model" — never a guess at another one.
+	 * With no roster, any non-empty handle stands.
+	 *
+	 * @param string $model
+	 * @return string
+	 */
+	public static function approved_model( $model ) {
+		$model = trim( (string) $model );
+		if ( '' === $model ) {
+			return '';
+		}
+		if ( class_exists( 'ZDZ_Model_Registry' ) ) {
+			$model = ZDZ_Model_Registry::remap( $model );
+		}
+		$choices = self::model_choices();
+		if ( $choices && ! isset( $choices[ $model ] ) ) {
+			return '';
+		}
+		return $model;
+	}
+
+	/**
+	 * The model this app's calls really use: the stored choice through approved_model(),
+	 * else the registry's `knowledge` slot (which falls back to the platform base model).
+	 * '' when nothing is configured anywhere — callers then skip the Ai step.
 	 */
 	public static function get_ai_model() {
-		return get_option( 'zkv_ai_model', 'Gemini-3.1-Pro' );
+		$model = self::approved_model( (string) get_option( 'zkv_ai_model', '' ) );
+		if ( '' === $model && class_exists( 'ZDZ_Model_Registry' ) ) {
+			$model = (string) ZDZ_Model_Registry::model_for( self::MODEL_SLOT );
+		}
+		return $model;
 	}
 
 	// ──────────────────────────────────────────────────────────────
@@ -1630,6 +1925,16 @@ Respond with ONLY the JSON object.";
 		$visibility  = in_array( $_POST['visibility'] ?? '', array( 'all_employees', 'admin_only', 'transcript_private' ), true )
 		               ? $_POST['visibility'] : 'all_employees';
 		$transcript_status = ( 'transcript_private' === $visibility ) ? 'detected' : '';
+		// Private paste - written encrypted from the start, never shown to an AI service.
+		$want_private = '1' === sanitize_text_field( wp_unslash( $_POST['private'] ?? '' ) );
+		if ( $want_private && 'transcript_private' === $visibility ) {
+			ob_end_clean();
+			wp_send_json_error( 'A private transcript cannot also be Private yet. Choose one.' );
+		}
+		if ( $want_private && ( ! class_exists( 'ZKV_Private' ) || ! ZKV_Private::available() || null === ZKV_Private::key( true ) ) ) {
+			ob_end_clean();
+			wp_send_json_error( 'Documents cannot be kept Private right now (the key is locked, or this server cannot encrypt). Nothing was saved.' );
+		}
 
 		// Ensure vault dir exists.
 		if ( function_exists( 'zkv_create_secure_vault_dir' ) ) {
@@ -1639,12 +1944,18 @@ Respond with ONLY the JSON object.";
 		// Save text as .txt file in vault.
 		$safe_title = sanitize_file_name( $title ?: 'pasted-text' );
 		$filename   = date( 'Y-m-d' ) . '-' . $safe_title . '.txt';
-		// Unguessable per-file random subdirectory (see the upload path) so the URL can't be guessed.
-		$vault_sub  = ZKV_VAULT_DIR . '/' . bin2hex( random_bytes( 16 ) );
-		wp_mkdir_p( $vault_sub );
-		$file_path  = $vault_sub . '/' . wp_unique_filename( $vault_sub, $filename );
-
-		file_put_contents( $file_path, $pasted_text );
+		if ( $want_private ) {
+			// Written encrypted from the start: no plain copy is ever on disk.
+			$file_path = ZKV_Private::encrypt_string( $pasted_text );
+			if ( '' === $file_path ) {
+				ob_end_clean();
+				wp_send_json_error( 'The text could not be encrypted (is the Private key locked?). Nothing was saved.' );
+			}
+		} else {
+			// A random name (ZKV_File_Names); the row keeps $filename.
+			$file_path = ZKV_VAULT_DIR . '/' . ZKV_File_Names::random_name( $filename );
+			file_put_contents( $file_path, $pasted_text );
+		}
 
 		// Compute content hash.
 		$file_hash = hash( 'sha256', $pasted_text );
@@ -1652,7 +1963,7 @@ Respond with ONLY the JSON object.";
 		// Check for duplicate.
 		global $wpdb;
 		$existing = $wpdb->get_row( $wpdb->prepare(
-			"SELECT id, title, original_name FROM {$wpdb->prefix}zkv_documents WHERE file_hash = %s LIMIT 1",
+			"SELECT id, title, original_name FROM {$wpdb->prefix}zkv_documents WHERE file_hash = %s AND is_private = 0 LIMIT 1",
 			$file_hash
 		), ARRAY_A );
 		if ( $existing ) {
@@ -1661,7 +1972,14 @@ Respond with ONLY the JSON object.";
 			wp_send_json_error( 'This exact text already exists in the vault as "' . $existing['title'] . '".' );
 		}
 
+		// A title or category the person typed is theirs (the index fills only what they left blank).
+		$title_locked    = '' !== trim( $title ) ? 1 : 0;
+		$category_locked = '' !== trim( $category ) ? 1 : 0;
 		// AI suggestions if no title provided.
+		if ( empty( $title ) && $want_private ) {
+			// Never the text's first line (often the sensitive part): a plain, dated name.
+			$title = 'Private note ' . date_i18n( 'M j, Y g:i a', current_time( 'timestamp' ) );
+		}
 		if ( empty( $title ) ) {
 			$suggestions = $this->get_ai_suggestions( $filename, 'text/plain', substr( $pasted_text, 0, 4000 ) );
 			$title = $suggestions['title'] ?: $safe_title;
@@ -1702,7 +2020,10 @@ Respond with ONLY the JSON object.";
 			'category_id'   => $category_id,
 			'status'        => 'pending',
 			'visibility'    => $visibility,
+			'is_private'    => $want_private ? 1 : 0,
 			'transcript_status' => $transcript_status,
+			'title_locked'    => $title_locked,
+			'category_locked' => ( $category_locked && $category_id ) ? 1 : 0,
 			'version'       => 1,
 			'created_at'    => current_time( 'mysql' ),
 			'updated_at'    => current_time( 'mysql' ),
@@ -1718,6 +2039,16 @@ Respond with ONLY the JSON object.";
 				array( 'id' => $doc_id ),
 				array( '%s' ), array( '%d' )
 			);
+		}
+
+		// Private - indexed now from the person's own words; no AI job.
+		if ( $want_private && $doc_id > 0 ) {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}zkv_documents WHERE id = %d", $doc_id ), ARRAY_A );
+			$r   = $row ? ZKV_Private::finish_private( $row ) : 'Not saved.';
+			ob_end_clean();
+			if ( true !== $r ) { wp_send_json_error( (string) $r ); }
+			ZKV_Private::log( 'pasted_private', $doc_id, get_current_user_id() );
+			wp_send_json_success( array( 'document_id' => $doc_id, 'title' => $title, 'private' => true ) );
 		}
 
 		// Schedule deep AI indexing.
@@ -1776,7 +2107,7 @@ Respond with ONLY the JSON object.";
 		global $wpdb;
 		$vis = $this->visibility_sql( 'd' );
 		$doc = $wpdb->get_row( $wpdb->prepare(
-			"SELECT d.file_url, d.original_name, d.mime_type
+			"SELECT d.file_url, d.original_name, d.mime_type, d.is_private
 			 FROM {$wpdb->prefix}zkv_documents d
 			 WHERE d.id = %d {$vis}",
 			$doc_id
@@ -1788,6 +2119,10 @@ Respond with ONLY the JSON object.";
 		}
 
 		$file_path = $doc['file_url']; // This is a filesystem path, not a URL.
+		if ( ! empty( $file_path ) && ! file_exists( $file_path ) ) {
+			$renamed = ZKV_File_Names::renamed( $file_path ); // renamed a moment ago
+			if ( '' !== $renamed ) { $file_path = $renamed; }
+		}
 		if ( empty( $file_path ) || ! file_exists( $file_path ) ) {
 			status_header( 404 );
 			die( 'File not found on server.' );
@@ -1795,12 +2130,8 @@ Respond with ONLY the JSON object.";
 
 		// Layer 5: Prevent path traversal — file must be inside vault dir OR WP uploads dir.
 		$real_path = realpath( $file_path );
-		$vault_dir = defined( 'ZKV_VAULT_DIR' ) ? realpath( ZKV_VAULT_DIR ) : false;
-		$uploads = wp_upload_dir();
-		$uploads_dir = realpath( $uploads['basedir'] );
-		$in_vault   = ( $real_path && $vault_dir && strpos( $real_path, $vault_dir ) === 0 );
-		$in_uploads = ( $real_path && $uploads_dir && strpos( $real_path, $uploads_dir ) === 0 );
-		if ( ! $real_path || ( ! $in_vault && ! $in_uploads ) ) {
+		// Inside the Vault folder or uploads, with the folder separator required (ZKV_File_Names).
+		if ( ! $real_path || ! ZKV_File_Names::is_allowed_path( $real_path ) ) {
 			status_header( 403 );
 			die( 'Access denied.' );
 		}
@@ -1814,6 +2145,18 @@ Respond with ONLY the JSON object.";
 		header( 'Pragma: no-cache' );
 		header( 'Expires: 0' );
 		header( 'X-Robots-Tag: noindex, nofollow' );
+
+		// A Private document is decrypted on the way out (and refused while the key is locked).
+		if ( ! empty( $doc['is_private'] ) ) {
+			if ( ! class_exists( 'ZKV_Private' ) || ! ZKV_Private::is_encrypted_file( $real_path ) || null === ZKV_Private::key( false ) ) {
+				status_header( 503 );
+				die( 'This Private document is locked until an administrator enters the recovery code.' );
+			}
+			header( 'Content-Type: ' . $mime );
+			header( 'Content-Disposition: inline; filename="' . sanitize_file_name( $name ) . '"' );
+			ZKV_Private::stream( $real_path );
+			exit;
+		}
 
 		// Content headers (Content-Type + nosniff + safe Content-Disposition, shared helper).
 		zkv_serve_file_headers( $mime, $name );
@@ -1887,7 +2230,8 @@ Respond with ONLY the JSON object.";
 		wp_send_json_success( array(
 			'chunk_count' => $count,
 			'mime_type'   => $mime,
-			'needs_browser_extract' => ( $count === 0 && $mime === 'application/pdf' ),
+			// A Private document keeps no extracted text, so the browser never extracts one.
+			'needs_browser_extract' => ( $count === 0 && $mime === 'application/pdf' && ! ( class_exists( 'ZKV_Private' ) && ZKV_Private::is_private( $doc_id ) ) ),
 		) );
 	}
 
@@ -1933,7 +2277,112 @@ Respond with ONLY the JSON object.";
 	}
 
 	// ══════════════════════════════════════════════════════════════
-	//  v1.5.0 — PRIVATE TRANSCRIPTS: admin queue
+	//  Private documents, the recovery code, outside links
+	// ══════════════════════════════════════════════════════════════
+
+	/** A document this person may see, and may change (its uploader or an admin), or null. */
+	private function own_or_admin_doc( $doc_id ) {
+		global $wpdb;
+		$vis = $this->visibility_sql( 'd' );
+		// Phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $vis is the Vault's own fixed fragment.
+		$doc = $wpdb->get_row( $wpdb->prepare( "SELECT d.* FROM {$wpdb->prefix}zkv_documents d WHERE d.id = %d {$vis}", (int) $doc_id ), ARRAY_A );
+		if ( ! $doc ) { return null; }
+		if ( (int) $doc['uploaded_by'] !== get_current_user_id() && ! $this->is_admin_user() ) { return null; }
+		return $doc;
+	}
+
+	/** Private on or off: the uploader or an admin. Off sends the document to the AI service (the screen asked). */
+	public function ajax_set_private() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! $this->check_access() || ! class_exists( 'ZKV_Private' ) ) { wp_send_json_error( 'Access denied.' ); }
+		$doc = $this->own_or_admin_doc( absint( $_POST['document_id'] ?? 0 ) );
+		if ( ! $doc ) { wp_send_json_error( 'Only the uploader or an admin can change this.' ); }
+		$on = '1' === sanitize_text_field( wp_unslash( $_POST['private'] ?? '' ) );
+		$r  = $on ? ZKV_Private::make_private( (int) $doc['id'], get_current_user_id() )
+			: ZKV_Private::make_ordinary( (int) $doc['id'], get_current_user_id() );
+		if ( true !== $r ) { wp_send_json_error( (string) $r ); }
+		wp_send_json_success( array( 'is_private' => $on ? 1 : 0 ) );
+	}
+
+	/** Administrators: the key's state, and whether the recovery code was written down. */
+	public function ajax_private_status() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) || ! class_exists( 'ZKV_Private' ) ) { wp_send_json_error( 'Admin only.' ); }
+		global $wpdb;
+		wp_send_json_success( array(
+			'state'      => ZKV_Private::key_state(),
+			'code_saved' => ZKV_Private::code_saved() ? 1 : 0,
+			'count'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}zkv_documents WHERE is_private = 1" ),
+		) );
+	}
+
+	/** Administrators (manage_options): show the recovery code. Every showing is logged. */
+	public function ajax_private_code() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) || ! class_exists( 'ZKV_Private' ) ) { wp_send_json_error( 'Admin only.' ); }
+		if ( 'ready' !== ZKV_Private::key_state() ) {
+			wp_send_json_error( 'none' === ZKV_Private::key_state() ? 'There is no Private key yet. It is made with the first Private document.' : 'The key is locked. Enter the recovery code instead.' );
+		}
+		ZKV_Private::log( 'recovery_code_shown', 0, get_current_user_id() );
+		nocache_headers();
+		wp_send_json_success( array( 'code' => ZKV_Private::recovery_code() ) );
+	}
+
+	public function ajax_private_saved() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) || ! class_exists( 'ZKV_Private' ) ) { wp_send_json_error( 'Admin only.' ); }
+		ZKV_Private::mark_code_saved( get_current_user_id() );
+		wp_send_json_success( array( 'code_saved' => 1 ) );
+	}
+
+	public function ajax_private_unlock() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) || ! class_exists( 'ZKV_Private' ) ) { wp_send_json_error( 'Admin only.' ); }
+		if ( class_exists( 'ZDZ_Share_Link' ) && ! ZDZ_Share_Link::rate_ok( 'zkv-unlock', 5, 600 ) ) {
+			wp_send_json_error( 'Too many tries. Wait ten minutes.' );
+		}
+		$r = ZKV_Private::unlock( sanitize_text_field( wp_unslash( $_POST['code'] ?? '' ) ) );
+		ZKV_Private::log( true === $r ? 'private_unlocked' : 'private_unlock_failed', 0, get_current_user_id() );
+		if ( true !== $r ) { wp_send_json_error( (string) $r ); }
+		wp_send_json_success( array( 'state' => ZKV_Private::key_state() ) );
+	}
+
+	/** Share outside: a link for 14 or 30 days. The url (with its token) is returned once, to the person who made it. */
+	public function ajax_link_create() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! $this->check_access() || ! class_exists( 'ZKV_Ext_Links' ) ) { wp_send_json_error( 'Access denied.' ); }
+		$r = ZKV_Ext_Links::create( absint( $_POST['document_id'] ?? 0 ), get_current_user_id(), array(
+			'days'      => absint( $_POST['days'] ?? ZKV_Ext_Links::DEFAULT ),
+			'recipient' => sanitize_text_field( wp_unslash( $_POST['recipient'] ?? '' ) ),
+			'source'    => 'vault',
+		) );
+		if ( is_wp_error( $r ) ) { wp_send_json_error( $r->get_error_message() ); }
+		nocache_headers();
+		wp_send_json_success( $r );
+	}
+
+	/** The upload form was cleared or closed: its AI step's file goes now (only the person's own, only if unclaimed). */
+	public function ajax_discard_temp() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! $this->check_access() || ! class_exists( 'ZKV_Private' ) ) { wp_send_json_error( 'Access denied.' ); }
+		$key = sanitize_text_field( wp_unslash( $_POST['temp_key'] ?? '' ) );
+		// The transient key carries the person's id - nobody can discard another person's file.
+		if ( 0 !== strpos( $key, 'zkv_temp_' . get_current_user_id() . '_' ) ) { wp_send_json_error( 'Not yours.' ); }
+		$t = get_transient( $key );
+		if ( $t && ! empty( $t['file'] ) ) { ZKV_Private::temp_discard( (string) $t['file'] ); delete_transient( $key ); }
+		wp_send_json_success( array( 'discarded' => $t ? 1 : 0 ) );
+	}
+
+	public function ajax_link_revoke() {
+		check_ajax_referer( ZKV_NONCE, 'nonce' );
+		if ( ! $this->check_access() || ! class_exists( 'ZKV_Ext_Links' ) ) { wp_send_json_error( 'Access denied.' ); }
+		$r = ZKV_Ext_Links::revoke( absint( $_POST['link_id'] ?? 0 ), get_current_user_id() );
+		if ( true !== $r ) { wp_send_json_error( (string) $r ); }
+		wp_send_json_success( array( 'stopped' => 1 ) );
+	}
+
+	// ══════════════════════════════════════════════════════════════
+	//  PRIVATE TRANSCRIPTS: admin queue
 	//
 	//  The queue is the ONLY admin surface for transcripts, and it is
 	//  deliberately body-free: an admin sees filenames, uploaders, dates,
@@ -2095,12 +2544,12 @@ Respond with ONLY the JSON object.";
 		if ( ! $this->check_access() ) { wp_send_json_error( 'Access denied.' ); }
 		// v1.5.2 (KV1): every active user WITH AN EMAIL is a selectable participant /
 		// share target — the picker must NOT depend on the vault app grant (that
-		// dependency is what made a real user like Ron un-selectable). Only the shared
+		// dependency is what made a real user without the app grant un-selectable). Only the shared
 		// kiosk account (zdz_general) is excluded; it can never be a party or a
 		// recipient of private content.
 		$out = array();
 		foreach ( get_users( array( 'fields' => 'all' ) ) as $user ) {
-			if ( in_array( 'zdz_general', (array) $user->roles, true ) ) { continue; }
+			if ( in_array( 'zdz_general', (array) $user->roles, true ) || ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_shared_device( $user ) ) ) { continue; }
 			if ( empty( $user->user_email ) ) { continue; }
 			$out[] = array( 'id' => (int) $user->ID, 'name' => $user->display_name );
 		}
@@ -2217,7 +2666,7 @@ Respond with ONLY the JSON object.";
 		$recipient = get_userdata( $with_id );
 		if ( ! $recipient ) { wp_send_json_error( 'Choose a person to share with.' ); }
 		if ( $with_id === $uid ) { wp_send_json_error( 'That is you.' ); }
-		if ( in_array( 'zdz_general', (array) $recipient->roles, true ) ) {
+		if ( in_array( 'zdz_general', (array) $recipient->roles, true ) || ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_shared_device( $recipient ) ) ) {
 			wp_send_json_error( 'The shared kiosk account cannot receive private content.' );
 		}
 		if ( ZKV_ACL::is_party( $with_id, $doc_id ) ) {
@@ -2227,7 +2676,7 @@ Respond with ONLY the JSON object.";
 		// grant. Sharing now gives SCOPED access — they can open only this transcript
 		// (or its excerpt) via the serve gate and the "/vault/shared" page, never the
 		// general vault. (This refusal is exactly why a transcript could be "shared"
-		// with someone like Ron who then couldn't open it.) The shared kiosk account
+		// with someone without the app grant who then couldn't open it.) The shared kiosk account
 		// is still refused above; parties/self are handled above too.
 
 		$expires_at = $days > 0

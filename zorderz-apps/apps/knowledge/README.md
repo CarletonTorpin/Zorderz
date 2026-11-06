@@ -11,8 +11,7 @@ document categories. All identity comes from the theme's Core services at runtim
 
 ## License
 
-GPL-2.0-or-later. (The internal predecessor was proprietary; this distribution
-build is GPL and carries no company, product, place or person names.)
+GPL-2.0-or-later. The module carries no company, product, place or person names.
 
 ## What it does
 
@@ -44,6 +43,22 @@ and `web.config` (IIS) as **defence-in-depth**, but `.htaccess` is inert on
 nginx and is never the guarantee. `zkv_vault_protection_report()` raises a loud
 admin health warning when the web server cannot honour a file-level deny rule,
 and recommends a server rule (or moving the directory outside the web root).
+
+Every stored file has a random name (32 hex characters plus its extension,
+`ZKV_File_Names`); the readable name lives only in `original_name`. Files from
+earlier versions are renamed in place in small batches, each rename recorded
+first so nothing loses its file. `ZKV_PRIVATE_DIR` in `wp-config.php` can place
+the folder elsewhere.
+
+**Private documents** (`ZKV_Private`) are never sent to an Ai service and their
+files are stored encrypted (libsodium secretstream) with no plain copy. The data
+key is wrapped by keys derived from the site's secret keys in `wp-config.php` (or
+`ZKV_PRIVATE_KEK`); administrators can show, and must write down, the recovery
+code that unlocks it after those keys change.
+
+**Outside links** (`ZKV_Ext_Links`, `/vault/l/<token>`) open one document for a
+set number of days without signing in. Only the token's hash is stored, and every
+request re-checks the link, its expiry and its maker's right to share.
 
 ## Core services consumed
 

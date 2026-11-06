@@ -3,9 +3,12 @@
  * Zdz_Flow_Refs — the namespaced external-reference map for work items.
  *
  * Every external record a work item touches is keyed by (system, entity, external_id) — never a
- * bare document number (the estimate#5982 != invoice#5982 collision). The database carries two
+ * bare document number (an estimate and an invoice may share a number). The database carries two
  * guarantees:
- *   - PRIMARY KEY(work_item_id, system, entity)     — one external id per (item, system, entity).
+ *   - PRIMARY KEY(work_item_id, system, entity, external_id) — a work item may hold MANY external
+ *     ids in one (system, entity): a Project with two estimates, a deposit and a balance invoice,
+ *     every one of its jobs. `ref_seq` keeps the order they were recorded in; the first is the
+ *     one a single-value reader is given.
  *   - UNIQUE(system, entity, external_id)           — one work item per external record. THIS is
  *     the double-writer / duplicate-container catch: a second minter for the same external record
  *     cannot store its ref, and put() resolves the DB winner and throws Zdz_Flow_Ref_Conflict
@@ -123,6 +126,8 @@ if ( ! class_exists( 'Zdz_Flow_Refs' ) ) {
 		/**
 		 * Idempotently record that $work_item_id owns the external record
 		 * (system, entity, external_id). Returns true on first record AND on re-record (no-op).
+		 * Another external id in the same (system, entity) is ADDED beside the ones the item
+		 * already holds; nothing is re-pointed or dropped. False when the row could not be stored.
 		 *
 		 * @param array $meta optional: external_version, last_pulled_at, last_pushed_at,
 		 *                     sync_state, last_error.
@@ -201,32 +206,14 @@ if ( ! class_exists( 'Zdz_Flow_Refs' ) ) {
 			if ( null !== $owner ) {
 				// Already ours: refresh only the provided metadata (still a no-op success).
 				if ( ! empty( $meta_data ) ) {
-					$wpdb->update( $table, $meta_data, $where, $meta_fmt, $where_fmt );
+					$wpdb->update( $table, $meta_data, $where + array( 'external_id' => $external_id ), $meta_fmt, array_merge( $where_fmt, array( '%s' ) ) );
 				}
 				return true;
 			}
 
-			// 2) Does THIS item already have a ref for (system, entity)? (the PRIMARY KEY)
-			$cur_ext = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT external_id FROM {$table} WHERE work_item_id = %s AND `system` = %s AND entity = %s",
-					$work_item_id,
-					$system,
-					$entity
-				)
-			);
-			if ( null !== $cur_ext ) {
-				// A move: same (item, system, entity), new external_id. We already proved the new
-				// external_id has no other owner, so re-point in place (never REPLACE — REPLACE would
-				// delete another item's UNIQUE row).
-				$data = array_merge( array( 'external_id' => $external_id ), $meta_data );
-				$fmt  = array_merge( array( '%s' ), $meta_fmt );
-				$wpdb->update( $table, $data, $where, $fmt, $where_fmt );
-				return true;
-			}
-
-			// 3) A brand-new PK row. $wpdb->insert maps null -> SQL NULL; the UNIQUE index is the
-			//    ultimate arbiter of a concurrent race.
+			// 2) A brand-new row (the item may already hold other ids in this namespace; they stay).
+			//    $wpdb->insert maps null -> SQL NULL; the UNIQUE index is the ultimate arbiter of a
+			//    concurrent race.
 			$data = array(
 				'work_item_id' => $work_item_id,
 				'system'       => $system,
@@ -266,7 +253,8 @@ if ( ! class_exists( 'Zdz_Flow_Refs' ) ) {
 				if ( null !== $owner2 && (string) $owner2 !== $work_item_id ) {
 					throw new Zdz_Flow_Ref_Conflict( (string) $owner2, $system, $entity, $external_id );
 				}
-				// Either it is ours now (concurrent same-item insert) or a PK move landed — success.
+				// Ours now (a concurrent same-item insert won), or not stored at all.
+				return null !== $owner2;
 			}
 			return true;
 		}
@@ -297,6 +285,7 @@ if ( ! class_exists( 'Zdz_Flow_Refs' ) ) {
 
 		/**
 		 * Forward lookup: the refs a work item holds, optionally filtered to one system/entity.
+		 * Ordered by system, entity, then the order the refs were recorded in (first = oldest).
 		 *
 		 * @return array<int,array<string,mixed>> ref rows (ARRAY_A).
 		 */
@@ -315,7 +304,52 @@ if ( ! class_exists( 'Zdz_Flow_Refs' ) ) {
 			}
 			$sql .= ' ORDER BY `system` ASC, entity ASC';
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
-			return is_array( $rows ) ? $rows : array();
+			return is_array( $rows ) ? self::in_recorded_order( $rows ) : array();
+		}
+
+		/**
+		 * Rows grouped by system and entity, each group in the order it was recorded (`ref_seq`).
+		 * Sorted here rather than in SQL so a table not yet re-keyed (no `ref_seq`) still reads.
+		 * PURE.
+		 *
+		 * @param array<int,array<string,mixed>> $rows
+		 * @return array<int,array<string,mixed>>
+		 */
+		public static function in_recorded_order( array $rows ): array {
+			$i = 0;
+			foreach ( $rows as $k => $r ) {
+				$rows[ $k ]['__pos'] = $i++;
+			}
+			usort( $rows, static function ( $a, $b ) {
+				$c = strcmp( (string) ( $a['system'] ?? '' ), (string) ( $b['system'] ?? '' ) );
+				if ( 0 === $c ) {
+					$c = strcmp( (string) ( $a['entity'] ?? '' ), (string) ( $b['entity'] ?? '' ) );
+				}
+				if ( 0 === $c && isset( $a['ref_seq'], $b['ref_seq'] ) ) {
+					$c = (int) $a['ref_seq'] <=> (int) $b['ref_seq'];
+				}
+				return 0 !== $c ? $c : ( $a['__pos'] <=> $b['__pos'] );
+			} );
+			foreach ( $rows as $k => $r ) {
+				unset( $rows[ $k ]['__pos'] );
+			}
+			return $rows;
+		}
+
+		/**
+		 * Every external id a work item holds in one (system, entity), in recorded order.
+		 *
+		 * @return string[]
+		 */
+		public static function ids( string $work_item_id, string $system, string $entity ): array {
+			$out = array();
+			foreach ( self::for( $work_item_id, $system, $entity ) as $r ) {
+				$id = (string) ( $r['external_id'] ?? '' );
+				if ( '' !== $id ) {
+					$out[] = $id;
+				}
+			}
+			return array_values( array_unique( $out ) );
 		}
 	}
 }

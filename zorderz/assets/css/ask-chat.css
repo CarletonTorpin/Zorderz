@@ -1,0 +1,29 @@
+/* "Ask chat about this" on every widget (assets/js/ask-chat.js). The header button matches the widget's nav buttons;
+   the panel sits under the header, in flow (no inner scroll). Tokens with fallbacks, so every display mode follows the
+   theme. */
+.dw-ask-btn{
+  width:32px;height:28px;margin:0 6px 0 auto;border:1px solid var(--sys-border, #e2e8f0);border-radius:var(--ref-radius-sm, 6px);
+  background:var(--sys-surface, #fff);color:var(--sys-text, #1e293b);cursor:pointer;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+.dw-ask-btn[aria-expanded="true"]{background:var(--sys-brand, #2C5F8A);border-color:var(--sys-brand, #2C5F8A);color:#fff;}
+.dw-ask-btn svg{pointer-events:none;}
+[data-theme="dark"] .dw-ask-btn:not([aria-expanded="true"]){color:var(--sys-text, #f1f5f9);background:rgba(255,255,255,.06);border-color:var(--ref-gray-600);}
+@media(prefers-color-scheme:dark){
+  [data-theme="system"] .dw-ask-btn:not([aria-expanded="true"]){color:var(--sys-text, #f1f5f9);background:rgba(255,255,255,.06);border-color:var(--ref-gray-600);}
+}
+.zdz-ask{padding:10px 16px 4px;border-bottom:1px solid var(--sys-border, #e2e8f0);}
+.zdz-ask[hidden]{display:none !important;}
+.zdz-ask-row{display:flex;gap:8px;}
+.zdz-ask-input{flex:1 1 auto;min-width:0;min-height:44px;padding:0 12px;border:1px solid var(--sys-border, #e2e8f0);
+  border-radius:var(--ref-radius-sm, 8px);background:var(--sys-surface-raised, var(--sys-surface, #fff));color:var(--sys-text, #1e293b);font-size:16px;}
+.zdz-ask-send{min-height:44px;padding:0 16px;border:0;border-radius:var(--ref-radius-sm, 8px);background:var(--sys-brand, #2C5F8A);
+  color:#fff;font-weight:600;cursor:pointer;}
+.zdz-ask-preview{margin:8px 0 6px;font-size:13px;color:var(--sys-text-sec, #64748b);}
+.zdz-ask-preview summary{cursor:pointer;min-height:32px;display:flex;align-items:center;}
+.zdz-ask-hidden{margin:4px 0 6px;}
+.zdz-ask-text{margin:0;white-space:pre-wrap;word-break:break-word;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--sys-text, #1e293b);background:var(--sys-surface-subtle, #f8fafc);border-radius:6px;padding:8px 10px;}
+.dw-ask-btn + .dw-nav{margin-left:0;}
+.zdz-focused .dash-widget-header .dw-ask-btn{margin-left:auto}
+.zdz-focused .dash-widget-header .dw-ask-btn ~ .dw-pin{margin-left:0}

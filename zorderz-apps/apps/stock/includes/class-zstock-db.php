@@ -4,10 +4,13 @@
  *
  * Five tables, all shipped EMPTY (schema only, never seeded):
  *   wp_zstock_ledger          immutable inventory event log (source of truth for current stock).
- *   wp_zstock_stock           per-item live state: denormalized current_stock + optional
- *                             par/reorder overrides. Keyed by the Item Engine item id (VARCHAR).
- *   wp_zstock_supplier_orders uploaded/parsed supplier invoices (draft → approved/rejected).
- *   wp_zstock_order_items     parsed line items from a supplier order.
+ *   wp_zstock_stock           per-item live state: current_stock (always the SUM of the ledger),
+ *                             optional par/reorder overrides, and counted_at (the first count).
+ *                             Keyed by the Item Engine item id (VARCHAR).
+ *   wp_zstock_supplier_orders supplier orders: incoming → received (a person's tap) / partial /
+ *                             rejected ("Not ours"); by hand, from an uploaded invoice, or from
+ *                             supplier order mail.
+ *   wp_zstock_order_items     an order's lines, with how many have been received so far.
  *   wp_zstock_sync_log        de-dupe log for the consumption sweep (absent in the earlier build).
  *
  * The catalog itself (items, SKUs, unit nouns, par/reorder defaults, and each item's BOM
@@ -30,7 +33,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ZSTOCK_DB {
 
 	const DB_VERSION_OPTION = 'zstock_db_version';
-	const DB_VERSION        = '1.0.0';
+	/** The schema's own version: bumped whenever a column is added, so an existing install gets it. */
+	const DB_VERSION        = '1.3.0';
 
 	public static function ledger_table() {
 		global $wpdb;
@@ -87,6 +91,7 @@ class ZSTOCK_DB {
 				current_stock DECIMAL(12,4) NOT NULL DEFAULT 0,
 				par_level DECIMAL(12,4) NULL DEFAULT NULL,
 				reorder_point DECIMAL(12,4) NULL DEFAULT NULL,
+				counted_at DATETIME NULL DEFAULT NULL,
 				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				PRIMARY KEY  (item_id)
 			) {$charset};"
@@ -109,10 +114,24 @@ class ZSTOCK_DB {
 				created_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
 				approved_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
 				approved_at DATETIME DEFAULT NULL,
+				source VARCHAR(20) NOT NULL DEFAULT 'upload',
+				source_key VARCHAR(64) NOT NULL DEFAULT '',
+				receipts INT NOT NULL DEFAULT 0,
+				received_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+				received_at DATETIME DEFAULT NULL,
+				rejected_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+				rejected_at DATETIME DEFAULT NULL,
+				closed_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+				closed_at DATETIME DEFAULT NULL,
+				supplier_match VARCHAR(120) NOT NULL DEFAULT '',
+				ref_cores VARCHAR(255) NOT NULL DEFAULT '',
+				notes TEXT NULL,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				PRIMARY KEY  (id),
 				KEY idx_status (status),
 				KEY idx_supplier (supplier_name(100)),
+				KEY idx_source_key (source_key),
+				KEY idx_supplier_match (supplier_match),
 				KEY idx_created_at (created_at)
 			) {$charset};"
 		);
@@ -131,6 +150,7 @@ class ZSTOCK_DB {
 				total DECIMAL(12,2) NOT NULL DEFAULT 0,
 				confidence VARCHAR(20) NOT NULL DEFAULT 'LOW',
 				matched TINYINT(1) NOT NULL DEFAULT 0,
+				received_qty DECIMAL(12,4) NULL DEFAULT NULL,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				PRIMARY KEY  (id),
 				KEY idx_order_id (order_id),

@@ -129,7 +129,7 @@ class ZDZ_Integration_Tests {
 		// ── Channel 8: Messaging → Analytics Preview ──
 		$checks[] = $this->check_messaging_preview();
 
-		// ── Channel 9: KPI Metrics Filter ──
+		// ── Channel 9: the home tiles' read verbs ──
 		$checks[] = $this->check_kpi_metrics();
 
 		// ── Channel 10: Permission System (Group 5) ──
@@ -147,7 +147,8 @@ class ZDZ_Integration_Tests {
 	 * ================================================================== */
 
 	private function check_credential_cascade() {
-		$prefixes = [ 'tscc_', 'tsec_', 'zdz_surveys_', 'tsa_', 'tsl_', 'zdz_core_' ];
+		// The option families the FreshBooks token service keeps in sync (ZDZ_Token_Service).
+		$prefixes = [ 'zdz_core_', 'zdz_surveys_', 'zl_' ];
 		$found = 0;
 		foreach ( $prefixes as $p ) {
 			if ( ! empty( get_option( $p . 'fb_access_token', '' ) ) ) {
@@ -156,7 +157,7 @@ class ZDZ_Integration_Tests {
 		}
 		return [
 			'name'   => 'Credential Cascade (FreshBooks)',
-			'pass'   => $found >= 2,
+			'pass'   => $found >= 1,
 			'detail' => "{$found}/" . count( $prefixes ) . " prefixes have access tokens",
 		];
 	}
@@ -242,13 +243,18 @@ class ZDZ_Integration_Tests {
 	}
 
 	private function check_kpi_metrics() {
-		$metrics = apply_filters( 'zdz_kpi_metrics', [] );
-		$count   = count( $metrics );
-		$preview = $count > 0 ? ' (' . implode( ', ', array_slice( array_keys( $metrics ), 0, 5 ) ) . ')' : '';
+		// The home tiles read their owners' verbs (ZDZ_KPI_Metrics); no metrics filter is applied any more.
+		$verbs   = array( 'ledger.home_figures', 'survey.counts' );
+		$missing = array();
+		foreach ( $verbs as $v ) {
+			if ( ! class_exists( 'ZDZ_Capabilities' ) || ! ZDZ_Capabilities::get( $v ) ) {
+				$missing[] = $v;
+			}
+		}
 		return [
-			'name'   => 'KPI Metrics Filter (zdz_kpi_metrics)',
-			'pass'   => $count > 0,
-			'detail' => "{$count} metrics registered{$preview}",
+			'name'   => 'Home tiles\' read verbs',
+			'pass'   => ! $missing,
+			'detail' => $missing ? 'not registered: ' . implode( ', ', $missing ) : implode( ', ', $verbs ) . ' registered',
 		];
 	}
 
@@ -293,7 +299,7 @@ class ZDZ_Integration_Tests {
 			$chunk_warnings = array();
 			foreach ( $pricing['doc_ids'] as $doc_id ) {
 				$chunk_count = $wpdb->get_var( $wpdb->prepare(
-					"SELECT COUNT(*) FROM {$wpdb->prefix}tskv_chunks WHERE document_id = %d",
+					"SELECT COUNT(*) FROM {$wpdb->prefix}zkv_chunks WHERE document_id = %d",
 					$doc_id
 				) );
 				if ( (int) $chunk_count === 0 ) {

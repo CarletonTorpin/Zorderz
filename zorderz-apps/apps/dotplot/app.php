@@ -21,17 +21,17 @@
  *
  * ── CORE-SERVICE BINDINGS (identity is READ from the theme, never hardcoded) ──
  *   - Report sources : ZDZ_Report_Sources (registry + spec validator + outbox reader).
- *   - Flow outbox    : wp_zdz_flow_outbox (the Wave-B Zdz_Flow writer's event outbox).
+ *   - Flow outbox    : wp_zdz_flow_outbox (the Zdz_Flow writer's event outbox).
  *   - Entitlement    : ZDZ_Data_Permissions::can(..,'view_company_revenue') for money sources.
  *   - App gate       : ZDZ_Plugin_API::user_can_access_app.
  *   - AI             : ZDZ_Model_Registry::gateway() (shared ZDZ_Core_Poe) — bound BY NAME,
  *                      the app never passes an API key.
  *
- * ── PORTED AS A DELETION (S8-03) ──────────────────────────────────────
- * The five-Poe-key rotation is GONE: no key list, no rotation on 402, no remembered-option,
- * no upgrade-clear. Single-credential is the Zorderz invariant; the app just calls the gateway.
- * Only the honest-diagnostic discipline (option NAMES / lengths / 8-char digests, never values)
- * is kept — see ZDP_Ai::diagnostics().
+ * ── ONE CREDENTIAL ──────────────────────────────────────────────
+ * The app holds no AI key: no key list, no rotation on 402, no remembered option. One
+ * credential, owned by the theme, is the Zorderz invariant; the app just calls the gateway.
+ * Diagnostics report option NAMES / lengths / 8-char digests, never values — see
+ * ZDP_Ai::diagnostics().
  *
  * SOURCE VOCABULARY: this app ships NONE. The sale chain / stage names are Identity (flows), and
  * a source is contributed via the theme's `zdz_report_sources` filter by the Connections
@@ -114,10 +114,9 @@ add_action(
 );
 
 /**
- * Declare this module's legacy TS -> current renames to the platform migration. A fresh Zorderz
- * install has no legacy rows, so every entry no-ops; the map documents the TS lineage and — by
- * carrying NO poe-key option — records that the five-key rotation apparatus was deleted, not
- * ported. Plugins DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place.
+ * Declare this module's pre-rename option and app id to the platform migration. A fresh Zorderz
+ * install has no such rows, so every entry no-ops. The map carries no AI-key option because the
+ * app keeps none. Apps DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place.
  */
 add_filter(
 	'zdz_rename_map',
@@ -130,7 +129,7 @@ add_filter(
 		);
 		$map['app_ids'] = array_merge(
 			$map['app_ids'] ?? array(),
-			array( 'ts-dot-plot' => ZDP_APP_ID )
+			array( 'dot-plot' => ZDP_APP_ID )
 		);
 		return $map;
 	}

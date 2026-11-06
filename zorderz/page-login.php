@@ -15,7 +15,7 @@
 // ── Bridge interstitial mode ────────────────────────────────────────────
 // This fires when Safari redirects here after Magic Login validates the token.
 // The user is already authenticated in Safari. We show a confirmation with
-// a login code for the PWA (v2.19.0), and optionally write a bridge token
+// a login code for the PWA, and optionally write a bridge token
 // to CacheStorage as a supplemental mechanism.
 $is_bridge = ! empty( $_GET['magic-login-bridge'] ) && $_GET['magic-login-bridge'] === '1';
 
@@ -24,6 +24,9 @@ if ( $is_bridge ) {
 	$request_id   = isset( $_GET['request_id'] ) ? sanitize_text_field( $_GET['request_id'] ) : '';
 	$bridge_code  = isset( $_GET['bridge_code'] ) ? sanitize_text_field( $_GET['bridge_code'] ) : '';
 	$is_cold_start = empty( $request_id );
+	// The page this sign-in started from (a vault document, say). This browser is signed in
+	// now, so it can open right here; the Home Screen app steps stay below.
+	$bridge_next = class_exists( 'ZDZ_Login_Next' ) ? ZDZ_Login_Next::clean( isset( $_GET['zdz_next'] ) ? wp_unslash( (string) $_GET['zdz_next'] ) : '' ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- ZDZ_Login_Next::clean() keeps only a same-site path matching ^/[A-Za-z0-9/_.-]*$ and returns '' for anything else
 
 	// The login/bridge card is white, so it wants the DARK-ink wide lockup. The
 	// Business Profile is authoritative; the theme mods below are the pre-profile
@@ -87,6 +90,11 @@ if ( $is_bridge ) {
 		}
 		.bridge-icon svg{color:#059669;width:32px;height:32px}
 		.bridge-title{font-size:20px;font-weight:700;margin-bottom:8px;color:#111827}
+		.bridge-next{margin:4px 0 22px}
+		.bridge-next-btn{display:block;width:100%;padding:14px 18px;border-radius:12px;background:#2563eb;color:#fff;
+			font-size:16px;font-weight:700;text-decoration:none;text-align:center}
+		.bridge-next-btn:active{background:#1d4ed8}
+		.bridge-next-sub{font-size:13px;color:#6b7280;margin-top:8px;line-height:1.4}
 		.bridge-sub{font-size:15px;color:#6b7280;line-height:1.5;margin-bottom:24px}
 		.bridge-home-hint{
 			display:inline-flex;align-items:center;gap:8px;
@@ -106,7 +114,7 @@ if ( $is_bridge ) {
 		}
 		.bridge-code-expire{font-size:12px;color:#9ca3af;margin-top:8px}
 		.bridge-or{font-size:12px;color:#d1d5db;margin:16px 0;text-transform:uppercase;letter-spacing:1px}
-		/* v2.20.0: Copy button */
+		/* Copy button */
 		.bridge-copy-btn{
 			display:inline-flex;align-items:center;gap:6px;
 			margin-top:10px;padding:10px 20px;
@@ -117,7 +125,7 @@ if ( $is_bridge ) {
 		}
 		.bridge-copy-btn:active{background:#C7D2FE}
 		.bridge-copy-btn svg{width:16px;height:16px}
-		/* v2.20.0: Step-by-step instructions */
+		/* Step-by-step instructions */
 		.bridge-steps{
 			text-align:left;margin:20px 0 8px;
 		}
@@ -130,7 +138,7 @@ if ( $is_bridge ) {
 			background:#EEF2FF;color:#4338CA;font-weight:700;font-size:13px;
 			display:flex;align-items:center;justify-content:center;
 		}
-		/* v2.20.0: Swipe animation */
+		/* Swipe animation */
 		.bridge-swipe-hint{
 			display:flex;align-items:center;justify-content:center;
 			margin:16px 0 8px;opacity:0.7;
@@ -167,6 +175,12 @@ if ( $is_bridge ) {
 	</div>
 
 	<div class="bridge-title">You're logged in!</div>
+	<?php if ( $bridge_next ) : ?>
+		<div class="bridge-next">
+			<a class="bridge-next-btn" href="<?php echo esc_url( home_url( $bridge_next ) ); ?>"><?php esc_html_e( 'Open what you were opening', 'zorderz' ); ?></a>
+			<div class="bridge-next-sub"><?php esc_html_e( 'It opens here in this browser. To use the Home Screen app instead, follow the steps below.', 'zorderz' ); ?></div>
+		</div>
+	<?php endif; ?>
 
 	<?php if ( $bridge_code ) : ?>
 		<?php
@@ -226,8 +240,8 @@ if ( $is_bridge ) {
  * Write the bridge token to CacheStorage as a best-effort supplemental mechanism.
  * Note: On modern iOS (16+), CacheStorage is isolated between Safari and the
  * standalone PWA, so this may not be picked up. The primary mechanisms are:
- *   - REST API polling (warm start, v2.18.0)
- *   - Short login code (cold start, v2.19.0)
+ *   - REST API polling (warm start,)
+ *   - Short login code (cold start,)
  * Kept for backward compatibility with any iOS versions that DO share CacheStorage.
  */
 (function(){
@@ -242,7 +256,7 @@ if ( $is_bridge ) {
 				var response = new Response(body, {
 					headers: { 'Content-Type': 'application/json' }
 				});
-				cache.put('/_ts-bridge-token', response);
+				cache.put('/_zdz-bridge-token', response);
 			}).catch(function(){});
 		}
 	} catch(e) {}
@@ -257,11 +271,16 @@ if ( $is_bridge ) {
 }
 
 // ── Normal login mode ───────────────────────────────────────────────────
-// Redirect if already logged in.
+// Redirect if already logged in: to the page that sent them here (ZDZ_Login_Next: ?zdz_next= or
+// the cookie), else home.
 if ( is_user_logged_in() ) {
-	wp_safe_redirect( home_url( '/' ) );
+	wp_safe_redirect( class_exists( 'ZDZ_Login_Next' ) ? ZDZ_Login_Next::url_or( home_url( '/' ) ) : home_url( '/' ) );
 	exit;
 }
+
+// Remember where this sign-in should end up. Carried in the magic-link redirect_to (below) AND a
+// short cookie, so the code claim and the PWA bridge find it too.
+$zdz_login_next = class_exists( 'ZDZ_Login_Next' ) ? ZDZ_Login_Next::remember( ZDZ_Login_Next::from_request() ) : '';
 
 // Same resolution as the bridge card above: white surface, so dark ink.
 // Business Profile first, pre-profile theme mods as the fallback.
@@ -279,7 +298,10 @@ if ( '' === $login_logo_url ) {
 
 // Build the redirect_to URL with bridge request_id placeholder.
 // The JS will replace __REQUEST_ID__ with the actual UUID before the form submits.
-$bridge_redirect = add_query_arg( 'zdz_bridge_request_id', '__TS_REQUEST_ID__', home_url( '/' ) );
+$bridge_redirect = add_query_arg( 'zdz_bridge_request_id', '__ZDZ_REQUEST_ID__', home_url( '/' ) );
+if ( '' !== $zdz_login_next ) {
+	$bridge_redirect = add_query_arg( 'zdz_next', rawurlencode( $zdz_login_next ), $bridge_redirect );
+}
 
 // We include the header so WP enqueues styles/scripts, then overlay everything.
 get_header(); ?>
@@ -517,7 +539,7 @@ get_header(); ?>
 		}
 	}
 
-	/* ---- v2.19.0: Login code entry ---- */
+	/* ---- Login code entry ---- */
 	.zdz-code-toggle {
 		display: block;
 		width: 100%;
@@ -535,7 +557,7 @@ get_header(); ?>
 		color: var(--ref-brand-600, #2563eb);
 		text-decoration: underline;
 	}
-	/* v2.21.0: demoted "Already have a code?" affordance — quiet, secondary,
+	/* demoted "Already have a code?" affordance — quiet, secondary,
 	   sits beneath the email→code hero. Hidden once the code block is shown. */
 	.zdz-have-code-link {
 		display: block;
@@ -667,7 +689,7 @@ get_header(); ?>
 
 		<!-- PRIMARY view: code login. Shown by default (`active`). Ordered the way
 		     a user actually does it: request a code (email) first, then enter it.
-		     v2.21.0 login streamline: ONE input on screen at a time. The email →
+ login streamline: ONE input on screen at a time. The email →
 		     "Send me a code" request is the always-visible hero; the 6-digit code
 		     field is collapsed behind a demoted "Already have a code?" link so the
 		     two inputs no longer compete. (Auth plumbing unchanged — same IDs,
@@ -729,7 +751,7 @@ get_header(); ?>
 
 <script>
 /**
- * v2.18.0: PWA Magic Login Bridge — Client-side polling.
+ * PWA Magic Login Bridge — Client-side polling.
  *
  * When running in standalone PWA mode on iOS, this script:
  * 1. Generates a request_id (UUID) and injects it into the form's redirect_to
@@ -749,7 +771,7 @@ get_header(); ?>
 
 	var apiBase = <?php echo wp_json_encode( esc_url_raw( rest_url( ZDZ_REST_NS . '/' ) ) ); ?>;
 
-	// ── v2.20.3: Unified login flow ──
+	// ── Unified login flow ──
 	// The OTP code is now injected into the Magic Login email via wp_mail filter.
 	// After the magic link form submits, we auto-transition to the code entry
 	// view since the user will receive ONE email with both the link and the code.
@@ -771,7 +793,7 @@ get_header(); ?>
 			}
 		}
 
-		// v2.20.3: After the magic link form submits, auto-show code entry
+		// After the magic link form submits, auto-show code entry
 		// since the email now contains both the magic link AND the OTP code
 		var magicForms = document.querySelectorAll('.magic-login-section form, .magic-login-form');
 		magicForms.forEach(function(form) {
@@ -868,7 +890,7 @@ get_header(); ?>
 		if (!('caches' in window)) return;
 		try {
 			caches.open('zdz-bridge-v1').then(function(cache) {
-				return cache.match('/_ts-bridge-token');
+				return cache.match('/_zdz-bridge-token');
 			}).then(function(response) {
 				if (!response) return;
 				return response.json();
@@ -876,7 +898,7 @@ get_header(); ?>
 				if (!data || !data.bridge_token) return;
 				// Clean up the cache entry
 				caches.open('zdz-bridge-v1').then(function(cache) {
-					cache.delete('/_ts-bridge-token');
+					cache.delete('/_zdz-bridge-token');
 				});
 				// Attempt to claim
 				claimBridgeToken(data.bridge_token);
@@ -920,7 +942,7 @@ get_header(); ?>
 		.catch(function() {});
 	}
 
-	// ── v2.19.0: Login code entry (works in both standalone and browser) ──
+	// ── Login code entry (works in both standalone and browser) ──
 	function initCodeEntry() {
 		var toggle    = document.getElementById('zdz-code-toggle');
 		var entry     = document.getElementById('zdz-code-entry');
@@ -934,7 +956,7 @@ get_header(); ?>
 
 		if (!toggle || !entry || !codeInput || !submitBtn) return;
 
-		// v2.21.0: demoted "Already have a code?" — reveal the collapsed code
+		// demoted "Already have a code?" — reveal the collapsed code
 		// field so only one input is ever visible at a time on load.
 		if (haveLink && haveBlock) {
 			haveLink.addEventListener('click', function() {
@@ -1107,12 +1129,12 @@ get_header(); ?>
 			var redirectInput = form.querySelector('input[name="redirect_to"]');
 			if (redirectInput) {
 				var val = redirectInput.value;
-				val = val.replace('__TS_REQUEST_ID__', requestId);
+				val = val.replace('__ZDZ_REQUEST_ID__', requestId);
 				redirectInput.value = val;
 			}
 			// Also try the action URL
-			if (form.action && form.action.indexOf('__TS_REQUEST_ID__') !== -1) {
-				form.action = form.action.replace('__TS_REQUEST_ID__', requestId);
+			if (form.action && form.action.indexOf('__ZDZ_REQUEST_ID__') !== -1) {
+				form.action = form.action.replace('__ZDZ_REQUEST_ID__', requestId);
 			}
 		});
 	}
@@ -1158,7 +1180,7 @@ get_header(); ?>
 
 		pollTimer = setInterval(doPoll, 2500);
 
-		// v2.20.0: Resume polling when the PWA becomes visible again.
+		// Resume polling when the PWA becomes visible again.
 		// iOS suspends JS timers when the app is backgrounded (user switches
 		// to email to tap the link). When they come back, the intervals may
 		// have been paused. This listener fires an immediate poll on return.

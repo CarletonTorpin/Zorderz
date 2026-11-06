@@ -1,0 +1,807 @@
+/* Doorhangers — the app's own styles, on the theme's tokens (light, dark, system and sunlight all
+   come from --sys-*; nothing here names a brand color or a font). Scoped to .zdh-app and the overlays it mounts on <body>.
+   Group color: Field (var(--zdz-grp-field), printed by ZDZ_App_Groups). Vermilion is never used here (reserved: "needs you"). */
+
+.zdh-app, .zdh-app * { box-sizing: border-box; }
+.zdh-app, .zdh-install-wrap, .zdh-toast, .zdh-pocket {
+	--zdh-red: var(--sys-brand, #0072B2);            /* the main action (the theme's brand), never a red of this app's own */
+	--zdh-red-bright: var(--sys-brand-hover, #005A8E);
+	--zdh-teal: var(--sys-text, #1F2328);             /* headings and strong text */
+	--zdh-text: var(--sys-text, #1F2328);
+	--zdh-muted: var(--sys-text-muted, #4B5563);
+	--zdh-border: var(--sys-border, #AEB6C2);
+	--zdh-line: var(--sys-border, #C9CFD9);
+	--zdh-band: var(--sys-bg-subtle, #F5F5F5);
+	--zdh-surface: var(--sys-surface, #FFFFFF);
+	--zdh-orange: #E69F00;
+	--zdh-green: var(--sys-success, #009E73);
+	--zdh-green-soft: var(--sys-tint-success-bg, #E6F6EE);
+	--zdh-amber: var(--sys-tint-warning-fg, #7A5A00); --zdh-amber-soft: var(--sys-tint-warning-bg, #FFF3CD);
+	--zdh-field: var(--zdz-grp-field, #009E73);
+	font-family: var(--sys-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+}
+.zdh-app { font-size: 16px; line-height: 1.5; color: var(--zdh-text); background: var(--zdh-band); margin: 0; max-width: none; border-radius: 0; overflow: clip; }
+.zdh-app p, .zdh-app li, .zdh-app label, .zdh-app td, .zdh-app th { font-family: inherit; color: var(--zdh-text); }
+.zdh-app p { font-size: 16px !important; line-height: 1.55 !important; margin: 0 0 .6rem !important; }
+.zdh-app h1, .zdh-app h2, .zdh-app h3 { font-family: inherit; font-weight: 700 !important; color: var(--zdh-teal) !important; text-align: left !important; letter-spacing: 0 !important; text-transform: none !important; text-shadow: none !important; }
+.zdh-app h2 { font-size: 1.25rem !important; line-height: 1.3 !important; margin: 0 0 .5rem !important; }
+.zdh-app h3 { font-size: 1.05rem !important; line-height: 1.3 !important; margin: 1rem 0 .45rem !important; }
+.zdh-app a { color: var(--zdh-red); }
+.zdh-app img { max-width: 100%; border: 0; box-shadow: none; }
+.zdh-app button, .zdh-app input, .zdh-app select, .zdh-app textarea { font-family: inherit; text-transform: none !important; letter-spacing: 0 !important; }
+
+
+/* Header + tabs */
+.zdh-header { background: var(--zdh-surface); padding: 1rem 1.25rem .9rem; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid var(--zdh-line); }
+.zdh-logo { width: 132px; max-width: 34vw; height: auto; flex: 0 0 auto; }
+.zdh-header-text { flex: 1; min-width: 0; }
+.zdh-app h1.zdh-title { font-size: clamp(1.25rem, 3.4vw, 1.7rem) !important; line-height: 1.15 !important; margin: 0 !important; }
+.zdh-app p.zdh-subtitle { font-size: .85rem !important; color: var(--zdh-muted) !important; margin: .2rem 0 0 !important; }
+
+.zdh-tabs { display: flex; background: var(--zdh-surface); border-bottom: 2px solid var(--zdh-field); position: sticky; top: 0; z-index: 20; }
+.zdh-app .zdh-tab { flex: 1; background: transparent !important; color: var(--zdh-muted) !important; border: 0 !important; border-bottom: 4px solid transparent !important; padding: .85rem .25rem !important; margin: 0 !important; font-family: inherit; font-size: .92rem !important; font-weight: 700 !important; cursor: pointer; border-radius: 0 !important; box-shadow: none !important; line-height: 1.2 !important; }
+.zdh-app .zdh-tab.active { color: var(--zdh-text) !important; border-bottom-color: var(--zdh-field) !important; background: transparent !important; }
+.zdh-main { padding: 1rem .9rem 1.5rem; }
+.zdh-footer { text-align: center; font-size: .78rem; color: var(--zdh-muted); padding: 1rem 1rem 1.25rem; }
+
+/* Cards */
+.zdh-card { background: var(--zdh-surface); border-radius: 18px; box-shadow: 0 2px 10px rgba(32,65,71,.06); padding: 1.1rem 1.15rem; margin-bottom: .9rem; }
+.zdh-card-tight { padding: .9rem .85rem 1rem; }
+.zdh-help { font-size: .88rem !important; color: var(--zdh-muted) !important; margin: .1rem 0 .75rem !important; }
+.zdh-muted { font-size: .84rem; color: var(--zdh-muted); }
+.zdh-warn { color: var(--zdh-red); }
+.zdh-error { background: var(--sys-tint-error-bg, #FCEBEC); color: var(--sys-tint-error-fg, #7A1220); border-left: 4px solid var(--zdh-red); padding: .7rem .9rem; border-radius: 10px; margin-bottom: .9rem; font-size: .9rem; }
+.zdh-note { background: var(--zdh-amber-soft); color: var(--zdh-amber); border-left: 4px solid var(--sys-warning, #E2B93B); padding: .5rem .8rem; border-radius: 10px; margin-bottom: .6rem; font-size: .84rem; }
+
+/* Forms */
+.zdh-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .65rem .8rem; }
+.zdh-grid label { display: flex; flex-direction: column; font-size: .8rem !important; font-weight: 700 !important; color: var(--zdh-teal) !important; gap: .25rem; min-width: 0; margin: 0 !important; }
+.zdh-span2 { grid-column: 1 / -1; }
+.zdh-app input[type=text], .zdh-app input[type=number], .zdh-app input[type=date], .zdh-app input[type=time], .zdh-app select, .zdh-app textarea {
+	width: 100% !important; min-width: 0; max-width: 100%; font-size: 16px !important; font-weight: 400 !important; padding: .6rem .7rem !important; border: 1px solid var(--zdh-border) !important; border-radius: 10px !important;
+	background: var(--zdh-surface) !important; color: var(--zdh-text) !important; margin: 0 !important; box-shadow: none !important; -webkit-appearance: none; appearance: none; line-height: 1.3 !important; height: auto !important;
+}
+.zdh-app input:focus, .zdh-app select:focus, .zdh-app textarea:focus { outline: none !important; border-color: var(--zdh-red) !important; box-shadow: 0 0 0 3px var(--sys-focus, rgba(0,114,178,.25)) !important; }
+.zdh-app input[readonly] { background: var(--zdh-band) !important; color: var(--zdh-muted) !important; }
+.zdh-app textarea { resize: vertical; }
+.zdh-app select { background-image: linear-gradient(45deg, transparent 50%, #666 50%), linear-gradient(135deg, #666 50%, transparent 50%) !important; background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50% !important; background-size: 5px 5px !important; background-repeat: no-repeat !important; padding-right: 1.8rem !important; }
+
+/* Buttons */
+.zdh-app .zdh-primary, .zdh-app .zdh-secondary, .zdh-app .zdh-tool, .zdh-app .zdh-mini, .zdh-app .zdh-filebtn { font-family: inherit; font-weight: 700 !important; border: 0 !important; cursor: pointer; text-decoration: none !important; text-align: center; box-shadow: none !important; line-height: 1.2 !important; transition: background .15s; }
+.zdh-app .zdh-primary { display: inline-block; background: var(--zdh-red) !important; color: #fff !important; width: 100%; font-size: 1.05rem !important; padding: .9rem 1.2rem !important; border-radius: 10px !important; }
+.zdh-app .zdh-primary:hover { background: var(--zdh-red-bright) !important; }
+.zdh-app .zdh-primary[disabled] { opacity: .5; cursor: not-allowed; }
+.zdh-app .zdh-secondary { display: inline-block; background: var(--zdh-surface) !important; color: var(--zdh-teal) !important; border: 2px solid var(--zdh-teal) !important; padding: .8rem 1.2rem !important; border-radius: 10px !important; font-size: .95rem !important; }
+.zdh-app .zdh-secondary:hover { background: var(--zdh-band) !important; }
+.zdh-actions { display: flex; gap: .6rem; margin: .4rem 0 1rem; align-items: stretch; }
+.zdh-actions .zdh-secondary { flex: 0 0 auto; }
+.zdh-actions .zdh-primary { flex: 1; }
+.zdh-app .zdh-linkbtn { background: none !important; border: 0 !important; color: var(--zdh-red) !important; font-family: inherit; font-size: .85rem !important; padding: 0 !important; cursor: pointer; text-decoration: underline !important; box-shadow: none !important; }
+.zdh-app .zdh-mini { font-size: .78rem !important; background: var(--zdh-band) !important; color: var(--zdh-teal) !important; border-radius: 8px !important; padding: .4rem .75rem !important; }
+.zdh-app .zdh-mini:hover { background: var(--sys-surface-raised, #E9ECF1) !important; }
+.zdh-app .zdh-mini.zdh-danger { color: var(--zdh-red) !important; }
+.zdh-app .zdh-tool { font-size: .82rem !important; background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; border-radius: 8px !important; padding: .5rem .85rem !important; }
+.zdh-maptools { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0 .6rem; }
+.zdh-app .zdh-filebtn { display: block; background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; border-radius: 10px !important; padding: .95rem !important; font-size: 1rem !important; }
+.zdh-filebtn input { display: none; }
+.zdh-thumbs { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
+.zdh-thumb { position: relative; width: 84px; height: 150px; border-radius: 12px; overflow: hidden; background: var(--sys-surface-subtle, #eee); box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+.zdh-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.zdh-app .zdh-thumb button { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: 0 !important; border-radius: 6px !important; background: rgba(0,0,0,.6) !important; color: #fff !important; font-size: 12px !important; cursor: pointer; padding: 0 !important; line-height: 24px !important; }
+
+/* Busy / done */
+.zdh-busy { text-align: center; padding: 2.5rem 1rem; }
+.zdh-spinner { width: 44px; height: 44px; border: 4px solid var(--sys-border, #E6E8EE); border-top-color: var(--zdh-red-bright); border-radius: 50%; margin: 0 auto 1rem; animation: zdh-spin .9s linear infinite; }
+@keyframes zdh-spin { to { transform: rotate(360deg); } }
+.zdh-busy-text { font-family: inherit; font-weight: 700; color: var(--zdh-teal); font-size: 1.05rem; }
+.zdh-busy-sub { font-size: .82rem; color: var(--zdh-muted); margin: .4rem auto 0; max-width: 34em; }
+.zdh-done { text-align: center; }
+.zdh-done h2 { text-align: center !important; }
+.zdh-done-icon { width: 56px; height: 56px; margin: 0 auto .5rem; border-radius: 50%; background: var(--zdh-green-soft); color: var(--zdh-green); font-size: 1.8rem; font-weight: 800; line-height: 56px; }
+
+/* AI summary + street rows */
+.zdh-ai-summary { background: var(--zdh-band); border-radius: 12px; padding: .75rem .9rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; margin-bottom: .9rem; }
+.zdh-street-row { display: grid; grid-template-columns: minmax(0, 1fr) 40px; gap: .45rem; align-items: center; padding: .65rem 0; border-bottom: 1px solid var(--zdh-line); }
+.zdh-street-row .sr-name { font-weight: 700 !important; }
+.zdh-street-row .sr-cov { grid-column: 1 / -1; }
+.zdh-app .zdh-street-row .sr-del { background: var(--zdh-band) !important; border: 0 !important; border-radius: 10px !important; height: 44px; cursor: pointer; color: var(--zdh-red) !important; font-size: 1rem !important; padding: 0 !important; box-shadow: none !important; }
+.zdh-street-row .sr-bounds { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .4rem; align-items: center; font-size: .8rem; color: var(--zdh-muted); }
+.zdh-street-row .sr-note { grid-column: 1 / -1; }
+
+/* Map + selection */
+.zdh-map { width: 100%; height: 52vh; min-height: 320px; border-radius: 14px; z-index: 1; }
+.zdh-map-tall { height: 55vh; min-height: 300px; border-radius: 18px; margin-bottom: .9rem; box-shadow: 0 2px 10px rgba(32,65,71,.06); }
+.zdh-map.zdh-drawing { cursor: crosshair; outline: 3px solid var(--zdh-red-bright); }
+.zdh-count { font-size: .9rem; margin-top: .6rem; color: var(--zdh-text); }
+.zdh-streetline { display: flex; gap: .6rem; align-items: flex-start; padding: .6rem 0; border-bottom: 1px solid var(--zdh-line); }
+.zdh-streetline-main { flex: 1; font-size: .92rem; }
+.zdh-streetline-btns { display: flex; gap: .3rem; }
+.zdh-swatch { width: 14px; height: 14px; border-radius: 4px; flex: 0 0 14px; margin-top: 5px; }
+.zdh-badge-soft { font-family: inherit; font-size: .68rem; background: var(--zdh-band); color: var(--zdh-muted); padding: .15em .55em; border-radius: 6px; margin-left: .3em; text-transform: uppercase; letter-spacing: .04em; }
+
+/* Chips, stats, log cards */
+.zdh-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0; }
+.zdh-chip { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; padding: .28em .65em; border-radius: 6px; background: var(--zdh-band); color: var(--zdh-text); }
+.zdh-chip.has { background: var(--zdh-green-soft); color: var(--zdh-green); font-weight: 700; }
+.zdh-stats { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin: 0 0 1rem; }
+.zdh-stat { background: var(--zdh-surface); border-radius: 14px; box-shadow: 0 2px 10px rgba(32,65,71,.06); padding: .8rem 1rem; flex: 1 1 120px; text-align: center; }
+.zdh-stat-n { font-family: inherit; font-size: 1.65rem; font-weight: 800; color: var(--zdh-red); line-height: 1.1; }
+.zdh-stat-l { font-size: .75rem; color: var(--zdh-muted); margin-top: .2rem; }
+.zdh-log h2 { margin: .2rem 0 .7rem !important; }
+.zdh-drop { background: var(--zdh-surface); border-radius: 18px; box-shadow: 0 2px 10px rgba(32,65,71,.06); padding: 1.05rem 1.15rem; margin-bottom: .9rem; border-left: 6px solid var(--zdh-red); }
+.zdh-drop-title { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .55rem; }
+.zdh-badge { display: inline-block; font-family: inherit; background: var(--zdh-red); color: #fff; font-weight: 700; font-size: .78rem; padding: .25em .65em; border-radius: 6px; }
+.zdh-badge-type { background: var(--zdh-teal); }
+.zdh-badge-service { background: var(--sys-tint-neutral-fg, #5B6770); color: var(--sys-tint-neutral-bg, #fff); }
+.zdh-drop-detail { font-size: .9rem; color: var(--zdh-text); line-height: 1.6; }
+.zdh-drop-detail strong { color: var(--zdh-teal); }
+.zdh-uptake { display: flex; gap: .5rem; margin-top: .5rem; }
+.zdh-shots { display: flex; gap: .4rem; margin-top: .6rem; flex-wrap: wrap; }
+.zdh-shots img { width: 56px; height: 100px; object-fit: cover; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.2); display: block; }
+.zdh-drop-btns { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
+.zdh-drop-extra { margin-top: .75rem; border-top: 1px dashed var(--zdh-line); padding-top: .75rem; }
+.zdh-addr-street { margin-bottom: .5rem; font-size: .86rem; }
+.zdh-addr-nums { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .25rem; }
+.zdh-addr-nums span { background: var(--zdh-band); border-radius: 6px; padding: .12em .45em; font-size: .78rem; }
+
+/* Lookup, export */
+.zdh-lookup-row { display: flex; gap: .5rem; }
+.zdh-app .zdh-lookup-row .zdh-primary { width: auto; flex: 0 0 auto; padding: .6rem 1.1rem !important; }
+.zdh-lookup-res { margin-top: .8rem; font-size: .9rem; }
+.zdh-status { display: inline-block; font-family: inherit; font-weight: 700; padding: .35em .75em; border-radius: 6px; font-size: .85rem; }
+.zdh-st-yes { background: var(--zdh-green-soft); color: var(--zdh-green); }
+.zdh-st-likely { background: var(--zdh-amber-soft); color: var(--zdh-amber); }
+.zdh-st-maybe { background: var(--sys-tint-warning-bg, #FDEBD0); color: var(--sys-tint-warning-fg, #8A4B00); }
+.zdh-st-no { background: var(--zdh-band); color: var(--zdh-muted); }
+.zdh-app ul.zdh-list { margin: .5rem 0 0 !important; padding-left: 1.1rem !important; font-size: .86rem; list-style: disc !important; }
+.zdh-app ul.zdh-list li { margin-bottom: .35rem !important; font-size: .86rem !important; }
+.zdh-table { width: 100%; border-collapse: collapse; font-size: .84rem; margin-top: .6rem; }
+.zdh-table th, .zdh-table td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--zdh-line); vertical-align: top; background: transparent !important; }
+.zdh-table th { font-family: inherit; color: var(--zdh-teal) !important; }
+.zdh-export-btns .zdh-primary, .zdh-export-btns .zdh-secondary { display: block; margin-top: .6rem; }
+.zdh-export-btns p { margin: .35rem 0 .9rem !important; }
+
+/* Leaflet inside a themed page */
+.zdh-app .leaflet-container { font-family: inherit; font-size: 12px; }
+.zdh-app .leaflet-container a { color: var(--sys-text-brand, #0078A8); }
+.zdh-app .leaflet-bar a { color: #333 !important; font-family: sans-serif; }
+.zdh-app .leaflet-popup-content { font-size: .85rem; line-height: 1.5; margin: 12px 14px; }
+.zdh-pop-title { font-family: inherit; font-weight: 700; color: var(--zdh-teal); margin-bottom: .2rem; }
+
+@media (max-width: 520px) {
+	.zdh-app { border-radius: 0; }
+	.zdh-main { padding: .75rem .6rem 1.2rem; }
+	.zdh-header { padding: .8rem .9rem; gap: .7rem; }
+	.zdh-logo { width: 96px; }
+	.zdh-app .zdh-tab { font-size: .8rem !important; padding: .75rem .1rem !important; }
+	.zdh-map { height: 48vh; }
+	.zdh-grid { gap: .5rem; }
+}
+
+/* mode picker, pen drawing, planned routes, revisit list */
+.zdh-app .zdh-choice { display: block; width: 100%; text-align: left; background: var(--zdh-surface) !important; border: 2px solid var(--zdh-line) !important; border-radius: 14px !important; padding: .9rem 1rem !important; margin: 0 0 .6rem !important; cursor: pointer; box-shadow: none !important; }
+.zdh-app .zdh-choice:hover { border-color: var(--zdh-red) !important; }
+.zdh-choice-title { display: block; font-family: inherit; font-weight: 700; color: var(--zdh-teal); font-size: 1.05rem; }
+.zdh-choice-sub { display: block; font-size: .85rem; color: var(--zdh-muted); margin-top: .15rem; }
+.zdh-seg { display: flex; gap: .4rem; }
+.zdh-app .zdh-segbtn { flex: 1; font-family: inherit; font-weight: 700 !important; font-size: .85rem !important; padding: .6rem .5rem !important; border: 2px solid var(--zdh-line) !important; border-radius: 8px !important; background: var(--zdh-surface) !important; color: var(--zdh-muted) !important; cursor: pointer; box-shadow: none !important; }
+.zdh-app .zdh-segbtn.on { border-color: var(--zdh-teal) !important; background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; }
+.zdh-app .zdh-tool-light { background: var(--zdh-band) !important; color: var(--zdh-teal) !important; }
+.zdh-map.zdh-drawing { cursor: crosshair; outline: 3px solid var(--zdh-red-bright); }
+.zdh-legend { display: flex; gap: 1rem; justify-content: center; font-size: .8rem; color: var(--zdh-muted); margin: -.4rem 0 .8rem; }
+.zdh-legend i { display: inline-block; width: 22px; height: 5px; border-radius: 3px; vertical-align: middle; margin-right: .3rem; }
+.zdh-due { display: flex; justify-content: space-between; align-items: center; gap: .6rem; background: var(--zdh-surface); border-radius: 14px; padding: .75rem .9rem; margin-bottom: .5rem; box-shadow: 0 2px 10px rgba(32,65,71,.06); font-size: .9rem; border-left: 5px solid var(--sys-warning, #E2B93B); }
+.zdh-due a.zdh-mini { white-space: nowrap; text-decoration: none !important; }
+.zdh-drop-planned { background: var(--sys-tint-success-bg, #F3FBF6); }
+.zdh-app .zdh-mini-primary { background: var(--zdh-red) !important; color: #fff !important; }
+.zdh-app .zdh-mini-primary:hover { background: var(--zdh-red-bright) !important; }
+.zdh-streetline-off { opacity: .75; }
+
+/* plan → execute */
+.zdh-banner { display: flex; align-items: center; justify-content: space-between; gap: .6rem; background: var(--sys-tint-warning-bg, #FFF3CD); color: var(--sys-tint-warning-fg, #6d4c00); padding: .55rem .9rem; font-size: .9rem; border-bottom: 1px solid var(--sys-border, #F0DE9E); }
+.zdh-details { padding: .6rem 1.15rem .9rem !important; }
+.zdh-details summary { font-family: inherit; font-weight: 700; color: var(--zdh-teal); cursor: pointer; padding: .3rem 0; list-style: none; }
+.zdh-details summary::-webkit-details-marker { display: none; }
+.zdh-details summary::before { content: "▸ "; color: var(--zdh-red); }
+.zdh-details[open] summary::before { content: "▾ "; }
+.zdh-details[open] summary { margin-bottom: .5rem; }
+.zdh-deliver-head { display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem; }
+.zdh-deliver-count { text-align: center; background: var(--zdh-band); border-radius: 14px; padding: .4rem .8rem; min-width: 84px; }
+.zdh-deliver-count strong { display: block; font-family: inherit; font-size: 1.7rem; color: var(--zdh-red); line-height: 1.1; }
+.zdh-deliver-count span { font-size: .72rem; color: var(--zdh-muted); }
+.zdh-deliver-status { font-size: .82rem; color: var(--zdh-muted); margin: .3rem 0 .2rem; }
+.zdh-drop-active { background: var(--sys-tint-warning-bg, #FFF7F8); }
+.zdh-drop-name { font-family: inherit; font-weight: 700; color: var(--zdh-teal); font-size: 1.05rem; margin: .1rem 0 .3rem; }
+.zdh-datehead { font-size: .85rem !important; color: var(--zdh-muted) !important; margin: .8rem 0 .4rem !important; text-transform: uppercase; letter-spacing: .04em; }
+.zdh-due-btns { display: flex; gap: .3rem; flex: 0 0 auto; }
+.zdh-check { display: flex; align-items: center; gap: .5rem; font-size: .9rem !important; margin: .4rem 0 .8rem !important; }
+.zdh-check input { width: 20px; height: 20px; }
+.zdh-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--sys-text, #1F2328); color: var(--sys-surface, #fff); padding: .8rem 1rem; border-radius: 14px; max-width: min(92vw, 420px); font-size: .9rem; z-index: 100090; display: flex; gap: .6rem; align-items: center; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+.zdh-toast .zdh-mini { flex: 0 0 auto; }
+
+/* review polish */
+.zdh-app .zdh-secondary-solid { background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; border-color: var(--zdh-teal) !important; }
+.zdh-app .zdh-secondary-solid:hover { background: var(--sys-brand-hover, #2c5660) !important; }
+.zdh-app .zdh-tool-on { background: var(--zdh-red-bright) !important; color: #fff !important; }
+
+/* the sheets the walk uses (location help, "still delivering?") */
+.zdh-app.zdh-install-root { position: static; max-width: none; margin: 0; background: none; box-shadow: none; border-radius: 0; overflow: visible; min-height: 0 !important; padding: 0; }
+@keyframes zdh-rise { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.zdh-install-wrap { position: fixed; inset: 0; z-index: 100085; background: rgba(32, 65, 71, .55); display: flex; align-items: flex-end; justify-content: center; padding: 0; animation: zdh-fade .2s ease-out; }
+@keyframes zdh-fade { from { opacity: 0; } to { opacity: 1; } }
+.zdh-install-sheet { position: relative; background: var(--zdh-surface); color: var(--zdh-text); width: 100%; max-width: 560px; border-radius: 22px 22px 0 0; padding: 1.35rem 1.25rem calc(1.2rem + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -10px 40px rgba(0,0,0,.25); animation: zdh-up .3s ease-out; font-family: inherit; }
+@keyframes zdh-up { from { transform: translateY(30px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (min-width: 700px) { .zdh-install-wrap { align-items: center; padding: 1rem; } .zdh-install-sheet { border-radius: 22px; padding-bottom: 1.3rem; } }
+.zdh-app .zdh-install-close { position: absolute; top: .9rem; right: .9rem; width: 38px; height: 38px; border-radius: 8px; border: 0 !important; background: var(--zdh-band) !important; color: var(--zdh-teal) !important; font-size: 1.5rem; line-height: 1 !important; cursor: pointer; padding: 0 !important; box-shadow: none !important; }
+.zdh-app h2.zdh-install-title { font-size: 1.35rem !important; margin: 0 2.6rem .25rem 0 !important; }
+.zdh-app p.zdh-install-sub { color: var(--zdh-muted) !important; font-size: .95rem !important; margin: 0 0 1rem !important; }
+.zdh-install-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .8rem; }
+.zdh-install-steps li { display: flex; align-items: center; gap: .75rem; }
+.zdh-inst-n { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%; background: var(--zdh-red); color: #fff; font-family: inherit; font-weight: 700; font-size: 1rem; display: flex; align-items: center; justify-content: center; }
+.zdh-inst-ic { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 12px; background: var(--zdh-band); color: var(--zdh-teal); display: flex; align-items: center; justify-content: center; }
+.zdh-inst-ic svg { width: 26px; height: 26px; }
+.zdh-inst-ic svg circle { fill: currentColor; }
+.zdh-inst-t { flex: 1 1 auto; font-size: 1.02rem; line-height: 1.35; color: var(--zdh-text); }
+.zdh-inst-t b { color: var(--zdh-red); font-weight: 700; }
+.zdh-inst-se { display: inline-block; color: var(--zdh-red); font-weight: 700; margin-left: .15rem; }
+.zdh-app p.zdh-install-foot { font-size: .84rem !important; color: var(--zdh-muted) !important; margin: .9rem 0 0 !important; }
+.zdh-install-foot b { color: var(--zdh-teal); }
+.zdh-install-arrow { position: absolute; right: 1.4rem; bottom: 2.1rem; font-size: 2.2rem; color: var(--zdh-red-bright); font-weight: 700; line-height: 1; animation: zdh-bounce 1.1s ease-in-out infinite; }
+@keyframes zdh-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(9px); } }
+.zdh-app p.zdh-install-brand { font-size: .78rem !important; color: var(--zdh-muted) !important; margin: 1.1rem 0 0 !important; padding-right: 3rem; }
+
+/* session banner buttons, toast */
+.zdh-banner-btns { display: flex; gap: .3rem; flex: 0 0 auto; }
+.zdh-toast span { flex: 1 1 auto; }
+
+/* shared-password gate (WordPress' own password form inside our card) */
+
+/* on iPhone Safari the share sheet covers the bottom half — pin the steps to the top, compact, and keep them readable */
+.zdh-install-wrap.zdh-sheet-top { align-items: flex-start; padding: 0; }
+.zdh-install-sheet.zdh-compact { border-radius: 0 0 22px 22px; padding: calc(.7rem + env(safe-area-inset-top, 0px)) 1rem .85rem; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.zdh-app h2.zdh-compact-title, .zdh-install-sheet.zdh-compact h2.zdh-install-title { font-size: 1.1rem !important; margin: 0 2.4rem .15rem 0 !important; line-height: 1.2 !important; }
+.zdh-install-sheet.zdh-compact p.zdh-install-sub { font-size: .82rem !important; margin: 0 0 .5rem !important; }
+.zdh-install-sheet.zdh-compact .zdh-install-close { top: calc(.5rem + env(safe-area-inset-top, 0px)); right: .7rem; width: 32px; height: 32px; font-size: 1.3rem; }
+.zdh-install-sheet.zdh-compact .zdh-install-steps { gap: .45rem; }
+.zdh-install-sheet.zdh-compact .zdh-install-steps li { align-items: flex-start; gap: .5rem; }
+.zdh-install-sheet.zdh-compact .zdh-inst-n { flex-basis: 24px; width: 24px; height: 24px; font-size: .82rem; margin-top: .05rem; }
+.zdh-install-sheet.zdh-compact .zdh-inst-ic { flex-basis: 30px; width: 30px; height: 30px; border-radius: 8px; }
+.zdh-install-sheet.zdh-compact .zdh-inst-ic svg { width: 18px; height: 18px; }
+.zdh-install-sheet.zdh-compact .zdh-inst-t { font-size: .93rem; line-height: 1.28; }
+.zdh-inst-small { display: block; font-size: .76rem; color: var(--zdh-muted); }
+.zdh-install-sheet.zdh-compact p.zdh-install-foot { font-size: .74rem !important; margin: .5rem 0 0 !important; line-height: 1.3 !important; }
+.zdh-install-sheet.zdh-compact .zdh-actions { margin-top: .6rem; }
+.zdh-install-sheet.zdh-compact .zdh-actions .zdh-primary { padding: .6rem 1rem !important; font-size: .95rem !important; }
+.zdh-arrow-fixed { position: fixed; right: 26px; bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); font-size: 2.4rem; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.6); font-weight: 700; line-height: 1; animation: zdh-bounce 1.1s ease-in-out infinite; pointer-events: none; }
+@media (max-height: 700px) { .zdh-install-sheet.zdh-compact p.zdh-install-sub, .zdh-install-sheet.zdh-compact p.zdh-install-foot { display: none; } }
+body.admin-bar .zdh-install-wrap.zdh-sheet-top { padding-top: 46px; }
+body.admin-bar .zdh-install-sheet.zdh-compact p.zdh-install-foot { display: none; }
+
+/* Quick Start strip + green/red walk buttons */
+.zdh-quick { display: flex; flex-direction: column; gap: .35rem; background: var(--zdh-surface); padding: .7rem 1rem .75rem; border-bottom: 1px solid var(--zdh-line); }
+.zdh-quick-on { flex-direction: row; align-items: center; justify-content: space-between; background: var(--sys-tint-success-bg, #EAF6EF); border-bottom-color: var(--sys-border, #CFE9DA); }
+.zdh-quick-text { font-size: .9rem; color: var(--zdh-teal); }
+.zdh-quick-help { font-size: .8rem; color: var(--zdh-muted); text-align: center; }
+.zdh-app .zdh-go, .zdh-app .zdh-stop { display: inline-block; width: 100%; font-family: inherit; font-weight: 700 !important; font-size: 1.05rem !important; padding: .9rem 1.2rem !important; border: 0 !important; border-radius: 10px !important; color: #fff !important; cursor: pointer; box-shadow: none !important; line-height: 1.2 !important; text-align: center; }
+.zdh-app .zdh-go { background: #1E8E5A !important; }
+.zdh-app .zdh-go:hover { background: #17754A !important; }
+.zdh-app .zdh-stop { background: var(--zdh-red) !important; }
+.zdh-app .zdh-stop:hover { background: var(--zdh-red-bright) !important; }
+.zdh-app .zdh-stop-mini { width: auto; font-size: .82rem !important; padding: .5rem .8rem !important; border-radius: 8px !important; white-space: nowrap; }
+.zdh-actions .zdh-stop { flex: 1 1 auto; width: auto; }
+@media (max-width: 520px) { .zdh-quick-on { flex-wrap: wrap; } .zdh-quick-on .zdh-banner-btns { width: 100%; justify-content: flex-end; } }
+
+/* bigger type everywhere, phone-first wording (.zdh-mob shows on phones, .zdh-desk on wider screens) */
+.zdh-mob { display: none; }
+.zdh-app { font-size: 17px; }
+.zdh-app p { font-size: 17px !important; }
+.zdh-app h2 { font-size: 1.4rem !important; }
+.zdh-app h3 { font-size: 1.15rem !important; }
+.zdh-help { font-size: 1rem !important; }
+.zdh-muted { font-size: .95rem; }
+.zdh-count { font-size: 1rem; }
+.zdh-app .zdh-tab { font-size: 1.02rem !important; padding: .95rem .25rem !important; }
+.zdh-app .zdh-primary { font-size: 1.15rem !important; padding: 1rem 1.2rem !important; min-height: 52px; }
+.zdh-app .zdh-secondary { font-size: 1.02rem !important; padding: .85rem 1.1rem !important; min-height: 50px; }
+.zdh-app .zdh-tool { font-size: .95rem !important; padding: .65rem 1rem !important; min-height: 44px; }
+.zdh-app .zdh-mini { font-size: .92rem !important; padding: .55rem .85rem !important; min-height: 40px; }
+.zdh-app .zdh-go, .zdh-app .zdh-stop { font-size: 1.2rem !important; padding: 1rem 1.2rem !important; min-height: 54px; }
+.zdh-app .zdh-stop-mini { font-size: .95rem !important; padding: .6rem .9rem !important; min-height: 42px; }
+.zdh-app .zdh-linkbtn { font-size: 1rem !important; }
+.zdh-app input[type=text], .zdh-app input[type=number], .zdh-app input[type=date], .zdh-app input[type=time], .zdh-app select, .zdh-app textarea { font-size: 17px !important; padding: .8rem .9rem !important; }
+.zdh-grid label { font-size: .92rem !important; }
+.zdh-streetline-main { font-size: 1rem; }
+.zdh-badge { font-size: .85rem; }
+.zdh-badge-soft { font-size: .75rem; }
+.zdh-chip { font-size: .9rem; }
+.zdh-status { font-size: .95rem; }
+.zdh-drop-detail { font-size: 1rem; }
+.zdh-drop-name { font-size: 1.15rem; }
+.zdh-stat-n { font-size: 1.9rem; }
+.zdh-stat-l { font-size: .85rem; }
+.zdh-deliver-status { font-size: 1rem; }
+.zdh-deliver-count strong { font-size: 2rem; }
+.zdh-deliver-count span { font-size: .8rem; }
+.zdh-banner { font-size: 1rem; }
+.zdh-quick-text { font-size: 1rem; }
+.zdh-quick-help { font-size: .9rem; }
+.zdh-toast { font-size: 1rem; }
+.zdh-inst-t { font-size: 1.08rem; }
+.zdh-check { font-size: 1rem !important; }
+@media (max-width: 640px) {
+	.zdh-mob { display: inline; }
+	.zdh-desk { display: none !important; }
+	.zdh-app { font-size: 17px; border-radius: 0; }
+	.zdh-header { padding: .75rem 1rem .65rem; }
+	.zdh-app p.zdh-subtitle { display: none !important; }
+	.zdh-main { padding: .8rem .7rem 1.2rem; }
+	.zdh-card { padding: 1rem .9rem; border-radius: 14px; }
+	.zdh-app h2 { font-size: 1.35rem !important; }
+	.zdh-help { margin-bottom: .6rem !important; }
+	.zdh-actions { flex-wrap: wrap; }
+	.zdh-actions .zdh-primary, .zdh-actions .zdh-stop { flex: 1 1 100%; order: -1; }
+	.zdh-actions .zdh-secondary { flex: 1 1 auto; }
+	.zdh-actions .zdh-secondary-solid { flex: 1 1 100%; }
+	.zdh-chips, .zdh-uptake, .zdh-shots { display: none; }
+	.zdh-drop-btns [data-a="enrich"] { display: none; }
+	.zdh-drop-detail { font-size: .98rem; line-height: 1.5; }
+	.zdh-stats { gap: .45rem; }
+	.zdh-stat { flex: 1 1 28%; padding: .6rem .4rem; }
+	.zdh-stat-n { font-size: 1.6rem; }
+	.zdh-stat-l { font-size: .78rem; }
+	.zdh-footer { font-size: .85rem; padding: .8rem 1rem 1rem; }
+	.zdh-quick { padding: .6rem .8rem; }
+	.zdh-quick-on { flex-wrap: wrap; }
+	.zdh-map { height: 52vh; min-height: 300px; }
+}
+@media (max-width: 640px) {
+	.zdh-streets { display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+}
+
+/* permanent Refresh button in the header */
+.zdh-app .zdh-refresh { flex: 0 0 auto; margin-left: auto; font-family: inherit; font-weight: 700 !important; font-size: .95rem !important; background: var(--zdh-surface) !important; color: var(--zdh-teal) !important; border: 2px solid var(--zdh-teal) !important; border-radius: 10px !important; padding: .55rem .85rem !important; cursor: pointer; box-shadow: none !important; line-height: 1.2 !important; white-space: nowrap; min-height: 42px; }
+.zdh-app .zdh-refresh:hover { background: var(--zdh-band) !important; }
+.zdh-app .zdh-refresh[disabled] { opacity: .6; cursor: wait; }
+@media (max-width: 640px) { .zdh-app .zdh-refresh { font-size: .9rem !important; padding: .5rem .7rem !important; } .zdh-header { gap: .6rem; } }
+
+.zdh-app [hidden] { display: none !important; }
+/* the toast lives on <body>, outside .zdh-app, so it needs the colours spelled out */
+.zdh-toast { background: var(--sys-text, #1F2328) !important; color: var(--sys-surface, #fff) !important; font-family: inherit; font-size: 1.05rem; padding: .85rem 1rem; }
+.zdh-toast span { color: #fff; }
+.zdh-toast .zdh-mini { background: var(--zdh-surface) !important; color: var(--zdh-teal) !important; border: 2px solid #fff !important; border-radius: 8px !important; font-family: inherit; font-weight: 700 !important; font-size: 1rem !important; padding: .45rem .8rem !important; cursor: pointer; }
+/* clarity pass — bigger type, darker text and borders, tighter spacing, one button language with obvious states.
+   Buttons: red = the main action · teal outline = other actions · small outlined = tools · a toggle carries a check box and turns teal when it is on. */
+.zdh-app { font-size: 18px; }
+.zdh-app p { font-size: 18px !important; color: var(--zdh-text) !important; margin: 0 0 .5rem !important; }
+.zdh-app h2 { font-size: 1.45rem !important; margin: 0 0 .35rem !important; }
+.zdh-app h3 { font-size: 1.2rem !important; margin: .7rem 0 .4rem !important; }
+.zdh-help { font-size: 1rem !important; color: var(--sys-text-sec, #3F4652) !important; margin: 0 0 .55rem !important; line-height: 1.4 !important; }
+.zdh-muted { font-size: 1rem; color: var(--zdh-muted); }
+.zdh-count { font-size: 1.05rem; font-weight: 700; color: var(--zdh-teal); margin-top: .45rem; }
+.zdh-app .zdh-count strong { color: var(--zdh-red); }
+.zdh-card { border: 1px solid var(--sys-border, #D7DCE5); box-shadow: 0 1px 3px rgba(32,65,71,.06); padding: .9rem .9rem; margin-bottom: .65rem; border-radius: 14px; }
+.zdh-card-tight { padding: .8rem .75rem .85rem; }
+.zdh-main { padding: .65rem .65rem 1.1rem; }
+.zdh-header { padding: .65rem 1rem .55rem; gap: .8rem; }
+.zdh-app h1.zdh-title { font-size: clamp(1.3rem, 3.4vw, 1.6rem) !important; }
+.zdh-footer { padding: .6rem 1rem .9rem; font-size: .92rem; color: var(--zdh-muted); }
+.zdh-error { font-size: 1rem; border-left-width: 5px; }
+.zdh-note { font-size: .98rem; border-left-color: var(--sys-warning, #D9A400); }
+.zdh-app .zdh-linkbtn { font-size: 1.02rem !important; font-weight: 700 !important; }
+
+/* tabs: the open tab is white with red text and a red bar under it */
+.zdh-app .zdh-tab { color: var(--zdh-muted) !important; font-size: 1.06rem !important; padding: .85rem .15rem !important; border-bottom: 5px solid transparent !important; opacity: 1 !important; }
+.zdh-app .zdh-tab.active { background: var(--zdh-surface) !important; color: var(--zdh-red) !important; border-bottom-color: var(--zdh-red) !important; }
+
+/* fields */
+.zdh-app input[type=text], .zdh-app input[type=number], .zdh-app input[type=date], .zdh-app input[type=time], .zdh-app select, .zdh-app textarea { font-size: 18px !important; padding: .7rem .8rem !important; border: 2px solid var(--zdh-border) !important; color: var(--zdh-text) !important; }
+.zdh-app input::placeholder, .zdh-app textarea::placeholder { color: var(--sys-text-ter, #6B7280) !important; opacity: 1 !important; }
+.zdh-app input[readonly] { color: var(--sys-text-sec, #3F4652) !important; }
+.zdh-grid { gap: .5rem .6rem; }
+.zdh-grid label { font-size: 1rem !important; gap: .2rem; }
+.zdh-check { font-size: 1.05rem !important; }
+.zdh-check input { width: 24px; height: 24px; }
+
+/* buttons */
+.zdh-app .zdh-primary { font-size: 1.2rem !important; padding: .9rem 1.1rem !important; min-height: 54px; }
+.zdh-app .zdh-secondary { font-size: 1.08rem !important; padding: .75rem 1rem !important; min-height: 52px; border-width: 2px !important; }
+.zdh-app .zdh-tool, .zdh-app .zdh-tool-light { font-size: 1.05rem !important; padding: .55rem .9rem !important; min-height: 46px; background: var(--zdh-surface) !important; color: var(--zdh-teal) !important; border: 2px solid var(--zdh-border) !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; gap: .45em; }
+.zdh-app .zdh-tool:hover { background: var(--sys-surface-raised, #F3F5F8) !important; border-color: var(--zdh-teal) !important; }
+.zdh-app .zdh-tool svg { width: 20px; height: 20px; flex: 0 0 20px; }
+.zdh-app .zdh-tool-on, .zdh-app .zdh-tool[aria-pressed="true"] { background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; border-color: var(--zdh-teal) !important; }
+.zdh-app .zdh-tool-on:hover, .zdh-app .zdh-tool[aria-pressed="true"]:hover { background: var(--sys-brand-hover, #2c5660) !important; }
+/* the check box on a toggle */
+.zdh-app .zdh-tool[aria-pressed]::before { content: ""; display: inline-block; width: 20px; height: 20px; border: 2px solid currentColor; border-radius: 5px; box-sizing: border-box; flex: 0 0 20px; opacity: .8; }
+.zdh-app .zdh-tool[aria-pressed="true"]::before { content: "\2713"; background: var(--zdh-surface); color: var(--zdh-teal); border-color: var(--sys-text-inv, #fff); font-size: 15px; line-height: 16px; font-weight: 800; text-align: center; opacity: 1; }
+.zdh-app .zdh-tool-warn[aria-pressed="false"] { color: var(--sys-tint-warning-fg, #8A4B00) !important; border-color: var(--sys-warning, #E2B93B) !important; background: var(--sys-tint-warning-bg, #FFF6DA) !important; }
+.zdh-app .zdh-tool-danger { color: var(--sys-error, #7A1220) !important; border-color: var(--sys-tint-error-fg, #E4B6BC) !important; }
+.zdh-app .zdh-mini { font-size: 1rem !important; padding: .5rem .8rem !important; min-height: 44px; background: var(--zdh-surface) !important; border: 2px solid var(--zdh-border) !important; color: var(--zdh-teal) !important; border-radius: 8px !important; }
+.zdh-app .zdh-mini:hover { background: var(--sys-surface-raised, #F3F5F8) !important; border-color: var(--zdh-teal) !important; }
+.zdh-app .zdh-mini-primary { background: var(--zdh-red) !important; border-color: var(--zdh-red) !important; color: #fff !important; }
+.zdh-app .zdh-mini-primary:hover { background: var(--zdh-red-bright) !important; border-color: var(--zdh-red-bright) !important; }
+.zdh-app .zdh-mini.zdh-danger { color: var(--sys-error, #7A1220) !important; border-color: var(--sys-tint-error-fg, #E4B6BC) !important; }
+.zdh-app .zdh-secondary-solid { background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; }
+.zdh-app button:active:not([disabled]) { transform: translateY(1px); filter: brightness(.93); }
+.zdh-app button[disabled] { opacity: .45 !important; cursor: not-allowed !important; }
+.zdh-app .zdh-refresh { border-color: var(--zdh-border) !important; font-size: 1rem !important; min-height: 44px; }
+.zdh-app .zdh-refresh:hover { border-color: var(--zdh-teal) !important; }
+.zdh-maptools { gap: .45rem; margin: .45rem 0 .5rem; }
+.zdh-drop-btns { gap: .4rem; margin-top: .65rem; }
+.zdh-actions { gap: .5rem; margin: .35rem 0 .8rem; }
+
+/* Move / Draw: a two-way switch above the plan map, a hint line, and a label on the map itself */
+.zdh-modeseg { display: flex; border: 2px solid var(--zdh-teal); border-radius: 12px; overflow: hidden; margin: .45rem 0 .4rem; background: var(--zdh-surface); }
+.zdh-app .zdh-modeseg button { flex: 1 1 50%; border: 0 !important; border-radius: 0 !important; background: var(--zdh-surface) !important; color: var(--zdh-teal) !important; font-family: inherit; font-weight: 700 !important; font-size: 1.12rem !important; padding: .7rem .4rem !important; min-height: 54px; display: inline-flex; align-items: center; justify-content: center; gap: .5rem; cursor: pointer; box-shadow: none !important; line-height: 1.15 !important; margin: 0 !important; }
+.zdh-app .zdh-modeseg button + button { border-left: 2px solid var(--zdh-teal) !important; }
+.zdh-app .zdh-modeseg button[aria-pressed="true"] { background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; }
+.zdh-app .zdh-modeseg button[aria-pressed="true"].zdh-mode-draw { background: var(--zdh-orange) !important; border-color: var(--zdh-orange) !important; }
+.zdh-app .zdh-modeseg button svg { width: 24px; height: 24px; flex: 0 0 24px; }
+.zdh-app p.zdh-mode-hint { font-size: 1rem !important; color: var(--sys-text-sec, #3F4652) !important; margin: 0 0 .45rem !important; line-height: 1.35 !important; min-height: 2.6em; }
+.zdh-mapwrap { position: relative; }
+.zdh-map-mode { display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2; font-family: inherit; font-weight: 700; font-size: 1rem; padding: .35rem .85rem; border-radius: 8px; background: rgba(32,65,71,.92); color: #fff; pointer-events: none; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.zdh-map-mode.drawing { display: block; background: var(--zdh-orange); }
+.zdh-map.zdh-drawing { outline: 4px solid var(--zdh-orange); }
+/* "My location" as a map control, like the zoom buttons */
+.zdh-app .leaflet-bar .zdh-locate { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--zdh-teal) !important; background: var(--zdh-surface); cursor: pointer; }
+.zdh-app .leaflet-bar .zdh-locate svg { width: 24px; height: 24px; }
+.zdh-app .leaflet-bar .zdh-locate.busy { color: #999 !important; }
+.zdh-app .leaflet-control-zoom a { width: 40px !important; height: 40px !important; line-height: 40px !important; font-size: 24px !important; }
+
+/* delivery view, cluster cards */
+.zdh-deliver .zdh-maptools { gap: .35rem; }
+.zdh-deliver .zdh-maptools .zdh-tool { flex: 1 1 auto; font-size: .98rem !important; padding: .5rem .55rem !important; }
+.zdh-deliver-count { border: 1px solid var(--sys-border, #D7DCE5); }
+.zdh-deliver-status { font-size: 1.02rem; color: var(--sys-text-sec, #3F4652); font-weight: 700; }
+.zdh-drop { padding: .9rem .85rem; margin-bottom: .65rem; border: 1px solid var(--sys-border, #D7DCE5); border-left-width: 6px; }
+.zdh-drop-detail { font-size: 1.02rem; line-height: 1.5; }
+.zdh-badge { font-size: .9rem; }
+.zdh-datehead { font-size: .95rem !important; color: var(--sys-text-sec, #3F4652) !important; font-weight: 700 !important; }
+.zdh-due { font-size: 1rem; border: 1px solid var(--sys-border, #D7DCE5); border-left-width: 5px; }
+.zdh-stat { border: 1px solid var(--sys-border, #D7DCE5); }
+.zdh-stat-l { color: var(--sys-text-sec, #3F4652); font-weight: 700; }
+.zdh-streetline-main { font-size: 1.02rem; }
+.zdh-badge-soft { font-size: .78rem; color: var(--sys-text-sec, #3F4652); border: 1px solid var(--zdh-line); }
+.zdh-quick { padding: .55rem .8rem .6rem; gap: .3rem; }
+.zdh-quick-help { font-size: .95rem; color: var(--sys-text-sec, #3F4652); }
+.zdh-quick-text { font-size: 1.02rem; font-weight: 700; }
+.zdh-app .zdh-go, .zdh-app .zdh-stop { font-size: 1.2rem !important; padding: .9rem 1.1rem !important; min-height: 54px; }
+.zdh-lookup-res { font-size: 1.02rem; }
+.zdh-status { font-size: 1.02rem; }
+.zdh-app ul.zdh-list li { font-size: 1rem !important; }
+.zdh-table { font-size: .95rem; }
+.zdh-toast { font-size: 1.05rem; }
+.zdh-details summary { font-size: 1.1rem; padding: .35rem 0; }
+.zdh-app .leaflet-container { font-size: 13px; }
+@media (max-width: 640px) {
+	.zdh-app { font-size: 18px; }
+	.zdh-header { padding: .55rem .8rem .5rem; }
+	.zdh-app h1.zdh-title { font-size: 1.3rem !important; }
+	.zdh-app .zdh-refresh { font-size: .95rem !important; padding: .45rem .6rem !important; }
+	.zdh-main { padding: .55rem .5rem 1rem; }
+	.zdh-card { padding: .8rem .7rem; border-radius: 12px; margin-bottom: .55rem; }
+	.zdh-card-tight { padding: .7rem .6rem .75rem; }
+	.zdh-app h2 { font-size: 1.35rem !important; }
+	.zdh-app .zdh-tab { font-size: 1rem !important; padding: .8rem .1rem !important; }
+	.zdh-quick { padding: .5rem .6rem .5rem; }
+	.zdh-quick-help { font-size: .92rem; }
+	.zdh-app .zdh-go, .zdh-app .zdh-stop { min-height: 52px; padding: .8rem 1rem !important; }
+	.zdh-map { height: 50vh; min-height: 300px; }
+	.zdh-app .zdh-modeseg button { font-size: 1.08rem !important; }
+	.zdh-app p.zdh-mode-hint { font-size: .98rem !important; }
+	.zdh-drop { padding: .8rem .7rem; }
+	.zdh-drop-btns .zdh-mini { flex: 1 1 auto; }
+	.zdh-footer { padding: .5rem .8rem .8rem; }
+}
+
+/* walks — a cluster split into sessions on foot */
+.zdh-walks-sum { font-size: 1.02rem !important; margin: .2rem 0 .5rem !important; }
+.zdh-walk-row { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-top: 1px solid var(--zdh-line); }
+.zdh-walk-row:first-child { border-top: 0; }
+.zdh-walklist { margin-top: .6rem; border-top: 1px dashed var(--zdh-line); }
+.zdh-walklist .zdh-walk-row:first-child { border-top: 0; }
+.zdh-walk-swatch { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 8px; color: #fff; font-family: inherit; font-weight: 700; font-size: .95rem; display: inline-flex; align-items: center; justify-content: center; }
+.zdh-walk-main { flex: 1 1 auto; font-size: 1rem; line-height: 1.35; color: var(--zdh-text); min-width: 0; }
+.zdh-walk-main strong { color: var(--zdh-teal); }
+.zdh-walk-streets { font-size: .92rem; color: var(--zdh-muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zdh-walk-done .zdh-walk-main { color: var(--zdh-muted); }
+.zdh-walk-done .zdh-walk-swatch { opacity: .55; }
+.zdh-walk-in_progress .zdh-walk-main strong { color: var(--zdh-red); }
+.zdh-app .zdh-walk-row .zdh-mini { flex: 0 0 auto; }
+.zdh-walk-tag { display: inline-block; color: #fff; font-family: inherit; font-weight: 700; font-size: .95rem; padding: .2em .6em; border-radius: 6px; margin-bottom: .3rem; }
+.zdh-walk-next { background: var(--zdh-band); border-radius: 12px; padding: .7rem .8rem; margin: .6rem 0; text-align: left; border-top: 0; }
+.zdh-app .leaflet-tooltip.zdh-start-tip { font-family: inherit; font-weight: 700; color: var(--zdh-teal); font-size: 13px; }
+.zdh-app .zdh-walks .zdh-grid select { font-size: 16px !important; }
+
+/* the title + tab bar are the anchor — stuck to the top; simpler screens */
+.zdh-app > .zdh-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: var(--zdh-surface); box-shadow: 0 2px 8px rgba(32,65,71,.14); }
+
+.zdh-tabs { position: static; }
+.zdh-header { padding: .5rem .9rem .45rem; border-bottom: 0; gap: .6rem; }
+.zdh-app h1.zdh-title { font-size: 1.3rem !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zdh-app .zdh-refresh { min-height: 40px; padding: .4rem .7rem !important; font-size: .95rem !important; }
+@media (max-width: 640px) {
+	.zdh-header { padding: .4rem .7rem .35rem; }
+	.zdh-app h1.zdh-title { font-size: 1.2rem !important; }
+	.zdh-app .zdh-tab { padding: .7rem .1rem !important; border-bottom-width: 4px !important; }
+	.zdh-app .zdh-refresh { min-height: 38px; padding: .35rem .6rem !important; font-size: .9rem !important; }
+}
+/* groups on the Clusters tab open by default and fold away */
+details.zdh-log > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
+details.zdh-log > summary::-webkit-details-marker { display: none; }
+details.zdh-log > summary::before { content: "▾"; color: var(--zdh-red); font-size: 1.1rem; width: 1em; flex: 0 0 1em; }
+details.zdh-log:not([open]) > summary::before { content: "▸"; }
+details.zdh-log > summary h2 { margin: 0 !important; display: inline-flex; align-items: center; gap: .5rem; }
+.zdh-log-n { font-family: inherit; font-weight: 700; font-size: .95rem; color: var(--zdh-teal); background: var(--zdh-band); border: 1px solid var(--zdh-line); border-radius: 6px; padding: .05em .5em; }
+details.zdh-log { margin-bottom: .6rem; }
+/* street row: one check button (all / some / none) */
+.zdh-app .zdh-mini[aria-pressed] { display: inline-flex; align-items: center; gap: .4em; }
+.zdh-app .zdh-mini[aria-pressed]::before { content: ""; display: inline-block; width: 18px; height: 18px; border: 2px solid currentColor; border-radius: 4px; box-sizing: border-box; flex: 0 0 18px; opacity: .8; font-size: 13px; line-height: 14px; font-weight: 800; text-align: center; }
+.zdh-app .zdh-mini[aria-pressed="true"] { background: var(--zdh-teal) !important; color: var(--sys-text-inv, #fff) !important; border-color: var(--zdh-teal) !important; }
+.zdh-app .zdh-mini[aria-pressed="true"]::before { content: "\2713"; background: var(--zdh-surface); color: var(--zdh-teal); border-color: var(--sys-text-inv, #fff); opacity: 1; }
+.zdh-app .zdh-mini[aria-pressed="mixed"]::before { content: "\2013"; opacity: 1; }
+/* card: one main button and a More ▾ row */
+.zdh-app .zdh-more { margin-left: auto; }
+.zdh-drop-more { margin-top: .4rem; padding-top: .5rem; border-top: 1px dashed var(--zdh-line); }
+@media (max-width: 640px) { .zdh-drop-btns .zdh-more { flex: 0 0 auto; } }
+
+/* a map you can read — higher-contrast tiles, big map text mode, house numbers drawn by the app.
+   the base map is a vector map (MapLibre GL canvas in the tile pane, contrast set in the style itself);
+   the contrast filter only applies to the raster fallback tiles. */
+.zdh-app .leaflet-tile-pane .zdh-tiles { filter: contrast(1.18) saturate(1.05); }
+.zdh-app .leaflet-tile-pane .zdh-tiles-big { image-rendering: auto; }
+.zdh-app .leaflet-tile-pane .leaflet-gl-layer { position: absolute; left: 0; top: 0; }
+/* the theme caps every element in an app at its parent's width (`.app-body * { max-width: 100% }`, a guard
+   against content running off the card). Leaflet's panes are 0 x 0 by design, so 100 % of a pane is 0: the MapLibre
+   container in the tile pane went 0 px wide and its overflow: hidden clipped the whole base map (routes drew on an empty
+   grey map), and popups and tooltips in their panes were squeezed to one word per line / a 20 px box. Leaflet and
+   MapLibre size what they put in a pane themselves (inline width, the popup's maxWidth option); let them. */
+.zdh-app .leaflet-pane, .zdh-app .leaflet-pane * { max-width: none; }
+.zdh-app .leaflet-tile-pane .maplibregl-map { background: var(--sys-bg-alt, #F8F4F0); }
+.zdh-app .maplibregl-canvas { outline: none; }
+.zdh-app .leaflet-bar .zdh-textsize { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--zdh-teal) !important; background: var(--zdh-surface); cursor: pointer; }
+.zdh-app .leaflet-bar .zdh-textsize svg { width: 26px; height: 26px; }
+.zdh-app .leaflet-bar .zdh-textsize.on { background: var(--zdh-teal); color: var(--sys-text-inv, #fff) !important; }
+.zdh-app .leaflet-tooltip { font-size: 15px; font-weight: 700; color: var(--zdh-text); border: 2px solid var(--zdh-border); padding: 4px 8px; }
+/* house numbers next to the dots: bold, dark, with a white halo instead of a box; only from zoom 17 in */
+.zdh-app .leaflet-tooltip.zdh-num { display: none; background: none; border: 0; box-shadow: none; padding: 0; margin: 0; font-family: inherit; font-size: 13px; font-weight: 800; color: #14181C; line-height: 1; letter-spacing: 0; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff; pointer-events: none; }
+.zdh-app .leaflet-tooltip.zdh-num::before { display: none; }
+.zdh-app .leaflet-container.zdh-labels .leaflet-tooltip.zdh-num { display: block; }
+.zdh-app .leaflet-tooltip.zdh-start-tip { display: block; font-size: 14px; }
+.zdh-app .leaflet-control-attribution { font-size: 11px; }
+@media (max-width: 640px) { .zdh-app .leaflet-tooltip.zdh-num { font-size: 14px; } }
+
+/* diagnostics, GPS gap note, outbox banner, Mark a stretch */
+.zdh-app .zdh-gap { background: var(--sys-tint-warning-bg, #FFF4D6); border: 2px solid var(--sys-warning, #E0A800); border-radius: 10px; padding: .6rem .8rem; margin: 0 0 .6rem; font-size: 1rem; line-height: 1.4; color: var(--zdh-text); }
+.zdh-app .zdh-gap .zdh-mini { margin-left: .4rem; }
+.zdh-app .zdh-banner.zdh-outbox { background: var(--sys-tint-neutral-bg, #EEF2F7); border-color: var(--sys-border, #AEB6C2); color: var(--sys-tint-neutral-fg, var(--zdh-text)); }
+.zdh-app .zdh-diag-btns { flex-wrap: wrap; }
+.zdh-app .zdh-diag-text { width: 100%; box-sizing: border-box; font: 12px/1.45 Menlo, Consolas, monospace; white-space: pre; overflow: auto; border: 2px solid var(--zdh-border); border-radius: 8px; padding: .5rem; background: var(--zdh-surface); color: var(--zdh-text); margin-top: .5rem; }
+.zdh-toast .zdh-mini-primary { margin-right: .4rem; }
+
+/* live quick walks, help card */
+.zdh-app .zdh-quick-ended { background: var(--sys-tint-info-bg, #E8F1FB); border-bottom-color: var(--sys-border, #BFD5EE); }
+.zdh-app .zdh-quick-ended .zdh-primary.zdh-stop-mini { padding: .45rem .8rem; font-size: 1rem; }
+.zdh-app .zdh-help-card { background: var(--sys-tint-info-bg, #FFF9EC); color: var(--sys-tint-info-fg, inherit); border: 2px solid var(--sys-border-strong, #F0D48A); }
+.zdh-app .zdh-help-card h2, .zdh-app .zdh-help-card li, .zdh-app .zdh-help-card p { color: var(--sys-text, inherit); }
+.zdh-app .zdh-help-card h2 { margin-top: 0; }
+.zdh-app .zdh-help-steps { margin: .4rem 0 .6rem; padding-left: 1.3rem; font-size: 1.05rem; line-height: 1.45; }
+.zdh-app .zdh-help-steps li { margin: .35rem 0; }
+.zdh-app .zdh-drop-quicklive .zdh-drop-detail em { color: var(--zdh-muted); }
+
+/* the Done button pinned to the bottom of the phone's screen; the wrap-up as a sheet */
+.zdh-app .zdh-actionbar { display: flex; gap: .6rem; margin: .4rem 0 1rem; }
+.zdh-app .zdh-actionbar > button { flex: 1 1 auto; min-height: 56px; font-size: 1.15rem; }
+@media (max-width: 640px) {
+	.zdh-app .zdh-actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 100080; margin: 0; padding: .55rem .7rem calc(.55rem + env(safe-area-inset-bottom, 0px)); background: var(--zdh-surface); border-top: 2px solid var(--zdh-line); box-shadow: 0 -6px 20px rgba(0,0,0,.12); }
+	body.zdh-has-bar .zdh-main { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+	body.zdh-has-bar .zdh-footer { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+	body.zdh-has-bar .zdh-toast { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+	.zdh-app .zdh-deliver .zdh-map { height: 46vh; min-height: 260px; }
+}
+.zdh-install-sheet.zdh-sheet-scroll { max-height: min(88vh, 88dvh); overflow: auto; -webkit-overflow-scrolling: touch; }
+.zdh-install-sheet.zdh-sheet-scroll .zdh-grid { margin-top: .5rem; }
+.zdh-install-sheet.zdh-sheet-scroll .zdh-actions { margin-top: .8rem; }
+/* while a walk view has its bottom bar, the install banner must not sit on top of the Done button */
+
+/* Nutshell cross-check card (Lookup tab) */
+.zdh-app .zdh-ns-row { display: flex; gap: .6rem; align-items: stretch; flex-wrap: wrap; margin: .4rem 0 .6rem; }
+.zdh-app .zdh-ns-row select { flex: 1 1 160px; min-height: 52px; }
+.zdh-app .zdh-ns-row .zdh-primary { flex: 1 1 200px; }
+.zdh-app .zdh-ns-sum { margin: .9rem 0 .3rem; }
+.zdh-app ul.zdh-ns-list { margin-top: .4rem !important; list-style: none !important; padding-left: 0 !important; }
+.zdh-app .zdh-ns-match { padding: .7rem 0; border-top: 1px solid var(--zdh-line); }
+.zdh-app .zdh-ns-match:first-child { border-top: 0; }
+.zdh-app .zdh-ns-top { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.zdh-app .zdh-ns-name { font-weight: 700; font-size: 1.08rem; color: var(--zdh-teal); text-decoration: underline; text-underline-offset: 3px; }
+.zdh-app .zdh-ns-addr { margin: .2rem 0; }
+.zdh-app .zdh-ns-del { font-size: .95rem; color: var(--zdh-muted); margin-top: .15rem; }
+
+/* ---------------------------------------------------------------- walks, lookup and settings */
+/* Done screen: the walk's numbers in big type */
+.zdh-done-nums { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; margin: .4rem 0 .8rem; }
+.zdh-done-nums > div { flex: 1 1 22%; min-width: 72px; background: var(--zdh-green-soft); border: 1px solid var(--sys-border, #BFE5CF); border-radius: 10px; padding: .55rem .3rem; }
+.zdh-done-nums strong { display: block; white-space: nowrap; font-family: inherit; font-size: 1.35rem; line-height: 1.1; color: var(--zdh-green); }
+.zdh-done-nums span { display: block; font-size: .85rem; color: var(--zdh-muted); }
+/* A card the map pointed at */
+.zdh-drop.zdh-flash { animation: zdh-flash 1.6s ease-out; }
+@keyframes zdh-flash { 0%, 40% { box-shadow: 0 0 0 4px var(--sys-warning, #F2812A); } 100% { box-shadow: none; } }
+/* PDF page picker + the marks the reader found on a paper map */
+.zdh-pdf-head { margin: .7rem 0 .4rem; font-size: .95rem; }
+.zdh-pdf-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .5rem; }
+.zdh-app .zdh-pdf-page { display: flex; flex-direction: column; align-items: center; gap: .25rem; padding: .35rem; background: var(--zdh-surface); border: 2px solid var(--zdh-line); border-radius: 8px; cursor: pointer; font-size: .85rem; color: var(--zdh-text); }
+.zdh-app .zdh-pdf-page img { width: 100%; height: 130px; object-fit: contain; background: var(--sys-surface-subtle, #fafafa); }
+.zdh-app .zdh-pdf-page.zdh-pdf-added { border-color: var(--zdh-green); background: var(--zdh-green-soft); }
+.zdh-marks { margin-top: .3rem; }
+.zdh-marks > div { margin: .15rem 0; }
+.zdh-mark-sw { display: inline-block; width: 22px; height: 12px; border-radius: 3px; margin-right: .4rem; vertical-align: middle; border: 1px solid rgba(0,0,0,.2); }
+/* Pocket mode: a black, touch-proof screen (outside .zdh-app, so literal colours) */
+.zdh-pocket { position: fixed; inset: 0; z-index: 100095; background: #000; color: #9AA3AE; display: flex; align-items: center; justify-content: center; touch-action: none; -webkit-user-select: none; user-select: none; font-family: inherit; padding: env(safe-area-inset-top, 0px) 20px env(safe-area-inset-bottom, 0px); }
+.zdh-pocket-in { width: 100%; max-width: 420px; text-align: center; }
+.zdh-pocket-big { font-family: inherit; font-size: 3.2rem; font-weight: 700; color: #6E7A86; line-height: 1.1; }
+.zdh-pocket-label { font-size: 1rem; margin-bottom: 1rem; }
+.zdh-pocket-sub, .zdh-pocket-gps { font-size: .95rem; margin: .25rem 0; }
+.zdh-pocket-note { min-height: 1.4em; margin: .8rem 0; color: #7FB8D8; font-size: 1rem; }
+.zdh-pocket-unlock { position: relative; overflow: hidden; margin: 1.6rem auto .8rem; display: block; width: 100%; max-width: 300px; height: 64px; border: 2px solid #3A4450; border-radius: 10px; background: #0B0D10; color: #9AA3AE; font-size: 1.1rem; font-weight: 700; font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.zdh-pocket-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #1E3A2C; }
+.zdh-pocket-unlock.zdh-holding .zdh-pocket-fill { width: 100%; transition: width .9s linear; }
+.zdh-pocket-txt { position: relative; }
+.zdh-pocket-help { font-size: .85rem; color: #56606B; line-height: 1.45; margin: 0; }
+body.zdh-pocket-on .zdh-toast { z-index: 100010; }
+body.zdh-pocket-on { overflow: hidden; }
+/* cluster dots step aside at street zoom (class on the map box, no layer churn) */
+.zdh-hide-marks .zdh-clmark { display: none; }
+
+/* ---------------------------------------------------------------- folded cluster cards */
+/* the side bar is the status, in the map legend's colours; every other card is shaded for contrast */
+.zdh-app .zdh-drop { padding: 0; overflow: hidden; }
+.zdh-app #log-done .zdh-drop:nth-of-type(even), .zdh-app #log-planned .zdh-drop:nth-of-type(even) { background: var(--sys-surface-subtle, #EEF1F5); }
+.zdh-app .zdh-drop-head { display: flex; align-items: center; gap: .6rem; width: 100%; margin: 0; padding: .8rem .85rem; background: transparent; border: 0; border-radius: 0; text-align: left; cursor: pointer; color: var(--zdh-text); font: inherit; box-shadow: none; -webkit-tap-highlight-color: rgba(32,65,71,.08); }
+.zdh-app .zdh-drop-head:active { background: rgba(32,65,71,.06); }
+.zdh-drop-head-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+.zdh-drop-hname { font-family: inherit; font-weight: 700; color: var(--zdh-teal); font-size: 1.08rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zdh-drop-sum { font-size: .95rem; color: var(--zdh-muted); line-height: 1.35; }
+.zdh-drop-chev { flex: 0 0 auto; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--zdh-line); border-radius: 8px; color: var(--zdh-teal); font-size: 1rem; transition: transform .15s ease; background: var(--zdh-surface); }
+.zdh-drop-open .zdh-drop-chev { transform: rotate(180deg); }
+.zdh-drop-body { padding: 0 .85rem .85rem; border-top: 1px dashed var(--zdh-line); padding-top: .7rem; }
+.zdh-app .zdh-drop > .zdh-drop-btns { padding: 0 .85rem; margin-top: 0; }
+.zdh-app .zdh-drop > .zdh-drop-btns:first-of-type { margin-bottom: .75rem; }
+.zdh-app .zdh-drop > .zdh-drop-more { margin: 0 .85rem .75rem; padding: .5rem 0 0; }
+.zdh-app .zdh-drop > .zdh-drop-extra { margin: 0 .85rem .85rem; }
+.zdh-log-tools { text-align: right; margin: -.2rem 0 .3rem !important; }
+.zdh-app .zdh-drop-quicklive { padding: .9rem .85rem; }
+
+/* lookup: how close did a route come */
+.zdh-app .zdh-nearby { margin-top: 10px; padding: 10px 12px; border: 2px solid var(--zdh-border, #AEB6C2); border-radius: 8px; background: var(--sys-surface-subtle, #F6F8FB); }
+.zdh-app .zdh-nearby-head { font-weight: 700; margin-bottom: 4px; }
+.zdh-app .zdh-nearby p { margin: 0 0 6px; }
+
+/* lookup spelling correction */
+.zdh-app .zdh-fix { margin-top: 8px; padding: 8px 10px; border-left: 4px solid var(--sys-warning, #E0641C); background: var(--sys-tint-warning-bg, #FFF6EE); border-radius: 6px; }
+
+/* No-Solicit House */
+.zdh-pocket-nosol { margin-top: .7rem; border-color: var(--sys-warning, #E69F00) !important; }
+.zdh-pocket-nosol .zdh-pocket-fill { background: #5A2A00; }
+.zdh-app .zdh-fix.zdh-nosol-note { border-left-color: var(--sys-error, #B91C1C); background: var(--sys-tint-error-bg, #FCEBEC); }
+
+/* the navigation view — a next-step banner over the top of the walk map, a "Then" line, a thin
+   progress strip, Ahead and Re-center, the beam on the blue dot. The banner is self-colored (a fixed dark green with
+   white, AA in every mode, readable over the light basemap) and carries .zdz-pair so the theme's force-paint leaves it
+   alone; every color is a token with a fallback. */
+.zdh-navwrap { position: relative; }
+.zdh-nav { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1001; background: var(--zdh-nav-bg, #0B5A3E); color: var(--zdh-nav-fg, #FFFFFF); border-radius: 12px; box-shadow: 0 3px 12px rgba(0,0,0,.28); overflow: hidden; font-family: inherit; pointer-events: auto; }
+.zdh-nav[hidden] { display: none; }
+.zdh-nav-main { display: flex; align-items: center; gap: .65rem; padding: .55rem .6rem .5rem .7rem; }
+.zdh-nav-icon { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; min-width: 54px; }
+.zdh-nav-svg { width: 34px; height: 34px; display: block; transition: transform .3s; }
+.zdh-nav-dist { font-size: .98rem; font-weight: 800; line-height: 1.1; margin-top: 2px; white-space: nowrap; }
+.zdh-nav-text { flex: 1 1 auto; min-width: 0; }
+.zdh-nav-what { font-size: 1.12rem; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.zdh-nav-detail { font-size: .9rem; line-height: 1.25; margin-top: 2px; color: var(--zdh-nav-sub, #D8F3E6); }
+.zdh-app .zdh-nav-ahead { flex: 0 0 auto; display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: 52px; min-height: 48px; padding: .3rem .45rem !important; border: 1.5px solid var(--zdh-nav-line, rgba(255,255,255,.55)) !important; border-radius: 10px !important; background: transparent !important; color: inherit !important; font: inherit; font-size: .74rem !important; font-weight: 700 !important; cursor: pointer; }
+.zdh-app .zdh-nav-ahead:hover, .zdh-app .zdh-nav-ahead:focus-visible { background: var(--zdh-nav-hover, rgba(255,255,255,.14)) !important; }
+.zdh-app .zdh-nav-ahead svg { width: 22px; height: 22px; }
+.zdh-nav-then { display: flex; align-items: center; gap: .4rem; padding: .32rem .7rem .38rem; background: var(--zdh-nav-then, #08432E); font-size: .9rem; line-height: 1.25; color: var(--zdh-nav-sub, #D8F3E6); }
+.zdh-nav-then-l { font-weight: 700; }
+.zdh-nav-then-l:empty { display: none; }
+.zdh-nav-svg-s { width: 18px; height: 18px; flex: 0 0 18px; }
+.zdh-nav-then-t { min-width: 0; overflow-wrap: anywhere; }
+.zdh-nav-then-d { opacity: .85; }
+.zdh-nav-progress { height: 4px; background: var(--zdh-nav-track, rgba(255,255,255,.22)); }
+.zdh-nav-progress i { display: block; height: 100%; background: var(--zdh-nav-fill, #7BE0B0); transition: width .4s; }
+/* Leaflet's corner buttons (zoom, Aa) sit below the banner */
+.zdh-navwrap .leaflet-top { top: var(--zdh-nav-h, 0px); transition: top .2s; }
+.zdh-app .zdh-recenter { position: absolute; right: 10px; bottom: 26px; z-index: 1001; display: inline-flex; align-items: center; gap: .4rem; min-height: 46px; padding: .5rem .85rem !important; border: 0 !important; border-radius: 12px !important; background: var(--zdh-nav-bg, #0B5A3E) !important; color: var(--zdh-nav-fg, #FFFFFF) !important; font: inherit; font-size: 1rem !important; font-weight: 800 !important; box-shadow: 0 3px 12px rgba(0,0,0,.3); cursor: pointer; }
+.zdh-app .zdh-recenter[hidden] { display: none; }
+.zdh-app .zdh-recenter svg { width: 22px; height: 22px; }
+/* the beam under the blue dot: the way the walker is going */
+.zdh-beam { pointer-events: none; background: none; border: 0; }
+.zdh-beam-in { width: 80px; height: 80px; color: var(--zdh-beam, #2980B9); transition: transform .4s, opacity .4s; transform-origin: 50% 50%; }
+.zdh-beam-in svg { width: 80px; height: 80px; display: block; }
+.zdh-sr { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.zdh-app .zdh-pace-btn { margin-left: .5rem; vertical-align: middle; }
+/* pocket mode: one dim line for the next step, and the spoken-turns switch */
+.zdh-pocket-nav { min-height: 1.3em; margin: .5rem 0 .2rem; font-size: 1.05rem; font-weight: 700; color: var(--zdh-pocket-nav, #7FA894); }
+.zdh-pocket-voice { margin-top: .7rem; }
+@media (max-width: 640px) {
+	.zdh-nav { top: 6px; left: 6px; right: 6px; }
+	.zdh-nav-what { font-size: 1.06rem; }
+	.zdh-nav-icon { min-width: 48px; }
+	.zdh-nav-svg { width: 30px; height: 30px; }
+	.zdh-app .zdh-deliver .zdh-navwrap .zdh-map { height: 52vh; min-height: 300px; }
+	.zdh-app .zdh-pace-btn { margin: .35rem 0 0; display: inline-block; }
+}
+
+/* ===================================================== old routes from paper, and the outdoor pass
+   Everything on the theme's tokens: no colour of this app's own, no [data-theme] rule. */
+.zdh-app .zdh-paper-choice .zdh-choice-title { display: flex; align-items: center; gap: .45rem; }
+.zdh-app .zdh-paper-choice svg, .zdh-batch-add svg { width: 22px; height: 22px; flex: 0 0 22px; vertical-align: -5px; }
+.zdh-batch-common { margin-top: .4rem; padding: .4rem 0 0 !important; border-top: 1px solid var(--zdh-line); }
+.zdh-batch-head { display: flex; flex-direction: column; gap: .5rem; margin: 0 0 .7rem; }
+.zdh-batch-head:empty { display: none; }
+.zdh-batch-sum { font-weight: 700; color: var(--zdh-text); }
+.zdh-bsheet { padding: .85rem .9rem !important; }
+.zdh-bs-head { display: flex; gap: .7rem; align-items: center; }
+.zdh-bs-thumb { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 10px; object-fit: cover; background: var(--zdh-band); border: 1px solid var(--zdh-line); display: block; }
+.zdh-bs-titles { min-width: 0; flex: 1; }
+.zdh-bs-title { font-weight: 700; font-size: 1.05rem; color: var(--zdh-text); overflow-wrap: anywhere; }
+.zdh-bs-sub { font-size: .9rem; color: var(--zdh-muted); overflow-wrap: anywhere; }
+.zdh-bs-busy.zdh-spinner { display: inline-block; width: 15px; height: 15px; border-width: 2px; margin: 0 .4rem -2px 0; vertical-align: baseline; }
+.zdh-bs-secs { color: var(--zdh-muted); font-variant-numeric: tabular-nums; }
+.zdh-bs-ok { color: var(--sys-tint-success-fg, var(--zdh-green)); font-weight: 700; }
+.zdh-bs-bad { color: var(--sys-tint-error-fg, var(--zdh-red)); font-weight: 700; }
+.zdh-bs-pics { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: .6rem; margin: .7rem 0 .5rem; align-items: stretch; }
+.zdh-bs-photo { display: block; border-radius: 10px; overflow: hidden; border: 1px solid var(--zdh-line); background: var(--zdh-band); }
+.zdh-bs-photo img { width: 100%; height: 100%; max-height: 180px; object-fit: cover; display: block; }
+.zdh-sketch { width: 100%; height: auto; max-height: 180px; border-radius: 10px; background: var(--zdh-band); border: 1px solid var(--zdh-line); display: block; }
+.zdh-sk-road { fill: none; stroke: var(--sys-border-strong, var(--zdh-border)); stroke-width: 2; stroke-linecap: round; }
+.zdh-sk-road.zdh-sk-on { stroke: var(--zdh-field); stroke-width: 3; }
+.zdh-sk-dots circle { fill: var(--zdh-teal); }
+.zdh-app .zdh-bs-date { display: flex; align-items: center; gap: .6rem; font-weight: 700; margin: .2rem 0 .4rem !important; }
+.zdh-app .zdh-bs-date input[type=date] { width: auto !important; flex: 1 1 auto; }
+.zdh-bs-flags { list-style: none; margin: .3rem 0 .5rem; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.zdh-app .zdh-bs-flag { margin: 0; padding: .4rem .6rem; border-radius: 8px; font-size: .92rem; border-left: 4px solid; }
+.zdh-app .zdh-bs-flag-block { background: var(--sys-tint-error-bg, var(--zdh-band)); color: var(--sys-tint-error-fg, var(--zdh-text)); border-color: var(--sys-error, var(--zdh-red)); }
+.zdh-app .zdh-bs-flag-check { background: var(--zdh-amber-soft); color: var(--zdh-amber); border-color: var(--sys-warning, var(--zdh-amber)); }
+.zdh-app .zdh-bs-flag-info { background: var(--zdh-band); color: var(--zdh-muted); border-color: var(--zdh-line); }
+/* a warning is told from a note by weight and a sign, not colour alone (sunlight mode has no colour) */
+.zdh-app .zdh-bs-flag-block, .zdh-app .zdh-bs-flag-check { font-weight: 650; border-left-width: 6px; }
+.zdh-app .zdh-bs-flag-block::before, .zdh-app .zdh-bs-flag-check::before { content: "\26A0\FE0E\00A0"; }
+.zdh-app .zdh-bs-flag-info { border-left-width: 2px; }
+.zdh-bs-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .4rem; }
+.zdh-bs-actions .zdh-tool { flex: 0 0 auto; }
+.zdh-app .zdh-bs-actions .zdh-bs-go { flex: 1 1 12rem; width: auto; }
+.zdh-bs-saved .zdh-bs-head, .zdh-bs-empty .zdh-bs-head { opacity: .85; }
+
+/* the map pop-up is a short card (max 260 px wide, 40 % of the screen tall), clear of the corner buttons */
+.zdh-app .zdh-popup .leaflet-popup-content { margin: 12px 14px; max-height: 40vh; overflow: auto; }
+.zdh-pop-line { margin-top: .15rem; }
+.zdh-pop-streets { color: var(--zdh-muted); }
+.zdh-app a.zdh-pop-btn { display: block; margin-top: .55rem; padding: .6rem .8rem; min-height: 44px; border-radius: 10px; background: var(--zdh-red); color: var(--sys-text-inv, #FFFFFF) !important; text-align: center; font-weight: 700; text-decoration: none !important; line-height: 1.6; }
+
+/* notes merge and fold: one line shows, "+N more" opens the rest; no notes box over 40 % of the screen */
+.zdh-notebox summary { cursor: pointer; list-style: none; }
+.zdh-notebox summary::-webkit-details-marker { display: none; }
+.zdh-note-more { font-weight: 700; text-decoration: underline; white-space: nowrap; }
+.zdh-notebox > div { margin-top: .3rem; }
+.zdh-note { max-height: 40vh; overflow: auto; }
+.zdh-install-sheet.zdh-sheet-scroll { max-height: min(78vh, 78dvh); }
+
+/* made for outside, on phones only (desktop keeps the denser layout): bigger type, stronger greys and borders, every
+   button 48 px or more (the main ones 56), inputs 52, map zoom 44, the walk banner's second line at full strength */
+@media (max-width: 640px) {
+	.zdh-app { font-size: 18px; --zdh-muted: var(--sys-text-sec, var(--sys-text-muted, #4B5563)); --zdh-border: var(--sys-border-strong, var(--sys-border, #AEB6C2)); }
+	.zdh-app p { font-size: 18px !important; }
+	.zdh-app h2 { font-size: 1.35rem !important; }
+	.zdh-app h3 { font-size: 1.15rem !important; }
+	.zdh-help { font-size: 1rem !important; }
+	.zdh-muted, .zdh-choice-sub, .zdh-bs-sub { font-size: .95rem; }
+	.zdh-grid label { font-size: .95rem !important; }
+	.zdh-app input[type=text], .zdh-app input[type=number], .zdh-app input[type=date], .zdh-app input[type=time], .zdh-app select { min-height: 52px; font-size: 18px !important; }
+	.zdh-app .zdh-primary { min-height: 56px; font-size: 1.1rem !important; }
+	.zdh-app .zdh-secondary, .zdh-app .zdh-tool, .zdh-app .zdh-tool-light, .zdh-app .zdh-mini, .zdh-app .zdh-filebtn, .zdh-app .zdh-choice { min-height: 48px; }
+	.zdh-app .zdh-linkbtn { font-size: 1rem !important; padding: .35rem 0 !important; }
+	.zdh-app .leaflet-control-zoom a { width: 44px !important; height: 44px !important; line-height: 44px !important; }
+	.zdh-nav-detail, .zdh-nav-then, .zdh-nav-then-d { opacity: 1; font-size: 1rem; }
+	.zdh-note { font-size: .95rem; }
+	.zdh-bs-pics { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}

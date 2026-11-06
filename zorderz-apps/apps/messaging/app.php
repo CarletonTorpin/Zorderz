@@ -2,126 +2,63 @@
 /**
  * Plugin Name: Zorderz Messaging
  * Plugin URI:  https://zorderz.org
- * Description: One-to-one DMs and department channels inside the Zorderz Field OS. @mentions, push notifications, inline FreshBooks preview cards. Minimum Effective Product.
- * Version:     1.1.8
+ * Description: One-to-one direct messages and team channels inside the Zorderz Field OS. @mentions, phone notifications held to quiet hours, estimate and invoice cards shared one document at a time.
+ * Version:     1.9.0
  * Author:      Zorderz
  * Text Domain: zdz-internal-messaging
  * Requires PHP: 8.0
  *
- * v1.1.8 (asset cache-bust): No functional delta found for 1.1.5–1.1.8 in the
- *   S8 analysis (S8-06) — these releases have no dedicated Bible section and the
- *   folded plugin README covers 1.1.0–1.1.3 only. Per the DEVICE-DIFF / DON'T-
- *   INVENT rule, the constant is advanced to the current-on-disk target and the
- *   version bump busts the JS/CSS asset cache. No behaviour change; no DB change.
- * v1.1.5–1.1.7: version-only (see v1.1.8) — no documented functional delta.
- * v1.1.4 (Vimeo chapter embed inside the messenger): A first-party training-video
- *   embed (a Vimeo player + clickable chapter list, as produced by the project's
- *   `text-to-vid` workflow) now renders inside a message WITHOUT weakening either
- *   sanitizer. The two layers each do their job — the server strips <iframe>/
- *   <script>/<style> at the write chokepoint (wp_kses_post, v1.0.27) and the
- *   client re-strips on render (DOMPurify) — so a passed-through embed's seeking
- *   script never runs. Instead, ZIM_Messages::extract_video_embeds() runs FIRST
- *   in post()/edit(), recognizing ONLY a TRUSTED-ORIGIN player.vimeo.com embed
- *   and distilling it to a plain-text [zdz-video]<hex>[/zdz-video] token carrying
- *   only the numeric video id + chapter list (which survives kses untouched);
- *   client wireVideoEmbeds() rebuilds the player with the iframe origin FIXED to
- *   player.vimeo.com and seeks host-side via the Vimeo postMessage API (with a
- *   #t= reload fallback); chapter clicks preventDefault() so they never navigate.
- *   The trusted-origin allow-list is a Core constant (Vimeo) exposed via the
- *   `zim_video_embed_hosts` filter. Also hardened: edit() now runs the same
- *   extract + wp_kses_post() the post() path does, closing a pre-existing gap
- *   where edited bodies were stored without a server-side kses pass. No DB
- *   migration; security posture unchanged (id validated numeric, origin fixed).
- * v1.1.3 (DM-email cooldown — testable + resettable): The v1.1.2 diagnostics
- *   proved the DM→email path works; test DMs simply landed inside the 30-min
- *   per-conversation cooldown (working as designed) and were correctly held back.
- *   To make live testing possible without waiting out or removing the throttle:
- *   - The cooldown now routes through the `zim_email_cooldown_seconds` filter
- *     (default 30 min). Returning 0 disables it entirely — a DM then always emails.
- *   - NEW admin button (Messaging → Channels → "DM email testing"): "Reset DM
- *     email cooldown" clears every zim_last_email_convo_* stamp so the next DM
- *     emails the recipient immediately. Admin-only, nonce-protected, reset-only.
- *   No DB migration; no change to production throttling behaviour by default.
- * v1.1.2 (DM-email outbound diagnostics): Added greppable `ZIM_DM_EMAIL:` debug
- *   logging to the DM-email path — logs when fire_group runs (and which branch),
- *   when the 30-min per-conversation cooldown SUPPRESSES a send, when there's no
- *   email on file, and the wp_mail() result (SENT/FAILED) with recipient + token.
- *   A successful wp_mail() is otherwise silent, which made it impossible to tell
- *   "sent" from "suppressed" when a DM email didn't arrive. Log-only; no behaviour
- *   change; WP_DEBUG-gated. No DB change.
- * v1.1.1 (poll-load reduction — 502 / cache-hit-ratio mitigation): The widget's
- *   real-time polling of admin-ajax.php was the platform's single biggest source
- *   of UNCACHEABLE origin hits (admin-ajax is never page-cached), a top driver of
- *   WP Engine PHP-worker saturation and the frequent 502 Bad Gateways (the origin
- *   cache hit ratio was ~12%, well into WP Engine's "Poor" band). Changes, all
- *   client-cadence only (no behaviour change to messaging itself):
- *   - Poll cadence 3s → 10s (server-provided `pollIntervalMs`, filterable via
- *     `zim_poll_interval_ms`); hard client floor 8s.
- *   - NEW exponential backoff shared across both pollers: a 5xx/failed poll backs
- *     the cadence off ×2 each time up to a 120s cap, then snaps back to base on
- *     the first success — so a struggling origin is given room to recover instead
- *     of being hammered (the old fixed 3s cadence was a feedback loop under load).
- *   - Bottom-nav badge poll 45s → 60s.
- *   No DB change; version bump busts the JS/CSS asset cache.
- * v1.1.0 (two-way email ↔ DM bridge): A DM alert email now contains the ACTUAL
- *   message text (not just "you have a new message") plus a Reply-To address of
- *   app+dm-<token>@<mail-domain>. Replying to that email posts the reply straight
- *   back into the DM as the recipient's message. DMs email the recipient
- *   regardless of push-subscription status (channels keep the old push-only
- *   fallback); quiet hours and the 30-min per-conversation cooldown still apply.
- *   - New: includes/class-zim-email-reply.php (ZIM_Email_Reply) — opaque signed
- *     routing token (HMAC-SHA256, constant-time verify, INV-Token), inbound
- *     detection + handling, quote/signature stripping, and a guarded self-poll
- *     fallback for when the Knowledge Vault mailbox is inactive.
- *   - Inbound transport reuses the Knowledge Vault's Microsoft-Graph poller
- *     (TSKV_Mailbox): the vault reads the shared App@ mailbox and hands DM
- *     replies to us BEFORE turning them into documents, so there is only ever one
- *     reader of the inbox. Sender must equal the intended recipient; the write
- *     still funnels through ZIM_Messages::post() (kiosk refused, INV-1/INV-10).
- *   - Honest output (INV-12): an unroutable reply is dropped + logged and filed
- *     under a "Messaging Failed" mail folder; no backscatter, no faked delivery.
- *   - No DB migration (the token is stateless/self-verifying); version bumped for
- *     asset cache-bust + changelog.
- * v1.0.26 (chat-regression fix): The cron_schedules filter used __() for its
- *   schedule label, which fires before the `init` action and triggered WP 6.7+'s
- *   "_load_textdomain_just_in_time was called incorrectly" PHP notice on EVERY
- *   request. With WP_DEBUG_DISPLAY on, that notice leaked into the Analytics chat's
- *   AJAX JSON responses, corrupting them → "Network error creating/loading
- *   session." Fix: the label is now a plain string (admin-only; no early
- *   translation needed). Paired with the analytics app's verify_ajax() JSON-output guard.
- * v1.0.25 (autocorrect): DM people-search field — autocorrect/autocapitalize/
- *   spellcheck off so typed names aren't altered.
- *
- * v1.0.24 (General Account Hardening — messaging lockdown): Read-only role
- *   support for the shared workshop-kiosk account `zdz_general`.
- *   - New predicates: zim_user_is_read_only(), zim_user_can_write(),
- *     zim_read_only_roles() (filterable). zim_user_has_access() now admits
- *     read-only roles so the kiosk can READ #announcements without holding the
- *     broad zdz_access_app capability.
- *   - Every write path refuses read-only users, server-side and deterministically:
- *       · AJAX mutations (post/edit/delete/bulk-delete/upload/dm-open) via the
- *         new gate_write(); admin mutations via gate_admin().
- *       · Model layer: ZIM_Messages::post() and
- *         ZIM_DMs::get_or_create_conversation() hard-refuse read-only actors —
- *         this is the single chokepoint that also closes the Brain-Bot
- *         "post to #channel" REST back-door (ZIM_REST::post_message), the
- *         surface behind the Session 406 autonomous-posting incident.
- *   - UI: the composer footer is NOT rendered into the DOM for the kiosk
- *     (removed, not merely disabled), the "New DM" affordance is hidden, and a
- *     read-only notice is shown where the composer would be. zimData carries
- *     isReadOnly. The widget also refuses the Analytics embed auto-send / DM-route
- *     for read-only users (client-side defence-in-depth; the server blocks are
- *     the guarantee).
- *   No DB migration: read-only behaviour is role-derived; #announcements
- *   auto-join already covers the kiosk's read access via seed_defaults().
- *
- * v1.0.22 (Prompt 4C): Font sizing & desktop layout.
- *   M1: Font size bump — name 13→14, meta 12→13, avatar 12→13,
- *       time-sep 12→13, empty 15→16, loading 14→15, label 16→17,
- *       section-hdr 13→14, search 16→17, main-title 18→20.
- *   M3: Desktop breakpoint @820px — max-height 800px, sidebar 300px,
- *       desktop font bumps (bubble 18, name 15, meta 14, label 18,
- *       section-hdr 15, compose 18, logo 20). 1280px+ → 900px.
+ * 1.9.0
+ *   - zim_queue_notice (ZIM_Notices): another app's notice, queued as one push and released after the person's quiet
+ *     hours (their own, else the business's, else Core's: ZDZ_Quiet_Hours); several released together become one
+ *     digest. Never the shared device, a read-only role, someone without Messages, or an account in Privacy View.
+ *   - Push belongs to a device: signing out removes only that device's subscription (session_hash). The read verb
+ *     messaging.push_setup answers Settings -> Notifications; zim_push_test sends a test; the widget's bell runs the
+ *     theme's shared routine.
+ *   - Estimates and invoices in a message (ZIM_Doc_Shares, wp_zim_doc_grants): a #NNNNN opens the document, read
+ *     only, for its own salesperson, an administrator, or someone its sender shared that one document with. "invoice
+ *     #N" means the invoice; any other #N the estimate. Cards never link out to the billing system.
+ *   - Editing in place; shared-media gallery cards (ZIM_Media_Cards); vault documents open inside the app; a link in
+ *     a message never navigates the messenger frame.
+ *   - ZIM_Privacy_View: an account in Privacy View messages only the administrator chosen for it and sees only that
+ *     thread. zim_dm_send (ZIM_DM_Send): the seam another app sends a direct message through. The compact one-thread
+ *     view the chat docks (?zim_compact=1). messaging.unread_counts. Usage actions through ZDZ_Usage::record().
+ *   - Core seeds #announcements only; the business's channels come from an administrator or its Identity Pack
+ *     (org.yml messaging.channels).
+ * 1.1.8 (asset cache refresh): no behaviour change; the version bump refreshes the JS/CSS asset cache.
+ * 1.1.4 (video chapter embed inside the messenger): a trusted-origin Vimeo player with a clickable chapter list
+ *   renders inside a message WITHOUT weakening either sanitizer. The server strips <iframe>/<script>/<style> at the
+ *   write chokepoint (wp_kses_post) and the client re-strips on render (DOMPurify), so a passed-through embed's
+ *   seeking script never runs. Instead, ZIM_Messages::extract_video_embeds() runs FIRST in post()/edit(), recognises
+ *   ONLY a trusted-origin player.vimeo.com embed, and distils it to a plain-text [zdz-video]<hex>[/zdz-video] token
+ *   carrying only the numeric video id and the chapter list (which survives kses untouched); the client's
+ *   wireVideoEmbeds() rebuilds the player with the iframe origin FIXED to player.vimeo.com and seeks host-side via
+ *   the Vimeo postMessage API (with a #t= reload fallback); chapter clicks never navigate. The trusted-origin
+ *   allow-list is a Core constant (Vimeo) exposed via the `zim_video_embed_hosts` filter. edit() runs the same
+ *   extract + wp_kses_post() the post() path does.
+ * 1.1.3 (DM-email cooldown, testable and resettable): the per-conversation cooldown routes through the
+ *   `zim_email_cooldown_seconds` filter (default 30 min; 0 disables it). An admin button (Messaging -> Channels ->
+ *   "DM email testing") clears every zim_last_email_convo_* stamp so the next direct message e-mails at once.
+ * 1.1.2 (DM-email diagnostics): greppable `ZIM_DM_EMAIL:` debug lines on the direct-message e-mail path (sent,
+ *   suppressed by the cooldown, no e-mail on file), WP_DEBUG only.
+ * 1.1.1 (poll-load reduction): the widget polls every 10 s (server-provided `pollIntervalMs`, filterable via
+ *   `zim_poll_interval_ms`; client floor 8 s), backs off x2 per failed poll up to 120 s and snaps back on success,
+ *   so a struggling host is given room to recover. Bottom-nav badge poll 60 s.
+ * 1.1.0 (two-way e-mail <-> direct message bridge): a direct-message e-mail carries the message text and a
+ *   Reply-To of <mailbox>+dm-<token>@<mail-domain>; replying posts straight back into the conversation as the
+ *   recipient. The token is opaque and signed (HMAC-SHA256, constant-time verify); the sender must be the person the
+ *   e-mail went to, and the write still goes through ZIM_Messages::post() (read-only roles refused). The knowledge
+ *   vault's mailbox reader (ZKV_Mailbox) hands such replies here before turning mail into documents, so the inbox
+ *   has one reader; an unroutable reply is dropped, logged and filed under "Messaging Failed".
+ * 1.0.26: the cron_schedules label is a plain string (a translation call before `init` raised a notice on every
+ *   request, which could corrupt AJAX JSON with WP_DEBUG_DISPLAY on).
+ * 1.0.25: the people-search field turns off autocorrect, autocapitalize and spellcheck.
+ * 1.0.24 (shared-device hardening): read-only role support for the shared account (`zdz_general`):
+ *   zim_user_is_read_only(), zim_user_can_write(), zim_read_only_roles() (filterable). Every write path refuses
+ *   read-only users server-side (AJAX gate_write()/gate_admin(); ZIM_Messages::post() and
+ *   ZIM_DMs::get_or_create_conversation() at the model layer, which also closes the REST "post to #channel" route);
+ *   the composer is not rendered for them. Read access to #announcements comes from the seed's auto-join.
+ * 1.0.22: font sizes and the desktop layout (820 px and 1280 px breakpoints).
  *
  * ============================================================================
  * PROGRAMMER NOTES
@@ -129,27 +66,26 @@
  * ROLE: Bootstrap. Constants, schema activation, class loading, theme hook.
  *
  * BUSINESS CONTEXT:
- * A business needs internal team messaging that lives
- * *inside* the Field OS rather than Slack/Teams. The MEP does one-to-one DMs
- * and department channels (#announcements, #sales, #ops, #mfg, #techs) with
- * @mentions, push notifications, and inline previews of FreshBooks references.
+ * A business needs internal team messaging that lives *inside* the Field OS
+ * rather than in a separate chat product: one-to-one direct messages and
+ * channels (Core's #announcements, plus whatever the business creates) with
+ * @mentions, push notifications, and inline estimate and invoice cards.
  *
- * DELIBERATELY NOT IN MEP (charter — see README "Not in this release"):
+ * DELIBERATELY NOT INCLUDED (see README "Not in this release"):
  *  - Threaded replies / reactions / typing indicators
- *  - External integrations (Slack bridge, Teams, etc.)
- *  - WebSockets — MEP uses 3-second HTTP polling (Trap 1)
- *  - Cross-conversation search — v1.1
+ *  - External integrations (chat bridges)
+ *  - WebSockets: HTTP polling (Trap 1)
+ *  - Cross-conversation search
  *
  * REAL-TIME MODEL:
- * HTTP long-polling. One in-flight poll per open conversation + one for the
- * sidebar badges. Total <= 2 concurrent AJAX requests per tab. Upgrade path
- * to WebSockets is v1.2+, not now.
+ * HTTP polling. One in-flight poll per open conversation + one for the
+ * sidebar badges. Total <= 2 concurrent AJAX requests per tab.
  *
  * SELF-CONTAINED:
- * This plugin uses NO external API clients. FreshBooks preview cards proxy
- * through the analytics app's /zorderz/v1/freshbooks-preview/{id} endpoint when Analytics is
- * installed; when not, #NNNNN auto-linking still works via a plain FB search
- * URL, and preview cards degrade gracefully. See Trap 2.
+ * This plugin uses NO external API clients. Estimate and invoice cards read
+ * through the Estimates app's document reader (zdz_fb_document_for_viewer)
+ * or, without it, the analytics app's /zorderz/v1/freshbooks-preview/{id}
+ * endpoint; with neither, a #NNNNN chip shows its number only. See Trap 2.
  *
  * CUSTOMER-FACING MODE:
  * If the analytics app's customer-facing mode is active for the current user, this plugin
@@ -162,8 +98,9 @@
  *  wp_zim_messages            — message bodies (FULLTEXT on body)
  *  wp_zim_attachments         — file metadata linked to messages
  *  wp_zim_mentions            — mention rows (preserved on soft-delete)
- *  wp_zim_push_subscriptions  — Web Push endpoints, per user + UA
+ *  wp_zim_push_subscriptions  — Web Push endpoints, per user + UA + session
  *  wp_zim_notification_queue  — deferred pushes (quiet hours) + digest log
+ *  wp_zim_doc_grants          — one document shared with a conversation's people
  * ============================================================================
  */
 
@@ -172,7 +109,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIM_VERSION', '1.1.8' );
+define( 'ZIM_VERSION', '1.9.0' );
 define( 'ZIM_PLUGIN_FILE', __FILE__ );
 define( 'ZIM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -245,6 +182,9 @@ function zim_user_is_read_only( $user_id = null ) {
 	$user_id = ( $user_id && (int) $user_id > 0 ) ? (int) $user_id : get_current_user_id();
 	if ( $user_id <= 0 ) {
 		return false;
+	}
+	if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $user_id ) ) {
+		return true;   // the shared device, by the platform's trait, whichever role carries it (no filter lifts this)
 	}
 	$u = get_userdata( $user_id );
 	if ( ! $u ) {
@@ -470,6 +410,12 @@ function zim_load_includes() {
 
 	// Wire cron callbacks after classes are loaded.
 	add_action( 'zim_cron_dispatch_notifications', array( 'ZIM_Notifications', 'dispatch_due' ) );
+	if ( class_exists( 'ZIM_Notices' ) ) {
+		ZIM_Notices::init();   // zim_queue_notice: another app's notice, held to quiet hours (the theme's alert router)
+	}
+	if ( class_exists( 'ZIM_DM_Send' ) ) {
+		ZIM_DM_Send::init();   // zim_dm_send: Messages' own seam for a direct message pressed in another app (the chat)
+	}
 	add_action( 'zim_cron_purge_attachments',      array( 'ZIM_Attachments', 'cron_purge' ) );
 	add_action( 'zim_cron_rotate_push_keys',       array( 'ZIM_Push', 'rotate_keys_if_due' ) );
 
@@ -505,8 +451,14 @@ function zim_load_includes() {
 		zim_grant_tile_to_all_eligible_users();
 	}
 
-	// Invalidate Web Push subscriptions on logout (Trap 6).
+	// Invalidate Web Push subscriptions on logout (Trap 6): only the device signing out (its session's rows).
 	add_action( 'clear_auth_cookie', array( 'ZIM_Push', 'on_logout' ) );
+	// messaging.push_setup, the read verb Settings -> Notifications asks (ZDZ_Push_Setup).
+	add_filter( 'zdz_register_capabilities', array( 'ZIM_Push', 'register_capabilities' ) );
+	// messaging.unread_counts: this person's unread messages as Messages' own badge counts them (counts only).
+	add_filter( 'zdz_register_capabilities', array( 'ZIM_Unread_Counts', 'register_capabilities' ) );
+	// The business's own channels, from its Identity Pack (org.yml messaging.channels).
+	add_filter( 'zdz_identity_pack_consumers', array( 'ZIM_Channels', 'pack_consumer' ) );
 
 	// Full-page route — ?zim_page=1 renders the inline widget full-viewport.
 	add_action( 'template_redirect', 'zim_maybe_render_full_page' );
@@ -618,7 +570,13 @@ function zim_maybe_render_full_page() {
 		echo '</style>';
 		$theme_css_url = get_stylesheet_uri();
 		if ( $theme_css_url ) {
-			echo '<link rel="stylesheet" href="' . esc_url( $theme_css_url ) . '">';
+			// Versioned like the theme's own enqueue: an unversioned, cached style.css could leave the type roles
+			// (--zdz-type-*) undefined in this frame.
+			echo '<link rel="stylesheet" href="' . esc_url( add_query_arg( 'ver', zim_theme_css_ver(), $theme_css_url ) ) . '">';
+		}
+		// The app's own Inter (the theme's self-hosted faces) when the theme ships them; the system font otherwise.
+		if ( function_exists( 'get_template_directory' ) && is_readable( get_template_directory() . '/assets/css/fonts.css' ) ) {
+			echo '<link rel="stylesheet" href="' . esc_url( add_query_arg( 'ver', zim_theme_css_ver(), get_template_directory_uri() . '/assets/css/fonts.css' ) ) . '">';
 		}
 		wp_print_styles( array( 'zim-widget-css' ) );
 		wp_print_scripts( array( 'marked-js', 'dompurify', 'zim-widget-js' ) );
@@ -626,13 +584,34 @@ function zim_maybe_render_full_page() {
 		// Standalone full-page: include theme assets so tokens resolve.
 		wp_head();
 	}
-	echo '</head><body class="zim-fullpage' . ( $is_embed ? ' zim-embed' : '' ) . '">';
+	echo '</head><body class="zim-fullpage' . ( $is_embed ? ' zim-embed' : '' ) . ( zim_is_compact() ? ' zim-compact' : '' ) . '">';
 	echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	if ( ! $is_embed ) {
 		wp_footer();
 	}
 	echo '</body></html>';
 	exit;
+}
+
+/**
+ * The theme stylesheet's cache key: the theme's version (ZDZ_THEME_VERSION / ZDZ_THEME_VER_FLOOR / wp_get_theme) and
+ * the file's own time, as the theme's own asset version does.
+ */
+function zim_theme_css_ver() {
+	$v = defined( 'ZDZ_THEME_VERSION' ) ? (string) ZDZ_THEME_VERSION : ( defined( 'ZDZ_THEME_VER_FLOOR' ) ? (string) ZDZ_THEME_VER_FLOOR : (string) wp_get_theme()->get( 'Version' ) );
+	$f = function_exists( 'get_stylesheet_directory' ) ? get_stylesheet_directory() . '/style.css' : '';
+	$t = ( $f && is_readable( $f ) ) ? (string) filemtime( $f ) : '';
+	$k = trim( $v . '.' . $t, '.' );
+	return '' !== $k ? $k : ZIM_VERSION;
+}
+
+/**
+ * The one-thread compact view the chat docks under its answer: /?zim_page=1&zdz_embed=dock&zim_compact=1&c=<id>.
+ * Messages draws its own thread (no data crosses apps; membership is checked by the same fetch as always): no
+ * sidebar, no header, the last messages and the composer.
+ */
+function zim_is_compact() {
+	return isset( $_GET['zim_compact'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['zim_compact'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- a display switch for the page; it changes nothing.
 }
 
 /**
@@ -757,10 +736,24 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 			'tsim_mentions' => 'zim_mentions',
 			'tsim_push_subscriptions' => 'zim_push_subscriptions',
 			'tsim_notification_queue' => 'zim_notification_queue',
+			'tsim_doc_grants' => 'zim_doc_grants',
 		] );
 		$map['options'] = array_merge( $map['options'] ?? [], [
 			'tsim_db_version' => 'zim_db_version',
 			'tsim_needs_reseed' => 'zim_needs_reseed',
+			// the push keys (a new key would silently invalidate every device's subscription) and the e-mail reply
+			// bridge (its secret keeps reply addresses already sent working)
+			'tsim_vapid_private_pem' => 'zim_vapid_private_pem',
+			'tsim_vapid_public_b64' => 'zim_vapid_public_b64',
+			'tsim_vapid_created_at' => 'zim_vapid_created_at',
+			'tsim_vapid_subject' => 'zim_vapid_subject',
+			'tsim_email_reply_secret' => 'zim_email_reply_secret',
+			'tsim_email_reply_config' => 'zim_email_reply_config',
+			'tsim_email_reply_self_seen' => 'zim_email_reply_self_seen',
+		] );
+		$map['user_meta'] = array_merge( $map['user_meta'] ?? [], [
+			'tsim_quiet_hours_' => 'zim_quiet_hours_',     // a person's own quiet hours (the whole key, despite its name)
+			'tsim_chat_sources' => 'zim_chat_sources',     // "From your chat" on the person's own messages
 		] );
 		$map['cron'] = array_merge( $map['cron'] ?? [], [
 			'tsim_cron_dispatch_notifications' => 'zim_cron_dispatch_notifications',
@@ -770,3 +763,28 @@ add_filter( 'zdz_rename_map', function ( $map ) {
 		] );
 	return $map;
 } );
+
+
+/*
+ * This app's main actions, counted in the theme's Usage view (wp-admin -> User Management -> Usage, "What people do
+ * inside the apps"). Each is recorded on the server where the action succeeded, never on a click that failed, through
+ * ZDZ_Usage::record(), which applies the usage-records consent (ZDZ_Consent::may_record), keeps no IP and stores the
+ * item's number only, never a name or a message.
+ */
+add_filter( 'zdz_register_usage_actions', function ( $a ) {
+	$a['internal-messaging'] = array(
+		'message_sent'    => 'Sent a message',
+		'message_edited'  => 'Edited a message',
+		'document_shared' => 'Shared an estimate or invoice',
+		'channel_created' => 'Created a channel',
+	);
+	return $a;
+} );
+if ( ! function_exists( 'zim_usage' ) ) {
+	/** Record one of this app's actions; $ref a number (the item's id) or 0. Nothing at all without the usage service. */
+	function zim_usage( $key, $ref = 0, $opts = array() ) {
+		if ( class_exists( 'ZDZ_Usage' ) && method_exists( 'ZDZ_Usage', 'record' ) ) {
+			ZDZ_Usage::record( 'internal-messaging', (string) $key, $ref, (array) $opts );
+		}
+	}
+}

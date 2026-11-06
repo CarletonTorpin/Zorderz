@@ -17,7 +17,7 @@ class ZDZ_Admin_UI {
 		add_action( 'personal_options_update', [ $this, 'save_app_permissions' ] );
 		add_action( 'edit_user_profile_update', [ $this, 'save_app_permissions' ] );
 
-		// v2.14.3: One-time migration - convert legacy numeric zdz_allowed_apps
+		// One-time migration - convert legacy numeric zdz_allowed_apps
 		// entries to stable string config IDs. Previous versions indexed apps by
 		// their numeric array position, which broke when plugins were
 		// activated/deactivated and also caused strict in_array() mismatches
@@ -26,7 +26,7 @@ class ZDZ_Admin_UI {
 	}
 
 	/**
-	 * v2.14.3: One-time migration for zdz_allowed_apps user meta.
+	 * One-time migration for zdz_allowed_apps user meta.
 	 *
 	 * Detects users whose zdz_allowed_apps still contain numeric values
 	 * (legacy format) and converts them to string config IDs by mapping
@@ -165,7 +165,7 @@ class ZDZ_Admin_UI {
 			</tr>
 		</table>
 
-		<?php // -- v2.17.0: Data Permissions (per-user override of role defaults) -- ?>
+		<?php // -- Data Permissions (per-user override of role defaults) -- ?>
 		<?php if ( class_exists( 'ZDZ_Data_Permissions' ) ) : ?>
 		<h3><?php esc_html_e( 'Zorderz Data Permissions', 'zorderz' ); ?></h3>
 		<p class="description"><?php esc_html_e( 'Override role-based defaults for data access across all plugins. "Default" uses the role\'s built-in setting.', 'zorderz' ); ?></p>
@@ -192,6 +192,7 @@ class ZDZ_Admin_UI {
 				'upload_to_knowledge_vault' => 'Knowledge Vault Uploads',
 				'lead_crew'                 => 'Crew Lead - assign work to & oversee a crew',
 				'handoff_jobs'              => 'Hand off job components to another tech',
+				'view_team_projects'        => 'Every Project\'s basic info (customer, sizes, photos, notes; never amounts)',
 			];
 			foreach ( ZDZ_Data_Permissions::ALL_KEYS as $dp_key ) :
 				$current  = $dp_overrides[ $dp_key ] ?? 'default';
@@ -216,7 +217,7 @@ class ZDZ_Admin_UI {
 		</table>
 		<?php endif; ?>
 
-		<?php // -- v2.32.0: Crew (hierarchy) - who this person leads ("ADD A SPECIFIC USER") -- ?>
+		<?php // -- Crew (hierarchy) - who this person leads ("ADD A SPECIFIC USER") -- ?>
 		<?php if ( class_exists( 'ZDZ_Hierarchy' ) ) :
 			// A user can be given a crew when they are (or can be) a Crew Lead.
 			// We show the picker whenever the resolved lead_crew cap is allow, OR
@@ -276,7 +277,7 @@ class ZDZ_Admin_UI {
 		endif; // ZDZ_Hierarchy exists
 		?>
 
-		<?php // -- v2.13.0 additive fields (shown for all roles) -- ?>
+		<?php // -- additive fields (shown for all roles) -- ?>
 		<h3><?php esc_html_e( 'Zorderz Personalization', 'zorderz' ); ?></h3>
 		<table class="form-table">
 			<tr>
@@ -295,17 +296,17 @@ class ZDZ_Admin_UI {
 			</tr>
 		</table>
 
-		<?php // -- v2.20.0 r4: Extended profile fields for cross-plugin use -- ?>
+		<?php // -- Extended profile fields for cross-app use -- ?>
 		<h3><?php esc_html_e( 'Zorderz Profile', 'zorderz' ); ?></h3>
 		<p class="description"><?php esc_html_e( 'These fields are used by the Lead Generator, Estimate Creator, and other plugins for personalization.', 'zorderz' ); ?></p>
 		<table class="form-table">
 			<tr>
-				<th><label for="tsl_salesperson_code"><?php esc_html_e( 'Salesperson Code', 'zorderz' ); ?></label></th>
+				<th><label for="zdz_profile_salesperson_code"><?php esc_html_e( 'Salesperson Code', 'zorderz' ); ?></label></th>
 				<td>
-					<input type="text" id="tsl_salesperson_code" name="tsl_salesperson_code"
-						value="<?php echo esc_attr( get_user_meta( $user->ID, 'tsl_salesperson_code', true ) ); ?>"
-						class="regular-text" maxlength="10" placeholder="e.g. AS" />
-					<p class="description"><?php esc_html_e( 'Short code used to match this user to territories and lead batches (e.g. "AS" for a salesperson). Overrides username-based matching.', 'zorderz' ); ?></p>
+					<input type="text" id="zdz_profile_salesperson_code" name="zdz_profile_salesperson_code"
+						value="<?php echo esc_attr( class_exists( 'ZDZ_Salesperson_Code' ) ? ZDZ_Salesperson_Code::profile( (int) $user->ID ) : '' ); ?>"
+						class="regular-text" maxlength="10" placeholder="e.g. AB" />
+					<p class="description"><?php esc_html_e( 'Short code used to match this user to territories and lead batches (e.g. "AB" for a salesperson). Overrides username-based matching.', 'zorderz' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -313,7 +314,7 @@ class ZDZ_Admin_UI {
 				<td>
 					<input type="tel" id="zdz_user_phone" name="zdz_user_phone"
 						value="<?php echo esc_attr( get_user_meta( $user->ID, 'zdz_user_phone', true ) ); ?>"
-						class="regular-text" placeholder="e.g. 619-555-1234" />
+						class="regular-text" placeholder="e.g. 555-555-0100" />
 					<p class="description"><?php esc_html_e( 'Direct phone number for this user. Used in email sign-offs and lead contact cards.', 'zorderz' ); ?></p>
 				</td>
 			</tr>
@@ -331,7 +332,7 @@ class ZDZ_Admin_UI {
 				<td>
 					<input type="text" id="zdz_user_territories" name="zdz_user_territories"
 						value="<?php echo esc_attr( implode( ', ', (array) ( get_user_meta( $user->ID, 'zdz_user_territories', true ) ?: [] ) ) ); ?>"
-						class="regular-text" placeholder="e.g. AS, NSD, EC" />
+						class="regular-text" placeholder="e.g. NORTH, EAST, WEST" />
 					<p class="description"><?php esc_html_e( 'Comma-separated territory codes this person covers. Used by the Lead Generator to auto-filter lead batches.', 'zorderz' ); ?></p>
 				</td>
 			</tr>
@@ -364,20 +365,24 @@ class ZDZ_Admin_UI {
 			return;
 		}
 
-		// v2.13.0: save salesperson initials for ALL roles (admins included).
+		// Initials (a team membership), territories, apps and data permissions (view_company_revenue included) are an
+		// administrator's to set, never one's own: this handler also runs on personal_options_update. The check above
+		// already returns for anyone who cannot edit other users; this second one keeps these fields closed if that
+		// gate is ever loosened to let a person save their own phone, e-mail name or login aliases.
+		$can_manage = current_user_can( 'edit_users' ) || current_user_can( 'manage_options' );
+
+		// save salesperson initials for ALL roles (admins included).
 		// CASE-SENSITIVE on purpose - matches FreshBooks invoice data exactly.
-		if ( isset( $_POST['zdz_salesperson_initials'] ) ) {
+		if ( $can_manage && isset( $_POST['zdz_salesperson_initials'] ) ) {
 			$raw   = wp_unslash( (string) $_POST['zdz_salesperson_initials'] );
 			$clean = preg_replace( '/[^\p{L}\p{N}]/u', '', $raw ) ?? '';
 			$clean = substr( $clean, 0, 8 );
 			update_user_meta( $user_id, 'zdz_salesperson_initials', $clean );
 		}
 
-		// v2.20.0 r4: Save extended profile fields for cross-plugin use.
-		if ( isset( $_POST['tsl_salesperson_code'] ) ) {
-			$code = sanitize_text_field( wp_unslash( $_POST['tsl_salesperson_code'] ) );
-			$code = substr( $code, 0, 10 );
-			update_user_meta( $user_id, 'tsl_salesperson_code', $code );
+		// Extended profile fields for cross-app use.
+		if ( $can_manage && isset( $_POST['zdz_profile_salesperson_code'] ) && class_exists( 'ZDZ_Salesperson_Code' ) ) {
+			ZDZ_Salesperson_Code::save_profile( (int) $user_id, sanitize_text_field( wp_unslash( $_POST['zdz_profile_salesperson_code'] ) ) );
 		}
 
 		if ( isset( $_POST['zdz_user_phone'] ) ) {
@@ -392,7 +397,7 @@ class ZDZ_Admin_UI {
 			update_user_meta( $user_id, 'zdz_user_email_name', $email_name );
 		}
 
-		if ( isset( $_POST['zdz_user_territories'] ) ) {
+		if ( $can_manage && isset( $_POST['zdz_user_territories'] ) ) {
 			$raw_territories = sanitize_text_field( wp_unslash( $_POST['zdz_user_territories'] ) );
 			// Parse comma-separated codes into an array, trim each
 			$territories = array_filter( array_map( 'trim', explode( ',', $raw_territories ) ) );
@@ -425,7 +430,7 @@ class ZDZ_Admin_UI {
 			update_user_meta( $user_id, 'zdz_login_aliases', array_values( array_unique( $clean ) ) );
 		}
 
-		// -- v2.32.0: Save the Crew (hierarchy). This is intentionally saved for
+		// -- Save the Crew (hierarchy). This is intentionally saved for
 		// ALL roles (admins included, since an admin could hypothetically lead a
 		// crew) - the picker only renders for lead-capable users, and set_crew()
 		// re-guards the actor + validates every member id. We only touch crew meta
@@ -440,6 +445,10 @@ class ZDZ_Admin_UI {
 			ZDZ_Hierarchy::set_crew( (int) $user_id, [], get_current_user_id() );
 		}
 
+		if ( ! $can_manage ) {
+			return; // apps and data permissions are an administrator's to set, never one's own
+		}
+
 		$user = get_userdata( $user_id );
 		if ( class_exists( 'ZDZ_User_Roles' ) && ZDZ_User_Roles::is_admin_role( $user->roles[0] ?? '' ) ) {
 			return; // Admin-level roles have all apps, don't save specific meta to override
@@ -448,7 +457,7 @@ class ZDZ_Admin_UI {
 		$apps = isset( $_POST['zdz_allowed_apps'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['zdz_allowed_apps'] ) ) : [];
 		update_user_meta( $user_id, 'zdz_allowed_apps', $apps );
 
-		// v2.17.0: Save data permissions overrides
+		// Save data permissions overrides
 		if ( isset( $_POST['zdz_data_permissions'] ) && is_array( $_POST['zdz_data_permissions'] ) && class_exists( 'ZDZ_Data_Permissions' ) ) {
 			$raw_perms   = wp_unslash( $_POST['zdz_data_permissions'] );
 			$clean_perms = [];

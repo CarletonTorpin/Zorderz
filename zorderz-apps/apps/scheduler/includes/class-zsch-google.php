@@ -2,16 +2,16 @@
 /**
  * ZSCH_Google — hand-rolled Google Calendar/OAuth REST client (wp_remote_*).
  *
- * Phase 0 surface: authorization URL, code exchange, token refresh, identity
+ * Surface: authorization URL, code exchange, token refresh, identity
  * (id_token claims), and calendarList (for the conflict-calendar picker).
- * Phase 1 adds events+syncToken and watch channels behind the same request
+ * The sync engine adds events+syncToken and watch channels behind the same request
  * core. No SDKs, no Composer — same posture as ZSCH_Graph / ZDZ_Core_Nutshell.
  *
  * IDENTITY: a Google Account is keyed by its immutable `sub` claim, NEVER by
  * email — a Google login may use any address (e.g. name@example.com), including
  * non-Gmail domains. Email is kept as a display label only.
  *
- * @since 1.6.0 (Connected Calendars Phase 0)
+ * @since 1.6.0 (Connected Calendars)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -25,7 +25,7 @@ class ZSCH_Google {
 	const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 	const API_BASE  = 'https://www.googleapis.com/calendar/v3';
 
-	/** Phase 1 read-only scopes (sensitive, not restricted — no CASA). */
+	/** Read-only scopes (sensitive, not restricted — no CASA). */
 	const SCOPES = 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events.readonly';
 
 	/**
@@ -187,7 +187,7 @@ class ZSCH_Google {
 	}
 
 	/**
-	 * Phase 1 (v1.7.0) — read one calendar's busy events over a UTC window.
+	 * Read one calendar's busy events over a UTC window.
 	 *
 	 * singleEvents=true expands recurrences into instances (so the mirror holds
 	 * concrete busy blocks). Events marked `transparency:transparent` (Google's

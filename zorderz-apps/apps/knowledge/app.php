@@ -6,7 +6,7 @@
  *   platform. Optional per-document visibility, party-siloed transcripts, and a
  *   runtime pricing-authority context feed for the platform assistant. Ships
  *   EMPTY: no company facts, no product corpus, no seeded categories.
- * Version:     1.7.1
+ * Version:     1.8.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -29,6 +29,35 @@
  * server cannot honour the file-level rule. Activation writes SCHEMA ONLY —
  * no categories, facts or product keywords are seeded, and upgrades never insert
  * business rows.
+ *
+ *
+ *   PRIVATE DOCUMENTS (ZKV_Private, column is_private) — a switch per document, off by
+ *     default. A Private document is never sent to any Ai service (no title suggestion, no
+ *     index, no page images, never another upload's category context, never chat); its file
+ *     is stored encrypted (libsodium secretstream) with no plain copy (no media attachment,
+ *     no image sizes, no extracted text); it is found by its title and the Context the person
+ *     typed. One data key, wrapped by keys derived from the site's own secret keys in
+ *     wp-config.php (or ZKV_PRIVATE_KEK); a recovery code, shown only to administrators and
+ *     logged on every showing, unlocks it if those keys are ever reset. Fails closed.
+ *   OUTSIDE LINKS (ZKV_Ext_Links, table zkv_ext_links) — /vault/l/<token>, no sign-in, for
+ *     a fixed number of days (14 or 30 by default, filter zkv_ext_link_days); only the
+ *     token's hash is stored; every request re-checks the link and the maker's right to share.
+ *   ONE ACCESS CHECK FOR OTHER APPS (ZKV_Files) — the zdz_vault_find_for_user,
+ *     zdz_vault_file_for_user, zdz_vault_file_bytes and zdz_vault_outside_link filters.
+ *   UNGUESSABLE FILE NAMES (ZKV_File_Names) — every stored file is 32 random hex characters
+ *     plus its extension; files from earlier versions are renamed in place in small batches,
+ *     each rename recorded first so nothing loses its file.
+ *   VIEWER (ZKV_Viewer) — /vault/{slug} is a readable page (PDFs drawn page by page with the
+ *     bundled pdf.js, images and video inline, other files as their extracted text); the file
+ *     itself is ?raw=1 (&dl=1 downloads). The page sends a Content-Security-Policy with a
+ *     per-request nonce. A signed-out visit remembers the document (ZDZ_Login_Next).
+ *   A person's title and category are theirs (title_locked / category_locked): the index
+ *     no longer replaces them; Rename and change category in the detail view.
+ *   pdftotext runs from one helper (fixed paths first, no shell lookup).
+ *   The Ai gateway key reads the platform credential first; while it, or the mail-in
+ *     Microsoft 365 app, is managed on Zorderz → Credentials, the settings screens show a
+ *     note instead of the fields. The model comes from the Model Registry (slot `knowledge`,
+ *     roster `zdz_model_choices`): no model name is written into this app.
  *
  * v1.7.1 (fresh-install schema + chat wiring):
  *   SCHEMA SELF-HEAL — the zkv_documents CREATE TABLE now declares
@@ -56,8 +85,8 @@
  * v1.5.2 (FIELD-REVIEW FIXES — KV1/KV2/KV3):
  *   KV1 SCOPED TRANSCRIPT ACCESS — a named party or the holder of an active
  *     whole-document share can now OPEN a transcript shared with them even if
- *     they lack the coarse `knowledge-vault` app grant (the "Ron" bug: sharing
- *     used to be a silent failure — the card called Ron a party but the serve
+ *     they lack the coarse `knowledge-vault` app grant (the unlisted-recipient bug: sharing
+ *     used to be a silent failure — the card called the recipient a party but the serve
  *     gate 404'd him, and share-create refused him outright). The bypass is
  *     limited to transcript docs the ACL already admits and grants NO reach into
  *     the general vault (normal docs still require the app grant; dashboard and
@@ -87,7 +116,7 @@
  *   A transcript document is readable ONLY by the WP users who are its named
  *   speaking parties — everywhere at once: vault list/search, /vault/{slug},
  *   preview chips, AND the assistant's retrieval context. Admins/owners who are
- *   not parties see nothing (silent 404 / absent — INV-1, fail closed).
+ *   not parties see nothing (silent 404 / absent — a person reads only their own; fail closed).
  *
  *   Mechanics (see ZKV_ACL):
  *   - visibility = 'transcript_private' + wp_zkv_doc_parties ACL keyed on WP
@@ -162,7 +191,7 @@ if ( ! function_exists( 'zkv_serve_file_headers' ) ) {
 	}
 }
 
-define( 'ZKV_VERSION', '1.7.2' );
+define( 'ZKV_VERSION', '1.8.0' );
 define( 'ZKV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZKV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZKV_NONCE', 'zkv_nonce' );
@@ -173,7 +202,13 @@ define( 'ZKV_MAX_UPLOAD_BYTES', 50 * 1024 * 1024 );
 // web.config are written here as defence-in-depth, but the route auth — not the
 // web-server file rule — is the guarantee (see zkv_vault_protection_report()).
 $zkv_upload_dir = wp_upload_dir();
-define( 'ZKV_VAULT_DIR', $zkv_upload_dir['basedir'] . '/zkv-vault' );
+// Files live in uploads/zkv-vault (so a host's uploads backup includes them) under random 32-hex
+// names (ZKV_File_Names), so a file can only be fetched by someone who already holds its name.
+// ZKV_PRIVATE_DIR in wp-config.php can move the folder elsewhere. A web-server rule denying
+// /wp-content/uploads/zkv-vault/ is still recommended on hosts that serve static files directly.
+require_once ZKV_PLUGIN_DIR . 'includes/class-zkv-file-names.php';
+define( 'ZKV_VAULT_DIR', ZKV_File_Names::vault_dir() );
+ZKV_File_Names::boot();
 define( 'ZKV_VAULT_URL', $zkv_upload_dir['baseurl'] . '/zkv-vault' ); // Reference only, NOT for serving
 
 /**
@@ -207,9 +242,8 @@ function zkv_login_url( $redirect = '' ) {
  * The product / brand keyword list used to (a) recognise a pricing-lookup query
  * and (b) rescue product-line pricing tables from dense PDF grids.
  *
- * CORE SHIPS ONLY GENERIC, TRADE-NEUTRAL PRICING CUES. The business-specific
- * product/brand tokens that used to be hardcoded here (the reason a stranger's
- * install carried one company's product lines) now arrive as tenant data via the
+ * CORE SHIPS ONLY GENERIC, TRADE-NEUTRAL PRICING CUES. A business's own
+ * product/brand tokens arrive as its data via the
  * `zkv_product_keywords` option, or from the future Item Engine through the
  * `zkv_product_keywords` filter — a documented seam with a graceful empty
  * default. The density-scoring mechanics that consume this list are unchanged.
@@ -354,6 +388,9 @@ function zkv_activate() {
 		status varchar(20) NOT NULL DEFAULT 'pending',
 		processing_error text DEFAULT NULL,
 		visibility varchar(100) NOT NULL DEFAULT 'all_employees',
+		is_private tinyint(1) NOT NULL DEFAULT 0,
+		title_locked tinyint(1) NOT NULL DEFAULT 0,
+		category_locked tinyint(1) NOT NULL DEFAULT 0,
 		is_pricing_authority tinyint(1) NOT NULL DEFAULT 0,
 		transcript_status varchar(24) NOT NULL DEFAULT '',
 		version int unsigned NOT NULL DEFAULT 1,
@@ -367,6 +404,7 @@ function zkv_activate() {
 		KEY idx_category (category_id),
 		KEY idx_created (created_at),
 		KEY idx_slug (slug),
+		KEY idx_private (is_private),
 		KEY idx_visibility (visibility),
 		KEY idx_pricing_authority (is_pricing_authority),
 		KEY idx_transcript_status (transcript_status)
@@ -499,6 +537,12 @@ function zkv_activate() {
 		UNIQUE KEY uniq_doc_line (document_id, line_no),
 		KEY idx_document (document_id)
 	) {$charset};" );
+
+	// Outside links (ZKV_Ext_Links) - token hash only.
+	if ( class_exists( 'ZKV_Ext_Links' ) || file_exists( ZKV_PLUGIN_DIR . 'includes/class-zkv-ext-links.php' ) ) {
+		require_once ZKV_PLUGIN_DIR . 'includes/class-zkv-ext-links.php';
+		dbDelta( ZKV_Ext_Links::schema( $charset ) );
+	}
 
 	$t_log = $wpdb->prefix . 'zkv_access_log';
 	dbDelta( "CREATE TABLE {$t_log} (
@@ -655,6 +699,7 @@ function zkv_deactivate() {
 	// Don't drop tables — prevent accidental data loss.
 	// v1.4.0: stop the email-in poll (rescheduled automatically on reactivation).
 	wp_clear_scheduled_hook( 'zkv_mail_poll_event' );
+	wp_clear_scheduled_hook( 'zkv_private_sweep' );
 }
 
 // ── DB Upgrade ─────────────────────────────────────────────────────
@@ -679,7 +724,7 @@ function zkv_ensure_schema() {
 
 	// Fast path: recently verified and the sentinel column is still present.
 	if ( get_transient( 'zkv_schema_ok' ) ) {
-		$sentinel = $wpdb->get_results( "SHOW COLUMNS FROM {$docs} LIKE 'is_pricing_authority'" );
+		$sentinel = $wpdb->get_results( "SHOW COLUMNS FROM {$docs} LIKE 'is_private'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is $wpdb->prefix plus a fixed literal; no input.
 		if ( ! empty( $sentinel ) ) {
 			return;
 		}
@@ -700,6 +745,13 @@ function zkv_ensure_schema() {
 	$columns = array(
 		'is_pricing_authority' => 'ADD COLUMN is_pricing_authority TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility',
 		'transcript_status'    => "ADD COLUMN transcript_status VARCHAR(24) NOT NULL DEFAULT '' AFTER visibility",
+		// A person's title and category are theirs: the index leaves a locked one alone.
+		// Existing rows stay unlocked (nobody's choice is on record for them).
+		'title_locked'         => 'ADD COLUMN title_locked TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility',
+		'category_locked'      => 'ADD COLUMN category_locked TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility',
+		// A Private document (ZKV_Private) is never sent to an Ai service and its file is
+		// stored encrypted. Every existing document starts ordinary (0).
+		'is_private'           => 'ADD COLUMN is_private TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility',
 	);
 	foreach ( $columns as $col => $add_sql ) {
 		if ( empty( $wpdb->get_results( "SHOW COLUMNS FROM {$docs} LIKE '{$col}'" ) ) ) {
@@ -712,6 +764,7 @@ function zkv_ensure_schema() {
 		'idx_pricing_authority' => 'ADD KEY idx_pricing_authority (is_pricing_authority)',
 		'idx_transcript_status' => 'ADD KEY idx_transcript_status (transcript_status)',
 		'idx_visibility'        => 'ADD KEY idx_visibility (visibility)',
+		'idx_private'           => 'ADD KEY idx_private (is_private)',
 	);
 	foreach ( $indexes as $idx => $add_sql ) {
 		if ( empty( $wpdb->get_results( $wpdb->prepare( "SHOW INDEX FROM {$docs} WHERE Key_name = %s", $idx ) ) ) ) {
@@ -743,6 +796,18 @@ function zkv_maybe_upgrade() {
 				wp_schedule_single_event( time() + 30, 'zkv_backfill_chunks' );
 			}
 		}
+		// The /vault/l/<token> route needs the rewrite rules flushed (on init, 99 — replacing
+		// the files never re-runs activation), and the chat's cached Vault blocks may carry titles of
+		// documents that are now Private: drop them once.
+		if ( version_compare( $db_ver, '1.8.0', '<' ) ) {
+			set_transient( 'zkv_flush_rewrite', '1', 60 );
+			if ( class_exists( 'ZKV_ZANA_Bridge' ) && method_exists( 'ZKV_ZANA_Bridge', 'invalidate_cache' ) ) {
+				ZKV_ZANA_Bridge::invalidate_cache();
+			}
+			if ( class_exists( 'ZKV_Bridge' ) && method_exists( 'ZKV_Bridge', 'invalidate_cache' ) ) {
+				ZKV_Bridge::invalidate_cache();
+			}
+		}
 		update_option( 'zkv_db_version', ZKV_VERSION );
 	}
 }
@@ -755,7 +820,42 @@ function zkv_load_includes() {
 	foreach ( glob( $dir . '*.php' ) as $file ) {
 		require_once $file;
 	}
+	if ( class_exists( 'ZKV_Files' ) ) { ZKV_Files::boot(); } // the access check other apps ask through
 }
+
+// Hourly - finish a "make Private" a dying request left, and remove the upload form's abandoned files.
+add_action( 'zkv_private_sweep', function () {
+	if ( class_exists( 'ZKV_Private' ) ) { ZKV_Private::sweep(); }
+} );
+add_action( 'init', function () {
+	if ( ! wp_next_scheduled( 'zkv_private_sweep' ) ) { wp_schedule_event( time() + 300, 'hourly', 'zkv_private_sweep' ); }
+} );
+
+// Outside links. Priority 1 - before the theme's sign-in gate (10) and the /vault/{slug} handler.
+add_action( 'template_redirect', function () {
+	if ( class_exists( 'ZKV_Ext_Links' ) ) { ZKV_Ext_Links::maybe_serve(); }
+}, 1 );
+
+// Install state, not business data: the file-rename bookkeeping (paths on THIS server) and the
+// notes a dying "make Private" or an abandoned upload leave for the hourly sweep never travel
+// in a Company Data export or import. The wrapped Private key does travel: it opens nothing
+// without this site's secret keys or the recovery code, and the recovery code needs it.
+add_filter( 'zdz_export_non_portable_option_patterns', function ( $patterns ) {
+	$patterns   = is_array( $patterns ) ? $patterns : array();
+	$patterns[] = '/^zkv_(pend|tmpf)_/';
+	$patterns[] = '/^zkv_rename_/';
+	$patterns[] = '/^zkv_renamed_paths$/';
+	$patterns[] = '/^zkv_names_done$/';
+	return $patterns;
+} );
+
+// The Model Registry slot this app's Ai calls resolve through (ZKV_Dashboard::get_ai_model).
+add_filter( 'zdz_model_slots', function ( $slots ) {
+	if ( is_array( $slots ) && ! isset( $slots['knowledge'] ) ) {
+		$slots['knowledge'] = array( 'tier' => 'frontier', 'purpose' => 'reads, titles and indexes knowledge documents' );
+	}
+	return $slots;
+} );
 
 // ── Background Indexing (WP Cron) ──────────────────────────────────
 // Processes uploaded documents that need deep AI indexing.
@@ -782,7 +882,7 @@ function zkv_backfill_content_chunks() {
 	$docs = $wpdb->get_results(
 		"SELECT d.*
 		 FROM {$wpdb->prefix}zkv_documents d
-		 WHERE d.status = 'indexed'
+		 WHERE d.status = 'indexed' AND d.is_private = 0
 		   AND d.id NOT IN (SELECT DISTINCT document_id FROM {$wpdb->prefix}zkv_chunks)
 		 ORDER BY d.id ASC
 		 LIMIT 50",
@@ -812,7 +912,7 @@ function zkv_backfill_content_chunks() {
 	// If there are more, schedule another batch.
 	$remaining = $wpdb->get_var(
 		"SELECT COUNT(*) FROM {$wpdb->prefix}zkv_documents d
-		 WHERE d.status = 'indexed'
+		 WHERE d.status = 'indexed' AND d.is_private = 0
 		   AND d.id NOT IN (SELECT DISTINCT document_id FROM {$wpdb->prefix}zkv_chunks)"
 	);
 	if ( (int) $remaining > 0 ) {
@@ -958,9 +1058,14 @@ function zkv_render_admin_page() {
 	// Handle form submission.
 	if ( isset( $_POST['zkv_save_settings'] ) && wp_verify_nonce( $_POST['_wpnonce'], 'zkv_admin_settings' ) ) {
 		$api_key = sanitize_text_field( $_POST['zkv_api_key'] ?? '' );
-		$model   = sanitize_text_field( $_POST['zkv_ai_model'] ?? 'Gemini-3.1-Pro' );
+		$model   = sanitize_text_field( wp_unslash( $_POST['zkv_ai_model'] ?? '' ) );
+		if ( class_exists( 'ZKV_Dashboard' ) ) {
+			$model = ZKV_Dashboard::approved_model( $model ); // only an approved model is stored
+		}
 
-		if ( ! empty( $api_key ) ) {
+		// Managed (or sent from a form that showed it managed): the row belongs to the Credentials screen.
+		$poe_managed = class_exists( 'ZKV_Dashboard' ) && ( ZKV_Dashboard::poe_managed() || ZKV_Dashboard::managed_posted( 'poe' ) );
+		if ( ! $poe_managed && ! empty( $api_key ) ) {
 			if ( class_exists( 'ZKV_Dashboard' ) ) {
 				$encrypted = ZKV_Dashboard::encrypt_key( $api_key );
 				update_option( 'zkv_poe_api_key', $encrypted ?: $api_key );
@@ -978,14 +1083,21 @@ function zkv_render_admin_page() {
 		&& ( isset( $_POST['zkv_mail_save'] ) || isset( $_POST['zkv_mail_test'] ) || isset( $_POST['zkv_mail_poll_now'] ) )
 		&& wp_verify_nonce( $_POST['_wpnonce'] ?? '', 'zkv_mail_settings' ) ) {
 
-		ZKV_Mailbox::update_config( array(
+		// While the mail-in app is managed on Zorderz → Credentials
+		// (or the form said so), tenant / client id / secret are the theme's: not in the patch
+		// (update_config keeps the stored values) and the secret is never written.
+		$mail_app_locked = class_exists( 'ZKV_Dashboard' ) && ZKV_Dashboard::mail_app_locked();
+		$mail_patch = array(
 			'mailbox'   => sanitize_email( $_POST['zkv_mail_mailbox'] ?? '' ),
-			'tenant_id' => sanitize_text_field( $_POST['zkv_mail_tenant'] ?? '' ),
-			'client_id' => sanitize_text_field( $_POST['zkv_mail_client'] ?? '' ),
 			'enabled'   => ! empty( $_POST['zkv_mail_enabled'] ),
-		) );
+		);
+		if ( ! $mail_app_locked ) {
+			$mail_patch['tenant_id'] = sanitize_text_field( wp_unslash( $_POST['zkv_mail_tenant'] ?? '' ) );
+			$mail_patch['client_id'] = sanitize_text_field( wp_unslash( $_POST['zkv_mail_client'] ?? '' ) );
+		}
+		ZKV_Mailbox::update_config( $mail_patch );
 		$posted_secret = trim( (string) wp_unslash( $_POST['zkv_mail_secret'] ?? '' ) );
-		if ( '' !== $posted_secret ) {
+		if ( ! $mail_app_locked && '' !== $posted_secret ) {
 			ZKV_Mailbox::set_secret( $posted_secret );
 		}
 		ZKV_Mailbox::maybe_schedule();
@@ -1010,11 +1122,17 @@ function zkv_render_admin_page() {
 
 	// Get current settings.
 	$current_key = '';
-	if ( class_exists( 'ZKV_Dashboard' ) ) {
+	$poe_set     = false;
+	$poe_managed = class_exists( 'ZKV_Dashboard' ) && ZKV_Dashboard::poe_managed();
+	if ( $poe_managed ) {
+		$poe_set = '' !== (string) ZKV_Dashboard::get_poe_api_key(); // managed: no part of the key is shown
+	} elseif ( class_exists( 'ZKV_Dashboard' ) ) {
 		$k = ZKV_Dashboard::get_poe_api_key();
 		if ( ! empty( $k ) ) { $current_key = substr( $k, 0, 8 ) . '...' . substr( $k, -4 ); }
 	}
-	$model = get_option( 'zkv_ai_model', 'Gemini-3.1-Pro' );
+	$model         = (string) get_option( 'zkv_ai_model', '' );
+	$model_used    = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::get_ai_model() : '';
+	$model_choices = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::model_choices() : array();
 	$has_own = ! empty( get_option( 'zkv_poe_api_key', '' ) );
 
 	// Get document stats.
@@ -1052,26 +1170,37 @@ function zkv_render_admin_page() {
 					<tr>
 						<th>Poe API Key</th>
 						<td>
-							<input type="password" name="zkv_api_key" class="regular-text" placeholder="sk-poe-..." />
+							<?php if ( $poe_managed ) : // no key field, no part of the key ?>
+							<input type="hidden" name="zdz_cred_managed[poe]" value="1">
+							<p><?php echo ZKV_Dashboard::managed_note_html(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped where built ?></p>
+							<p class="description">Poe: <?php echo $poe_set ? 'configured' : 'not set'; ?></p>
+							<?php else : ?>
+							<input type="password" name="zkv_api_key" class="regular-text" placeholder="sk-poe-..." autocomplete="new-password" />
 							<p class="description">
 								<?php if ( ! empty( $current_key ) ) : ?>
 									Current: <code><?php echo esc_html( $current_key ); ?></code>
-									<?php echo $has_own ? ' (this app\'s key)' : ' (shared platform key)'; ?>
+									(<?php echo esc_html( ZKV_Dashboard::key_source() ); ?>)
 								<?php else : ?>
-									No API key configured. Get one at <a href="https://poe.com/api/keys" target="_blank">poe.com/api/keys</a>
+									No API key configured. Get one at <a href="https://poe.com/api/keys" target="_blank" rel="noopener">poe.com/api/keys</a>
 								<?php endif; ?>
 							</p>
+							<?php endif; ?>
 						</td>
 					</tr>
 					<tr>
 						<th>AI Model</th>
 						<td>
+							<?php if ( $model_choices ) : // the models the business offers (Model Registry roster) ?>
 							<select name="zkv_ai_model">
-								<option value="Gemini-3.1-Pro" <?php selected( $model, 'Gemini-3.1-Pro' ); ?>>Gemini 3.1 Pro</option>
-								<option value="Gemini-3.6-Flash" <?php selected( $model, 'Gemini-3.6-Flash' ); ?>>Gemini 3.6 Flash (faster)</option>
-								<option value="Claude-Opus-4.8" <?php selected( $model, 'Claude-Opus-4.8' ); ?>>Claude Opus 4.8</option>
-								<option value="Claude-Sonnet-4.6" <?php selected( $model, 'Claude-Sonnet-4.6' ); ?>>Claude Sonnet 4.6</option>
+								<option value="" <?php selected( $model, '' ); ?>>Platform model</option>
+								<?php foreach ( $model_choices as $handle => $label ) : ?>
+								<option value="<?php echo esc_attr( $handle ); ?>" <?php selected( $model, $handle ); ?>><?php echo esc_html( $label ); ?></option>
+								<?php endforeach; ?>
 							</select>
+							<?php else : // no roster: type the handle your gateway uses, or leave blank for the platform model ?>
+							<input type="text" name="zkv_ai_model" class="regular-text" value="<?php echo esc_attr( $model ); ?>" placeholder="Platform model" />
+							<?php endif; ?>
+							<p class="description">In use: <code><?php echo esc_html( '' !== $model_used ? $model_used : 'none configured' ); ?></code></p>
 						</td>
 					</tr>
 				</table>
@@ -1083,6 +1212,7 @@ function zkv_render_admin_page() {
 			$mail_cfg    = ZKV_Mailbox::get_config();
 			$mail_status = ZKV_Mailbox::status();
 			$mail_creds  = ZKV_Mailbox::effective_credentials();
+			$mail_app_managed = class_exists( 'ZKV_Dashboard' ) && ZKV_Dashboard::cred_managed( 'ms_vault_mail' );
 		?>
 		<div class="card" style="max-width:600px;padding:20px;margin-bottom:20px;">
 			<h2>Email-In — Forward Mail to the Vault (Microsoft 365)</h2>
@@ -1119,6 +1249,15 @@ function zkv_render_admin_page() {
 							<p class="description">The dedicated address staff forward to (a free shared mailbox works).</p>
 						</td>
 					</tr>
+					<?php if ( $mail_app_managed ) : // no tenant / client id / secret fields ?>
+					<tr>
+						<th>Microsoft 365 app</th>
+						<td>
+							<input type="hidden" name="zdz_cred_managed[ms_vault_mail]" value="1">
+							<p><?php echo ZKV_Dashboard::managed_app_note_html(); // phpcs:ignore -- built with esc_url ?></p>
+						</td>
+					</tr>
+					<?php else : ?>
 					<tr>
 						<th>Directory (tenant) ID</th>
 						<td><input type="text" name="zkv_mail_tenant" class="regular-text" value="<?php echo esc_attr( $mail_cfg['tenant_id'] ); ?>"
@@ -1137,6 +1276,7 @@ function zkv_render_admin_page() {
 							<p class="description">Stored in its own isolated option; read only server-side. Leave blank to keep the saved value.</p>
 						</td>
 					</tr>
+					<?php endif; ?>
 					<tr>
 						<th>Enable email-in</th>
 						<td><label><input type="checkbox" name="zkv_mail_enabled" value="1" <?php checked( ! empty( $mail_cfg['enabled'] ) ); ?> />
@@ -1218,9 +1358,11 @@ add_action( 'init', function () {
 	// ahead of the generic single-segment slug rule (which would otherwise capture
 	// 'shared' as a document slug). This page is reachable WITHOUT the coarse
 	// knowledge-vault app grant — it is how a shared-with recipient who does not
-	// have the vault app (e.g. Ron) finds and opens what was shared with them.
+	// have the vault app (e.g. a crew member without it) finds and opens what was shared with them.
 	add_rewrite_rule( '^vault/shared/?$', 'index.php?zkv_shared=1', 'top' );
 	add_rewrite_tag( '%zkv_shared%', '([0-9]+)' );
+	// /vault/l/<token>[/file] - a link for someone outside, for 14 or 30 days.
+	if ( class_exists( 'ZKV_Ext_Links' ) ) { ZKV_Ext_Links::rewrite(); }
 } );
 
 // ── v1.5.0: Excerpt view — /vault/excerpt/{share_id} ──────────────
@@ -1247,8 +1389,7 @@ add_action( 'template_redirect', function () {
 	};
 
 	if ( ! is_user_logged_in() ) {
-		wp_redirect( zkv_login_url() );
-		exit;
+		ZKV_Viewer::remember_and_login( '/vault/excerpt/' . $share_id ); // signing in comes back here
 	}
 	// v1.5.2 (KV1): NO coarse knowledge-vault app gate here. An excerpt recipient
 	// (e.g. a named party or a teammate who does NOT have the vault app) must be
@@ -1330,7 +1471,7 @@ add_action( 'template_redirect', function () {
 // A coarse-grant-free landing page: lists every transcript the logged-in user is a
 // party to or holds an active WHOLE-doc share on (each opens /vault/{slug}), plus
 // every active EXCERPT shared with them (each opens /vault/excerpt/{id}). This is how
-// a shared-with recipient who does NOT have the vault app (e.g. Ron) finds and opens
+// a shared-with recipient who does NOT have the vault app (e.g. a crew member without it) finds and opens
 // what was shared. Authorization is entirely per-item — this page only ever lists
 // grants the user already holds (the same ACL the serve gates re-check on open).
 add_action( 'template_redirect', function () {
@@ -1338,8 +1479,7 @@ add_action( 'template_redirect', function () {
 		return; // Not the /vault/shared URL.
 	}
 	if ( ! is_user_logged_in() ) {
-		wp_redirect( zkv_login_url() );
-		exit;
+		ZKV_Viewer::remember_and_login( '/vault/shared' );
 	}
 	if ( ! class_exists( 'ZKV_ACL' ) ) {
 		status_header( 404 ); echo 'Not found.'; exit; // Fail closed.
@@ -1454,14 +1594,14 @@ add_action( 'template_redirect', function () {
 	// The theme's login gate fires at priority 10 on template_redirect
 	// and blocks non-logged-in users BEFORE we get here. But double-check.
 	if ( ! is_user_logged_in() ) {
-		wp_redirect( zkv_login_url() );
-		exit;
+		// Remember the document so signing in comes back to it.
+		ZKV_Viewer::remember_and_login( '/vault/' . sanitize_title( $slug ) );
 	}
 
 	global $wpdb;
 	$slug = sanitize_title( $slug );
 	$doc  = $wpdb->get_row( $wpdb->prepare(
-		"SELECT id, file_url, original_name, mime_type, visibility FROM {$wpdb->prefix}zkv_documents WHERE slug = %s",
+		"SELECT id, slug, title, file_url, attachment_id, original_name, mime_type, visibility, is_private FROM {$wpdb->prefix}zkv_documents WHERE slug = %s",
 		$slug
 	), ARRAY_A );
 
@@ -1530,34 +1670,64 @@ add_action( 'template_redirect', function () {
 		}
 	}
 
-	$file_path = $doc['file_url']; // Filesystem path
-	if ( empty( $file_path ) || ! file_exists( $file_path ) ) {
+	// Find the file the way the indexer does (a stored path, a stored uploads URL, the media
+	// attachment, the record of a random rename), plus a re-base onto this server's uploads
+	// folder when the stored absolute path names an older server location.
+	$file_path = ZKV_Viewer::locate( $doc );
+	if ( '' === $file_path ) {
+		if ( ! ZKV_Viewer::wants_file() ) {
+			ZKV_Viewer::render( $doc, '' ); // the viewer says the file is missing and shows the text the Vault kept
+		}
+		error_log( 'ZKV: /vault/ file not found for doc #' . (int) $doc['id'] . ' (stored path does not resolve on this server).' );
 		status_header( 404 );
 		echo 'File not found.';
 		exit;
 	}
 
-	// Path traversal check — file must be inside the vault dir OR the WP uploads dir.
+	// Path traversal check — inside the vault folder or uploads, with the folder separator
+	// required after the root (ZKV_File_Names::is_allowed_path).
 	$real = realpath( $file_path );
-	$vault_dir = defined( 'ZKV_VAULT_DIR' ) ? realpath( ZKV_VAULT_DIR ) : false;
-	$uploads = wp_upload_dir();
-	$uploads_dir = realpath( $uploads['basedir'] );
-
-	$in_vault   = ( $real && $vault_dir && strpos( $real, $vault_dir ) === 0 );
-	$in_uploads = ( $real && $uploads_dir && strpos( $real, $uploads_dir ) === 0 );
-
-	if ( ! $real || ( ! $in_vault && ! $in_uploads ) ) {
+	if ( ! $real || ! ZKV_File_Names::is_allowed_path( $real ) ) {
 		status_header( 403 );
 		exit;
+	}
+
+	// A Private document opens only with its key; locked (the site's keys changed) says so.
+	if ( ! empty( $doc['is_private'] ) && ( ! class_exists( 'ZKV_Private' ) || ! ZKV_Private::is_encrypted_file( $real ) || null === ZKV_Private::key( false ) ) ) {
+		status_header( 503 );
+		ZKV_Viewer::private_headers();
+		echo 'This Private document is locked. An administrator can unlock it with the recovery code (Knowledge settings).';
+		exit;
+	}
+
+	// A used "come back here" cookie is spent.
+	if ( class_exists( 'ZDZ_Login_Next' ) && isset( $_COOKIE[ ZDZ_Login_Next::KEY ] ) ) {
+		ZDZ_Login_Next::forget();
+	}
+
+	// The address itself is the viewer page; the file is ?raw=1 (&dl=1 downloads it).
+	if ( ! ZKV_Viewer::wants_file() ) {
+		ZKV_Viewer::render( $doc, $real );
 	}
 
 	// Serve the file.
 	$mime = $doc['mime_type'] ?: 'application/octet-stream';
 	$name = $doc['original_name'] ?: basename( $file_path );
 
-	header( 'Cache-Control: private, no-cache, must-revalidate' );
-	header( 'X-Robots-Tag: noindex, nofollow' );
-	zkv_serve_file_headers( $mime, $name ); // Content-Type + nosniff + safe Content-Disposition
+	ZKV_Viewer::private_headers(); // no-store, noindex, same-site framing, nosniff
+	if ( ZKV_Viewer::wants_download() ) {
+		header( 'Content-Type: ' . $mime );
+		header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $name ) . '"' );
+	} else {
+		zkv_serve_file_headers( $mime, $name ); // Content-Type + nosniff + safe Content-Disposition
+	}
+	// A Private document's file is decrypted on the way out, never written anywhere in plain.
+	if ( ! empty( $doc['is_private'] ) ) {
+		if ( ZKV_Private::stream( $real ) < 0 ) {
+			error_log( 'ZKV: Private doc #' . (int) $doc['id'] . ' did not decrypt whole (file damaged).' );
+		}
+		exit;
+	}
 	header( 'Content-Length: ' . filesize( $real ) );
 	readfile( $real );
 	exit;
@@ -1629,6 +1799,7 @@ add_action( 'after_setup_theme', function () {
 					'nonce'     => wp_create_nonce( ZKV_NONCE ),
 					'userId'    => $user_id,
 					'isAdmin'   => $is_admin,
+					'wpAdmin'   => user_can( $user_id, 'manage_options' ) ? '1' : '0', // the recovery code is theirs
 					'maxUpload' => ZKV_MAX_UPLOAD_BYTES,
 					'version'   => ZKV_VERSION,
 					// Vendored pdf.js shipped with the bundle (the Estimates app owns the copy).
@@ -1663,19 +1834,43 @@ add_action( 'after_setup_theme', function () {
 								<button class="zkv-modal-close" id="zkv-settings-close"><i data-lucide="x"></i></button>
 							</div>
 							<div class="zkv-modal-body">
+								<?php // The Private key and its recovery code (WordPress administrators only). ?>
+								<div class="zkv-form-group" id="zkv-private-admin">
+									<label>Private documents</label>
+									<span class="zkv-hint" id="zkv-private-state">Checking…</span>
+									<div id="zkv-private-code-box" style="display:none;"><code id="zkv-private-code" class="zkv-private-code"></code>
+										<span class="zkv-hint">Write this down and keep it somewhere safe, off this computer. Whoever has it can open every Private document. If the site's security keys are ever reset, typing it below unlocks them again.</span>
+										<button type="button" class="zkv-btn zkv-btn-secondary" id="zkv-private-saved">I've written it down</button></div>
+									<div id="zkv-private-unlock-box" style="display:none;"><input type="text" id="zkv-private-unlock-code" placeholder="Recovery code" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+										<button type="button" class="zkv-btn zkv-btn-primary" id="zkv-private-unlock">Unlock</button><span class="zkv-hint" id="zkv-private-unlock-msg"></span></div>
+									<button type="button" class="zkv-btn zkv-btn-secondary" id="zkv-private-show" style="display:none;">Show the recovery code</button>
+								</div>
 								<div class="zkv-form-group">
-									<label for="zkv-settings-apikey">Poe API Key</label>
-									<input type="password" id="zkv-settings-apikey" placeholder="sk-poe-..." />
+									<?php if ( class_exists( 'ZKV_Dashboard' ) && ZKV_Dashboard::poe_managed() ) : ?>
+									<label>Poe API Key</label>
+									<input type="hidden" id="zkv-settings-managed-poe" name="zdz_cred_managed[poe]" value="1">
+									<span class="zkv-hint"><?php echo ZKV_Dashboard::managed_note_html(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped where built ?></span>
 									<span class="zkv-hint" id="zkv-key-status"></span>
+									<?php else : ?>
+									<label for="zkv-settings-apikey">Poe API Key</label>
+									<input type="password" id="zkv-settings-apikey" placeholder="sk-poe-..." autocomplete="new-password" />
+									<span class="zkv-hint" id="zkv-key-status"></span>
+									<?php endif; ?>
 								</div>
 								<div class="zkv-form-group">
 									<label for="zkv-settings-model">AI Model</label>
+									<?php $zkv_models = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::model_choices() : array(); ?>
+									<?php if ( $zkv_models ) : // the models the business offers (Model Registry roster) ?>
 									<select id="zkv-settings-model">
-										<option value="Gemini-3.1-Pro">Gemini 3.1 Pro</option>
-										<option value="Gemini-3.6-Flash">Gemini 3.6 Flash (faster)</option>
-										<option value="Claude-Opus-4.8">Claude Opus 4.8</option>
-										<option value="Claude-Sonnet-4.6">Claude Sonnet 4.6</option>
+										<option value="">Platform model</option>
+										<?php foreach ( $zkv_models as $zkv_handle => $zkv_label ) : ?>
+										<option value="<?php echo esc_attr( $zkv_handle ); ?>"><?php echo esc_html( $zkv_label ); ?></option>
+										<?php endforeach; ?>
 									</select>
+									<?php else : ?>
+									<input type="text" id="zkv-settings-model" placeholder="Platform model" autocomplete="off" spellcheck="false" />
+									<?php endif; ?>
+									<span class="zkv-hint" id="zkv-model-used"></span>
 								</div>
 								<div class="zkv-form-group">
 									<button class="zkv-btn zkv-btn-secondary" id="zkv-reindex-all-btn" style="width:100%">
@@ -1716,6 +1911,12 @@ add_action( 'after_setup_theme', function () {
 								<button class="zkv-modal-close" id="zkv-modal-close"><i data-lucide="x"></i></button>
 							</div>
 							<div class="zkv-modal-body">
+								<?php // Chosen FIRST, so nothing is read by the Ai before the person decides. ?>
+								<div class="zkv-private-pick" id="zkv-private-pick">
+									<label class="zkv-private-label"><input type="checkbox" id="zkv-private" /> <strong>Keep private</strong></label>
+									<span class="zkv-hint">Never sent to any AI service, and stored encrypted. Only its title and the Context you type are searchable, so keep sensitive details out of those. Choose this before picking the file.</span>
+									<span class="zkv-hint zkv-private-warn" id="zkv-private-warn" style="display:none;">The AI already read this file to suggest a title. Remove it and pick it again to keep it from the AI completely.</span>
+								</div>
 								<div class="zkv-input-toggle">
 									<button class="zkv-toggle-btn active" id="zkv-mode-file">Upload File</button>
 									<button class="zkv-toggle-btn" id="zkv-mode-scan">Scan</button>

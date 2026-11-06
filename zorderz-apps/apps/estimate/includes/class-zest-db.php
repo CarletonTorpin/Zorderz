@@ -4,10 +4,10 @@
  *
  * Two tables: the estimate mirror (a local index of what the app has drafted/sent, the
  * source of truth for ownership + history) and the background parse-job queue. SCHEMA
- * ONLY on activation — no estimate, customer, price or catalog row is ever seeded
- * (§C.3). Legacy tables (tsec_estimates / tsec_parse_jobs) are renamed in place by the
- * theme's ZDZ_Rename_Migration from the map app.php declares, so a private-lineage
- * install upgrades cleanly; a fresh Zorderz install simply creates these empty.
+ * ONLY on activation — no estimate, customer, price or catalog row is ever seeded.
+ * Tables under older names are renamed in place by the theme's ZDZ_Rename_Migration
+ * from the map app.php declares, so an upgraded install keeps its rows; a fresh
+ * Zorderz install simply creates these empty.
  *
  * @package Zorderz\Estimate
  */
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZEST_DB {
 
-	const DB_VERSION = '1.24.0';
+	const DB_VERSION = '1.27.0';
 
 	/** doc_type discriminator values — this row models an estimate or an invoice document. */
 	const DOC_TYPE_ESTIMATE = 'estimate';
@@ -64,6 +64,16 @@ class ZEST_DB {
 	public static function payments_table(): string {
 		global $wpdb;
 		return $wpdb->prefix . 'zest_payments';
+	}
+
+	public static function line_changes_table(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'zest_line_changes';
+	}
+
+	public static function reassign_table(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'zest_reassign';
 	}
 
 	/**
@@ -150,11 +160,17 @@ class ZEST_DB {
 			accepted_at     DATETIME     NULL DEFAULT NULL,
 			accepted_by     BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			accepted_source VARCHAR(20)  NOT NULL DEFAULT '',
+			approved_at     DATETIME     NULL DEFAULT NULL,
+			approved_by     BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			approved_fp     VARCHAR(64)  NOT NULL DEFAULT '',
+			seal_hold       VARCHAR(40)  NOT NULL DEFAULT '',
 			PRIMARY KEY (id),
 			KEY idx_created (created_at),
 			KEY idx_status  (status),
 			KEY idx_billing_status (billing_status),
-			KEY idx_created_by (created_by)
+			KEY idx_created_by (created_by),
+			KEY idx_seal_hold (seal_hold),
+			KEY idx_billing_doc (billing_doc_id)
 		) {$charset};" );
 
 		$jobs = self::jobs_table();
@@ -175,7 +191,7 @@ class ZEST_DB {
 			KEY idx_created (created_at)
 		) {$charset};" );
 
-		// ── Phase 2: the no-API invoice document (mirrors the estimate) ──
+		// ── The no-API invoice document (mirrors the estimate) ──
 		$invoices = self::invoices_table();
 		dbDelta( "CREATE TABLE {$invoices} (
 			id                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -227,6 +243,54 @@ class ZEST_DB {
 			created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
 			KEY idx_invoice (invoice_id)
+		) {$charset};" );
+
+		// Every change made to a billing document from the billing view or a re-assign: who, when, which line, before and
+		// after. Written BEFORE the billing system is (state 'pending'), then marked saved or failed.
+		$changes = self::line_changes_table();
+		dbDelta( "CREATE TABLE {$changes} (
+			id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			batch         VARCHAR(64)  NOT NULL DEFAULT '',
+			created_at    DATETIME     NOT NULL,
+			user_id       BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			initials      VARCHAR(8)   NOT NULL DEFAULT '',
+			doc_kind      VARCHAR(10)  NOT NULL DEFAULT 'estimate',
+			billing_id    VARCHAR(50)  NOT NULL DEFAULT '',
+			doc_number    VARCHAR(40)  NOT NULL DEFAULT '',
+			line_no       INT          NOT NULL DEFAULT 0,
+			change_type   VARCHAR(10)  NOT NULL DEFAULT '',
+			field         VARCHAR(20)  NOT NULL DEFAULT '',
+			slot          VARCHAR(40)  NOT NULL DEFAULT '',
+			option_id     VARCHAR(40)  NOT NULL DEFAULT '',
+			before_text   TEXT         NULL,
+			after_text    TEXT         NULL,
+			before_amount DECIMAL(12,2) NULL DEFAULT NULL,
+			after_amount  DECIMAL(12,2) NULL DEFAULT NULL,
+			reason        VARCHAR(300) NOT NULL DEFAULT '',
+			verified      TINYINT      NOT NULL DEFAULT 0,
+			state         VARCHAR(10)  NOT NULL DEFAULT 'pending',
+			PRIMARY KEY  (id),
+			KEY idx_doc (doc_kind, billing_id),
+			KEY idx_batch (batch)
+		) {$charset};" );
+
+		// Re-assign batches: what was looked at, proposed, written and undone, with what each estimate was before.
+		$reassign = self::reassign_table();
+		dbDelta( "CREATE TABLE {$reassign} (
+			id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			created_at    DATETIME     NOT NULL,
+			created_by    BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			state         VARCHAR(20)  NOT NULL DEFAULT 'scanning',
+			generation    BIGINT       NOT NULL DEFAULT 0,
+			params        LONGTEXT     NULL,
+			items         LONGTEXT     NULL,
+			notices       LONGTEXT     NULL,
+			applied_at    DATETIME     NULL DEFAULT NULL,
+			applied_count INT          NOT NULL DEFAULT 0,
+			undone_at     DATETIME     NULL DEFAULT NULL,
+			undone_by     BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			PRIMARY KEY  (id),
+			KEY idx_state (state)
 		) {$charset};" );
 
 		// Failsafe: only stamp the version once the table really exists.

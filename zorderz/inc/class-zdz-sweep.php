@@ -14,8 +14,8 @@
  * a defer, and no row is double-processed.
  *
  * This is Core from the start (unlike the jobs-app-local Zdz_Flow): a sweep holds
- * no per-app state. Plan 01's Projects reconcile and Plan 02's lead-ref backfill
- * consume this rather than re-implementing a loop — there is exactly one sweep
+ * no per-app state. The Jobs Projects reconcile and lead-ref backfill and the
+ * schedule inference consume this rather than re-implementing a loop — there is exactly one sweep
  * helper and this is it. [CORE] entirely; no Identity value.
  *
  * @since   1.7.0

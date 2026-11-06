@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Zorderz Bug Reporter v2.0
+ * Zorderz Bug Reporter
  *
  * User-facing bug/feedback reporting with:
  * - Smart auto-captured context (current view, app, browser, console errors)

@@ -8,24 +8,25 @@
  * that stored HTML, kept together and (deliberately) free of hard WordPress deps
  * so each can be exercised by a no-WP harness:
  *
- *   1. FINALIZE (S5-01/S5-02). A single idempotent transform that STRIPS any
+ *   1. FINALIZE. A single idempotent transform that STRIPS any
  *      prior sentinel-wrapped appended sections and RE-APPENDS fresh ones, so a
  *      re-generate / photo-remove / reorder converges to the same bytes. Two
  *      sections ship: a full-size print/email-durable photo gallery, and a
  *      proof-of-payment panel.
  *
- *   2. THE PAYMENT-CLAIM GATE (S5-02, honesty-critical). The panel reads
+ *   2. THE PAYMENT-CLAIM GATE (honesty-critical). The panel reads
  *      "Payment in Full" ONLY when the system of record backs it — resolved
  *      through a conservative per-source matrix (every resolved source must be
  *      paid; a void reads unpaid) AND ratified by ZDZ_Answer_Authority::
  *      payment_claimed(). Fail-safe: with no authority, or any doubt, the panel
  *      renders a neutral "Your Invoice" with NO claim. A false "paid" is a lie.
  *
- *   3. THE wp_kses ALLOWLIST (S5-14). A curated allowlist applied at APPROVE time
- *      (see ZRCPT_Receipt::ajax_approve_receipt) so a compromised or prompt-
- *      injected bot output cannot store active content on a public URL even if a
- *      reviewer clicks through. A legitimate gallery/paid-panel receipt round-
- *      trips unchanged; <script> and every on* handler are stripped.
+ *   3. SANITIZE AT EVERY WRITE. sanitize() runs ZRCPT_Sanitize (a browser-rule
+ *      tokenizer, the wp_kses receipt allowlist, then an unconditional floor) on
+ *      every write of the stored HTML — generate, photo edits, approve — so a
+ *      compromised or prompt-injected model output cannot store active content on
+ *      a public URL even if a reviewer clicks through. A legitimate gallery/paid-
+ *      panel receipt round-trips unchanged; script, handlers and script URLs go.
  *
  * Mechanism only. Sentinels, ordering, escaping, the QR-free
  * link+number panel, the kses allowlist, and the "every source must confirm"
@@ -57,7 +58,7 @@ class ZRCPT_Finalize {
 	 * the paid panel and the full-size gallery (in that order, before </body> when
 	 * present). Running it twice yields identical bytes.
 	 *
-	 * @param string $html The receipt HTML (fresh bot output, or stored HTML).
+	 * @param string $html The receipt HTML (a freshly written page, or stored HTML).
 	 * @param array  $ctx  {
 	 *   @type string[] $photo_urls       Ordered install-photo URLs for the gallery.
 	 *   @type string   $invoice_url      Customer-facing invoice link (may carry a
@@ -102,7 +103,7 @@ class ZRCPT_Finalize {
 	/* ───────────────────────────── Sections ──────────────────────────────── */
 
 	/**
-	 * S5-01 — the full-size gallery: one full-width photo per row, in the given
+	 * The full-size gallery: one full-width photo per row, in the given
 	 * order, every URL esc_url()-escaped. Empty in => ''. Wrapped in sentinels.
 	 */
 	public static function build_fullsize_gallery( array $photo_urls, array $ctx = array() ): string {
@@ -131,7 +132,7 @@ class ZRCPT_Finalize {
 	}
 
 	/**
-	 * S5-02 — the proof-of-payment panel. The heading asserts "Payment in Full"
+	 * The proof-of-payment panel. The heading asserts "Payment in Full"
 	 * ONLY when the payment-claim gate confirms it; otherwise a neutral heading
 	 * with NO claim. Renders the invoice link as selectable plaintext plus an
 	 * "open online" button (href escaped with esc_ATTR — NOT esc_url — so a
@@ -205,7 +206,7 @@ class ZRCPT_Finalize {
 	 *       unpaid, never "zero outstanding => paid").
 	 *   (2) ZDZ_Answer_Authority::payment_claimed() ratifies the CLAIM against the
 	 *       system-of-record facts. Without the authority present, we NEVER assert
-	 *       paid (INV-12 for money) — the panel falls back to "Your Invoice".
+	 *       paid (honest output for money) — the panel falls back to "Your Invoice".
 	 *
 	 * @return bool True only when a "Payment in Full" statement is backed.
 	 */
@@ -251,7 +252,7 @@ class ZRCPT_Finalize {
 	/**
 	 * Normalize a set of billing sources to a single {resolved, paid} verdict.
 	 *
-	 * Rule (S5-02): paid iff >= 1 source resolved AND every resolved source is
+	 * Rule: paid iff >= 1 source resolved AND every resolved source is
 	 * paid. An UNRESOLVED source (provider unreachable / no status) blocks the
 	 * claim. A VOID ($0 outstanding on a non-zero amount) reads UNPAID — the old
 	 * "zero outstanding => paid" heuristic is deliberately dropped.
@@ -332,102 +333,41 @@ class ZRCPT_Finalize {
 		return $default;
 	}
 
-	/* ─────────────────────────── wp_kses (S5-14) ─────────────────────────── */
+	/* ─────────────────────────── Sanitizing ─────────────────────────── */
 
 	/**
-	 * The curated allowlist for a model-authored receipt page: structural, text,
-	 * table, list, gallery/panel and inline-SVG markup a receipt legitimately uses
-	 * for print/email — with inline `style` allowed (receipts lay themselves out
-	 * inline). NO <script>, <iframe>, <object>, <embed>, <form>, and NO on* handler
-	 * (an unlisted attribute is dropped by kses). Filterable, but the strip in
-	 * sanitize() is a non-negotiable floor regardless of the allowlist.
+	 * The receipt allowlist for wp_kses (structural, text, table, list, gallery/panel and
+	 * inline-SVG markup with inline `style`). Owned by ZRCPT_Sanitize; kept here so older
+	 * callers keep working. Filterable through `zrcpt_receipt_kses_allowed`.
 	 */
 	public static function kses_allowed(): array {
-		$common = array(
-			'class' => true, 'id' => true, 'style' => true, 'title' => true,
-			'dir'   => true, 'lang' => true, 'role' => true,
-		);
-		$tags = array(
-			'html'   => array( 'lang' => true ),
-			'head'   => array(),
-			'body'   => $common,
-			'meta'   => array( 'charset' => true, 'name' => true, 'content' => true ),
-			'title'  => array(),
-			'style'  => array( 'type' => true, 'media' => true ),
-			'div'    => $common, 'section' => $common, 'article' => $common,
-			'header' => $common, 'footer' => $common, 'main' => $common,
-			'aside'  => $common, 'nav' => $common,
-			'h1' => $common, 'h2' => $common, 'h3' => $common,
-			'h4' => $common, 'h5' => $common, 'h6' => $common,
-			'p' => $common, 'span' => $common, 'strong' => $common, 'b' => $common,
-			'em' => $common, 'i' => $common, 'u' => $common, 'small' => $common,
-			'sub' => $common, 'sup' => $common, 'mark' => $common,
-			'br' => array(), 'hr' => $common, 'wbr' => array(),
-			'a'   => $common + array( 'href' => true, 'target' => true, 'rel' => true ),
-			'img' => $common + array(
-				'src' => true, 'alt' => true, 'width' => true, 'height' => true,
-				'loading' => true, 'srcset' => true, 'sizes' => true,
-			),
-			'ul' => $common, 'ol' => $common + array( 'start' => true, 'type' => true ),
-			'li' => $common, 'dl' => $common, 'dt' => $common, 'dd' => $common,
-			'table' => $common, 'thead' => $common, 'tbody' => $common, 'tfoot' => $common,
-			'tr' => $common,
-			'td' => $common + array( 'colspan' => true, 'rowspan' => true ),
-			'th' => $common + array( 'colspan' => true, 'rowspan' => true, 'scope' => true ),
-			'caption' => $common, 'colgroup' => $common, 'col' => $common + array( 'span' => true ),
-			'figure' => $common, 'figcaption' => $common, 'blockquote' => $common,
-			'pre' => $common, 'code' => $common,
-			// Inline SVG (icons, marks) — a fixed geometric subset, no scripting.
-			'svg'  => $common + array( 'viewbox' => true, 'width' => true, 'height' => true, 'fill' => true, 'stroke' => true, 'xmlns' => true ),
-			'path' => array( 'd' => true, 'fill' => true, 'stroke' => true, 'stroke-width' => true ),
-			'g'    => $common, 'circle' => array( 'cx' => true, 'cy' => true, 'r' => true, 'fill' => true, 'stroke' => true ),
-			'rect' => array( 'x' => true, 'y' => true, 'width' => true, 'height' => true, 'rx' => true, 'ry' => true, 'fill' => true ),
-			'line' => array( 'x1' => true, 'y1' => true, 'x2' => true, 'y2' => true, 'stroke' => true ),
-			'polyline' => array( 'points' => true, 'fill' => true, 'stroke' => true ),
-			'polygon'  => array( 'points' => true, 'fill' => true, 'stroke' => true ),
-		);
-		if ( function_exists( 'apply_filters' ) ) {
-			$f = apply_filters( 'zrcpt_receipt_kses_allowed', $tags );
-			if ( is_array( $f ) && ! empty( $f ) ) {
-				return $f;
-			}
-		}
-		return $tags;
+		return ZRCPT_Sanitize::allowed_html();
 	}
 
 	/**
-	 * Sanitize model-authored receipt HTML for safe public serving. Prefers
-	 * wp_kses (a real allowlist) AND always runs a conservative strip of active
-	 * content, so even without wp_kses (or a kses gap) a <script>/on*=/javascript:
-	 * payload can't reach the stored public page. Idempotent: a clean receipt
-	 * round-trips unchanged. The ZRCPT sentinel comments are preserved across the
-	 * kses pass (kses drops comments) so the finalize strip keeps working.
+	 * Sanitize model-authored receipt HTML for safe storing and public serving. The
+	 * finalize sentinels (HTML comments, which the sanitizer removes) are carried through
+	 * as inert text so the finalize strip keeps working; everything else goes through
+	 * ZRCPT_Sanitize::clean(). Idempotent: a clean receipt round-trips unchanged.
 	 *
-	 * @param string $html Stored (approved) receipt HTML.
+	 * @param string $html Receipt HTML.
 	 * @return string
 	 */
 	public static function sanitize( string $html ): string {
 		if ( '' === $html ) {
 			return $html;
 		}
-		// Protect what must survive VERBATIM across the passes: the idempotency
-		// sentinels (kses drops comments) AND every <style> block (a receipt is a
-		// full HTML document, and kses' CSS text handling would mangle selectors
-		// like "a > b"). CSS can't execute script in a modern browser, so a
-		// verbatim <style> is safe; the XSS vectors live in <script>/on*=/js: URLs,
-		// stripped below.
-		list( $html, $restore ) = self::protect_blocks( $html );
-
-		if ( function_exists( 'wp_kses' ) ) {
-			$out = wp_kses( $html, self::kses_allowed() );
-			if ( is_string( $out ) && '' !== $out ) {
-				$html = $out;
-			}
+		$sent = array(
+			'%%ZRCPT_FSG_S%%' => self::FS_GALLERY_START,
+			'%%ZRCPT_FSG_E%%' => self::FS_GALLERY_END,
+			'%%ZRCPT_PIV_S%%' => self::PAID_INV_START,
+			'%%ZRCPT_PIV_E%%' => self::PAID_INV_END,
+		);
+		foreach ( $sent as $ph => $orig ) {
+			$html = str_replace( $orig, $ph, $html );
 		}
-		$html = self::strip_active_content( $html );
-
-		// Restore the protected blocks last (so the strip never scanned their CSS).
-		return strtr( $html, $restore );
+		$html = ZRCPT_Sanitize::clean( $html );
+		return strtr( $html, $sent );
 	}
 
 	/* ────────────────────────────── Internals ────────────────────────────── */
@@ -446,67 +386,6 @@ class ZRCPT_Finalize {
 			return substr( $html, 0, $pos ) . $append . substr( $html, $pos );
 		}
 		return $html . $append;
-	}
-
-	/**
-	 * Replace the ZRCPT sentinel comments AND every <style> block with inert
-	 * placeholders so they survive the kses / strip passes verbatim, and return
-	 * the protected HTML plus a restore map (placeholder => original).
-	 */
-	private static function protect_blocks( string $html ): array {
-		$restore = array();
-
-		// Sentinels (fixed strings).
-		$sent = array(
-			'%%ZRCPT_FSG_S%%' => self::FS_GALLERY_START,
-			'%%ZRCPT_FSG_E%%' => self::FS_GALLERY_END,
-			'%%ZRCPT_PIV_S%%' => self::PAID_INV_START,
-			'%%ZRCPT_PIV_E%%' => self::PAID_INV_END,
-		);
-		foreach ( $sent as $ph => $orig ) {
-			$html = str_replace( $orig, $ph, $html );
-			$restore[ $ph ] = $orig;
-		}
-
-		// <style>…</style> blocks (variable content) → indexed placeholders.
-		$i = 0;
-		$html = preg_replace_callback(
-			'#<style\b[^>]*>.*?</style>#is',
-			function ( $m ) use ( &$restore, &$i ) {
-				$ph            = '%%ZRCPT_STYLE_' . ( $i++ ) . '%%';
-				$restore[ $ph ] = $m[0];
-				return $ph;
-			},
-			$html
-		);
-		if ( ! is_string( $html ) ) {
-			$html = '';
-		}
-		return array( $html, $restore );
-	}
-
-	/**
-	 * Conservative active-content strip: <script> (paired + stray), and every on*
-	 * event-handler attribute, and javascript: in href/src. Leaves ordinary
-	 * content untouched, so a clean receipt is unchanged.
-	 */
-	private static function strip_active_content( string $html ): string {
-		$rules = array(
-			'#<\s*script\b[^>]*>.*?<\s*/\s*script\s*>#is' => '',
-			'#<\s*/?\s*script\b[^>]*>#is'                 => '',
-			'#\son[a-z]+\s*=\s*"[^"]*"#i'                 => '',
-			"#\son[a-z]+\s*=\s*'[^']*'#i"                 => '',
-			'#\son[a-z]+\s*=\s*[^\s>]+#i'                 => '',
-			'#(href|src)\s*=\s*"\s*javascript:[^"]*"#i'   => '$1="#"',
-			"#(href|src)\s*=\s*'\s*javascript:[^']*'#i"   => '$1="#"',
-		);
-		foreach ( $rules as $pat => $rep ) {
-			$out = preg_replace( $pat, $rep, $html );
-			if ( is_string( $out ) ) {
-				$html = $out;
-			}
-		}
-		return $html;
 	}
 
 	/** Resolve a section label/style through a neutral filter; Core default given. */

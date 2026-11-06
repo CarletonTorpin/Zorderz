@@ -9,7 +9,7 @@
  *   subtype/tag — nothing is hardcoded to one trade. What counts as a cut piece, the piece
  *   vocabulary, default sizes and the roll/material model all come from the Item Engine and
  *   tenant configuration; supplier costs SHIP EMPTY.
- * Version:     2.4.0
+ * Version:     2.6.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,7 +55,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZPREP_VERSION', '2.4.0' );
+define( 'ZPREP_VERSION', '2.6.0' );
 define( 'ZPREP_FILE', __FILE__ );
 define( 'ZPREP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZPREP_URL', plugin_dir_url( __FILE__ ) );
@@ -98,9 +98,9 @@ if ( ! defined( 'ZPREP_CONTRACT_SIGNATURE' ) ) {
 }
 
 /**
- * Deprecated data-contract aliases (recognised for historical CRM notes; never emitted).
- * Declared as a filterable map rather than typed inline, so an upgrading prior-build
- * install still parses its old blocks while a fresh Zorderz install ships clean.
+ * Other headers a business's older CRM notes may carry for the same two blocks (recognised
+ * when reading; never emitted). Core knows only the generic cut-completion title; a business
+ * whose notes were written under other headers adds them on this filter.
  *
  * @return array{meas:string[],cut:string[]}
  */
@@ -108,11 +108,35 @@ function zprep_contract_deprecated_aliases(): array {
 	return (array) apply_filters(
 		'zprep_contract_deprecated_aliases',
 		array(
-			'meas' => array( 'TS Est Maker', 'Est Maker' ),
-			'cut'  => array( 'Prep — Cut Plan Complete', 'TS Prep' ),
+			'meas' => array(),
+			'cut'  => array( 'Prep — Cut Plan Complete' ),
 		)
 	);
 }
+
+/**
+ * Record one of Prep's actions in the platform's usage records ($ref a number or 0, never a
+ * name). Does nothing on a theme without the usage service.
+ */
+function zprep_usage( string $key, int $ref = 0, array $opts = array() ): void {
+	if ( class_exists( 'ZDZ_Usage' ) && method_exists( 'ZDZ_Usage', 'record' ) ) {
+		ZDZ_Usage::record( ZPREP_APP_ID, $key, $ref, $opts );
+	}
+}
+
+add_filter(
+	'zdz_register_usage_actions',
+	function ( $a ) {
+		$a                 = is_array( $a ) ? $a : array();
+		$a[ ZPREP_APP_ID ] = array(
+			'cut_plan_computed' => __( 'Planned the cuts', 'zorderz' ),
+			'cut_marked'        => __( 'Marked pieces cut', 'zorderz' ),
+			'cut_completed'     => __( 'Marked a cut complete', 'zorderz' ),
+			'section_saved'     => __( 'Saved field measurements', 'zorderz' ),
+		);
+		return $a;
+	}
+);
 
 /**
  * Content-keyed asset version: module version + file mtime, so a byte change to a
@@ -136,8 +160,32 @@ require_once ZPREP_DIR . 'includes/class-zprep-engine.php';
 require_once ZPREP_DIR . 'includes/class-zprep-crm.php';
 require_once ZPREP_DIR . 'includes/class-zprep-parser.php';
 require_once ZPREP_DIR . 'includes/class-zprep-billing.php';
+require_once ZPREP_DIR . 'includes/class-zprep-billing-chain.php';
 require_once ZPREP_DIR . 'includes/class-zprep-admin.php';
 require_once ZPREP_DIR . 'includes/class-zprep-dashboard.php';
+require_once ZPREP_DIR . 'includes/class-zprep-cut-state.php';
+require_once ZPREP_DIR . 'includes/class-zprep-sections.php';
+require_once ZPREP_DIR . 'includes/class-zprep-upcoming.php';
+require_once ZPREP_DIR . 'includes/class-zprep-pack.php';
+ZPREP_Upcoming::init();
+add_filter( 'zdz_identity_pack_consumers', array( 'ZPREP_Pack', 'register' ) );
+require_once ZPREP_DIR . 'includes/class-zprep-assignments.php';
+require_once ZPREP_DIR . 'includes/class-zprep-remakes.php';
+require_once ZPREP_DIR . 'includes/class-zprep-plan-preview.php';
+require_once ZPREP_DIR . 'includes/class-zprep-queue-counts.php';
+
+/**
+ * The job tables (cut state, assignments, remakes). Created on activation and again whenever
+ * the stored schema version differs, because an update dropped over an existing install does
+ * not re-run activation. Schema only; nothing is seeded.
+ */
+function zprep_migrate_job_tables(): void {
+	ZPREP_Cut_State::migrate();
+	ZPREP_Sections::migrate();
+	ZPREP_Assignments::migrate();
+	ZPREP_Remakes::migrate();
+	update_option( 'zprep_jobs_schema_version', ZPREP_VERSION, false );
+}
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
@@ -157,6 +205,7 @@ function zprep_activate() {
 		wp_schedule_event( time() + 180, 'zprep_5min', 'zprep_billing_sync' );
 	}
 	update_option( 'zprep_db_version', ZPREP_Leftovers::DB_VERSION, false );
+	zprep_migrate_job_tables();
 	update_option( 'zprep_version', ZPREP_VERSION, false );
 }
 
@@ -184,8 +233,14 @@ add_action(
 		// Self-heal the leftovers schema on any file-overwrite / fresh copy that
 		// skipped activation.
 		ZPREP_Leftovers::maybe_upgrade();
+		if ( get_option( 'zprep_jobs_schema_version' ) !== ZPREP_VERSION ) {
+			zprep_migrate_job_tables();
+		}
 
 		ZPREP_Dashboard::init();
+		ZPREP_Assignments::register_hooks();     // Prep access for a person holding a job assignment
+		ZPREP_Cut_State::register_project_source(); // the "Cut state" panel on a jobs-app project
+		ZPREP_Queue_Counts::init();              // prep.queue_counts
 
 		if ( is_admin() ) {
 			ZPREP_Admin::init();
@@ -198,8 +253,8 @@ add_action(
 			wp_schedule_event( time() + 180, 'zprep_5min', 'zprep_billing_sync' );
 		}
 
-		// Expose this module's marker tokens via one map (never a literal). Legacy
-		// prior-build headers are recorded as deprecated aliases.
+		// Expose this module's marker tokens via one map (never a literal), with the older
+		// headers a business's notes may carry (zprep_contract_deprecated_aliases).
 		add_filter(
 			'zdz_prep_markers',
 			function ( $markers ) {
@@ -225,24 +280,6 @@ add_action(
 
 add_action( 'zprep_leftovers_expire_reservations', array( 'ZPREP_Leftovers', 'cron_expire' ) );
 add_action( 'zprep_billing_sync', array( 'ZPREP_Billing', 'run_approved_sync' ) );
-
-// ── KPI metrics contribution (theme's zdz_kpi_metrics filter) ──────
-add_filter(
-	'zdz_kpi_metrics',
-	function ( $metrics ) {
-		if ( ! is_array( $metrics ) ) {
-			$metrics = array();
-		}
-		global $wpdb;
-		$t = ZPREP_Leftovers::table_name();
-		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) {
-			return $metrics;
-		}
-		$saveable = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = 'available'" );
-		$metrics['prep_leftovers_available'] = array( 'value' => (string) $saveable, 'raw' => $saveable, 'source' => 'prep' );
-		return $metrics;
-	}
-);
 
 // ── Dashboard app registration (theme interface — after_setup_theme) ──
 add_action(
@@ -290,6 +327,16 @@ add_filter(
 				'tsemc_fb_status_filter_ver'  => 'zprep_billing_status_filter_ver',
 				'tsemc_ns_activity_type_id'   => 'zprep_crm_activity_type_id',
 				'tsemc_ns_cut_stage_name'     => 'zprep_cut_stage_name',
+				'tsemc_upcoming_audience'     => 'zprep_upcoming_audience',
+			)
+		);
+		$map['tables'] = array_merge(
+			$map['tables'],
+			array(
+				'tsemc_cut_state'       => ZPREP_Cut_State::TABLE,
+				'tsemc_sections'        => ZPREP_Sections::TABLE,
+				'tsemc_job_assignments' => ZPREP_Assignments::TABLE,
+				'tsemc_remakes'         => ZPREP_Remakes::TABLE,
 			)
 		);
 		$map['cron'] = array_merge(
@@ -297,6 +344,7 @@ add_filter(
 			array(
 				'tsemc_fb_sync'                        => 'zprep_billing_sync',
 				'tsemc_leftovers_expire_reservations'  => ZPREP_Leftovers::CRON_HOOK,
+				'tsemc_queue_counts_refresh'           => ZPREP_Queue_Counts::CRON_HOOK,
 			)
 		);
 		// NOTE: a tenant upgrading from a differently-named legacy cut/prep app maps its

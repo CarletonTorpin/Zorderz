@@ -26,3 +26,7 @@ node_modules/
 
 # Git bundles (produced for hand-off, not tracked)
 *.bundle
+
+# Python caches
+__pycache__/
+*.pyc

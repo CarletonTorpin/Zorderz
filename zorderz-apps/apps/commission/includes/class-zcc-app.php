@@ -56,7 +56,6 @@ class ZCC_App implements \Zorderz\Widget_App_Interface {
 						<select class="zcc-period">
 							<option value="this_month"><?php esc_html_e( 'This month', 'zorderz' ); ?></option>
 							<option value="last_month"><?php esc_html_e( 'Last month', 'zorderz' ); ?></option>
-							<option value="mtd"><?php esc_html_e( 'Month to date', 'zorderz' ); ?></option>
 						</select>
 					</label>
 					<button type="button" class="zcc-run button"><?php echo $is_piece ? esc_html__( 'My pay', 'zorderz' ) : esc_html__( 'My commission', 'zorderz' ); ?></button>

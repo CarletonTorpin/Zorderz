@@ -3,13 +3,12 @@
  * ZL Lead Assignment — per-lead ownership by the app user.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * WHAT THIS IS (Phase 1 of the per-user-leads program)
+ * WHAT THIS IS
  * ─────────────────────────────────────────────────────────────────────────────
  * This class makes a *the app user* the owner of a lead, and makes that
  * ownership the **source of truth for assignment** — the app's own checkable data,
  * usable with NO Nutshell account. (Nutshell remains authoritative only for the
- * CRM pipeline *stage*; that's a separate, later concern. See
- * ZL-PER-USER-LEADS-AND-PIPELINE-PLAN-v1.md §1.)
+ * CRM pipeline *stage*; that's a separate concern.)
  *
  * The model, per the CRM-integration best practice "choose one system as master
  * and use a source flag to prevent overwrites":
@@ -36,7 +35,7 @@
  * Today several rep-facing handlers authorize on "any app user" (zdz_access_app).
  * current_user_can_act_on_lead() is the gate the handlers should call: an admin/
  * operator may act on any lead; a salesperson may act ONLY on a lead assigned to
- * them. On the shared kiosk (ts_general) the per-user lead view is suppressed —
+ * them. On the shared kiosk (zdz_general) the per-user lead view is suppressed —
  * a kiosk is not "a salesperson" (most-restrictive-wins).
  *
  * @package Zorderz\Leads
@@ -84,15 +83,22 @@ class ZL_Lead_Assignment {
 	}
 
 	/**
-	 * Is this user on the shared-kiosk tier (ts_general)? A kiosk is never
-	 * treated as an individual salesperson, so per-user lead views are hidden.
+	 * Is this user the shared device (the platform's trait, ZDZ_User_Roles::is_shared_device(), or its role), or is
+	 * this device in Demo Mode? A kiosk is never treated as an individual salesperson, so per-user lead views are
+	 * hidden.
 	 *
 	 * @param int|null $user_id
 	 * @return bool
 	 */
 	public static function is_kiosk( $user_id = null ): bool {
 		$user_id = $user_id ? (int) $user_id : get_current_user_id();
-		$user    = $user_id ? get_userdata( $user_id ) : null;
+		if ( $user_id > 0 && $user_id === (int) get_current_user_id() && class_exists( 'ZDZ_Kiosk_Demo' ) && method_exists( 'ZDZ_Kiosk_Demo', 'is_active' ) && ZDZ_Kiosk_Demo::is_active() ) {
+			return true;
+		}
+		if ( $user_id > 0 && class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( (int) $user_id ) ) {
+			return true;
+		}
+		$user = $user_id ? get_userdata( $user_id ) : null;
 		return $user && in_array( 'zdz_general', (array) $user->roles, true );
 	}
 

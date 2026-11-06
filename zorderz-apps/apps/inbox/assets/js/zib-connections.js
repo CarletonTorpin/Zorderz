@@ -6,10 +6,34 @@
  * DOMContentLoaded, and via a MutationObserver — so it works whether the
  * dashboard renders the widget server-side or injects it after this script has
  * already run. Talks only to zorderz/v1, owner-scoped server-side; no mail fetched.
+ *
+ * Built on the theme's kit of parts (window.ZDZ.ui). Every request goes through
+ * ZDZ.ui.rest, so a lost signal, a timeout or a 502 page becomes a sentence a
+ * person can read, shown where the "Couldn't …" text is; loaders are the kit's
+ * breathing dots; the triage Undo is the kit's toast; Disconnect asks in a kit
+ * sheet instead of window.confirm.
  */
 (function () {
 	'use strict';
 	try { console.log('[ZIB] connections.js loaded'); } catch (e) {}
+
+	/* The app needs the kit; without it, say so plainly instead of failing silently. There is
+	   deliberately no private fetch fallback. */
+	var NO_KIT = 'This app needs a newer Zorderz theme. Reload the app.';
+	function kit() { return (window.ZDZ && window.ZDZ.ui && window.ZDZ.ui.rest) ? window.ZDZ.ui : null; }
+	var waitingForKit = false;
+
+	/* Why a request failed, in the person's words. A server "Not found." / "Action failed."
+	   (kind 'app') adds nothing to our own sentence; a lost signal, a timeout or a server error does. */
+	function why(err) {
+		return (err && err.kind && err.kind !== 'app' && err.message) ? ' ' + err.message : '';
+	}
+	/* The failure reason ('reconnect', 'busy', …) from a WP_Error body, JSON or text. */
+	function reasonOf(err) {
+		var b = err && err.body;
+		if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { b = null; } }
+		return (b && ((b.data && b.data.reason) || b.reason)) || '';
+	}
 
 	function esc(s) {
 		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -30,17 +54,36 @@
 		if (!card || card.getAttribute('data-zib-inited') === '1') { return; }
 		var cfg = cfgFor(card);
 		if (!cfg.restUrl) { try { console.warn('[ZIB] card has no rest URL; skipping'); } catch (e) {} return; }
+		if (!kit()) {
+			// The kit loads in the footer too; give it until the page has loaded before giving up.
+			if (document.readyState !== 'complete') {
+				if (!waitingForKit) { waitingForKit = true; window.addEventListener('load', scan); }
+				return;
+			}
+			card.setAttribute('data-zib-inited', '1');
+			card.innerHTML = '<p class="zib-sub zib-nokit" role="alert">' + esc(NO_KIT) + '</p>';
+			return;
+		}
 		card.setAttribute('data-zib-inited', '1');
 		var connCanSend = false; // v0.10.0: set from /connection.can_send — Send UI shows only when granted
 		var connCanTriage = false; // v0.11.0: set from /connection.can_triage — triage UI shows only when granted
 
-		function api(path, method, body) {
-			return fetch(cfg.restUrl + path, {
+		/* through the kit: resolves with the JSON of a 2xx answer, rejects with a
+		   ZDZ.ui.RequestError (readable .message; .body keeps the server's {code, data:{reason}}). The card's
+		   own nonce is sent, as before. A GET is retried once after a lost signal or a 502-504; a POST never. */
+		function api(path, method, body, opts) {
+			var o = {
 				method: method || 'GET',
-				credentials: 'same-origin',
-				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cfg.nonce || '' },
-				body: body ? JSON.stringify(body) : undefined
-			}).then(function (r) { return r.json().catch(function () { return {}; }); });
+				headers: { 'X-WP-Nonce': cfg.nonce || '' },
+				body: body || undefined
+			};
+			// a send with Vault documents reads files and uploads them before it sends; it gets two minutes,
+			// not the kit's 30 seconds.
+			if (opts && opts.timeout) { o.timeout = opts.timeout; }
+			return ZDZ.ui.rest(cfg.restUrl + path, o);
+		}
+		function retryBtn(id) {
+			return ' <button type="button" class="zib-btn zib-retry" id="' + id + '">Try again</button>';
 		}
 
 		function goConnect() {
@@ -91,7 +134,7 @@
 					'your questions to the assistant, an admin search you allow, an email you attach to a job, or a reply/message ' +
 					'you compose and click Send on.</p>' +
 				'</div>' +
-				'<div class="zib-mailview" id="zib-mailview"><div class="zib-loading">Loading your mail…</div></div>';
+				'<div class="zib-mailview" id="zib-mailview">' + ZDZ.ui.loadingHtml('Loading your mail…') + '</div>';
 
 			var sel = card.querySelector('#zib-mode');
 			if (sel) { sel.value = conn.index_mode || 'none'; }
@@ -102,14 +145,32 @@
 			card.querySelector('#zib-reconnect').addEventListener('click', goConnect);
 			if (sel) {
 				// fire-and-forget: changing the index mode must NOT blow away the open mail view.
-				sel.addEventListener('change', function () { api('/connection/mode', 'POST', { account_id: conn.id, mode: sel.value }); });
+				// a failed save is no longer silent - the kit's toast says why, with Try again.
+				var saveMode = function () {
+					api('/connection/mode', 'POST', { account_id: conn.id, mode: sel.value })
+						.catch(function (err) { ZDZ.ui.toastError(err, saveMode); });
+				};
+				sel.addEventListener('change', saveMode);
 			}
-			card.querySelector('#zib-admin').addEventListener('change', function (e) {
-				api('/connection/admin-access', 'POST', { account_id: conn.id, enabled: e.target.checked });
-			});
+			var adminBox = card.querySelector('#zib-admin');
+			var saveAdmin = function () {
+				api('/connection/admin-access', 'POST', { account_id: conn.id, enabled: adminBox.checked })
+					.catch(function (err) { ZDZ.ui.toastError(err, saveAdmin); });
+			};
+			adminBox.addEventListener('change', saveAdmin);
+			/* Disconnect asks in the kit's sheet (Back closes it) instead of
+			   window.confirm; the button shows busy while it works, and a failure is written in the sheet. */
 			card.querySelector('#zib-disconnect').addEventListener('click', function () {
-				if (!window.confirm('Disconnect your mailbox? Your indexed mail will be removed.')) { return; }
-				api('/connection/disconnect', 'POST', { account_id: conn.id }).then(function () { load(); });
+				ZDZ.ui.sheet({
+					title: 'Disconnect your mailbox?',
+					body: '<p class="zib-sheet-p">' + esc('Your indexed mail will be removed.') + '</p>',
+					actions: [
+						{ label: 'Cancel' },
+						{ label: 'Disconnect', kind: 'danger', onClick: function () {
+							return api('/connection/disconnect', 'POST', { account_id: conn.id }).then(function () { load(); });
+						} }
+					]
+				});
 			});
 
 			mountMail();
@@ -200,8 +261,7 @@
 							'<button type="button" data-d="compact" title="Compact">▤</button>' +
 						'</div>' +
 					'</div>' +
-					'<div class="zib-panes"><div class="zib-nav"></div><div class="zib-read">' + READ_EMPTY + '</div></div>' +
-						'<div class="zib-snackwrap" id="zib-snack" role="status" aria-live="polite"></div>';
+					'<div class="zib-panes"><div class="zib-nav"></div><div class="zib-read">' + READ_EMPTY + '</div></div>';
 
 				panes = view.querySelector('.zib-panes');
 				nav = view.querySelector('.zib-nav');
@@ -248,7 +308,7 @@
 
 			// ---- folders → populate the toolbar switcher, open Inbox by default ----
 			function loadFolders() {
-				nav.innerHTML = '<div class="zib-loading">Loading your mail…</div>';
+				ZDZ.ui.loading(nav, 'Loading your mail…');
 				api('/folders', 'GET').then(function (res) {
 					var fs = (res && res.folders) ? res.folders : [];
 					// No per-folder index yet (the all-folder sync is not on): fall back to the coarse
@@ -279,7 +339,11 @@
 					if (!inbox) { inbox = sorted[0]; }
 					folSel.value = inbox.hash;
 					openFolder(inbox.hash, inbox.name);
-				}).catch(function () { nav.innerHTML = '<p class="zib-empty">Couldn’t load folders.</p>'; });
+				}).catch(function (err) {
+					// the kit's sentence says why (no signal, signed out, server trouble), with Try again.
+					nav.innerHTML = '<p class="zib-empty zib-err" role="alert">' + esc('Couldn’t load folders.' + why(err)) + retryBtn('zib-fol-retry') + '</p>';
+					var rb = nav.querySelector('#zib-fol-retry'); if (rb) { rb.addEventListener('click', loadFolders); }
+				});
 			}
 
 			function openFolder(hash, name) { state.folder = { hash: hash, name: name, search: null }; state.baseFolder = { hash: hash, name: name }; state.offset = 0; showList(); }
@@ -290,6 +354,38 @@
 				if (state.folder.search) { return '/search?q=' + encodeURIComponent(state.folder.search) + '&limit=' + LIM + '&offset=' + state.offset; }
 				return '/browse?folder=' + encodeURIComponent(state.folder.hash || '') + '&limit=' + LIM + '&offset=' + state.offset;
 			}
+			/* On a phone the page is the only scroll (CSS) — nested scroll areas made accidental
+			   endless scrolling easy — so the list keeps its place the way Messages does:
+			   opening a message brings the reader to the top, and Back returns to the same spot
+			   in the same list instead of reloading it from the first message. */
+			var PHONE_Q = '(max-width: 880px)';
+			function isPhone() { try { return window.matchMedia(PHONE_Q).matches; } catch (e) { return false; } }
+			function pageScroller(el) {
+				for (var p = el && el.parentElement; p; p = p.parentElement) {
+					var oy = getComputedStyle(p).overflowY;
+					if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) { return p; }
+				}
+				return document.scrollingElement || document.documentElement;
+			}
+			var listScroll = null;   // { el, top } where the list was when a message opened
+			function rememberListScroll() {
+				if (!isPhone()) { listScroll = null; return; }
+				var sc = pageScroller(view); listScroll = { el: sc, top: sc.scrollTop };
+			}
+			function readerToTop() {
+				if (!isPhone()) { return; }
+				try { view.scrollIntoView({ block: 'start' }); } catch (e) { /* non-fatal */ }
+			}
+			function returnToList() {
+				if (isPhone() && panes && nav && nav.querySelector('.zib-results .zib-hit')) {
+					state.openId = null; state.openMsg = null;
+					panes.classList.remove('zib-reading');
+					read.innerHTML = READ_EMPTY;
+					if (listScroll && listScroll.el) { listScroll.el.scrollTop = listScroll.top; }
+					return;
+				}
+				showList();
+			}
 			function showList() {
 				state.offset = 0;
 				state.openId = null; state.openMsg = null;
@@ -298,11 +394,17 @@
 				nav.innerHTML = '<div class="zib-results" role="listbox" aria-label="Messages"></div><div class="zib-more"></div>';
 				loadMore();
 			}
-			function loadMore() {
+			/* "Load more" stays where it is and shows busy (ZDZ.ui.busy) instead of being swapped
+			   for a loading line; the first page shows the kit's loader. A failure says why, with Try again. */
+			function loadMore(btn) {
 				var results = nav.querySelector('.zib-results');
 				var more = nav.querySelector('.zib-more');
-				if (more) { more.innerHTML = '<div class="zib-loading">Loading…</div>'; }
-				api(listUrl(), 'GET').then(function (res) {
+				var useBtn = btn && btn.nodeType === 1 ? btn : null;
+				if (useBtn && useBtn.getAttribute('aria-busy') === 'true') { return; } // a double tap adds the page once
+				if (more && !useBtn) { ZDZ.ui.loading(more, 'Loading…'); }
+				var url = listUrl();
+				var req = useBtn ? ZDZ.ui.busy(useBtn, function () { return api(url, 'GET'); }) : api(url, 'GET');
+				return req.then(function (res) {
 					var list = (res && res.results) ? res.results : [];
 					if (state.offset === 0 && !list.length) { results.innerHTML = '<p class="zib-empty">No mail here.</p>'; if (more) { more.innerHTML = ''; } return; }
 					var html = '';
@@ -331,9 +433,15 @@
 					if (more) {
 						more.innerHTML = (list.length >= LIM) ? '<button type="button" class="zib-btn" id="zib-loadmore">Load more</button>' : '';
 						var lm = nav.querySelector('#zib-loadmore');
-						if (lm) { lm.addEventListener('click', loadMore); }
+						if (lm) { lm.addEventListener('click', function () { loadMore(lm); }); }
 					}
-				}).catch(function () { if (more) { more.innerHTML = ''; } });
+				}).catch(function (err) {
+					if (!more) { return; }
+					var lead = state.offset === 0 ? 'Couldn’t load your mail.' : 'Couldn’t load more mail.';
+					more.innerHTML = '<p class="zib-empty zib-err" role="alert">' + esc(lead + why(err)) + retryBtn('zib-more-retry') + '</p>';
+					var rb = more.querySelector('#zib-more-retry');
+					if (rb) { rb.addEventListener('click', function () { loadMore(rb); }); }
+				});
 			}
 			function selectRow(el) {
 				var prev = nav.querySelectorAll('.zib-hit[aria-selected="true"]');
@@ -371,16 +479,15 @@
 			}
 
 			// ── Undo snackbar — one pending action at a time; a new one flushes (commits) the prior ──
-			function hideSnack() { var s = view.querySelector('#zib-snack'); if (s) { s.innerHTML = ''; s.classList.remove('zib-snack-show'); } }
-			function flushPending() { if (pendingTriage) { var p = pendingTriage; pendingTriage = null; clearInterval(p.tick); clearTimeout(p.timer); p.commit(); hideSnack(); } }
+			/* the Undo bar is the kit's toast (one action, the app's one toast
+			   place), up for exactly the hold window; the move is sent when the window ends. */
+			var snack = null;
+			function hideSnack() { if (snack) { snack.close(); snack = null; } }
+			function flushPending() { if (pendingTriage) { var p = pendingTriage; pendingTriage = null; clearTimeout(p.timer); p.commit(); hideSnack(); } }
 			function showSnack(label, secs, onUndo) {
-				var s = view.querySelector('#zib-snack'); if (!s) { return null; }
-				s.innerHTML = '<div class="zib-snack"><span class="zib-snack-msg">' + esc(label) + '</span>' +
-					'<button type="button" class="zib-snack-undo">Undo</button>' +
-					'<span class="zib-snack-n" aria-hidden="true">' + (secs | 0) + '</span></div>';
-				s.classList.add('zib-snack-show');
-				var ub = s.querySelector('.zib-snack-undo'); if (ub) { ub.addEventListener('click', onUndo); }
-				return s;
+				hideSnack();
+				snack = ZDZ.ui.toast(label, { action: 'Undo', onAction: onUndo, duration: secs * 1000 });
+				return snack;
 			}
 			// Optimistically remove a message, auto-advance to the next, and hold the actual Graph move for
 			// a few seconds behind a salient Undo (INV-WRITE stays owner-explicit; Undo is the mis-tap net).
@@ -391,29 +498,32 @@
 				var nId = nextRowId(curId);
 				if (row) { row.style.display = 'none'; }
 				if (nId) { selectRowById(nId); openMsg(nId); } else { showList(); }
-				var secs = 5, remain = secs, committed = false;
+				var secs = 5, committed = false;
 				function commit() {
 					if (committed) { return; } committed = true;
 					api('/message/' + (curId | 0) + '/move', 'POST', { to: dest }).then(function (r) {
 						if (r && r.ok) { movedThisSession[curId] = true; if (row) { row.remove(); } }
 						else if (row) { row.style.display = ''; }
-					}).catch(function () { if (row) { row.style.display = ''; } });
+					}).catch(function (err) {
+						// the message comes back to the list, and the kit's toast says why.
+						if (row) { row.style.display = ''; }
+						ZDZ.ui.toastError({ message: 'Couldn’t move that message.' + why(err) });
+					});
 				}
-				var snack = showSnack(verbPast, secs, function undo() {
-					clearInterval(tick); clearTimeout(timer); pendingTriage = null; hideSnack();
+				var timer = null;
+				showSnack(verbPast, secs, function undo() {
+					clearTimeout(timer); pendingTriage = null; snack = null;
 					if (row) { row.style.display = ''; }
 					selectRowById(curId); openMsg(curId);
 				});
-				var nEl = snack ? snack.querySelector('.zib-snack-n') : null;
-				var tick = setInterval(function () { remain--; if (nEl) { nEl.textContent = Math.max(0, remain); } }, 1000);
-				var timer = setTimeout(function () { pendingTriage = null; clearInterval(tick); commit(); hideSnack(); }, secs * 1000);
-				pendingTriage = { curId: curId, tick: tick, timer: timer, commit: commit };
+				timer = setTimeout(function () { pendingTriage = null; commit(); hideSnack(); }, secs * 1000);
+				pendingTriage = { curId: curId, timer: timer, commit: commit };
 			}
 			function triageMarkUnread(id, back) {
 				if (!connCanTriage) { return; }
 				api('/message/' + (id | 0) + '/mark-read', 'POST', { read: false }).then(function (r) {
-					if (r && r.ok) { readThisSession[id] = false; markRowUnread(id, true); if (back) { showList(); } }
-				}).catch(function () {});
+					if (r && r.ok) { readThisSession[id] = false; markRowUnread(id, true); if (back) { returnToList(); } }
+				}).catch(function (err) { ZDZ.ui.toastError({ message: 'Couldn’t mark it unread.' + why(err) }); });
 			}
 
 			// ── keyboard shortcuts (Gmail/Superhuman muscle memory), gated by "engaged" ──
@@ -433,6 +543,9 @@
 				var t = e.target;
 				if (t && (/^(input|textarea|select)$/i.test(t.tagName) || t.isContentEditable)) { return; }
 				if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+				// while a draft is open, only ? and Esc are shortcuts. Picking a Vault document
+				// re-draws its row, focus falls to the page, and "e" or "#" would archive or delete the mail behind it.
+				if (read && read.querySelector('.zib-c-body') && e.key !== '?' && e.key !== 'Escape') { return; }
 				var reading = panes && panes.classList.contains('zib-reading');
 				var oid = (state.openId != null && reading) ? state.openId : null;
 				var k = e.key;
@@ -449,7 +562,7 @@
 					if (h) { h.remove(); e.preventDefault(); }
 					else if (menuOpen) { /* the menu's own handler closes it — don't also navigate */ }
 					else if (composing) { /* never discard a typed draft on Escape — use Cancel */ }
-					else if (reading) { showList(); e.preventDefault(); }
+					else if (reading) { returnToList(); e.preventDefault(); }
 				}
 				else if (oid != null && k === 'e') { triageWithUndo(oid, 'archive', 'Archived'); e.preventDefault(); }
 				else if (oid != null && (k === '#' || k === 'Delete')) { triageWithUndo(oid, 'deleteditems', 'Deleted'); e.preventDefault(); }
@@ -647,9 +760,11 @@
 				var box = view.querySelector('.zib-r-attach');
 				box.innerHTML = '<button type="button" class="zib-btn zib-attbtn" id="zib-attbtn">📎 View attachments</button>';
 				var btn = box.querySelector('#zib-attbtn');
-				btn.addEventListener('click', function () {
-					btn.disabled = true; btn.textContent = 'Loading…';
-					api('/message/' + (id | 0) + '/attachments', 'GET').then(function (res) {
+				// the button shows busy (ZDZ.ui.busy keeps its size; a second tap is not a second
+				// request) instead of being disabled and relabeled; a failure is the kit's toast, with Try again.
+				function loadAtts() {
+					if (btn.getAttribute('aria-busy') === 'true') { return; }
+					ZDZ.ui.busy(btn, function () { return api('/message/' + (id | 0) + '/attachments', 'GET'); }).then(function (res) {
 						var imgs = (res && res.images) ? res.images : [];
 						var others = (res && res.others) ? res.others : [];
 						var host = document.createElement('div'); host.className = 'zib-atts';
@@ -672,8 +787,9 @@
 							c.textContent = '📎 ' + String(o.name || 'attachment') + ' (not shown)'; host.appendChild(c);
 						});
 						box.innerHTML = ''; box.appendChild(host);
-					}).catch(function () { btn.disabled = false; btn.textContent = '📎 View attachments'; });
-				});
+					}).catch(function (err) { ZDZ.ui.toastError({ message: 'Couldn’t load the attachments.' + why(err) }, loadAtts); });
+				}
+				btn.addEventListener('click', loadAtts);
 			}
 
 			function lightbox(src, alt) {
@@ -693,11 +809,21 @@
 			}
 
 			function openMsg(id) {
+				if (panes && !panes.classList.contains('zib-reading')) { rememberListScroll(); }
 				if (panes) { panes.classList.add('zib-reading'); }
-				read.innerHTML = '<div class="zib-loading">Loading…</div>';
+				readerToTop();
+				ZDZ.ui.loading(read, 'Loading…');
+				/* a message that will not open says why (the kit's sentence), offers Try again, and
+				   keeps the way back to the list - on a phone the list is hidden while the reader shows. */
+				function openFailed(err) {
+					read.innerHTML = '<div class="zib-rd">' + backToList() +
+						'<p class="zib-empty zib-err" role="alert">' + esc('Couldn’t open that message.' + why(err)) + retryBtn('zib-open-retry') + '</p></div>';
+					var bk = read.querySelector('#zib-tolist'); if (bk) { bk.addEventListener('click', returnToList); }
+					var rb = read.querySelector('#zib-open-retry'); if (rb) { rb.addEventListener('click', function () { openMsg(id); }); }
+				}
 				api('/message/' + (id | 0), 'GET').then(function (res) {
 					var m = res && res.message;
-					if (!m) { read.innerHTML = '<p class="zib-empty">Couldn’t open that message.</p>'; return; }
+					if (!m) { openFailed(null); return; }
 					state.openId = (id | 0); state.openMsg = m;   // v0.17.0: for keyboard reader-actions
 					var sender = parseSender(m.from);
 					var actions = '';
@@ -726,7 +852,7 @@
 							'<div class="zib-movepick zib-hide"></div><div class="zib-tri-status"></div>' +
 							'<div class="zib-r-bodywrap"></div><div class="zib-r-attach"></div>' +
 						'</div>';
-					var back = read.querySelector('#zib-tolist'); if (back) { back.addEventListener('click', showList); }
+					var back = read.querySelector('#zib-tolist'); if (back) { back.addEventListener('click', returnToList); }
 					read.querySelector('.zib-r-subj').textContent = m.subject || '(no subject)';
 					read.querySelector('.zib-rd-name').textContent = sender.name;
 					read.querySelector('.zib-rd-when').textContent = m.received_at ? fmtDateTime(m.received_at) : '';
@@ -742,7 +868,10 @@
 					renderBody(m);
 					if (m.has_attachments) { renderAttach(id); }
 					if (connCanTriage) { setupTriage(id); }
-				}).catch(function () { read.innerHTML = '<p class="zib-empty">Couldn’t open that message.</p>'; });
+					// once more with the message in place - while it loaded, the page may have been too
+					// short to bring the reader to the top (Email last on the dashboard).
+					readerToTop();
+				}).catch(openFailed);
 			}
 
 			// ---- triage (INV-WRITE: owner-explicit) — now in an overflow menu ----
@@ -800,7 +929,7 @@
 				// auto-advance + a salient Undo window) instead of an immediate, irreversible move.
 				function pickFolder() {
 					closeMenu(); pick.classList.remove('zib-hide');
-					pick.innerHTML = '<div class="zib-loading">Loading folders…</div>';
+					ZDZ.ui.loading(pick, 'Loading folders…');
 					api('/folders', 'GET').then(function (res) {
 						var fs = (res && res.folders) ? res.folders : [];
 						if (!fs.length) { pick.innerHTML = '<div class="zib-empty">No folders to move to.</div>'; return; }
@@ -812,7 +941,7 @@
 							if (h) { pick.classList.add('zib-hide'); triageWithUndo(id, h, 'Moved'); }
 						});
 						pick.querySelector('#zib-move-cancel').addEventListener('click', function () { pick.classList.add('zib-hide'); });
-					}).catch(function () { pick.innerHTML = '<div class="zib-empty">Couldn’t load folders.</div>'; });
+					}).catch(function (err) { pick.innerHTML = '<div class="zib-empty zib-err" role="alert">' + esc('Couldn’t load folders.' + why(err)) + '</div>'; });
 				}
 				var items = menu.querySelectorAll('.zib-ovf-item');
 				for (var i = 0; i < items.length; i++) {
@@ -866,7 +995,11 @@
 
 			// ---- compose (reply / reply-all / forward / new) — INV-SEND: owner clicks Send ----
 			function openCompose(opts) {
+				// on a phone, compose is a page of its own like a message - the list
+				// remembers its place and Cancel on a new email returns there (Messages' pattern).
+				if (panes && !panes.classList.contains('zib-reading')) { rememberListScroll(); }
 				if (panes) { panes.classList.add('zib-reading'); }
+				readerToTop();
 				var mode = opts.mode;
 				var m = opts.m || {};
 				var isReply = (mode === 'reply' || mode === 'replyall');
@@ -890,6 +1023,12 @@
 					fields += '<label class="zib-c-row"><span>Subject</span><input type="text" class="zib-c-subj" placeholder="Subject"></label>';
 				}
 				fields += '<textarea class="zib-c-body" rows="9" placeholder="' + (isForward ? 'Add a note (optional)…' : 'Write your message…') + '"></textarea>';
+				/* Vault documents. Each is attached or sent as a link that stops working after
+				   14 or 30 days; a Private document is a link only (the server decides the same - ZIB_Compose::plan). */
+				fields += '<div class="zib-c-docs"><div class="zib-docs-list" id="zib-docs-list"></div>' +
+					'<button type="button" class="zib-btn zib-c-vault" id="zib-c-vault" aria-expanded="false" aria-controls="zib-vpick">📎 Vault document</button>' +
+					'<div class="zib-vpick zib-hide" id="zib-vpick"><input type="search" class="zib-vp-q" placeholder="Search the Vault by title or Context" aria-label="Search the Vault" autocomplete="off">' +
+					'<div class="zib-vp-res" aria-live="polite"></div></div></div>';
 
 				read.innerHTML =
 					'<div class="zib-rd">' +
@@ -907,9 +1046,112 @@
 				if (pf.subj && read.querySelector('.zib-c-subj')) { read.querySelector('.zib-c-subj').value = pf.subj; }
 				if (pf.body && read.querySelector('.zib-c-body')) { read.querySelector('.zib-c-body').value = pf.body; }
 
-				read.querySelector('#zib-c-cancel').addEventListener('click', function () { if (isNew) { showList(); } else { openMsg(opts.id); } });
+				// the documents on this email (restored by Undo, a failed send, or the chat's handoff).
+				var docs = [];
+				(pf.docs || []).forEach(function (d) { addDoc(d); });
+				function addDoc(d) {
+					var id = parseInt(d && d.id, 10) || 0;
+					if (!id || docs.length >= 5) { return false; }
+					for (var i = 0; i < docs.length; i++) { if (docs[i].id === id) { return false; } }
+					var priv = !!d.is_private;
+					var how = (priv || d.how === 'link') ? 'link' : 'attach';
+					docs.push({ id: id, title: String(d.title || 'Document'), is_private: priv, size: parseInt(d.size, 10) || 0,
+						how: how, days: (parseInt(d.days, 10) === 30 ? 30 : 14) });
+					return true;
+				}
+				var docsList = read.querySelector('#zib-docs-list');
+				var maxTotal = 10485760; // the server's zib_attach_max_total, updated from each Vault search
+				function renderDocs() {
+					if (!docsList) { return; }
+					var used = 0;
+					docsList.innerHTML = docs.map(function (d, i) {
+						var v = d.how === 'attach' ? 'attach' : ('link' + d.days);
+						// Say what the server will do: past the size limit, Attach goes as a link.
+						var asLink = false;
+						if (d.how === 'attach') { if (d.size <= 0 || used + d.size > maxTotal) { asLink = true; } else { used += d.size; } }
+						return '<div class="zib-doc" data-i="' + i + '">' +
+							'<span class="zib-doc-t">📄 ' + esc(d.title) + (d.is_private ? ' <span class="zib-doc-priv">Private</span>' : '') + '</span>' +
+							'<select class="zib-doc-how" aria-label="' + esc('How to send ' + d.title) + '">' +
+								(d.is_private ? '' : '<option value="attach"' + (v === 'attach' ? ' selected' : '') + '>Attach</option>') +
+								'<option value="link14"' + (v === 'link14' ? ' selected' : '') + '>Link · 14 days</option>' +
+								'<option value="link30"' + (v === 'link30' ? ' selected' : '') + '>Link · 30 days</option>' +
+							'</select>' +
+							'<button type="button" class="zib-chip-x zib-doc-x" aria-label="' + esc('Remove ' + d.title) + '">×</button>' +
+							(asLink ? '<span class="zib-doc-note">Too big to attach with the rest, so it goes as a ' + d.days + '-day link.</span>' : '') +
+						'</div>';
+					}).join('') + (docs.some(function (d) { return d.is_private; })
+						? '<p class="zib-doc-note">A Private document goes as a link that stops working on the day shown in the email.</p>' : '');
+				}
+				if (docsList) {
+					docsList.addEventListener('change', function (e) {
+						var sel = e.target.closest ? e.target.closest('.zib-doc-how') : null; if (!sel) { return; }
+						var d = docs[parseInt(sel.closest('.zib-doc').getAttribute('data-i'), 10)]; if (!d) { return; }
+						if (sel.value === 'attach' && !d.is_private) { d.how = 'attach'; } else { d.how = 'link'; d.days = sel.value === 'link30' ? 30 : 14; }
+						// the "too big" notes depend on every row's choice: draw again, keep focus on this choice
+						var at = sel.closest('.zib-doc').getAttribute('data-i');
+						renderDocs();
+						var again = docsList.querySelector('.zib-doc[data-i="' + at + '"] .zib-doc-how'); if (again) { again.focus(); }
+					});
+					docsList.addEventListener('click', function (e) {
+						var x = e.target.closest ? e.target.closest('.zib-doc-x') : null; if (!x) { return; }
+						docs.splice(parseInt(x.closest('.zib-doc').getAttribute('data-i'), 10), 1);
+						renderDocs();
+						if (vBtn) { vBtn.focus(); } // never leave focus on the page
+					});
+				}
+				renderDocs();
+				var vBtn = read.querySelector('#zib-c-vault'), vPick = read.querySelector('#zib-vpick');
+				var vQ = vPick ? vPick.querySelector('.zib-vp-q') : null, vRes = vPick ? vPick.querySelector('.zib-vp-res') : null;
+				var vTimer = null, vSeq = 0, vItems = [];
+				function vSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : (n > 0 ? Math.max(1, Math.round(n / 1024)) + ' KB' : ''); }
+				function vSearch() {
+					var q = (vQ.value || '').trim();
+					if (q.length < 2) { vRes.innerHTML = ''; return; }
+					var seq = ++vSeq;
+					ZDZ.ui.loading(vRes, 'Searching the Vault…');
+					api('/vault/find?q=' + encodeURIComponent(q), 'GET').then(function (r) {
+						if (seq !== vSeq) { return; }
+						if (r && r.max_total > 0) { maxTotal = r.max_total; }
+						if (!r || r.vault === false) { vRes.innerHTML = '<p class="zib-vp-msg">The Knowledge Vault isn’t available.</p>'; return; }
+						vItems = (r.items || []);
+						if (!vItems.length) { vRes.innerHTML = '<p class="zib-vp-msg">No document you can open matches “' + esc(q) + '”.</p>'; return; }
+						vRes.innerHTML = vItems.map(function (it, i) {
+							return '<button type="button" class="zib-vp-item" data-i="' + i + '"><span class="zib-vp-t">' + esc(it.title || it.name || 'Document') + '</span>' +
+								(it.is_private ? ' <span class="zib-doc-priv">Private</span>' : '') +
+								'<span class="zib-vp-m">' + esc(vSize(it.size)) + '</span></button>';
+						}).join('');
+					}).catch(function (err) {
+						if (seq !== vSeq) { return; }
+						vRes.innerHTML = '<p class="zib-vp-msg">' + esc('Couldn’t search the Vault.' + (why(err) || ' Try again.')) + '</p>';
+					});
+				}
+				if (vBtn && vPick) {
+					vBtn.addEventListener('click', function () {
+						var open = vPick.classList.toggle('zib-hide') === false;
+						vBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+						if (open && vQ) { vQ.focus(); }
+					});
+					vQ.addEventListener('input', function () { clearTimeout(vTimer); vTimer = setTimeout(vSearch, 300); });
+					vQ.addEventListener('keydown', function (e) {
+						if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); vPick.classList.add('zib-hide'); vBtn.setAttribute('aria-expanded', 'false'); vBtn.focus(); }
+					});
+					vRes.addEventListener('click', function (e) {
+						var b = e.target.closest ? e.target.closest('.zib-vp-item') : null; if (!b) { return; }
+						var it = vItems[parseInt(b.getAttribute('data-i'), 10)]; if (!it) { return; }
+						if (!addDoc(it)) { status.textContent = docs.length >= 5 ? 'Five documents is the most one email can carry.' : 'That document is already on this email.'; status.className = 'zib-c-status zib-c-err'; return; }
+						renderDocs();
+						vSeq++; clearTimeout(vTimer); // a search still on its way must not draw into the closed picker
+						vPick.classList.add('zib-hide'); vBtn.setAttribute('aria-expanded', 'false'); vQ.value = ''; vRes.innerHTML = '';
+						var sel = docsList && docsList.querySelector('.zib-doc[data-i="' + (docs.length - 1) + '"] .zib-doc-how');
+						if (sel) { sel.focus(); } else { vBtn.focus(); } // never leave focus on the page
+					});
+				}
 
 				var status = read.querySelector('.zib-c-status');
+				readerToTop(); // again now the form is in place (see openMsg)
+				read.querySelector('#zib-c-cancel').addEventListener('click', function () { if (isNew) { returnToList(); } else { openMsg(opts.id); } });
+
+				status = read.querySelector('.zib-c-status');
 				if (opts.error) { status.textContent = opts.error; status.className = 'zib-c-status zib-c-err'; }
 
 				read.querySelector('#zib-c-send').addEventListener('click', function () {
@@ -919,64 +1161,105 @@
 					var subj = (read.querySelector('.zib-c-subj') || {}).value || '';
 					if ((isNew || isForward) && !to.trim()) { status.textContent = 'Add at least one recipient.'; status.className = 'zib-c-status zib-c-err'; return; }
 					if ((toChips && toChips.invalid()) || (ccChips && ccChips.invalid())) { status.textContent = 'Check the highlighted address(es).'; status.className = 'zib-c-status zib-c-err'; return; }
-					if (isReply && !body.trim()) { status.textContent = 'Write a message first.'; status.className = 'zib-c-status zib-c-err'; return; }
+					if (isReply && !body.trim() && !docs.length) { status.textContent = 'Write a message first.'; status.className = 'zib-c-status zib-c-err'; return; }
+					var sentDocs = docs.map(function (d) { return { id: d.id, how: d.how, days: d.days }; });
+					var keptDocs = docs.slice();
 					// INV-SEND stays explicit — but via a non-blocking Undo window, not a modal confirm.
-					sendWithUndo({ mode: mode, id: opts.id, all: (mode === 'replyall'), to: to, cc: cc, subj: subj, body: body },
-						function restore(err) { openCompose({ mode: mode, id: opts.id, m: m, prefill: { to: to, cc: cc, subj: subj, body: body }, error: err }); });
+					sendWithUndo({ mode: mode, id: opts.id, all: (mode === 'replyall'), to: to, cc: cc, subj: subj, body: body, docs: sentDocs },
+						function restore(err) { openCompose({ mode: mode, id: opts.id, m: m, prefill: { to: to, cc: cc, subj: subj, body: body, docs: keptDocs }, error: err }); });
 				});
 			}
 
 			// Optimistic send: collapse to a "Sending… / Undo" panel, fire after a short window.
+			/* the panel's working sign is the kit's loader (its label counts
+			   down), not a private spinner. A failed send goes back to the draft with the reason: a reason
+			   the server names keeps its own words; anything else is "Couldn’t send." plus the kit's
+			   sentence (no signal, signed out, server trouble). */
 			function sendWithUndo(p, restore) {
-				var SECS = 5, undone = false, remain = SECS, tick = null, timer = null;
+				var SECS = 5, undone = false, fired = false, remain = SECS, tick = null, timer = null;
 				read.innerHTML =
 					'<div class="zib-rd"><div class="zib-sendpending">' +
-						'<span class="zib-spin" aria-hidden="true"></span>' +
-						'<span class="zib-sp-msg">Sending in <b class="zib-sp-n">' + SECS + '</b>s…</span>' +
+						'<div class="zib-sp-load"></div>' +
 						'<button type="button" class="zib-btn zib-linkbtn" id="zib-undo">Undo</button>' +
 						'<button type="button" class="zib-btn zib-linkbtn" id="zib-sendnow">Send now</button>' +
 					'</div></div>';
-				var nEl = read.querySelector('.zib-sp-n');
-				tick = setInterval(function () { remain--; if (nEl) { nEl.textContent = Math.max(0, remain); } }, 1000);
+				var label = function (n) { return 'Sending in ' + n + ' s…'; };
+				var ld = ZDZ.ui.loading(read.querySelector('.zib-sp-load'), label(SECS));
+				tick = setInterval(function () { remain--; ld.label(label(Math.max(0, remain))); }, 1000);
 				function cleanup() { clearInterval(tick); clearTimeout(timer); }
 				function fire() {
-					if (undone) { return; }
+					if (undone || fired) { return; }
+					fired = true;
 					cleanup();
 					var pend = read.querySelector('.zib-sendpending');
-					if (pend) { pend.innerHTML = '<span class="zib-spin" aria-hidden="true"></span> <span class="zib-sp-msg">Sending…</span>'; }
+					if (pend) { pend.innerHTML = '<div class="zib-sp-load"></div>'; ZDZ.ui.loading(pend.querySelector('.zib-sp-load'), 'Sending…'); }
 					var req;
-					if (p.mode === 'reply' || p.mode === 'replyall') { req = api('/message/' + (p.id | 0) + '/reply', 'POST', { comment: p.body, all: p.all }); }
-					else if (p.mode === 'forward') { req = api('/message/' + (p.id | 0) + '/forward', 'POST', { to: p.to, comment: p.body }); }
-					else { req = api('/send', 'POST', { to: p.to, cc: p.cc, subject: p.subj, body: p.body }); }
+					// Vault documents ride along as docs:[{id, how, days}] - the server's one compose send.
+					var hasDocs = !!(p.docs && p.docs.length);
+					var withDocs = function (o) { if (hasDocs) { o.docs = p.docs; } return o; };
+					var longOpt = hasDocs ? { timeout: 120000 } : null;
+					if (p.mode === 'reply' || p.mode === 'replyall') { req = api('/message/' + (p.id | 0) + '/reply', 'POST', withDocs({ comment: p.body, all: p.all }), longOpt); }
+					else if (p.mode === 'forward') { req = api('/message/' + (p.id | 0) + '/forward', 'POST', withDocs({ to: p.to, comment: p.body }), longOpt); }
+					else { req = api('/send', 'POST', withDocs({ to: p.to, cc: p.cc, subject: p.subj, body: p.body }), longOpt); }
 					req.then(function (res) {
 						if (res && res.ok) {
 							read.innerHTML = '<div class="zib-rd"><div class="zib-sent">✓ Sent</div>' +
 								'<button type="button" class="zib-btn zib-back" id="zib-s-done">← Back to mail</button></div>';
 							read.querySelector('#zib-s-done').addEventListener('click', showList);
 						} else {
-							var reason = (res && (res.reason || (res.data && res.data.reason))) || 'error';
-							var msg = 'Couldn’t send. Please try again.';
-							if (reason === 'reconnect' || reason === 'auth') { msg = 'Sending isn’t enabled yet — open ⚙ and reconnect to grant send permission.'; }
-							else if (reason === 'no-recipients') { msg = 'No valid recipients.'; }
-							else if (reason === 'empty') { msg = 'Nothing to send.'; }
-							else if (reason === 'busy') { msg = 'Mail server is busy — try again in a moment.'; }
-							restore(msg);
+							restore(sendError(res && (res.reason || (res.data && res.data.reason)), null));
 						}
-					}).catch(function () { restore('Couldn’t send. Please try again.'); });
+					}).catch(function (err) {
+						// With documents, a server error with no reason (a gateway's 504 page, the server running
+						// out of time) or a signal lost after the request left may follow a delivery.
+						var rs = reasonOf(err);
+						if (hasDocs && !rs && err && (err.kind === 'server' || err.kind === 'offline' || err.kind === 'response' || err.kind === 'timeout')) { rs = 'unsure'; }
+						restore(sendError(rs, err));
+					});
 				}
 				timer = setTimeout(fire, SECS * 1000);
-				read.querySelector('#zib-undo').addEventListener('click', function () { undone = true; cleanup(); restore(''); });
+				read.querySelector('#zib-undo').addEventListener('click', function () { if (fired) { return; } undone = true; cleanup(); restore(''); });
 				read.querySelector('#zib-sendnow').addEventListener('click', fire);
 			}
+			function sendError(reason, err) {
+				// no answer in time, or the mail server failed on the very last step - it may have
+				// gone. Never "try again" here: that is how a customer gets the email twice.
+				if (reason === 'unsure' || (err && err.kind === 'timeout')) { return 'It may have gone. Check Sent before sending again.'; }
+				if (reason === 'too-slow') { return 'That took too long to prepare, so nothing was sent. Send fewer documents, or send big ones as links.'; }
+				if (reason === 'reconnect' || reason === 'auth') { return 'Sending isn’t enabled yet — open ⚙ and reconnect to grant send permission.'; }
+				if (reason === 'no-recipients') { return 'No valid recipients.'; }
+				if (reason === 'empty') { return 'Nothing to send.'; }
+				if (reason === 'busy') { return 'Mail server is busy — try again in a moment.'; }
+				if (reason === 'vault-missing') { return 'The Knowledge Vault isn’t available right now, so the documents couldn’t go.'; }
+				if (reason === 'doc-not-found') { return 'A Vault document couldn’t be read. Remove it, add it again and send.'; }
+				if (reason === 'doc-no-share') { return 'You can’t share one of those documents outside the business.'; }
+				// A write refused for this mailbox (403 zib_write_denied, "Action failed.") is not a sign-in problem.
+				if (err && err.kind === 'auth' && err.status === 403) { return 'Couldn’t send from this mailbox. Please try again, or ask an admin.'; }
+				return 'Couldn’t send.' + (why(err) || ' Please try again.');
+			}
+
+			/* the chat's "Open in Email" hands over a new email to finish here (Bridge.loadApp('inbox',
+			   {zibHandoff}) → zdz_app_launch). The server gives it once, to this person only; nothing is sent until Send. */
+			card.__zibHandoff = function (token) {
+				if (!connCanSend) { ZDZ.ui.toast('Sending isn’t enabled yet — open ⚙ and reconnect to grant send permission.'); return; }
+				api('/compose/handoff/' + token, 'POST').then(function (r) {
+					openCompose({ mode: 'new', prefill: { to: r.to || '', cc: r.cc || '', subj: r.subject || '', body: r.body || '', docs: r.docs || [] },
+						error: r.docs_missing ? 'A document from the chat couldn’t be added here. Add it again with Vault document.' : '' });
+				}).catch(function (err) { ZDZ.ui.toastError(err); });
+			};
 
 			renderShell();
 			loadFolders();
+			if (card.__zibPendingHandoff) { var pendTok = card.__zibPendingHandoff; card.__zibPendingHandoff = ''; card.__zibHandoff(pendTok); }
 		}
 
 		function load() {
-			card.innerHTML = '<div class="zib-loading">Loading your email connection…</div>';
-			api('/connection', 'GET').then(render).catch(function () {
-				card.innerHTML = '<p class="zib-sub">Couldn’t load your email connection. Reload the page to try again.</p>';
+			ZDZ.ui.loading(card, 'Loading your email connection…');
+			api('/connection', 'GET').then(render).catch(function (err) {
+				// say why (the kit's sentence) and offer Try again right here.
+				card.innerHTML = '<p class="zib-sub zib-err" role="alert">' + esc('Couldn’t load your email connection.' + (why(err) || ' Reload the page to try again.')) + '</p>' +
+					'<button type="button" class="zib-btn zib-retry" id="zib-conn-retry">Try again</button>';
+				var rb = card.querySelector('#zib-conn-retry'); if (rb) { rb.addEventListener('click', load); }
 			});
 		}
 
@@ -1012,6 +1295,18 @@
 		});
 		mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
 	} catch (e) {}
+
+	// "Open in Email" from the chat. The shell's launch event names this app and carries the token;
+	// a card that is not ready yet keeps it until its mail view is up.
+	document.addEventListener('zdz_app_launch', function (ev) {
+		var d = ev && ev.detail;
+		if (!d || d.appId !== 'inbox' || !d.options) { return; }
+		var tok = String(d.options.zibHandoff || '');
+		if (!/^[a-f0-9]{32}$/.test(tok)) { return; }
+		var c = document.querySelector('#zib-card, .zib-card');
+		if (!c) { return; }
+		if (typeof c.__zibHandoff === 'function') { c.__zibHandoff(tok); } else { c.__zibPendingHandoff = tok; }
+	});
 
 	// Clean the ?zib_connected=… flag the OAuth round-trip lands on (once).
 	try {

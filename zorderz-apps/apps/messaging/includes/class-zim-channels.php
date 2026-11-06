@@ -8,11 +8,14 @@
  * Membership is per-user rows in wp_zim_members referencing conversation_id.
  *
  * SEEDING CONTRACT (activation-time):
- *   - #announcements — admin-post-only, auto-joins ALL users with zdz_access_app.
- *   - #sales         — members: zdz_sales + admins.
- *   - #ops           — members: zdz_operator + admins.
- *   - #mfg           — members: zdz_mfg + admins.
- *   - #techs         — members: zdz_tech + admins.
+ *   - Core seeds ONE channel, #announcements: administrators post, everyone
+ *     with Messages reads (the shared device included, read-only). Its read-only
+ *     notice and the admin-post-only flag are Core behaviour that need it.
+ *   - Any other channel is the business's: an administrator creates it
+ *     (Messaging -> Channels, or + in the widget), or the business's Identity
+ *     Pack lists it under org.yml `messaging.channels` (stored as the option
+ *     zim_default_channels), or a plugin adds it on `zim_default_channels`.
+ *     Each listed channel auto-joins the people holding its roles.
  *
  * Idempotent: re-running create_default() skips channels that already exist.
  *
@@ -32,55 +35,170 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZIM_Channels {
 
-	/**
-	 * Default channel seed list. Slug → role whitelist (empty = everyone).
-	 *
-	 * Admin-post-only flag (is_announcements) gates write access in
-	 * ZIM_Messages::post().
-	 */
-	public static function default_seed_spec() {
-		// The default channel set follows the Core role slugs (sales / ops / mfg /
-		// tech). A business with a different org shape overrides it via the
-		// `zim_default_channels` filter (or an org pack) — e.g. a firm with no fab
-		// shop drops #mfg. This is a Core default, not baked-in tenant identity.
-		return (array) apply_filters( 'zim_default_channels', array(
+	/** The option an Identity Pack writes: the business's own channels (see sanitize_channel_specs()). */
+	const OPT_CHANNELS = 'zim_default_channels';
+
+	/** Roles a listed channel may name: Core's role slugs and WordPress's administrator. */
+	const ROLES = array( 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'zdz_general' );
+
+	/** Core's one channel: everyone reads, administrators post. */
+	public static function core_seed_spec() {
+		return array(
 			array(
 				'slug'             => 'announcements',
 				'name'             => '#announcements',
-				'description'      => 'Company-wide announcements. Admins post; everyone reads.',
+				'description'      => 'Announcements for everyone. Administrators post; everyone reads.',
 				'is_announcements' => 1,
-				'roles'            => array(), // everyone with zdz_access_app
+				'roles'            => array(),
+				'everyone'         => true,    // everyone with Messages
 			),
-			array(
-				'slug'        => 'sales',
-				'name'        => '#sales',
-				'description' => 'Sales team + admins.',
-				'roles'       => array( 'zdz_sales', 'zdz_admin', 'zdz_owner', 'administrator' ),
-			),
-			array(
-				'slug'        => 'ops',
-				'name'        => '#ops',
-				'description' => 'Operations and service coordination.',
-				'roles'       => array( 'zdz_operator', 'zdz_admin', 'zdz_owner', 'administrator' ),
-			),
-			array(
-				'slug'        => 'mfg',
-				'name'        => '#mfg',
-				'description' => 'Manufacturing and shop.',
-				'roles'       => array( 'zdz_mfg', 'zdz_admin', 'zdz_owner', 'administrator' ),
-			),
-			array(
-				'slug'        => 'techs',
-				'name'        => '#techs',
-				'description' => 'Field techs.',
-				'roles'       => array( 'zdz_tech', 'zdz_admin', 'zdz_owner', 'administrator' ),
-			),
-		) );
+		);
 	}
 
 	/**
-	 * Seed the five default channels and auto-join users by role.
-	 * Runs on plugin activation. Idempotent.
+	 * The channels to seed: Core's, then the business's (option zim_default_channels, written by an Identity Pack),
+	 * then the `zim_default_channels` filter. A listed slug already in the list is skipped (Core's stays as it is).
+	 */
+	public static function default_seed_spec() {
+		$specs = self::core_seed_spec();
+		$seen  = array( 'announcements' => true );
+		$own   = function_exists( 'get_option' ) ? get_option( self::OPT_CHANNELS, array() ) : array();
+		foreach ( self::sanitize_channel_specs( is_array( $own ) ? $own : array() ) as $c ) {
+			if ( ! isset( $seen[ $c['slug'] ] ) ) {
+				$seen[ $c['slug'] ] = true;
+				$specs[]            = $c;
+			}
+		}
+		$f = apply_filters( 'zim_default_channels', $specs );
+		return is_array( $f ) ? self::sanitize_channel_specs( $f ) : $specs;
+	}
+
+	/**
+	 * A list of channel specs, cleaned. Each: slug (a-z0-9-, at most 40), name ("#slug" when missing), description
+	 * (one line), is_announcements (administrators post), roles (Core role slugs only) or everyone (true). A channel
+	 * whose roles are all unknown is DROPPED, never widened to everyone: "everyone" must be said. At most 20.
+	 *
+	 * @return array[] [ slug, name, description, is_announcements, roles, everyone ]
+	 */
+	public static function sanitize_channel_specs( array $list ) {
+		$out  = array();
+		$seen = array();
+		foreach ( $list as $c ) {
+			if ( ! is_array( $c ) ) {
+				continue;
+			}
+			$slug = strtolower( (string) preg_replace( '/[^a-z0-9-]+/i', '-', trim( (string) ( $c['slug'] ?? '' ), "# \t" ) ) );
+			$slug = trim( substr( $slug, 0, 40 ), '-' );
+			if ( '' === $slug || isset( $seen[ $slug ] ) ) {
+				continue;
+			}
+			$everyone = ! empty( $c['everyone'] ) || ( array_key_exists( 'roles', $c ) && array() === $c['roles'] && ! empty( $c['is_announcements'] ) );
+			$roles    = array();
+			foreach ( (array) ( $c['roles'] ?? array() ) as $r ) {
+				$r = strtolower( trim( (string) $r ) );
+				if ( in_array( $r, self::ROLES, true ) && ! in_array( $r, $roles, true ) ) {
+					$roles[] = $r;
+				}
+			}
+			if ( ! $everyone && ! $roles ) {
+				continue;   // unknown roles: refuse, never "everyone"
+			}
+			$name = trim( (string) preg_replace( '/[\r\n\t]+/', ' ', wp_strip_all_tags( (string) ( $c['name'] ?? '' ) ) ) );
+			$desc = trim( (string) preg_replace( '/[\r\n\t]+/', ' ', wp_strip_all_tags( (string) ( $c['description'] ?? '' ) ) ) );
+			$out[]          = array(
+				'slug'             => $slug,
+				'name'             => '' !== $name ? mb_substr( $name, 0, 60 ) : '#' . $slug,
+				'description'      => mb_substr( $desc, 0, 200 ),
+				'is_announcements' => ! empty( $c['is_announcements'] ) ? 1 : 0,
+				'roles'            => $everyone ? array() : $roles,
+				'everyone'         => $everyone,
+			);
+			$seen[ $slug ] = true;
+			if ( count( $out ) >= 20 ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/* ── Identity Pack: org.yml messaging.channels ──────────────────────── */
+
+	/** Register as a consumer of the business's org.yml (ZDZ_Identity_Pack). */
+	public static function pack_consumer( $consumers ) {
+		$consumers = is_array( $consumers ) ? $consumers : array();
+		$consumers['messaging-channels'] = array(
+			'files'    => array( 'org' ),
+			'preview'  => array( __CLASS__, 'pack_preview' ),
+			'apply'    => array( __CLASS__, 'pack_apply' ),
+			'snapshot' => array( __CLASS__, 'pack_snapshot' ),
+			'restore'  => array( __CLASS__, 'pack_restore' ),
+		);
+		return $consumers;
+	}
+
+	/**
+	 * The channels a pack lists, cleaned, or null when it says nothing:
+	 *   org.yml
+	 *     messaging:
+	 *       channels:
+	 *         - { slug: crew, name: "#crew", description: "...", roles: [ zdz_tech, zdz_admin ] }
+	 *         - { slug: all-hands, everyone: true }
+	 */
+	public static function pack_channels( array $files ) {
+		$org = $files['org'] ?? null;
+		if ( ! is_array( $org ) || ! isset( $org['messaging'] ) || ! is_array( $org['messaging'] ) || ! array_key_exists( 'channels', $org['messaging'] ) ) {
+			return null;
+		}
+		$list = array_values( array_filter( self::sanitize_channel_specs( (array) $org['messaging']['channels'] ), function ( $c ) {
+			return 'announcements' !== $c['slug'];   // Core's own channel is not the pack's to change
+		} ) );
+		return $list;
+	}
+
+	public static function pack_preview( array $files ) {
+		$new = self::pack_channels( $files );
+		if ( null === $new ) {
+			return array();
+		}
+		$old  = get_option( self::OPT_CHANNELS, array() );
+		$was  = implode( ', ', wp_list_pluck( self::sanitize_channel_specs( is_array( $old ) ? $old : array() ), 'name' ) );
+		$will = implode( ', ', wp_list_pluck( $new, 'name' ) );
+		return $was === $will ? array() : array( array(
+			'file' => 'org',
+			'path' => 'messaging.channels',
+			'from' => '' !== $was ? $was : '(none)',
+			'to'   => '' !== $will ? $will : '(none)',
+		) );
+	}
+
+	/** Store the list and create the channels it names (existing channels and their messages are never touched). */
+	public static function pack_apply( array $files, $slug = '' ) {
+		$new = self::pack_channels( $files );
+		if ( null === $new ) {
+			return array( 'org: no messaging.channels block, channels left as they were.' );
+		}
+		update_option( self::OPT_CHANNELS, $new, false );
+		self::seed_defaults();
+		return array( sprintf( 'Messaging channels applied (%d listed). Reverting stops seeding them; channels already created, and their messages, stay until an administrator deletes them.', count( $new ) ) );
+	}
+
+	public static function pack_snapshot() {
+		$v = get_option( self::OPT_CHANNELS, null );
+		return is_array( $v ) ? $v : null;
+	}
+
+	public static function pack_restore( $kept ) {
+		if ( is_array( $kept ) ) {
+			update_option( self::OPT_CHANNELS, $kept, false );
+		} else {
+			delete_option( self::OPT_CHANNELS );
+		}
+	}
+
+	/**
+	 * Seed the channels in default_seed_spec() and auto-join users by role.
+	 * Runs on activation, on a version change and when an Identity Pack lists
+	 * channels. Idempotent: an existing channel is never changed, only joined.
 	 */
 	public static function seed_defaults() {
 		foreach ( self::default_seed_spec() as $spec ) {
@@ -299,6 +417,10 @@ class ZIM_Channels {
 
 	public static function remove_member( $conversation_id, $user_id ) {
 		global $wpdb;
+		// Their document shares from this conversation end with their membership.
+		if ( class_exists( 'ZIM_Doc_Shares' ) ) {
+			ZIM_Doc_Shares::revoke_for_grantee( (int) $conversation_id, (int) $user_id, (int) get_current_user_id() );
+		}
 		$wpdb->delete(
 			$wpdb->prefix . 'zim_members',
 			array(

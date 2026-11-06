@@ -12,8 +12,8 @@
  *
  *   INBOUND (this class):
  *     The recipient replies to that email. The Knowledge Vault's Microsoft-Graph
- *     poller (TSKV_Mailbox::poll → TSKV_Email_Ingest::ingest) is the SINGLE reader
- *     of the shared App@ mailbox. Before it turns a message into a vault document
+ *     poller (ZKV_Mailbox::poll → ZKV_Email_Ingest::ingest) is the SINGLE reader
+ *     of the business's shared app mailbox. Before it turns a message into a vault document
  *     it asks us — message_is_dm_reply($msg) — and if we claim it, hands the raw
  *     Graph message to handle_graph_message($msg). We verify the token, confirm
  *     the sender IS the person the DM was addressed to, strip the quoted history,
@@ -25,7 +25,7 @@
  *     vault's poll is authoritative and hands DM replies off to us. If the vault
  *     plugin is INACTIVE, self_poll() takes over on the same 5-minute cadence but
  *     claims ONLY app+dm-* messages, leaving everything else untouched. The two
- *     never run at once (self_poll no-ops whenever TSKV_Mailbox is active).
+ *     never run at once (self_poll no-ops whenever ZKV_Mailbox is active).
  *
  * TOKEN (INV-Token — opaque, signed, constant-time, single-purpose):
  *     base64url(payload) . '.' . base64url( HMAC-SHA256(payload, secret) )
@@ -34,9 +34,9 @@
  *               NON-autoloaded, server-side only, never localized / returned).
  *     The token proves routing; it is NOT a capability — the sender must still
  *     match the intended recipient, and ZIM_Messages::post() re-checks write
- *     permission (kiosk refused) server-side (INV-1 / INV-10).
+ *     permission (kiosk refused) server-side.
  *
- * HONEST OUTPUT (INV-12): a reply that cannot be routed is dropped and logged;
+ * HONEST OUTPUT: a reply that cannot be routed is dropped and logged;
  *     we never fabricate a delivery and never send backscatter to strangers.
  *
  * @since 1.1.0
@@ -109,7 +109,7 @@ class ZIM_Email_Reply {
 	 * Bridge config. Defaults derive from the Knowledge Vault mailbox config so
 	 * the mailbox is configured in ONE place (the vault Email-In screen):
 	 *   mailbox_base = local part of the vault mailbox (e.g. "app")
-	 *   mail_domain  = domain of the vault mailbox (e.g. "the marketing site")
+	 *   mail_domain  = domain of the vault mailbox (e.g. "example.com")
 	 *
 	 * @return array{enabled:bool,mailbox_base:string,mail_domain:string}
 	 */
@@ -121,8 +121,8 @@ class ZIM_Email_Reply {
 
 		$base   = '';
 		$domain = '';
-		if ( class_exists( 'TSKV_Mailbox' ) ) {
-			$mb = TSKV_Mailbox::get_config();
+		if ( class_exists( 'ZKV_Mailbox' ) ) {
+			$mb = ZKV_Mailbox::get_config();
 			$addr = is_array( $mb ) ? (string) ( $mb['mailbox'] ?? '' ) : '';
 			if ( '' !== $addr && false !== strpos( $addr, '@' ) ) {
 				list( $base, $domain ) = explode( '@', $addr, 2 );
@@ -300,7 +300,7 @@ class ZIM_Email_Reply {
 		if ( ! $recipient || empty( $recipient->user_email ) ) {
 			return self::fail( 'token recipient is not a WP user' );
 		}
-		if ( strtolower( $from_email ) !== strtolower( (string) $recipient->user_email ) ) {
+		if ( ! self::sender_is_recipient( $from_email, (string) $recipient->user_email ) ) {
 			// Someone other than the intended recipient replied (or a forward).
 			// Never post as them; drop it.
 			return self::fail( 'reply sender ' . $from_email . ' != intended recipient' );
@@ -346,6 +346,16 @@ class ZIM_Email_Reply {
 		);
 	}
 
+	/**
+	 * Is the reply's sender the person the message was e-mailed to? Both addresses present and equal, ignoring case.
+	 * The token proves routing only; this is what stops a forwarded e-mail being posted as its recipient.
+	 */
+	public static function sender_is_recipient( $from_email, $recipient_email ) {
+		$a = strtolower( trim( (string) $from_email ) );
+		$b = strtolower( trim( (string) $recipient_email ) );
+		return '' !== $a && '' !== $b && false !== strpos( $a, '@' ) && hash_equals( $b, $a );
+	}
+
 	// ──────────────────────────────────────────────────────────────
 	//  Self-poll fallback (only when the vault mailbox is NOT active)
 	// ──────────────────────────────────────────────────────────────
@@ -357,12 +367,12 @@ class ZIM_Email_Reply {
 	 */
 	public static function self_poll() {
 		// Primary path owns the inbox whenever it's active — stand down.
-		if ( class_exists( 'TSKV_Mailbox' ) && TSKV_Mailbox::is_active() ) {
+		if ( class_exists( 'ZKV_Mailbox' ) && ZKV_Mailbox::is_active() ) {
 			return;
 		}
 		// Need the Graph transport (it lives in the vault plugin). If the vault
 		// plugin is absent entirely, we have no transport → nothing to do.
-		if ( ! class_exists( 'TSKV_Mailbox' ) ) {
+		if ( ! class_exists( 'ZKV_Mailbox' ) ) {
 			return;
 		}
 		if ( ! self::outbound_ready() ) {
@@ -376,7 +386,7 @@ class ZIM_Email_Reply {
 		}
 		update_option( self::SELF_POLL_TS_OPT, time(), false );
 
-		$list = TSKV_Mailbox::list_unread();
+		$list = ZKV_Mailbox::list_unread();
 		if ( empty( $list['ok'] ) || empty( $list['messages'] ) ) {
 			return;
 		}
@@ -398,14 +408,14 @@ class ZIM_Email_Reply {
 				continue;
 			}
 			if ( '' !== $imid && in_array( $imid, $seen, true ) ) {
-				TSKV_Mailbox::mark_read( $mid );
+				ZKV_Mailbox::mark_read( $mid );
 				continue;
 			}
 
 			$r = self::handle_graph_message( $msg );
-			TSKV_Mailbox::mark_read( $mid ); // claim it either way (it WAS a DM reply)
+			ZKV_Mailbox::mark_read( $mid ); // claim it either way (it WAS a DM reply)
 			if ( empty( $r['ok'] ) ) {
-				TSKV_Mailbox::file_message( $mid, self::FOLDER_FAILED );
+				ZKV_Mailbox::file_message( $mid, self::FOLDER_FAILED );
 			}
 
 			if ( '' !== $imid ) {
@@ -581,7 +591,7 @@ class ZIM_Email_Reply {
 
 	/**
 	 * Minimal HTML→text for reply bodies (mirrors the vault's approach, kept
-	 * local so this class has no hard dependency on TSKV_Email_Ingest).
+	 * local so this class has no hard dependency on ZKV_Email_Ingest).
 	 */
 	public static function html_to_text( $html ) {
 		$text = (string) $html;

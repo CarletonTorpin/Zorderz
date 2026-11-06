@@ -41,7 +41,7 @@ class ZKV_Transcript {
 	/** A label must speak on at least this many lines to count as a speaker. */
 	const MIN_SPEAKER_LINES = 2;
 
-	/** user_meta key holding extra names that resolve to a user ("CJ, Carl"). */
+	/** user_meta key holding extra names that resolve to a user ("AJ, Al"). */
 	const ALIAS_META = 'ts_transcript_aliases';
 
 	/**
@@ -67,7 +67,7 @@ class ZKV_Transcript {
 	 *   - WebVTT <v Speaker> voice tags are converted to "Speaker: " prefixes
 	 *     BEFORE parsing (the stock parser strip_tags()es the name away).
 	 *   - Email-sourced docs are sliced to the body BELOW the provenance
-	 *     separator, so "Forwarded by: Ron <…>" header lines can neither
+	 *     separator, so "Forwarded by: Robin <…>" header lines can neither
 	 *     pollute speaker detection nor leak into excerpts.
 	 *
 	 * @param array $doc wp_zkv_documents row.
@@ -165,7 +165,7 @@ class ZKV_Transcript {
 		if ( in_array( $ext, $transcript_exts, true )
 		     || in_array( $mime, array( 'text/vtt', 'application/x-subrip' ), true ) ) {
 			$raw = (string) file_get_contents( $path );
-			// Preserve WebVTT voice tags as speaker prefixes: <v Ron>hi</v> → Ron: hi
+			// Preserve WebVTT voice tags as speaker prefixes: <v Robin>hi</v> → Robin: hi
 			$raw = preg_replace( '/<v(?:\.[^\s>]*)?\s+([^>]+)>/i', '$1: ', $raw );
 			$raw = str_ireplace( '</v>', '', $raw );
 			return ZKV_Indexer::parse_transcript( $raw, $ext ?: 'vtt' );
@@ -240,7 +240,7 @@ class ZKV_Transcript {
 		$users = get_users( array( 'fields' => 'all' ) );
 		foreach ( $users as $user ) {
 			$roles = (array) $user->roles;
-			if ( in_array( 'zdz_general', $roles, true ) ) { continue; } // kiosk never a party
+			if ( in_array( 'zdz_general', $roles, true ) || ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_shared_device( $user ) ) ) { continue; } // the shared device is never a party
 			$uid   = (int) $user->ID;
 			$names = array(
 				(string) $user->display_name,
@@ -657,7 +657,7 @@ class ZKV_Transcript {
 		if ( ! $user ) {
 			return array( 'ok' => false, 'error' => 'no such user' );
 		}
-		if ( in_array( 'zdz_general', (array) $user->roles, true ) ) {
+		if ( in_array( 'zdz_general', (array) $user->roles, true ) || ( class_exists( 'ZKV_ACL' ) && ZKV_ACL::is_shared_device( $user ) ) ) {
 			return array( 'ok' => false, 'error' => 'the kiosk account can never be a party' );
 		}
 		$ok = self::grant_party( $doc_id, $user_id, $label, 'manual', $actor_uid );

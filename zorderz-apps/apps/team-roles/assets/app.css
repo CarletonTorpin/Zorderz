@@ -1,0 +1,206 @@
+/* Team Roles — the app's own styles, on the theme's tokens (light, dark, system and sunlight all come
+   from --sys-*; no color of this app's own). Buttons, sheets, toasts and loaders are the kit's.
+   Each level is a theme tint PAIR (background with its own foreground) and carries .zdz-pair, and also a mark and a word,
+   so the answer never rests on color alone. Group color: Team. Vermilion is never used here (reserved: "needs you"). */
+
+.zro-app, .zro-app *, .zro-form, .zro-form *, .zro-pick, .zro-pick * { box-sizing: border-box; }
+/* the variables also on the sheets' bodies and the pick menu: both are mounted on <body>, outside .zro-app */
+.zro-app, .zro-form, .zro-pick {
+	--zro-text: var(--sys-text, CanvasText);
+	--zro-muted: var(--sys-text-muted, GrayText);
+	--zro-line: var(--sys-border, GrayText);
+	--zro-surface: var(--sys-surface, Canvas);
+	--zro-band: var(--sys-bg-subtle, Canvas);
+	--zro-accent: var(--zdz-grp-team, var(--sys-brand, Highlight));
+	--zro-can-bg: var(--sys-tint-success-bg, Canvas);
+	--zro-can-fg: var(--sys-tint-success-fg, CanvasText);
+	--zro-learn-bg: var(--sys-tint-warning-bg, Canvas);
+	--zro-learn-fg: var(--sys-tint-warning-fg, CanvasText);
+	--zro-no-bg: var(--sys-tint-neutral-bg, Canvas);
+	--zro-no-fg: var(--sys-tint-neutral-fg, CanvasText);
+	--zro-err-fg: var(--sys-tint-error-fg, CanvasText);
+}
+.zro-app {
+	font-family: var(--sys-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+	font-size: 16px;
+	line-height: 1.45;
+	color: var(--zro-text);
+	padding: 12px 16px 20px;
+	max-width: 100%;
+}
+.zro-app p, .zro-app li, .zro-app label, .zro-app td, .zro-app th, .zro-app span { font-family: inherit; }
+.zro-app p { margin: 0 0 8px; color: var(--zro-text); }
+.zro-app button { font-family: inherit; }
+.zro-app [hidden] { display: none !important; }
+.zro-muted { color: var(--zro-muted); font-size: .9rem; }
+.zro-err { color: var(--zro-err-fg); }
+
+/* header */
+.zro-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.zro-app h2.zro-title { font-size: 1.35rem; line-height: 1.2; margin: 0; font-weight: 700; color: var(--zro-text); }
+.zro-scope { margin: 2px 0 0; font-size: .9rem; color: var(--zro-muted); }
+.zro-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zro-views { display: inline-flex; border: 1px solid var(--zro-line); border-radius: 12px; overflow: hidden; }
+.zro-views button { border: 0; background: transparent; color: var(--zro-text); padding: 0 14px; min-height: 40px; font-size: .95rem; cursor: pointer; }
+.zro-views button[aria-pressed="true"] { background: var(--zro-accent); color: var(--sys-text-inv, Canvas); font-weight: 600; }
+
+/* the legend */
+.zro-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 10px; padding: 0; list-style: none; font-size: .85rem; color: var(--zro-muted); }
+.zro-legend li { display: inline-flex; align-items: center; gap: 6px; color: var(--zro-muted); }
+
+/* a level mark: tint pair + glyph + word */
+.zro-mark { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 28px; padding: 2px 8px; border-radius: 8px; font-size: .82rem; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.zro-mark .zro-glyph { font-size: .95rem; line-height: 1; }
+.zro-mark--can { background: var(--zro-can-bg); color: var(--zro-can-fg); }
+.zro-mark--learning { background: var(--zro-learn-bg); color: var(--zro-learn-fg); }
+.zro-mark--cannot { background: var(--zro-no-bg); color: var(--zro-no-fg); }
+.zro-mark--unset { background: transparent; color: var(--zro-muted); border: 1px dashed var(--zro-line); font-weight: 400; }
+
+/* the grid: people down the side, abilities across the top; scrolls sideways inside its own box */
+.zro-gridwrap { overflow: auto; max-height: 72vh; border: 1px solid var(--zro-line); border-radius: 12px; background: var(--zro-surface); -webkit-overflow-scrolling: touch; }
+.zro-grid { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: .9rem; }
+/* The theme makes every table in a card a self-scrolling block capped at the card's width (.dash-widget-body table:
+   display:block; max-width:100% !important). That squeezed this grid and cut off the columns past the card. Here the
+   box around the grid is the scroller (so the header row and the person column can stick), so this one table opts out:
+   the more specific !important wins over the theme's. */
+.zro-app table.zro-grid { display: table !important; max-width: none !important; overflow: visible !important; height: auto; }
+.zro-app .zro-grid thead, .zro-app .zro-grid tbody, .zro-app .zro-grid tr { max-width: none; }
+.zro-grid th, .zro-grid td { border-bottom: 1px solid var(--zro-line); padding: 0; background: var(--zro-surface); color: var(--zro-text); }
+/* --sys-bg-subtle is see-through; a sticky cell needs a solid floor or scrolled columns show through it */
+.zro-grid thead th { position: sticky; z-index: 2; background-color: var(--zro-surface); background-image: linear-gradient(var(--zro-band), var(--zro-band)); font-weight: 600; text-align: left; vertical-align: bottom; }
+.zro-grid thead tr:first-child th { top: 0; height: 34px; padding: 6px 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--zro-muted); border-left: 1px solid var(--zro-line); }
+.zro-grid thead tr:nth-child(2) th { top: 34px; padding: 6px 6px 8px; width: 92px; min-width: 92px; max-width: 92px; font-size: .8rem; line-height: 1.25; white-space: normal; }
+.zro-grid thead tr:nth-child(2) th.zro-gstart, .zro-grid td.zro-gstart { border-left: 1px solid var(--zro-line); }
+.zro-grid .zro-corner, .zro-grid .zro-who { position: sticky; left: 0; z-index: 3; min-width: 168px; max-width: 200px; border-right: 1px solid var(--zro-line); }
+.zro-grid thead .zro-corner { z-index: 4; }
+.zro-grid tbody .zro-who { z-index: 1; padding: 6px 8px; }
+.zro-who-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; border: 0; background: transparent; color: var(--zro-text); text-align: left; cursor: pointer; padding: 0; font-size: .92rem; }
+.zro-who-btn:hover .zro-who-name { text-decoration: underline; }
+.zro-ini { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 4px; border-radius: 6px; border: 1px solid var(--zro-line); font-size: .7rem; font-weight: 700; color: var(--zro-muted); flex: 0 0 auto; }
+.zro-who-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zro-you { font-size: .75rem; color: var(--zro-muted); font-weight: 400; }
+.zro-cell { width: 92px; min-width: 92px; text-align: center; }
+.zro-cell-btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; border: 0; background: transparent; cursor: pointer; padding: 4px; }
+.zro-cell-btn[disabled] { cursor: default; }
+.zro-cell-btn:not([disabled]):hover { background: var(--zro-band); }
+.zro-cell-btn:focus-visible, .zro-seg button:focus-visible, .zro-who-btn:focus-visible, .zro-views button:focus-visible { outline: 3px solid var(--sys-focus, Highlight); outline-offset: -3px; }
+.zro-cell-btn .zro-noted { display: block; width: 6px; height: 6px; border-radius: 3px; background: currentColor; margin-left: 3px; opacity: .7; }
+.zro-grid tbody tr:last-child td, .zro-grid tbody tr:last-child th { border-bottom: 0; }
+.zro-grid tr.is-me .zro-who { box-shadow: inset 4px 0 0 var(--zro-accent); }
+
+/* one person at a time */
+.zro-person-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.zro-person-head select { font-size: 16px; min-height: 44px; max-width: 100%; flex: 1 1 220px; }
+.zro-group { margin: 0 0 14px; border: 1px solid var(--zro-line); border-radius: 12px; background: var(--zro-surface); overflow: hidden; }
+.zro-app h3.zro-group-title { margin: 0; padding: 8px 12px; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--zro-muted); background: var(--zro-band); font-weight: 600; }
+.zro-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border-top: 1px solid var(--zro-line); flex-wrap: wrap; }
+.zro-row:first-of-type { border-top: 0; }
+.zro-row-main { flex: 1 1 200px; min-width: 0; }
+.zro-row-label { font-weight: 600; color: var(--zro-text); }
+.zro-row-sub { display: block; font-size: .85rem; color: var(--zro-muted); overflow-wrap: anywhere; }
+.zro-row-side { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.zro-seg { display: inline-flex; border: 1px solid var(--zro-line); border-radius: 12px; overflow: hidden; }
+.zro-seg button { border: 0; border-left: 1px solid var(--zro-line); background: transparent; color: var(--zro-text); min-height: 44px; min-width: 64px; padding: 0 10px; font-size: .9rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.zro-seg button:first-child { border-left: 0; }
+/* the chosen one is marked by more than its tint: Sunlight drops tints, and color alone is never the signal */
+.zro-seg button[aria-pressed="true"] { box-shadow: inset 0 -4px 0 currentColor; text-decoration: underline; text-underline-offset: 3px; }
+.zro-seg button[aria-pressed="true"].is-can { background: var(--zro-can-bg); color: var(--zro-can-fg); font-weight: 700; }
+.zro-seg button[aria-pressed="true"].is-learning { background: var(--zro-learn-bg); color: var(--zro-learn-fg); font-weight: 700; }
+.zro-seg button[aria-pressed="true"].is-cannot { background: var(--zro-no-bg); color: var(--zro-no-fg); font-weight: 700; }
+.zro-icon-btn { min-width: 44px; min-height: 44px; border: 1px solid var(--zro-line); border-radius: 12px; background: transparent; color: var(--zro-text); cursor: pointer; font-size: 1rem; }
+
+/* sheets (the kit draws the sheet; these are its contents) */
+.zro-form label { display: block; font-size: .9rem; font-weight: 600; margin: 10px 0 4px; color: var(--sys-text, CanvasText); }
+.zro-form input[type="text"], .zro-form input[type="date"], .zro-form select, .zro-form textarea { width: 100%; font-size: 16px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--sys-border, GrayText); border-radius: 10px; background: var(--sys-surface, Canvas); color: var(--sys-text, CanvasText); font-family: inherit; }
+.zro-form textarea { min-height: 72px; resize: vertical; }
+.zro-form .zro-seg { display: flex; width: 100%; }
+.zro-form .zro-seg button { flex: 1 1 0; }
+.zro-help { font-size: .85rem; color: var(--sys-text-muted, GrayText); margin: 4px 0 0; }
+.zro-ab-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.zro-ab-list li { display: flex; align-items: center; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--sys-border, GrayText); flex-wrap: wrap; }
+.zro-ab-list .zro-ab-name { flex: 1 1 160px; min-width: 0; color: var(--sys-text, CanvasText); }
+.zro-ab-list .zro-ab-name small { display: block; color: var(--sys-text-muted, GrayText); }
+.zro-ab-list li.is-retired .zro-ab-name { color: var(--sys-text-muted, GrayText); }
+.zro-ab-group { margin: 14px 0 4px; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--sys-text-muted, GrayText); }
+.zro-hist { list-style: none; margin: 0; padding: 0; }
+.zro-hist li { padding: 8px 0; border-bottom: 1px solid var(--sys-border, GrayText); font-size: .92rem; color: var(--sys-text, CanvasText); }
+.zro-hist time { display: block; font-size: .8rem; color: var(--sys-text-muted, GrayText); }
+.zro-hist .zro-mark { font-size: .78rem; }
+
+/* items. An item spans its roles (Sell / Install / Repair), one narrower column each, under a third header row
+   whose top is measured by app.js (stickHeads). A thin rule starts each item; a thicker one each group. */
+.zro-grid.has-items thead tr:nth-child(2) th.zro-item { text-align: center; border-bottom: 1px solid var(--zro-line); width: auto; min-width: 0; max-width: none; }
+.zro-grid.has-items thead tr:nth-child(3) th { top: 92px; }
+.zro-grid.has-items thead tr:nth-child(3) th { padding: 4px 4px 6px; font-size: .74rem; font-weight: 600; color: var(--zro-muted); text-align: center; width: 64px; min-width: 64px; max-width: 64px; }
+.zro-grid th.zro-istart, .zro-grid td.zro-istart { border-left: 1px dotted var(--zro-line); }
+.zro-grid thead th.zro-gstart, .zro-grid td.zro-gstart { border-left: 1px solid var(--zro-line); }
+.zro-cell.zro-cell--role { width: 64px; min-width: 64px; }
+.zro-addon { display: inline-block; font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--zro-muted); border: 1px solid var(--zro-line); border-radius: 6px; padding: 0 4px; margin-left: 2px; vertical-align: 1px; }
+.zro-item-block { border-top: 1px solid var(--zro-line); }
+.zro-item-block:first-of-type { border-top: 0; }
+.zro-item-name { padding: 10px 12px 2px; font-weight: 700; color: var(--zro-text); }
+.zro-row.zro-row--role { border-top: 0; padding-top: 4px; padding-bottom: 6px; padding-left: 24px; }
+.zro-row--role .zro-row-label { font-weight: 500; }
+
+/* wide screens: an item on one line, its roles side by side (Sell | Install | Repair), each label over its switch */
+@media (min-width: 1180px) {
+	.zro-item-block { display: grid; grid-template-columns: minmax(150px, 1fr) repeat(3, 278px); align-items: end; column-gap: 12px; padding: 6px 12px 8px 0; }
+	.zro-item-block .zro-row--sell { grid-column: 2; }
+	.zro-item-block .zro-row--install { grid-column: 3; }
+	.zro-item-block .zro-row--repair { grid-column: 4; }
+	.zro-item-block > .zro-row { grid-row: 1; }
+	.zro-item-name { padding: 8px 0 8px 12px; align-self: center; grid-column: 1; grid-row: 1; }
+	.zro-row.zro-row--role { padding: 4px 0; flex-direction: column; align-items: flex-start; gap: 2px; flex-wrap: nowrap; }
+	.zro-row--role .zro-row-main { flex: 0 0 auto; }
+	.zro-row--role .zro-row-label { font-size: .8rem; font-weight: 600; color: var(--zro-muted); text-transform: uppercase; letter-spacing: .03em; }
+	.zro-row--role .zro-row-sub { max-width: 260px; }
+	.zro-row--role .zro-seg button { min-width: 0; padding: 0 8px; }
+}
+
+/* the one-time move: a band above the grid, then its sheet */
+.zro-move { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--zro-line); border-left: 4px solid var(--zro-accent); border-radius: 12px; background: var(--zro-surface); }
+.zro-move p { margin: 0 0 8px; }
+.zro-move-people, .zro-move-map { list-style: none; margin: 0 0 8px; padding: 0; }
+.zro-move-people li, .zro-move-map li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 0; border-bottom: 1px solid var(--sys-border, GrayText); color: var(--sys-text, CanvasText); }
+.zro-moveform .zro-move-name { flex: 1 1 100%; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+.zro-moveform .zro-move-pair { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; }
+.zro-moveform .zro-move-to { flex: 1 1 100%; font-size: .92rem; color: var(--sys-text, CanvasText); }
+.zro-moveform .zro-move-items { list-style: none; margin: 2px 0 0; padding: 0 0 0 10px; }
+.zro-moveform .zro-move-items li { padding: 2px 0; border: 0; font-size: .88rem; }
+.zro-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.zro-moveform .zro-move-name small { font-weight: 400; color: var(--sys-text-muted, GrayText); }
+.zro-moveform li label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
+.zro-moveform li label select { width: auto; min-height: 40px; padding: 4px 8px; }
+.zro-moveform li small { color: var(--sys-text-muted, GrayText); font-size: .8rem; }
+.zro-moveform .zro-move-n { margin-left: auto; font-size: .85rem; font-weight: 400; color: var(--sys-text-muted, GrayText); }
+.zro-moveform .zro-move-pick { flex-wrap: wrap; gap: 6px; }
+.zro-moveform .zro-move-pick select { font-size: .92rem; }
+.zro-roles { border: 1px solid var(--sys-border, GrayText); border-radius: 10px; padding: 6px 10px 8px; margin: 10px 0 0; }
+.zro-roles legend { font-size: .9rem; font-weight: 600; padding: 0 4px; color: var(--sys-text, CanvasText); }
+.zro-form .zro-roles label, .zro-form label.zro-check { display: inline-flex; align-items: center; gap: 6px; margin: 6px 14px 0 0; font-weight: 500; }
+.zro-form .zro-roles input, .zro-form .zro-check input { width: 20px; height: 20px; }
+
+@media (max-width: 560px) {
+	.zro-app { padding: 10px 12px 18px; }
+	.zro-row-side { width: 100%; justify-content: space-between; }
+	.zro-row-side .zro-seg { flex: 1 1 auto; }
+	.zro-row-side .zro-seg button { flex: 1 1 0; min-width: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+	.zro-cell-btn, .zro-seg button { transition: background-color .12s ease; }
+}
+
+/* the pick menu at a grid cell (two taps: the cell, then the mark; saved at once, Undo in the message) */
+.zro-tip { font-size: .85rem; color: var(--zro-muted); margin: -4px 0 10px; }
+.zro-pick { position: fixed; z-index: 100000; width: 300px; max-width: calc(100vw - 16px); padding: 10px; border: 1px solid var(--zro-line); border-radius: 14px; background: var(--zro-surface); color: var(--zro-text); box-shadow: 0 8px 28px rgba(0, 0, 0, .28); font-family: var(--sys-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif); font-size: 16px; line-height: 1.4; }
+.zro-pick-title { margin: 0 0 8px; font-size: .85rem; font-weight: 600; color: var(--zro-muted); }
+.zro-pick-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.zro-pick-opts button { min-height: 48px; border: 1px solid var(--zro-line); border-radius: 10px; background: transparent; color: var(--zro-text); font: inherit; font-size: .95rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.zro-pick-opts button.is-can { background: var(--zro-can-bg); color: var(--zro-can-fg); }
+.zro-pick-opts button.is-learning { background: var(--zro-learn-bg); color: var(--zro-learn-fg); }
+.zro-pick-opts button.is-cannot { background: var(--zro-no-bg); color: var(--zro-no-fg); }
+.zro-pick-opts button.is-unset { border-style: dashed; color: var(--zro-muted); font-weight: 500; }
+/* the current mark is shown by more than its tint (Sunlight drops tints) */
+.zro-pick-opts button[aria-pressed="true"] { box-shadow: inset 0 0 0 3px currentColor; text-decoration: underline; text-underline-offset: 3px; }
+.zro-pick-more { display: block; width: 100%; margin-top: 8px; min-height: 40px; border: 0; background: transparent; color: var(--zro-text); font: inherit; font-size: .9rem; text-decoration: underline; cursor: pointer; }
+.zro-pick button:focus-visible { outline: 3px solid var(--sys-focus, Highlight); outline-offset: 2px; }

@@ -15,9 +15,17 @@
  *     disabling thinking / 400-ing a level-taking bot);
  *   - the resolved handle run through ZDZ_Model_Registry::remap() before the body is
  *     built (folds an explicitly-passed retired handle to the live one);
- *   - on a retryable status, ONE immediate retry (no worker-holding sleep) with the
- *     registry-resolved fallback handle (the fallback map ships EMPTY → a fresh
- *     install surfaces the error rather than looping).
+ *   - on a failure another model might not have (ZDZ_Model_Registry::fails_over():
+ *     400 / 404 / 408 / 413 / 422, 429, 5xx, 529, and a time-out when the call has a
+ *     budget and time is left; never 401 / 403, a key problem), ONE immediate retry (no
+ *     worker-holding sleep) with the registry-resolved fallback handle (the fallback map
+ *     ships EMPTY → a fresh install surfaces the error rather than looping). A handle
+ *     that answered 404 is remembered for an hour and not asked again as a fallback;
+ *   - web search only for a model that can search (ZDZ_Model_Registry::web_capable()).
+ *     A call for one that cannot first asks the registry's `web` slot for findings
+ *     (only a short, text-only question travels to the web: ZDZ_Core_LLM::web_safe())
+ *     and hands them over as context, with web search off; with no findings, the model
+ *     is told it could not look anything up, so it says so instead of guessing.
  *
  * Two return surfaces:
  *   - query(): string — the assistant text, or '' on any failure (as before, so
@@ -60,15 +68,22 @@ class ZDZ_Core_Poe {
 	 * return either a success array or a WP_Error whose error_data carries the HTTP
 	 * status so a caller can diagnose the failure.
 	 *
+	 * Two caller-side knobs are read here and never sent: `_budget_s` (int, seconds) caps
+	 * the HTTP wait so a caller with a deadline is never held past it (never under 15 s),
+	 * and `_no_failover` (bool) answers from exactly the model asked for or not at all,
+	 * skipping the fallback retry (the Ai router sends a role to Poe only by an admin's
+	 * choice, and a fallback model is a choice nobody made).
+	 *
 	 * @param array  $messages     Chat messages.
 	 * @param float  $temperature  Sampling temperature (kept always-sent, as before).
-	 * @param array  $extra_params Optional: thinking_budget|thinking_level|output_effort|web_search.
+	 * @param array  $extra_params Optional: thinking_budget|thinking_level|output_effort|web_search|_budget_s|_no_failover.
 	 * @param string $model        Optional explicit model handle (else the default).
 	 * @return array|WP_Error  ['text','status','model','data'] on success; WP_Error on failure.
 	 */
 	public function request( array $messages, float $temperature = 0.0, array $extra_params = array(), string $model = '' ) {
-		// ── Resolve then remap (closes the S7-08 gap; folds a passed retired handle
-		//    to the live one). An empty default resolves through the registry base. ──
+		// ── Resolve then remap (a passed retired handle folds to the live one, so a
+		//    caller can never pin a retired model). An empty default resolves through
+		//    the registry base. ──
 		$bot = ( '' !== $model ) ? $model : $this->default_model;
 		if ( class_exists( 'ZDZ_Model_Registry' ) ) {
 			$bot = ( '' === $bot ) ? ZDZ_Model_Registry::base_model() : ZDZ_Model_Registry::remap( $bot );
@@ -88,25 +103,40 @@ class ZDZ_Core_Poe {
 			);
 		}
 
-		$body = $this->build_body( $messages, $temperature, $extra_params, $bot );
-		list( $code, $raw, $transport ) = $this->post( $body );
+		$budget_s = isset( $extra_params['_budget_s'] ) && is_numeric( $extra_params['_budget_s'] ) ? max( 15, (int) $extra_params['_budget_s'] ) : 0;
+		$started  = microtime( true );
+		$asked    = array( $messages, $extra_params );   // the caller's own, before any web findings are added
+		list( $messages, $extra_params ) = $this->web_for( $bot, $messages, $extra_params, $budget_s );
+		$body     = $this->build_body( $messages, $temperature, $extra_params, $bot );
+		list( $code, $raw, $transport ) = $this->post( $body, $budget_s );
+		if ( null === $transport && 404 === $code && class_exists( 'ZDZ_Model_Registry' ) ) {
+			ZDZ_Model_Registry::mark_gone( $bot, 'poe' );   // a real 404: not asked again as a fallback for an hour
+		}
 
-		// ── Retryable status: retry ONCE, immediately (no sleep), with the
-		//    registry-resolved fallback handle. Empty fallback map → no retry model
-		//    → surface the error rather than loop. ──
-		if ( null === $transport && in_array( $code, array( 429, 502, 503, 504 ), true ) ) {
-			$fb = class_exists( 'ZDZ_Model_Registry' ) ? ZDZ_Model_Registry::fallback_for( $bot ) : '';
-			if ( '' !== $fb && class_exists( 'ZDZ_Model_Registry' ) ) {
-				$fb = ZDZ_Model_Registry::remap( $fb );
-			}
-			if ( '' !== $fb && $fb !== $bot ) {
-				// Rebuild for the fallback's family (build_body re-runs the knob guard).
-				$retry_body = $this->build_body( $messages, $temperature, $extra_params, $fb );
-				list( $code2, $raw2, $transport2 ) = $this->post( $retry_body );
+		// ── A failure another model might not have: retry ONCE, immediately (no
+		//    sleep), with the registry-resolved fallback handle. Empty fallback map →
+		//    no retry model → surface the error rather than loop. A time-out is
+		//    retried only when the caller gave a budget and enough of it is left. A
+		//    caller that asked for no failover gets the first answer as it is. ──
+		$left = $budget_s > 0 ? $budget_s - ( microtime( true ) - $started ) : 0;
+		if ( empty( $extra_params['_no_failover'] ) && class_exists( 'ZDZ_Model_Registry' )
+			&& ( null === $transport ? ( $code >= 400 && ZDZ_Model_Registry::fails_over( $code ) ) : $left >= 15 ) ) {
+			$fb = ZDZ_Model_Registry::remap( ZDZ_Model_Registry::fallback_for( $bot ) );
+			if ( '' !== $fb && $fb !== $bot && ! ZDZ_Model_Registry::is_gone( $fb, 'poe' ) ) {
+				// Rebuilt for the fallback: its own web rule (findings already fetched are reused, never asked twice)
+				// and its family's knob (build_body re-runs the guard).
+				$reuse = $messages !== $asked[0] && ! ZDZ_Model_Registry::web_capable( $fb );
+				list( $fb_messages, $fb_extra ) = $reuse ? array( $messages, $extra_params ) : $this->web_for( $fb, $asked[0], $asked[1], $budget_s );
+				$retry_body = $this->build_body( $fb_messages, $temperature, $fb_extra, $fb );
+				list( $code2, $raw2, $transport2 ) = $this->post( $retry_body, $budget_s > 0 ? (int) max( 15, floor( $left ) ) : 0 );
+				if ( null === $transport2 && 404 === $code2 ) {
+					ZDZ_Model_Registry::mark_gone( $fb, 'poe' );
+				}
 				if ( null === $transport2 ) {
-					$bot  = $fb;
-					$code = $code2;
-					$raw  = $raw2;
+					$bot       = $fb;
+					$code      = $code2;
+					$raw       = $raw2;
+					$transport = null;
 				}
 			}
 		}
@@ -160,6 +190,51 @@ class ZDZ_Core_Poe {
 			sprintf( __( 'Empty response from model "%s". Confirm the model name is available on your Poe plan.', 'zorderz' ), $bot ),
 			$err_data
 		);
+	}
+
+	/** Said to a model without web search when the call wanted the web and no findings came. */
+	public static function no_web_note(): string {
+		return 'Note: live web search is not available for this answer. If the question needs current information from the web, say plainly that you could not look it up, and do not invent it.';
+	}
+
+	/**
+	 * The messages and parameters for $bot when the caller asked for web search. A model that can search keeps
+	 * web_search. One that cannot never gets it: the registry's `web` slot is asked for findings on the question
+	 * (only when the messages are a short, text-only question, ZDZ_Core_LLM::web_safe(); never business data), and they
+	 * go first as a system message; with none, the no-web note does.
+	 *
+	 * @return array{0:array,1:array} [ messages, extra_params ]
+	 */
+	private function web_for( string $bot, array $messages, array $extra_params, int $budget_s ): array {
+		if ( empty( $extra_params['web_search'] ) || ! class_exists( 'ZDZ_Model_Registry' ) || ZDZ_Model_Registry::web_capable( $bot ) ) {
+			return array( $messages, $extra_params );
+		}
+		unset( $extra_params['web_search'] );
+		$found = '';
+		$web   = ZDZ_Model_Registry::web_model( $bot, 'poe' );
+		if ( '' !== $web && class_exists( 'ZDZ_Core_LLM' ) && ZDZ_Core_LLM::web_safe( $messages ) ) {
+			$sys = 'You are the web-research step for another model. Search the web for what the question needs and return '
+				. 'concise factual findings with concrete figures and dates, each followed by the exact URL it came from. Say '
+				. 'when sources disagree or the web is inconclusive. Never invent a figure or a URL.';
+			$q   = '';
+			foreach ( $messages as $m ) {
+				if ( 'user' === ( $m['role'] ?? '' ) && is_string( $m['content'] ?? null ) ) {
+					$q = $m['content'];
+				}
+			}
+			$r = $this->request(
+				array( array( 'role' => 'system', 'content' => $sys ), array( 'role' => 'user', 'content' => $q ) ),
+				0.2,
+				array( 'web_search' => true, '_no_failover' => true, '_budget_s' => $budget_s > 0 ? max( 15, (int) floor( $budget_s / 2 ) ) : 60 ),
+				$web
+			);
+			$found = is_wp_error( $r ) ? '' : trim( (string) ( $r['text'] ?? '' ) );
+		}
+		$note = '' !== $found
+			? "WEB FINDINGS (from a separate web search; first-pass, unverified: cite them as such):\n" . $found
+			: self::no_web_note();
+		array_unshift( $messages, array( 'role' => 'system', 'content' => $note ) );
+		return array( $messages, $extra_params );
 	}
 
 	/**
@@ -292,10 +367,15 @@ class ZDZ_Core_Poe {
 	/**
 	 * One POST. Returns list( int $code, string $raw, WP_Error|null $transport_error ).
 	 * A transport error (WP_Error from wp_remote_post) yields code 0 + a null body.
+	 * $budget_s > 0 caps the wait at the caller's own time budget. Protected so a suite can script the answers.
 	 */
-	private function post( array $body ): array {
+	protected function post( array $body, int $budget_s = 0 ): array {
+		$timeout = self::timeout_for( $body );
+		if ( $budget_s > 0 ) {
+			$timeout = min( $timeout, $budget_s );
+		}
 		$args = array(
-			'timeout' => self::timeout_for( $body ),
+			'timeout' => $timeout,
 			'headers' => array(
 				'Authorization' => 'Bearer ' . $this->api_key,
 				'Content-Type'  => 'application/json',

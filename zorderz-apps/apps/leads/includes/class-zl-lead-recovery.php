@@ -1,6 +1,6 @@
 <?php
 /**
- * Zorderz Leads — Recover a failed lead (D-03 / S6-01)
+ * Zorderz Leads — Recover a failed lead
  *
  * One-click, duplicate-safe, CRM-ONLY retry for a lead that generated locally but
  * never reached the CRM (its create threw, or the id write-back was lost). It does

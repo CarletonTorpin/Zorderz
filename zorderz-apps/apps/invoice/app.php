@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Zorderz Invoice Creator
  * Description: Optional (beta) invoicing app: create a pay-by-card invoice, take payment through a Stripe account, and optionally append the pay link to a FreshBooks invoice. An optional, clearly-disclosed platform fee can be retained via Stripe Connect. Ships with no billing data and no credentials.
- * Version: 0.2.0-beta
+ * Version: 0.2.1-beta
  * Author: Zorderz
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -65,7 +65,7 @@ if ( defined( 'ZIC_DISABLE' ) && ZIC_DISABLE ) {
 	return;
 }
 
-define( 'ZIC_VERSION', '0.2.0-beta' );
+define( 'ZIC_VERSION', '0.2.1-beta' );
 define( 'ZIC_DB_VERSION', '1.0.0' );
 define( 'ZIC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -253,6 +253,11 @@ add_filter(
 		$map['cron'] = array_merge(
 			$map['cron'] ?? array(),
 			array( 'tsic_fb_token_refresh_cron' => 'zic_fb_token_refresh_cron' )
+		);
+		// App-id values inside people's grant lists: the older id, so a grant names the app that answers.
+		$map['app_ids'] = array_merge(
+			$map['app_ids'] ?? array(),
+			array( 'tsic' => 'invoice' )
 		);
 		return $map;
 	}

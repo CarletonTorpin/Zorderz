@@ -1,17 +1,21 @@
 <?php
 /**
- * FreshBooks-reference preview cards.
+ * Billing-document reference preview cards (an estimate or invoice number).
  *
  * Detects #NNNNN tokens in message bodies and, on demand, renders a small
- * preview card (number, kind, customer, amount, status, link). The actual
- * data comes from Analytics via its REST endpoint `/zorderz/v1/freshbooks-preview/{id}`
- * — we never talk to FreshBooks directly (Trap 2 — no external API clients
- * in this plugin).
+ * preview card (number, kind, customer, amount, status). The actual data
+ * comes from Analytics via its REST endpoint `/zorderz/v1/freshbooks-preview/{id}`
+ * — we never talk to the billing system directly (Trap 2 — no external API
+ * clients in this plugin). With the Estimates app's document reader present,
+ * ZIM_Doc_Shares answers instead (the document itself, for someone who may
+ * see it); this card is the plain fallback.
  *
  * Graceful degradation:
- *   • Preview proxy available   → proxy through the analytics app's REST endpoint, cache 5 min.
- *   • Analytics not loaded      → return a lightweight fallback card that just
- *                           links to the FreshBooks search URL. No error.
+ *   • Preview proxy available   → proxy through the analytics app's REST endpoint, cache 5 min, per person.
+ *   • Analytics not loaded      → return a lightweight fallback card (number only). No error.
+ *
+ * A card's `url` is always '': no part of the app sends anyone off to the
+ * billing system. The chip opens the document inside the app (ZDZ.ui.paper).
  *
  * Rendering is client-driven: the composer JS parses for #NNNNN, inserts a
  * placeholder span, and an IntersectionObserver calls `zim_preview_ref` as
@@ -35,7 +39,7 @@ class ZIM_Preview_Cards {
 	 *
 	 * Callers should use this with preg_match_all( ..., PREG_SET_ORDER ).
 	 */
-	const REF_REGEX = '/(?<![\w#])#(\d{3,8})(?!\d)/';
+	const REF_REGEX = '/(?<![\w#&])#(\d{3,8})(?!\d)/';   // never "&#105;" (an entity), as widget.js
 
 	/** Transient TTL for successful previews. */
 	const CACHE_TTL = 5 * MINUTE_IN_SECONDS;
@@ -76,13 +80,15 @@ class ZIM_Preview_Cards {
 			return new WP_Error( 'zim_preview_bad_id', 'Invalid reference number.' );
 		}
 
-		$key    = 'zim_fb_preview_' . $number;
+		// One cache per person: the endpoint answers for the current user, so a card one person may see is never
+		// served to another.
+		$key    = 'zim_fb_preview_' . get_current_user_id() . '_' . $number;
 		$cached = get_transient( $key );
 		if ( false !== $cached ) {
 			if ( isset( $cached['__miss'] ) ) {
 				return new WP_Error( 'zim_preview_not_found', 'Reference not found.' );
 			}
-			return $cached;
+			return self::without_link( $cached );
 		}
 
 		// Preview proxy not available? Return a minimal fallback card with no caching —
@@ -159,14 +165,13 @@ class ZIM_Preview_Cards {
 			'total'         => isset( $data['total'] ) ? (float) $data['total'] : null,
 			'currency'      => isset( $data['currency'] ) ? (string) $data['currency'] : 'USD',
 			'status'        => isset( $data['status'] ) ? (string) $data['status'] : '',
-			'url'           => isset( $data['url'] ) ? esc_url_raw( (string) $data['url'] ) : '',
+			'url'           => '',   // never the billing system's address
 			'source'        => 'analytics',
 		);
 	}
 
 	/**
-	 * Minimal card for when Analytics isn't available. The link goes to the
-	 * user's own FreshBooks search — no guarantee the number is real.
+	 * Minimal card for when Analytics isn't available: the number only.
 	 */
 	private static function fallback_card( $number ) {
 		return array(
@@ -177,8 +182,16 @@ class ZIM_Preview_Cards {
 			'total'         => null,
 			'currency'      => '',
 			'status'        => '',
-			'url'           => 'https://my.freshbooks.com/#/search?q=' . rawurlencode( (string) $number ),
+			'url'           => '',
 			'source'        => 'fallback',
 		);
+	}
+
+	/** A card as answered: any `url` it carries is dropped (never the billing system's address). */
+	private static function without_link( $card ) {
+		if ( is_array( $card ) && array_key_exists( 'url', $card ) ) {
+			$card['url'] = '';
+		}
+		return $card;
 	}
 }
