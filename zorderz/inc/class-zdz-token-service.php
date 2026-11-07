@@ -1009,9 +1009,8 @@ class ZDZ_Token_Service {
 		} );
 
 		add_action( 'init', static function () {
-			// Retire any pre-rename cron hooks a provider declares (e.g. a
-			// legacy must-use plugin's hook), then ensure our single
-			// 15-minute maintenance tick is scheduled.
+			// Retire any earlier cron hooks a provider declares, then ensure
+			// our single 15-minute maintenance tick is scheduled.
 			foreach ( self::providers() as $provider ) {
 				foreach ( $provider['legacy_cron'] as $legacy_hook ) {
 					if ( '' !== $legacy_hook && wp_next_scheduled( $legacy_hook ) ) {
@@ -1031,9 +1030,8 @@ class ZDZ_Token_Service {
 		add_action( 'after_setup_theme', array( __CLASS__, 'watch_families' ), 1 );
 		add_action( 'init', array( __CLASS__, 'watch_families' ), PHP_INT_MAX );
 
-		// Deprecated-alias migration: publish each provider's old canonical option
-		// keys → the zdz_tok_<key>_* store, applied (copy-not-move) by the theme's
-		// rename migration so a legacy install upgrades in place.
+		// Publish each provider's earlier option keys (if it declares any) → the
+		// zdz_tok_<key>_* store, applied (copy-not-move) by the theme's rename migration.
 		add_filter( 'zdz_rename_map', array( __CLASS__, 'rename_map' ) );
 
 		add_action( 'admin_notices', array( __CLASS__, 'admin_notice' ) );
@@ -1157,17 +1155,6 @@ class ZDZ_Token_Service {
 ZDZ_Token_Service::boot();
 
 /*
- * Deprecated alias for a legacy install upgrading in place. Any legacy
- * consumer still calling the old class name resolves to this service (the public
- * contract is identical: refresh()/get_refresh_token()/get_access_token()). Only
- * added when the legacy class is absent, so it never collides with a still-
- * present legacy must-use plugin.
- */
-if ( ! class_exists( 'TS_Token_Service', false ) ) {
-	class_alias( 'ZDZ_Token_Service', 'TS_Token_Service' );
-}
-
-/*
  * ── Bundled provider: FreshBooks ──────────────────────────────────────────
  * The reference registration. FreshBooks is ONE registered provider, not a core
  * assumption — everything specific to it lives in this descriptor. Any tenant
@@ -1189,24 +1176,21 @@ if ( ! function_exists( 'zdz_register_freshbooks_token_provider' ) ) {
 			'request_headers'      => array( 'Api-Version' => 'alpha' ),
 			'default_ttl'          => 43200,      // access tokens ~12h; used only if the response omits expires_in
 			'plaintext_secret_max' => 100,        // a stored blob longer than this is encrypted, not the plaintext secret
-			// Legacy families kept in sync so un-migrated readers keep working
+			// Per-app families kept in sync so each app's reader keeps working
 			// until the Connections layer replaces projection with one encrypted
 			// row. Projection only writes to families ALREADY present on the
 			// install, so listing extras never seeds data.
 			'option_families' => array(
 				'zdz_core_fb_', 'zdz_surveys_fb_', 'zl_fb_', 'zic_fb_',
-				'tsa_fb_', 'tsec_fb_', 'tscc_fb_', 'tsl_fb_', 'tsic_fb_',
-				'ts_core_fb_', 'ts_surveys_fb_', 'tsemc_fb_', 'tser_fb_',
 			),
 			// Invoices is set up on its own FreshBooks app: its family is ours only when
 			// it names the platform app's client id itself.
-			'separate_families'  => array( 'zic_fb_', 'tsic_fb_' ),
+			'separate_families'  => array( 'zic_fb_' ),
 			// Where a "Connect FreshBooks" sign-in writes: Core's family, and Leads'.
 			'reconnect_families' => array( 'zdz_core_fb_', 'zl_fb_' ),
-			// Old canonical store prefix → migrated to zdz_tok_fb_* via zdz_rename_map.
-			'legacy_options'  => array( 'ts_tok_fb_' ),
-			// The pre-rename maintenance cron hook, retired on upgrade.
-			'legacy_cron'     => array( 'ts_tok_fb_cron' ),
+			// Earlier store prefixes and cron hooks to retire (none for FreshBooks).
+			'legacy_options'  => array(),
+			'legacy_cron'     => array(),
 			// The kernel resolves credentials from the platform's OWN store, never
 			// by reaching into a plugin's admin class.
 			'credentials'     => 'zdz_freshbooks_token_credentials',

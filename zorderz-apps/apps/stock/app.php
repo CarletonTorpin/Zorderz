@@ -36,8 +36,7 @@
  *   - EVERY endpoint gates on REAL app-access (ZDZ_Plugin_API::user_can_access_app), not the
  *     blanket zdz_access_app cap that every role (incl. the shared kiosk) holds — the v1.1.6
  *     build already moved this way; it is preserved.
- *   - Tables/options/cron carry rename-map entries so an existing install upgrades in place; the item_id columns are
- *     widened by a real guarded migration (see ZSTOCK_DB). No REST routes exist in this module
+ *   - The item_id columns are widened by a real guarded migration (see ZSTOCK_DB). No REST routes exist in this module
  *     (admin-ajax only), so there is no namespace to move.
  *   - REPAIR: the earlier build did not actually run — the consumption query used non-existent columns
  *     and exact-string keyword equality, and the sync-log table was never created. Rebinding the
@@ -267,43 +266,14 @@ add_action(
 	)
 );
 
-/* ── Deprecated-alias rename map (plugins DECLARE; the kernel's ZDZ_Rename_Migration performs
- * the renames in one place). A fresh Zorderz install has no legacy rows, so every entry no-ops;
- * data is never seeded, only renamed if present. The legacy local catalog (tssc_items) and BOM
- * (tssc_bom) tables are deliberately NOT renamed — that data belongs in the Item Engine now, via
- * its discovery/import, not in a competing local table. ───────────────────────────────────── */
+/**
+ * The app's earlier id, kept in people's app grants by older Zorderz releases, becomes the current one
+ * (the theme's ZDZ_Rename_Migration performs it; a fresh install has nothing to rename).
+ */
 add_filter(
 	'zdz_rename_map',
 	function ( $map ) {
-		$map['tables'] = array_merge(
-			$map['tables'] ?? array(),
-			array(
-				'tssc_ledger'          => 'zstock_ledger',
-				'tssc_supplier_orders' => 'zstock_supplier_orders',
-				'tssc_order_items'     => 'zstock_order_items',
-				'tssc_fb_sync_log'     => 'zstock_sync_log',
-			)
-		);
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'tssc_db_version'            => 'zstock_db_version',
-				'tssc_brain_bot'             => 'zstock_assistant',
-				'tssc_fb_auto_sync'          => 'zstock_auto_sync',
-				'tssc_fb_sync_interval'      => 'zstock_sync_interval',
-				'tssc_low_stock_email'       => 'zstock_low_stock_email',
-				'tssc_default_supplier_name' => 'zstock_default_supplier_name',
-				'tssc_last_fb_sync'          => 'zstock_last_sync',
-			)
-		);
-		$map['cron'] = array_merge(
-			$map['cron'] ?? array(),
-			array( 'tssc_fb_sync_cron' => 'zstock_consumption_sweep' )
-		);
-		$map['app_ids'] = array_merge(
-			$map['app_ids'] ?? array(),
-			array( 'stock-checker' => ZSTOCK_APP_ID )
-		);
+		$map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array( 'stock-checker' => ZSTOCK_APP_ID ) );
 		return $map;
 	}
 );

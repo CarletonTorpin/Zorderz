@@ -106,7 +106,7 @@ These changes came out of the first real end-to-end install: a fictional company
 
 **Config screens were denied to a full administrator (blocker).** Business Profile, Identity Pack and the Item Engine admin returned "Sorry, you are not allowed to access this page." The submenu classes hook `admin_menu` before the parent Zorderz menu exists (the parent was only instantiated inside its own `init` callback), so the submenus were orphaned and WordPress refused them. `ZDZ_Core_Settings::get_instance();` now runs immediately after its `require_once` in `functions.php`, registering the parent first.
 
-**User Management rendered blank.** Its JavaScript was gated on the hook suffix `zorderz_page_ts-user-management`, a leftover `ts-` id from the rename, while the page registers as `zorderz_page_zdz-user-management`. Corrected the guard.
+**User Management rendered blank.** Its JavaScript was gated on a stale hook suffix, while the page registers as `zorderz_page_zdz-user-management`. Corrected the guard.
 
 **The theme title was corrected.** `style.css` now reads **Zorderz Core**.
 
@@ -148,7 +148,7 @@ Advances the theme kernel. Two features land, both additive and backward-compati
 - Filter (extend, never re-gate): `zdz_selectable_people`
 - REST: `GET /wp-json/zorderz/v1/party/people?search=&exclude=1,2` (returns id/name/initials/role; email stays server-side)
 
-Excludes the shared-kiosk role (`zdz_general`) and users flagged inactive (`zdz_inactive` user-meta, with a read-time alias to the pre-rename `ts_inactive` key). Contract: `PARTY-ROSTER-CONTRACT-v1.md`.
+Excludes the shared-kiosk role (`zdz_general`) and users flagged inactive (`zdz_inactive` user-meta). Contract: `PARTY-ROSTER-CONTRACT-v1.md`.
 
 ## New: Connected Calendars in Settings → App Authorizations
 
@@ -245,8 +245,6 @@ An example pack ships inside the theme. Apply it on a throwaway install to watch
 ## Changed
 
 **Role app-grants can say "everything" explicitly.** Stored as a literal `true` rather than reusing `null`, so *not configured* and *configured to everything* can never be the same value.
-
-**`ts-jobs` → `zdz-jobs` is now in the rename map**, ahead of the app itself. Grants naming it already exist; mapping it now means they survive the port instead of pointing at a dead id on the day it lands.
 
 **Version renumbered from 2.37.1 to 1.0.1.** That earlier 2.x number overstated how long Zorderz has existed and hid that this is a new line, so Zorderz versions restart at 1.0.x. The update check compares the version string for inequality rather than ordering, so going backwards is mechanically safe; it fires the reload prompt once, which is correct. The visible consequence is that an existing install may show a smaller number than it did before.
 

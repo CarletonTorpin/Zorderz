@@ -27,10 +27,8 @@
  *     random pattern — there is no hardcoded fallback letter.
  *   - Dropped the analytics/chat embed hook (the "play while you wait" coupling
  *     to another app) and its results overlay. The game is a standalone tile.
- *   - Renamed off the old ts/tsg identifiers to the short `zg` prefix. REST is
- *     registered under the theme's single ZDZ_REST_NS constant (never typed
- *     twice). The score table and DB-version option carry deprecated-alias
- *     rename-map entries so an existing install upgrades in place.
+ *   - Identifiers use the short `zg` prefix. REST is registered under the
+ *     theme's single ZDZ_REST_NS constant (never typed twice).
  *
  * ── Architecture ──────────────────────────────────────────────────────
  * PREFIX:  zg_
@@ -101,20 +99,6 @@ add_action(
 		}
 	},
 	5
-);
-
-/**
- * Deprecated-alias rename map. The platform's Zdz_Rename_Migration renames the
- * legacy pre-rename table and option to the `zg` names on activation so an
- * existing install upgrades cleanly. Plugins declare; the kernel migrates.
- */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables']  = array_merge( $map['tables'] ?? array(), array( 'ts_game_scores' => 'zg_game_scores' ) );
-		$map['options'] = array_merge( $map['options'] ?? array(), array( 'tsg_db_version' => 'zg_db_version' ) );
-		return $map;
-	}
 );
 
 

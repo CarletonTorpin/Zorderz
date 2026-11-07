@@ -172,8 +172,8 @@ class ZIB_Enrich {
 			}
 		}
 
-		// (3) product + quantity — "3 rolls (of material)", "16 screens", "5 yards of fabric"
-		$units = 'rolls?|units?|yards?|yds?|feet|foot|ft|boxes?|cases?|pieces?|pcs?|screens?|doors?|sheets?|bundles?|pallets?|sq\.?\s?ft|sqft';
+		// (3) product + quantity — "3 rolls (of material)", "16 panels", "5 yards of fabric"
+		$units = 'rolls?|units?|yards?|yds?|feet|foot|ft|boxes?|cases?|pieces?|pcs?|sheets?|bundles?|pallets?|sq\.?\s?ft|sqft' . self::extra_nouns();
 		if ( preg_match_all( '/\b([0-9]+(?:\.[0-9]+)?)\s+(' . $units . ')\b(?:\s+of\s+([a-z][a-z0-9\-\' ]{2,40}?))?(?=[\s.,;:!?)]|$)/i', $hay, $pm, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $pm[1] as $i => $cap ) {
 				$qty   = (float) $cap[0];
@@ -200,7 +200,7 @@ class ZIB_Enrich {
 				$order_refs[] = array( 'ref' => (string) $oc[0], 'off' => (int) $oc[1] );
 			}
 		}
-		if ( preg_match_all( '/\b(rolls?|panels?|sheets?|screens?|vents?)\b\s*(?:in\s+([a-z]+)\b\s*)?[\x{00D7}xX]\s*([0-9]{1,4})\b/iu', $hay, $em, PREG_OFFSET_CAPTURE ) ) {
+		if ( preg_match_all( '/\b(rolls?|panels?|sheets?|units?|pieces?|boxes?|cases?|bundles?' . self::extra_nouns() . ')\b\s*(?:in\s+([a-z]+)\b\s*)?[\x{00D7}xX]\s*([0-9]{1,4})\b/iu', $hay, $em, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $em[3] as $i => $qcap ) {
 				$noun_off = (int) $em[1][ $i ][1];
 				$before   = substr( $hay, max( 0, $noun_off - 64 ), min( 64, $noun_off ) );
@@ -274,12 +274,41 @@ class ZIB_Enrich {
 		);
 	}
 
+	/**
+	 * The business's own count nouns ("|nouns?|…"): the unit nouns of the Item Engine's countable items, plus any
+	 * the `zib_enrich_count_nouns` filter adds. Each entry is a singular noun; its plural is matched too.
+	 * Empty catalog and no filter: nothing is added.
+	 */
+	private static function extra_nouns(): string {
+		static $cache = null;
+		if ( null !== $cache ) {
+			return $cache;
+		}
+		$nouns = array();
+		if ( class_exists( 'ZDZ_Item_Engine' ) && method_exists( 'ZDZ_Item_Engine', 'count_categories' ) ) {
+			foreach ( (array) ZDZ_Item_Engine::count_categories() as $meta ) {
+				if ( ! empty( $meta['unit_noun_singular'] ) ) {
+					$nouns[] = (string) $meta['unit_noun_singular'];
+				}
+			}
+		}
+		$out = '';
+		foreach ( array_unique( (array) apply_filters( 'zib_enrich_count_nouns', $nouns ) ) as $n ) {
+			$n = strtolower( trim( (string) $n ) );
+			if ( preg_match( '/^[a-z][a-z \-]{1,30}$/', $n ) ) {
+				$out .= '|' . preg_quote( $n, '/' ) . 's?';
+			}
+		}
+		$cache = $out;
+		return $out;
+	}
+
 	public static function canon_unit( string $u ): string {
 		$u = strtolower( trim( $u ) );
 		$map = array(
 			'roll' => 'rolls', 'unit' => 'units', 'yard' => 'yards', 'yd' => 'yards', 'yds' => 'yards',
 			'foot' => 'feet', 'ft' => 'feet', 'box' => 'boxes', 'case' => 'cases', 'piece' => 'pieces',
-			'pc' => 'pieces', 'pcs' => 'pieces', 'screen' => 'screens', 'door' => 'doors',
+			'pc' => 'pieces', 'pcs' => 'pieces',
 			'sheet' => 'sheets', 'bundle' => 'bundles', 'pallet' => 'pallets', 'sqft' => 'sqft', 'sq ft' => 'sqft', 'sq.ft' => 'sqft',
 		);
 		$u = preg_replace( '/\s+/', ' ', $u );

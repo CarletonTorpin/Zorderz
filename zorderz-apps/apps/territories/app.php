@@ -194,34 +194,3 @@ function zter_enqueue_app( $user_id ) {
 	);
 }
 
-/**
- * Carry an install's earlier Territories data across to this app's names. The platform migration performs the
- * renames; a fresh install has none of these and every entry is a no-op.
- */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables']  = array_merge(
-			$map['tables'] ?? array(),
-			array(
-				'tster_zips'      => 'zter_zips',
-				'tster_decisions' => 'zter_decisions',
-				'tster_history'   => 'zter_history',
-			)
-		);
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'tster_rules'         => 'zter_rules',
-				'tster_install_rules' => 'zter_install_rules',
-				'tster_zones'         => 'zter_zones',
-				'tster_words'         => 'zter_words',
-				'tster_settings'      => 'zter_settings',
-				'tster_rr'            => 'zter_rr',
-				'tster_generation'    => 'zter_generation',
-				'tster_asks'          => 'zter_asks',
-			)
-		);
-		return $map;
-	}
-);

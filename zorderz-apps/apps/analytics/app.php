@@ -105,25 +105,6 @@ add_action(
 	},
 	20
 );
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables']  = array_merge( $map['tables'] ?? array(), array(
-			'tsa_ledger_invoices'   => 'zana_ledger_invoices',
-			'tsa_ledger_estimates'  => 'zana_ledger_estimates',
-			'tsa_ledger_leads'      => 'zana_ledger_leads',
-			'tsa_ledger_lead_notes' => 'zana_ledger_lead_notes',
-			'tsa_ledger_note_reads' => 'zana_ledger_note_reads',
-		) );
-		$map['options'] = array_merge( $map['options'] ?? array(), array(
-			'tsa_ledger_state' => 'zana_ledger_state', // the sync's cursors: a carried-over history is not read again
-		) );
-		$map['cron']    = array_merge( $map['cron'] ?? array(), array(
-			'tsa_ledger_sync' => 'zana_ledger_sync',
-		) );
-		return $map;
-	}
-);
 // ── The stored-data ledger (END) ────────────────────────────────────
 require_once ZANA_DIR . 'includes/class-zana-surface.php';
 
@@ -367,61 +348,6 @@ add_action(
 	21
 );
 
-/**
- * Declare this module's legacy→current rename map to the platform migration. Plugins
- * DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place. A
- * fresh Zorderz install has no legacy rows, so every entry no-ops. Data is never
- * seeded — only renamed if present.
- */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables'] = array_merge(
-			$map['tables'] ?? array(),
-			array(
-				'tsa_sessions'      => 'zana_sessions',
-				'tsa_messages'      => 'zana_messages',
-				'tsa_memory'        => 'zana_memory',
-				'tsa_cache'         => 'zana_cache',
-				'tsa_company_facts' => 'zana_company_facts',
-				'tsa_referrals'     => 'zana_referrals',     // the referral panel's record of each case
-			)
-		);
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'tsa_version'          => 'zana_version',
-				'tsa_db_version'       => 'zana_db_version',
-				'tsa_ai_model'         => 'zdz_model_slot_chat', // model routing now lives in ZDZ_Model_Registry
-				'tsa_rule_manifest_mode' => 'zana_rule_manifest_mode',
-				'tsa_referrals_db'     => 'zana_referrals_db',
-				'tsa_ai_allowance_work' => 'zana_ai_allowance',    // each person's daily Ai allowance for the chat
-			)
-		);
-		$map['user_meta'] = array_merge(
-			$map['user_meta'] ?? array(),
-			array(
-				'tsa_ai_day'         => 'zana_ai_day',
-				'tsa_ai_day_milli'   => 'zana_ai_day_milli',
-				'tsa_pv_shown_tags'  => 'zana_pv_shown_tags',   // the Privacy View tags each chat was shown
-			)
-		);
-		$map['cron'] = array_merge(
-			$map['cron'] ?? array(),
-			array(
-				'tsa_heartbeat' => 'zana_heartbeat',
-			)
-		);
-		$map['app_ids'] = array_merge(
-			$map['app_ids'] ?? array(),
-			array(
-				'ts-sales-analytics' => ZANA_APP_ID, // the folder renamed; the app id is unchanged
-			)
-		);
-		return $map;
-	}
-);
-
 /* ── The chat's routes and channels (BEGIN) ─────────────────────────────────────────────────────────────────────────
  * Mailbox questions answered by the inbox app, "About you", answer times, the "Chat answers" notification channel,
  * Charts as the calculator, the Hours / Route Planner / page / Team Roles routes, library links, access codes cut,
@@ -473,37 +399,4 @@ add_action(
 	22
 );
 
-/** An install that ran this app under its earlier names is carried across by the platform's rename migration. */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables']    = array_merge( $map['tables'] ?? array(), array(
-			'tsa_push_subscriptions' => 'zana_push_subscriptions',
-			'tsa_email_cooldown'     => 'zana_email_cooldown',
-			'tsa_turn_timings'       => 'zana_turn_timings',
-		) );
-		$map['options']   = array_merge( $map['options'] ?? array(), array(
-			'tsa_vapid_public_key'      => 'zana_vapid_public_key',   // the chat channel's key: existing devices keep working
-			'tsa_vapid_private_pem'     => 'zana_vapid_private_pem',
-			'tsa_umem_enabled'          => 'zana_umem_enabled',
-			'tsa_umem_queue'            => 'zana_umem_queue',
-			'tsa_facts_version'         => 'zana_facts_version',
-			'tsa_role_prompts_owner'    => 'zana_role_prompts_owner',
-			'tsa_role_prompts_admin'    => 'zana_role_prompts_admin',
-			'tsa_role_prompts_sales'    => 'zana_role_prompts_sales',
-			'tsa_role_prompts_operator' => 'zana_role_prompts_operator',
-			'tsa_role_prompts_foreman'  => 'zana_role_prompts_shop',
-			'tsa_role_prompts_tech'     => 'zana_role_prompts_field',
-		) );
-		$map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
-			'tsa_umem_last_week' => 'zana_umem_last_week',
-			'tsa_push_tests'     => 'zana_push_tests',
-		) );
-		$map['cron']      = array_merge( $map['cron'] ?? array(), array(
-			'tsa_umem_weekly' => 'zana_umem_weekly',
-			'tsa_umem_step'   => 'zana_umem_step',
-		) );
-		return $map;
-	}
-);
 /* ── The chat's routes and channels (END) ─────────────────────────────────────────────────────────────────────── */

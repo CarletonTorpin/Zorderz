@@ -8,7 +8,7 @@
  * third-party consumers. The endpoints expose only what the current
  * user could already see in the widget.
  *
- * Routes (all under the `zim/v1` namespace; the legacy `tsim/v1` is kept as an alias):
+ * Routes (all under the `zim/v1` namespace):
  *
  *   GET /wp-json/zim/v1/unread-total
  *     Returns this user's total unread count across all conversations:
@@ -32,10 +32,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ZIM_REST {
 
 	const NS = 'zim/v1';
-
-	// Legacy namespace ("tsim"), kept
-	// as a back-compat alias so any external caller of the old REST namespace still resolves.
-	const LEGACY_NS = 'tsim/v1';
 
 	public static function register_routes() {
 		$routes = array(
@@ -90,12 +86,8 @@ class ZIM_REST {
 			),
 		);
 
-		// Register under the canonical zim/v1 namespace AND the legacy tsim/v1 alias
-		// so any external caller of the pre-rename namespace keeps resolving.
-		foreach ( array( self::NS, self::LEGACY_NS ) as $ns ) {
-			foreach ( $routes as $path => $args ) {
-				register_rest_route( $ns, $path, $args );
-			}
+		foreach ( $routes as $path => $args ) {
+			register_rest_route( self::NS, $path, $args );
 		}
 	}
 

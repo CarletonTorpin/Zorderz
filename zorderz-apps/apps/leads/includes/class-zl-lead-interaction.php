@@ -450,9 +450,9 @@ class ZL_Lead_Interaction {
 			return;
 		}
 
-		$ts_roles = array( 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'administrator' );
+		$team_roles = array( 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'administrator' );
 		$users    = get_users( array(
-			'role__in' => $ts_roles,
+			'role__in' => $team_roles,
 			'orderby'  => 'display_name',
 			'order'    => 'ASC',
 		) );

@@ -601,8 +601,7 @@ class ZRCPT_FreshBooks {
 	 */
 	/**
 	 * One billing credential from Zorderz Core (decoded whatever format it is stored in), or ''.
-	 * Pre-rename option names are carried into Core's names by the rename migration, so no
-	 * per-app copies are read here.
+	 * No per-app copies are read here.
 	 */
 	private function get_credential( string $field ): string {
 		if ( class_exists( 'ZDZ_Core_Settings' ) && method_exists( 'ZDZ_Core_Settings', 'get_credential' ) ) {

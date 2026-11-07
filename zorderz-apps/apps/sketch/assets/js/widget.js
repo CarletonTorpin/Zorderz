@@ -320,7 +320,7 @@
           if (saveBtn) saveBtn.disabled = !st.strokes.length;
           // Show full debug trace — the server returns step-by-step diagnostics.
           var errMsg = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
-          console.error('TSSP Save Debug:', errMsg);
+          console.error('Sketch Pad save debug:', errMsg);
           alert('Save failed: ' + errMsg);
         }
       })

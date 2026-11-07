@@ -110,12 +110,7 @@ module declines to register if the theme (owner of that constant) is absent.
 
 Tables (created on activation, `wp_` prefix): `zkv_documents`, `zkv_index`,
 `zkv_chunks`, `zkv_categories`, `zkv_doc_parties`, `zkv_doc_shares`,
-`zkv_transcript_lines`, `zkv_access_log`. A legacy install carrying the old
-`tskv_*` names is migrated in place by the theme's `ZDZ_Rename_Migration` via the
-`zdz_rename_map` this module declares (tables, options, cron). Deprecated class
-aliases (`TSKV_Bridge`, `TSKV_Mailbox`, `TSKV_ACL`) are kept
-transitionally so other components' cross-references keep working during the
-rename.
+`zkv_transcript_lines`, `zkv_access_log`.
 
 ## Registration
 

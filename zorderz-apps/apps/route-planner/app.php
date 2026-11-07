@@ -221,32 +221,6 @@ add_filter( 'zdz_register_capabilities', function ( $caps ) {
 	return $caps;
 }, 20 );
 
-/**
- * An install that ran this app under its earlier option, table and app-id names is carried across by the platform's
- * rename migration. Declared here; the theme performs it. A fresh install has none of these.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-	$map['tables'] = array_merge( $map['tables'] ?? array(), array(
-		'tsrp_drives'    => 'zrp_drives',
-		'tsrp_notes'     => 'zrp_notes',
-		'tsrp_note_tags' => 'zrp_note_tags',
-		'tsrp_codes'     => 'zrp_codes',
-		'tsrp_audio'     => 'zrp_audio',
-		'tsrp_sends'     => 'zrp_sends',
-	) );
-	$map['options'] = array_merge( $map['options'] ?? array(), array(
-		'tsrp_settings'   => 'zrp_settings',
-		'tsrp_db_version' => 'zrp_db_version',
-	) );
-	$map['cron'] = array_merge( $map['cron'] ?? array(), array(
-		'tsrp_audio_tick' => 'zrp_audio_tick',
-	) );
-	$map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array(
-		'routeplanner' => ZRP_APP_ID,
-	) );
-	return $map;
-} );
-
 add_action( 'after_setup_theme', function () {
 	if ( ! interface_exists( '\Zorderz\Widget_App_Interface' ) ) {
 		return;

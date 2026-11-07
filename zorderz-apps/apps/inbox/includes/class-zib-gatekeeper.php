@@ -454,7 +454,7 @@ class ZIB_Gatekeeper {
 	 * The addressee comes from the parties table, NEVER the body (same doctrine as
 	 * sent_to_recipient) so recipient identity can never be steered by mailed-in content.
 	 *
-	 * @return string  e.g. "Casey Lee <casey@acme.com>", with " +2 more" appended for a
+	 * @return string  e.g. "Casey Lee <casey@example.com>", with " +2 more" appended for a
 	 *                 multi-recipient send; '' when no addressee was stored.
 	 */
 	private static function recipient_label( int $actor, int $message_id ): string {
@@ -3052,8 +3052,8 @@ class ZIB_Gatekeeper {
 	 * Format a "Name <addr>" line without ever eating the closing bracket.
 	 *
 	 * The obvious `trim( "$name <$addr>", ' <>' )` shortcut is wrong: its trim mask
-	 * strips a trailing '>' from EVERY address, so "Morgan <morgan@x.com>" rendered as
-	 * "Morgan <morgan@x.com". This builds the string by cases: both parts present →
+	 * strips a trailing '>' from EVERY address, so "Morgan <morgan@example.com>" rendered as
+	 * "Morgan <morgan@example.com". This builds the string by cases: both parts present →
 	 * "Name <addr>"; only one → that one; neither → ''.
 	 */
 	public static function fmt_addr( string $name, string $addr ): string {

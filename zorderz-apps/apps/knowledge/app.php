@@ -73,8 +73,7 @@
  *     hooks that filter and feeds it the ACL-scoped ZKV_ZANA_Bridge inventory +
  *     matched content, so an indexed, permitted vault document is answerable in chat.
  *
- * v1.6.0: full ts_/TS_ prefix rename
- *   to zkv/ZKV with in-place migration via `zdz_rename_map`; REST under the single
+ * v1.6.0: identifiers under the zkv/ZKV prefix; REST under the single
  *   ZDZ_REST_NS namespace; proprietary licence → GPL-2.0-or-later; product-name
  *   literals → the settings-driven `zkv_product_keywords` list (density-scoring
  *   mechanics unchanged); indexer/classifier prompts assembled at runtime from
@@ -2039,60 +2038,3 @@ add_action( 'after_setup_theme', function () {
 	}
 
 } );
-
-/**
- * Declare this module's legacy→current rename map to the platform migration.
- *
- * Plugins DECLARE; the theme's ZDZ_Rename_Migration performs the table renames,
- * option-key moves and cron-hook renames in one place. This is what lets a legacy
- * install carrying the old tskv_* / TSKV_* names upgrade cleanly in place to the
- * zkv_* names. A fresh Zorderz install has no legacy rows, so every entry no-ops.
- * Data is never seeded here — only renamed if present.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-	$map['tables'] = array_merge( $map['tables'] ?? array(), array(
-		'tskv_documents'         => 'zkv_documents',
-		'tskv_index'             => 'zkv_index',
-		'tskv_chunks'            => 'zkv_chunks',
-		'tskv_categories'        => 'zkv_categories',
-		'tskv_doc_parties'       => 'zkv_doc_parties',
-		'tskv_doc_shares'        => 'zkv_doc_shares',
-		'tskv_transcript_lines'  => 'zkv_transcript_lines',
-		'tskv_access_log'        => 'zkv_access_log',
-	) );
-	$map['options'] = array_merge( $map['options'] ?? array(), array(
-		'tskv_db_version'   => 'zkv_db_version',
-		'tskv_poe_api_key'  => 'zkv_poe_api_key',
-		'tskv_ai_model'     => 'zkv_ai_model',
-		'tskv_mail_config'  => 'zkv_mail_config',
-		'tskv_mail_secret'  => 'zkv_mail_secret',
-	) );
-	$map['cron'] = array_merge( $map['cron'] ?? array(), array(
-		'tskv_process_pending_doc' => 'zkv_process_pending_doc',
-		'tskv_backfill_chunks'     => 'zkv_backfill_chunks',
-		'tskv_mail_poll_event'     => 'zkv_mail_poll_event',
-	) );
-	return $map;
-} );
-
-/**
- * Deprecated class aliases (documented successors).
- *
- * Other components may still reference the legacy class names —
- * the theme's integration health check probes ZKV_ZANA_Bridge / TSKV_Bridge, and
- * the messaging module's email bridge probes TSKV_Mailbox. During the Option-A
- * rename these aliases keep those cross-component contracts working; they are
- * transitional and slated for removal once every consumer speaks ZKV_*.
- * Registered late so the real classes (loaded on plugins_loaded) exist first.
- */
-add_action( 'plugins_loaded', function () {
-	foreach ( array(
-		'ZKV_Bridge'     => 'TSKV_Bridge',
-		'ZKV_Mailbox'    => 'TSKV_Mailbox',
-		'ZKV_ACL'        => 'TSKV_ACL',
-	) as $current => $legacy ) {
-		if ( class_exists( $current ) && ! class_exists( $legacy ) ) {
-			class_alias( $current, $legacy );
-		}
-	}
-}, 20 );

@@ -42,7 +42,7 @@ class ZKV_Transcript {
 	const MIN_SPEAKER_LINES = 2;
 
 	/** user_meta key holding extra names that resolve to a user ("AJ, Al"). */
-	const ALIAS_META = 'ts_transcript_aliases';
+	const ALIAS_META = 'zkv_transcript_aliases';
 
 	/**
 	 * Labels that look like "Name:" lines but are provenance/headers, never
@@ -226,7 +226,7 @@ class ZKV_Transcript {
 	 * normalized name → array of user ids that claim it.
 	 *
 	 * Names per user: display_name, first_name, user_login, nickname, plus the
-	 * ts_transcript_aliases user_meta (comma-separated or JSON array). The
+	 * zkv_transcript_aliases user_meta (comma-separated or JSON array). The
 	 * shared kiosk role (zdz_general) is excluded — the kiosk is never a party
 	 * (INV-Kiosk).
 	 *

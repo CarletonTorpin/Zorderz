@@ -1263,51 +1263,11 @@ add_filter( 'zdz_register_capabilities', function( $caps ) {
 } );
 
 /**
- * Declare this module's legacy → current rename map to the platform migration. Plugins
- * DECLARE; the theme's ZDZ_Rename_Migration performs the table/option/meta/cron renames in
- * ONE place (real dbDelta/RENAME with data preserved), guarded by its own version option.
- * A fresh Zorderz install has no legacy rows, so every entry no-ops. Data is never seeded —
- * only renamed if the old name is present. This is how the business's own `wp_tsl_*` install
- * upgrades cleanly to the `wp_zl_*` tables.
+ * The app's earlier id, kept in people's app grants by older Zorderz releases, becomes the current one
+ * (the theme's ZDZ_Rename_Migration performs it; a fresh install has nothing to rename).
  */
 add_filter( 'zdz_rename_map', function ( $map ) {
-    $map['tables'] = array_merge( $map['tables'] ?? array(), array(
-        'tsl_batches'       => 'zl_batches',
-        'tsl_leads'         => 'zl_leads',
-        'tsl_lead_history'  => 'zl_lead_history',
-        'tsl_lead_forwards' => 'zl_lead_forwards',
-    ) );
-    $map['options'] = array_merge( $map['options'] ?? array(), array(
-        'tsl_db_version'                 => 'zl_db_version',
-        'tsl_salespeople'                => 'zl_salespeople',
-        'tsl_territories'                => 'zl_territories',
-        'tsl_leads_per_batch'            => 'zl_leads_per_batch',
-        'tsl_lookback_days'              => 'zl_lookback_days',
-        'tsl_cooldown_days'              => 'zl_cooldown_days',
-        'tsl_excluded_companies'         => 'zl_excluded_companies',
-        'tsl_permissions'                => 'zl_permissions',
-        'tsl_ai_model'                   => 'zl_ai_model',
-        'tsl_fb_client_id'               => 'zl_fb_client_id',
-        'tsl_fb_client_secret'           => 'zl_fb_client_secret',
-        'tsl_fb_account_id'              => 'zl_fb_account_id',
-        'tsl_assignment_backfill_pending' => 'zl_assignment_backfill_pending',
-        // The CRM login and the Ai key an earlier surveys app kept, which this app still reads after the
-        // platform's own credentials and its own copies (ZL_Admin::get_shared_option / decrypt_shared).
-        'ts_surveys_ns_email'            => 'zdz_surveys_ns_email',
-        'ts_surveys_ns_api_key'          => 'zdz_surveys_ns_api_key',
-        'ts_surveys_poe_api_key'         => 'zdz_surveys_poe_api_key',
-    ) );
-    $map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
-        'tsl_salesperson_code' => 'zl_salesperson_code',
-    ) );
-    $map['cron'] = array_merge( $map['cron'] ?? array(), array(
-        'tsl_cleanup_stale_batches' => 'zl_cleanup_stale_batches',
-    ) );
-    $map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array(
-        'ts-sales-leads' => 'leads',
-        'lead-generator' => 'leads',
-        'leads' => 'leads',
-    ) );
+    $map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array( 'lead-generator' => 'leads' ) );
     return $map;
 } );
 

@@ -17,9 +17,8 @@
  * `consumes[]`) lives in ZDZ_Item_Engine — this module stores no product taxonomy.
  *
  * ── Guarded migration ──────────────────────────────────────────────────────
- * In the legacy build the ledger/order-item item id was a BIGINT pointing at a LOCAL catalog row.
- * The catalog is now the Item Engine, whose ids are VARCHAR. When the platform migration renames
- * a legacy table into place, maybe_upgrade() detects an integer id column and widens it to
+ * The ledger/order-item item id is an Item Engine id (VARCHAR). Where a table still has an
+ * integer id column, maybe_upgrade() detects it and widens it to
  * VARCHAR(80) (recorded as a schema migration). A fresh Zorderz install just creates the columns
  * as VARCHAR and this no-ops.
  *
@@ -185,8 +184,7 @@ class ZSTOCK_DB {
 		if ( get_option( self::DB_VERSION_OPTION ) !== self::DB_VERSION || ! self::table_exists( self::ledger_table() ) ) {
 			self::install();
 		} else {
-			// Even when the version matches, honour a table that arrived via the rename migration
-			// with a legacy integer id column.
+			// Even when the version matches, widen a table that still has an integer id column.
 			self::migrate_item_id_columns();
 		}
 	}

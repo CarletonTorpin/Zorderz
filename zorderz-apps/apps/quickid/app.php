@@ -71,19 +71,11 @@ final class ZQID_Card {
 	private static $instance = null;
 
 	/**
-	 * Per-person card override meta keys, mapped to their pre-rename keys.
-	 * The `zqid_*` keys are authoritative; the pre-rename `tsqid_*` keys are
-	 * read as a fallback and migrated on the next profile save, so an upgraded
-	 * install keeps its per-person card data.
+	 * Per-person card override meta keys.
 	 *
-	 * @var array<string,string>
+	 * @var string[]
 	 */
-	private static $card_meta = array(
-		'zqid_name'  => 'tsqid_name',
-		'zqid_title' => 'tsqid_title',
-		'zqid_cell'  => 'tsqid_cell',
-		'zqid_email' => 'tsqid_email',
-	);
+	private static $card_meta = array( 'zqid_name', 'zqid_title', 'zqid_cell', 'zqid_email' );
 
 	public static function instance() {
 		if ( null === self::$instance ) {
@@ -150,15 +142,10 @@ final class ZQID_Card {
 	/* ------------------------------------------------------------------ */
 
 	/**
-	 * A per-person card meta value, preferring the current `zqid_*` key and
-	 * falling back to the deprecated `tsqid_*` key.
+	 * A per-person card meta value.
 	 */
 	private function person_meta( $user_id, $key ) {
-		$val = trim( (string) get_user_meta( $user_id, $key, true ) );
-		if ( '' === $val && isset( self::$card_meta[ $key ] ) ) {
-			$val = trim( (string) get_user_meta( $user_id, self::$card_meta[ $key ], true ) );
-		}
-		return $val;
+		return trim( (string) get_user_meta( $user_id, $key, true ) );
 	}
 
 	/**
@@ -466,7 +453,7 @@ final class ZQID_Card {
 		if ( ! current_user_can( 'edit_user', $user_id ) ) {
 			return;
 		}
-		foreach ( self::$card_meta as $key => $legacy ) {
+		foreach ( self::$card_meta as $key ) {
 			if ( ! isset( $_POST[ $key ] ) ) {
 				continue;
 			}
@@ -476,8 +463,6 @@ final class ZQID_Card {
 			} else {
 				update_user_meta( $user_id, $key, $val );
 			}
-			// Retire the pre-rename key either way (one-time migration).
-			delete_user_meta( $user_id, $legacy );
 		}
 	}
 }

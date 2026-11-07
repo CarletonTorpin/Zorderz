@@ -349,7 +349,7 @@ add_filter( 'cron_schedules', function( $schedules ) {
 
 // ── Media Library exclusion ─────────────────────────────────────────
 // Messaging chat attachments are stored as private WP attachment posts with
-// meta key `_tsim_chat_attachment`. We exclude them from the admin Media
+// meta key `_zim_chat_attachment`. We exclude them from the admin Media
 // Library so they don't clutter the shared media grid. Users can still
 // view their images through the chat thread where they were shared.
 add_action( 'pre_get_posts', function ( $query ) {
@@ -358,7 +358,7 @@ add_action( 'pre_get_posts', function ( $query ) {
 	if ( ! $screen || 'upload' !== $screen->id ) return;
 	$meta_query = $query->get( 'meta_query' ) ?: array();
 	$meta_query[] = array(
-		'key'     => '_tsim_chat_attachment',
+		'key'     => '_zim_chat_attachment',
 		'compare' => 'NOT EXISTS',
 	);
 	$query->set( 'meta_query', $meta_query );
@@ -367,7 +367,7 @@ add_action( 'pre_get_posts', function ( $query ) {
 add_filter( 'ajax_query_attachments_args', function ( $args ) {
 	$args['meta_query'] = $args['meta_query'] ?? array();
 	$args['meta_query'][] = array(
-		'key'     => '_tsim_chat_attachment',
+		'key'     => '_zim_chat_attachment',
 		'compare' => 'NOT EXISTS',
 	);
 	return $args;
@@ -397,6 +397,28 @@ function zim_maybe_upgrade() {
 		// Flag so the includes-loader re-seeds after classes are available.
 		update_option( 'zim_needs_reseed', '1' );
 	}
+	zim_migrate_attachment_meta_keys();
+}
+
+/**
+ * Chat attachments written by Zorderz 2.0.0 and earlier carry older meta key names. Rename them once,
+ * so existing attachments stay out of the Media Library and their signed links keep working.
+ * Idempotent; a fresh install has nothing to rename. Removed in a later release.
+ */
+function zim_migrate_attachment_meta_keys() {
+	if ( '1' === get_option( 'zim_attachment_meta_keys_v2' ) ) {
+		return;
+	}
+	global $wpdb;
+	$renames = array(
+		'_tsim_chat_attachment' => '_zim_chat_attachment',
+		'_tsim_att_token'       => '_zim_att_token',
+	);
+	foreach ( $renames as $old => $new ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time key rename.
+		$wpdb->update( $wpdb->postmeta, array( 'meta_key' => $new ), array( 'meta_key' => $old ) );
+	}
+	update_option( 'zim_attachment_meta_keys_v2', '1', false );
 }
 
 // ── Load all class files ───────────────────────────────────────────
@@ -721,47 +743,6 @@ add_action( 'after_setup_theme', function() {
 			return $apps;
 		} );
 	}
-} );
-
-/**
- * Register this plugin's rename map with the platform migration.
- * Plugins declare; the kernel migrates. No per-plugin migration code.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-		$map['tables'] = array_merge( $map['tables'] ?? [], [
-			'tsim_conversations' => 'zim_conversations',
-			'tsim_members' => 'zim_members',
-			'tsim_messages' => 'zim_messages',
-			'tsim_attachments' => 'zim_attachments',
-			'tsim_mentions' => 'zim_mentions',
-			'tsim_push_subscriptions' => 'zim_push_subscriptions',
-			'tsim_notification_queue' => 'zim_notification_queue',
-			'tsim_doc_grants' => 'zim_doc_grants',
-		] );
-		$map['options'] = array_merge( $map['options'] ?? [], [
-			'tsim_db_version' => 'zim_db_version',
-			'tsim_needs_reseed' => 'zim_needs_reseed',
-			// the push keys (a new key would silently invalidate every device's subscription) and the e-mail reply
-			// bridge (its secret keeps reply addresses already sent working)
-			'tsim_vapid_private_pem' => 'zim_vapid_private_pem',
-			'tsim_vapid_public_b64' => 'zim_vapid_public_b64',
-			'tsim_vapid_created_at' => 'zim_vapid_created_at',
-			'tsim_vapid_subject' => 'zim_vapid_subject',
-			'tsim_email_reply_secret' => 'zim_email_reply_secret',
-			'tsim_email_reply_config' => 'zim_email_reply_config',
-			'tsim_email_reply_self_seen' => 'zim_email_reply_self_seen',
-		] );
-		$map['user_meta'] = array_merge( $map['user_meta'] ?? [], [
-			'tsim_quiet_hours_' => 'zim_quiet_hours_',     // a person's own quiet hours (the whole key, despite its name)
-			'tsim_chat_sources' => 'zim_chat_sources',     // "From your chat" on the person's own messages
-		] );
-		$map['cron'] = array_merge( $map['cron'] ?? [], [
-			'tsim_cron_dispatch_notifications' => 'zim_cron_dispatch_notifications',
-			'tsim_cron_purge_attachments' => 'zim_cron_purge_attachments',
-			'tsim_cron_rotate_push_keys' => 'zim_cron_rotate_push_keys',
-			'tsim_email_reply_self_poll' => 'zim_email_reply_self_poll',
-		] );
-	return $map;
 } );
 
 

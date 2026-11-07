@@ -330,7 +330,7 @@ add_action( 'after_setup_theme', function() {
                                 <label class="zrcpt-w-label">Find the job</label>
                                 <p class="zrcpt-w-hint">Customer name, invoice/estimate #, phone, or email — just like Prep.</p>
                                 <div class="zrcpt-w-lookup-row">
-                                    <input type="text" id="zrcpt-w-lookup-input" class="zrcpt-w-input" placeholder="e.g. Jordan Blake, 15217, or 555-555-0123" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                                    <input type="text" id="zrcpt-w-lookup-input" class="zrcpt-w-input" placeholder="e.g. Jordan Blake, 10234, or 555-555-0123" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
                                     <button type="button" id="zrcpt-w-lookup-btn" class="zrcpt-w-btn zrcpt-w-btn-sm">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                         Find
@@ -439,7 +439,7 @@ add_action( 'after_setup_theme', function() {
                                 <div class="zrcpt-w-success-details">
                                     <div class="zrcpt-w-detail"><strong>Address:</strong> <span id="zrcpt-w-res-address">--</span></div>
                                     <div class="zrcpt-w-detail"><strong>Date:</strong> <span id="zrcpt-w-res-date">--</span></div>
-                                    <div class="zrcpt-w-detail"><strong>Units:</strong> <span id="zrcpt-w-res-vents">--</span></div>
+                                    <div class="zrcpt-w-detail"><strong>Units:</strong> <span id="zrcpt-w-res-units">--</span></div>
                                     <div class="zrcpt-w-detail"><strong>Photos:</strong> <span id="zrcpt-w-res-photos">--</span></div>
                                     <div class="zrcpt-w-detail" id="zrcpt-w-res-fb" style="display:none;"><strong>FreshBooks:</strong> <span id="zrcpt-w-res-fb-text">--</span></div>
                                 </div>
@@ -748,30 +748,13 @@ add_action( 'wp_ajax_zrcpt_widget_stats', function() {
 } );
 
 /**
- * Declare this module's legacy -> current rename map to the platform migration. Plugins
- * DECLARE; the theme's ZDZ_Rename_Migration performs the option/meta/post-type/app-id renames
- * in ONE place. A fresh Zorderz install has no legacy rows, so every entry no-ops. Data is
- * never seeded — only renamed if the old name is present. This is how the business's own
- * `zrcpt_receipt*` install upgrades cleanly.
+ * An option key that older Zorderz releases used becomes the current one (the theme's ZDZ_Rename_Migration
+ * performs it; a fresh install has nothing to rename).
  */
 add_filter( 'zdz_rename_map', function ( $map ) {
     // Zorderz-era option key bump (no brand word); never seeded — renamed only if present.
     $map['options'] = array_merge( $map['options'] ?? array(), array(
         'zrcpt_receipt_options' => 'zrcpt_options',
     ) );
-    // The receipt "mode" meta key is unchanged; any legacy product-named VALUE is
-    // migrated to the tagged mode by the class on read (see ZRCPT_Receipt::receipt_mode()).
-    $map['post_meta'] = array_merge( $map['post_meta'] ?? array(), array(
-        '_receipt_mode' => '_receipt_mode',
-    ) );
-    // "Which house?" filings (same columns), so the answers people already gave are kept.
-    $map['tables'] = array_merge( $map['tables'] ?? array(), array(
-        'tser_photo_house' => 'zrcpt_photo_house',
-    ) );
-    // A tenant upgrading from a differently-named legacy receipt app maps its old
-    // brand-named CPT slug and app-id to the current ones (ZRCPT_APP_ID / the
-    // 'zrcpt_receipt' CPT) through this SAME filter from its own (private) pack, so
-    // its receipt posts and user app-grants survive the rename. The public module
-    // ships NO legacy product/brand id of its own.
     return $map;
 } );

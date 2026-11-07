@@ -78,9 +78,7 @@ final class ZRCPT_Receipt {
     // (No product-named mode constant: any legacy stored value maps to MODE_TAGGED
     // via receipt_mode(), so no brand word is compiled in.)
 
-    // Current, platform-registered app id (matches ZRCPT_APP_ID and the app config
-    // 'id'). A tenant's brand-named legacy app id maps to this via zdz_rename_map
-    // from its private pack, so app grants survive the rename.
+    // Current, platform-registered app id (matches ZRCPT_APP_ID and the app config 'id').
     const APP_ID = 'receipts';
 
     /**
@@ -4036,12 +4034,12 @@ final class ZRCPT_Receipt {
      * Extract invoice/estimate number from a filename.
      *
      * Handles common naming patterns:
-     *   "Invoice 15217.pdf"        → 15217
-     *   "Estimate 5431.pdf"        → 5431
-     *   "Invoice 15217-4.pdf"      → 15217
-     *   "INV-15217.pdf"            → 15217
-     *   "EST-5431.pdf"             → 5431
-     *   "15217.pdf"                → 15217
+     *   "Invoice 10234.pdf"        → 10234
+     *   "Estimate 5012.pdf"        → 5012
+     *   "Invoice 10234-4.pdf"      → 10234
+     *   "INV-10234.pdf"            → 10234
+     *   "EST-5012.pdf"             → 5012
+     *   "10234.pdf"                → 10234
      *
      * @param string $filename  The uploaded file's original name.
      * @return string  The extracted document number, or empty string.
@@ -4049,22 +4047,22 @@ final class ZRCPT_Receipt {
     private function extract_document_number( $filename ) {
         $name = pathinfo( $filename, PATHINFO_FILENAME );
 
-        // "Invoice 15217" / "Estimate 5431" / "Invoice 15217-4"
+        // "Invoice 10234" / "Estimate 5012" / "Invoice 10234-4"
         if ( preg_match( '/(?:invoice|estimate|est|inv)[#\s._-]*(\d{3,})/i', $name, $m ) ) {
             return $m[1];
         }
 
-        // "INV-15217" / "EST-5431"
+        // "INV-10234" / "EST-5012"
         if ( preg_match( '/^(?:INV|EST)[#\s._-]*(\d{3,})/i', $name, $m ) ) {
             return $m[1];
         }
 
-        // Just a number: "15217.pdf"
+        // Just a number: "10234.pdf"
         if ( preg_match( '/^(\d{3,})(?:[_-]\d+)?$/', $name, $m ) ) {
             return $m[1];
         }
 
-        // Number at end: "doc-15217"
+        // Number at end: "doc-10234"
         if ( preg_match( '/(\d{3,})(?:-\d+)?$/', $name, $m ) ) {
             return $m[1];
         }

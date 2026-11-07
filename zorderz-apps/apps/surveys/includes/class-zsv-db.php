@@ -159,11 +159,9 @@ class ZSV_DB {
 	/**
 	 * SURVEY-OPERATOR SCHEMA MIGRATION (the required real migration).
 	 *
-	 * A legacy install upgraded to Zorderz has its `ts_survey_leads` table renamed to
-	 * `zdz_survey_leads` by the platform ZDZ_Rename_Migration, but the COLUMNS keep
-	 * their legacy names — two of them named after the single baked-in survey operator
-	 * (those legacy column names arrive from a private migration pack via the
-	 * `zsv_legacy_operator_column_renames` filter — Core names no person). This renames them to
+	 * An install whose `zdz_survey_leads` table came from an earlier schema can carry
+	 * older COLUMN names, two of them named after a person (an add-on supplies those
+	 * names on the `zsv_legacy_operator_column_renames` filter; Core names no person). This renames them to
 	 * the schema-neutral `operator_notes` / `operator_status`, preserving data, and
 	 * also folds the even-older provider-named `nutshell_*` columns to `crm_*`.
 	 *
