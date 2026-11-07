@@ -27,10 +27,10 @@ Either way, connection **secrets are never carried** and must be reconnected on 
 
 ## 0. Conventions
 
-- **Three execution paths are given where they differ: WP-CLI, REST/HTTP, and browser (wp-admin).** Use WP-CLI if you have shell access to the host; it is the most reliable. Use REST/HTTP if you only have network access plus an administrator account. Use the browser path if you are a browser-driving agent; the wp-admin UI locations are named. **The Company Data export/import (step 8A) are wp-admin features and have no WP-CLI command; drive them in the browser or through a logged-in session that carries their nonces.**
+- **Three execution paths are given where they differ: WP-CLI, REST/HTTP, and browser (wp-admin).** Use WP-CLI if you have shell access to the host; it is the most reliable. Use REST/HTTP if you only have network access plus an administrator account: it can verify and configure a site, but **it cannot install Zorderz**, because WordPress has no REST call that uploads a theme or plugin; ask the operator to upload and activate the theme (step 4), then continue over HTTP. Use the browser path if you are a browser-driving agent; the wp-admin UI locations are named. **The Company Data export/import (step 8A) are wp-admin features and have no WP-CLI command; drive them in the browser or through a logged-in session that carries their nonces.**
 - **Authenticated REST calls** use an [Application Password](https://developer.wordpress.org/rest-api/using-the-rest-api/authentication/): `curl -u "ADMIN_USER:APP_PASSWORD" ...`. Create one under **Users -> Profile -> Application Passwords**, or with `wp user application-password create ADMIN_USER zorderz-setup --porcelain`.
 - **Browser-driving agents, four things that will bite you if you do not know them:**
-  1. **Do not click a file input.** It opens a native OS file picker you cannot see or drive. Set the file on the `<input type=file>` element directly (your framework's file-upload primitive), then submit.
+  1. **Do not click a file input.** It opens a native OS file picker you cannot see or drive. Set the file on the `<input type=file>` element directly (your framework's file-upload primitive), then submit. **If your tool cannot attach a file** (many browser extensions cannot), open the upload form and ask the operator to choose the zip, then continue with Install and Activate yourself.
   2. **If a submit button click seems to miss, submit the form programmatically** (`inputElement.form.submit()`). WordPress upload forms (theme, plugin, and the import form) are ordinary forms; this is reliable.
   3. **After an upload installs, follow the result screen's "Activate" / "Activate Plugin" link** rather than hunting for a button.
   4. **Managed hosts (for example WP Engine) log in to wp-admin by SSO** (no password to type), and may return **transient 502s that clear on retry**. A 502 on one request while others succeed, and that recovers on its own, is host infrastructure, not a Zorderz fault. Wrap requests in a bounded retry; do not treat a self-clearing 502 as a code failure.
@@ -48,7 +48,7 @@ Either way, connection **secrets are never carried** and must be reconnected on 
 | WordPress | 6.0 |
 | PHP | 8.0 |
 | Database | MySQL 5.7+ or MariaDB 10.3+ |
-| Access | shell + WP-CLI, **or** an admin account (browser or Application Password) |
+| Access | shell + WP-CLI, **or** an admin account in a browser (an Application Password alone can verify and configure, not install) |
 
 **Verify:**
 
@@ -312,7 +312,9 @@ curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/item-engine/cata
 
 ## 9. Connect providers and the Ai gateway (required after an import)
 
-**Installing on a test site?** The staging guard holds e-mail, billing and CRM writes, Ai calls and hub calls on a copy of a live site, or where WordPress reports a `staging` or `development` environment type. A fresh site of its own records itself as the live site on the first admin visit, so on a test site that is not a copy, add `define( 'ZDZ_STAGING_GUARD', 'on' );` to `wp-config.php` **before** entering any credential. The admin bar shows "STAGING GUARD ON" when it is active.
+**Installing on a test site?** The staging guard holds outgoing e-mail and every outgoing write to another service (billing, CRM, Ai and hub calls), and pauses scheduled jobs, on a copy of a live site, or where WordPress reports a `staging` or `development` environment type. A fresh site of its own records itself as the live site on the first admin visit, so on a test site that is not a copy, add `define( 'ZDZ_STAGING_GUARD', 'on' );` to `wp-config.php` **before** entering any credential. The admin bar shows "STAGING GUARD ON" when it is active.
+
+**Who enters them:** the operator. Do not type a secret on their behalf: open **Zorderz -> Credentials**, tell them which rows are needed, and verify afterwards that each row reads as set (the page never prints a key back). The same goes for OAuth consent screens and the Ai budget below.
 
 **Where credentials are entered:** wp-admin -> **Zorderz -> Credentials** (`admin.php?page=zdz-core-credentials`). This is the one credential store: one key per service, sealed at rest, never printed back into the page; apps read their keys from it. **After a bundle import this step is mandatory**, because the bundle carried no secrets, so every integration starts blank exactly as on a fresh install.
 
