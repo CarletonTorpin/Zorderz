@@ -240,12 +240,12 @@ function zsp_ajax_save_sketch() {
 	if ( ! $media ) {
 		$debug[] = 'save_returned:null';
 		$debug[] = 'last_db_error:' . $wpdb->last_error;
-		error_log( 'TSSP save failed. Debug: ' . implode(' | ', $debug) );
+		error_log( 'Sketch Pad save failed. Debug: ' . implode(' | ', $debug) );
 		wp_send_json_error( 'Metadata save failed. Debug: ' . implode(' | ', $debug) );
 	}
 
 	$debug[] = 'saved:id=' . $media['id'];
-	error_log( 'TSSP save OK. Debug: ' . implode(' | ', $debug) );
+	error_log( 'Sketch Pad save OK. Debug: ' . implode(' | ', $debug) );
 	wp_send_json_success( [ 'media_id' => $media['id'], 'file_url' => $url, 'thumbnail_url' => $thumb ?: $url, 'title' => $media['title'] ] );
 }
 

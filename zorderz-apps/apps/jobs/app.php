@@ -464,43 +464,6 @@ add_action( 'zjob_close_sweep', function () {
 	}
 } );
 
-/**
- * Declare this module's legacy->current rename map to the platform migration. Plugins
- * DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place. A fresh
- * Zorderz install has no legacy rows, so every entry no-ops. Data is never seeded —
- * only renamed if present.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-	$map['tables'] = array_merge( $map['tables'] ?? array(), array(
-		'zdz_jobs'  => 'zdz_jobs',   // the jobs table
-		'zjob_user_log'  => 'zjob_user_log',
-	) );
-	$map['options'] = array_merge( $map['options'] ?? array(), array(
-		'zjob_cleared_test_ids'          => 'zjob_cleared_test_ids',
-		'zjob_order_operators'           => 'zjob_order_operators',
-		'zjob_order_po'                  => 'zjob_order_po',
-		'zjob_log_repair'                => 'zjob_log_repair',
-		'zjob_accept_fallback'           => 'zjob_accept_fallback',
-		'zjob_db_version'                => 'zjob_db_version',
-		'zjob_user_log_db_version'            => 'zjob_user_log_db_version',
-		'zjob_media_share_token_healed'  => 'zjob_media_share_token_healed',
-		'zjob_step_owners'               => 'zjob_step_owners',
-		'zjob_order_company'             => 'zjob_order_company',
-		'zjob_group_homes'               => 'zjob_group_homes',
-	) );
-	$map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
-		'zdz_crm_user_id' => 'zdz_crm_user_id',
-	) );
-	$map['cron'] = array_merge( $map['cron'] ?? array(), array(
-		'zjob_heartbeat'   => 'zjob_heartbeat',
-		'zjob_close_sweep' => 'zjob_close_sweep',
-	) );
-	$map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array(
-		'ts-jobs' => ZJOB_APP_ID,
-	) );
-	return $map;
-} );
-
 /** The actions this app counts in the platform's Usage view (a number at most, never a name). */
 add_filter( 'zdz_register_usage_actions', function ( $a ) {
 	$a = is_array( $a ) ? $a : array();

@@ -16,7 +16,7 @@
  *     happens. Custom-table rows move as plain associative arrays.
  *   - PREFIX-DRIVEN DISCOVERY. Every Zorderz table and option carries a known
  *     prefix (zdz_, zana_, zest_, zkv_, zim_, zsch_, zstock_, zcc_, zic_, zg_,
- *     zsv_, zl_, zjob_, plus legacy ts*). We discover them at runtime via SHOW
+ *     zsv_, zl_, zjob_). We discover them at runtime via SHOW
  *     TABLES and an option query, so new apps are covered automatically. Both
  *     lists are filterable for extension.
  *   - PRESERVE PRIMARY KEYS on import into an EMPTY install. Because the target is

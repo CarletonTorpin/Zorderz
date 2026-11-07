@@ -49,6 +49,7 @@ class ZDZ_Bug_Tracker {
 	 * ────────────────────────────────────────────── */
 
 	public function __construct() {
+		add_action( 'init', [ $this, 'migrate_meta_keys' ], 5 );
 		add_action( 'init', [ $this, 'register_cpt' ] );
 		add_action( 'rest_api_init', [ $this, 'register_rest_routes' ] );
 		add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
@@ -70,6 +71,31 @@ class ZDZ_Bug_Tracker {
 		// Meta boxes on the bug report edit screen.
 		add_action( 'add_meta_boxes', [ $this, 'add_meta_boxes' ] );
 		add_action( 'save_post_zdz_bug_report', [ $this, 'save_meta_boxes' ] );
+	}
+
+	/**
+	 * Reports saved by Zorderz 2.0.0 and earlier carry older meta key names. Rename them once, so their status,
+	 * category, priority and captured debug data keep showing. Idempotent; a fresh install has nothing to rename.
+	 * Removed in a later release.
+	 */
+	public function migrate_meta_keys() {
+		if ( '1' === get_option( 'zdz_bug_meta_keys_v2' ) ) {
+			return;
+		}
+		global $wpdb;
+		$renames = [
+			'_zdz_bug_status'   => '_zdz_bug_status',
+			'_zdz_bug_category' => '_zdz_bug_category',
+			'_zdz_bug_priority' => '_zdz_bug_priority',
+			'_zdz_bug_app'      => '_zdz_bug_app',
+			'_zdz_bug_view'     => '_zdz_bug_view',
+			'_zdz_bug_debug_data'   => '_zdz_bug_debug_data',
+		];
+		foreach ( $renames as $old => $new ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time key rename.
+			$wpdb->update( $wpdb->postmeta, [ 'meta_key' => $new ], [ 'meta_key' => $old ] );
+		}
+		update_option( 'zdz_bug_meta_keys_v2', '1', false );
 	}
 
 	/* ──────────────────────────────────────────────

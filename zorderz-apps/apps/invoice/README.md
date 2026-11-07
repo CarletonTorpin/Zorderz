@@ -31,9 +31,8 @@ payments, no credentials, no seeds. Everything is configured by an admin under
 - **Isolated FreshBooks connection.** This app keeps its own FreshBooks OAuth
   credentials and refreshes them on its own options, so it can never be clobbered
   by another connection's token refresh.
-- Renamed to the `zic` prefix; REST routes live under the theme's single
-  `ZDZ_REST_NS` constant; tables/options carry rename-map aliases so an existing
-  install upgrades in place.
+- Identifiers use the `zic` prefix; REST routes live under the theme's single
+  `ZDZ_REST_NS` constant.
 
 ## Settings reference
 

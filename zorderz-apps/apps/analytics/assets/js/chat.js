@@ -1477,9 +1477,9 @@
     claimLaunches();
     ensureNav();
     ensureSubview();
-    // The digest / recall deep link: #zana-session=<id> (the older #tsa-session= is still read); a tapped "your answer
+    // The digest / recall deep link: #zana-session=<id>; a tapped "your answer
     // is ready" notification: ?zana_session=<id> (taken out of the address once read, so a reload starts at home).
-    var m = (window.location.hash || '').match(/#(?:zana|tsa)-session=(\d+)/);
+    var m = (window.location.hash || '').match(/#zana-session=(\d+)/);
     var q = (window.location.search || '').match(/[?&]zana_session=(\d+)/);
     if (q && window.history && typeof window.history.replaceState === 'function') {
       try {

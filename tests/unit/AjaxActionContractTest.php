@@ -3,7 +3,7 @@
  * Every admin-ajax action a Zorderz script posts must be registered in PHP.
  *
  * 1.10.1 shipped Sketch Pad, Camera and Media dead: their PHP still registered the
- * pre-rename action names while the JavaScript (and the theme service worker) posted the
+ * older action names while the JavaScript (and the theme service worker) posted the
  * renamed ones, so every call answered admin-ajax's "0". This scans each app's scripts for
  * the action names they post and requires the app's PHP, or the theme's, to register them.
  *

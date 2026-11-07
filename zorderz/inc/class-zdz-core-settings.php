@@ -249,10 +249,9 @@ class ZDZ_Core_Settings {
 	public static function get_credential( string $key ): string {
 		$val = (string) get_option( self::OPTION_PREFIX . $key, '' );
 		if ( '' === $val ) {
-			// Upgrade shim: on an install carried across by ZDZ_Rename_Migration, a credential may still sit only
-			// under an app's pre-rename option name (copied, not moved, until cleanup). Read it there rather than
-			// report the service as unconfigured. A fresh install has none of these and reads the Core option only.
-			$fallback_prefixes = [ 'tscc_', 'tsa_', 'tsl_', 'zdz_surveys_', 'tsec_' ];
+			// A credential first saved on the Surveys app's own settings sits under its option name. Read it there
+			// rather than report the service as unconfigured.
+			$fallback_prefixes = [ 'zdz_surveys_' ];
 			foreach ( $fallback_prefixes as $prefix ) {
 				$val = (string) get_option( $prefix . $key, '' );
 				if ( '' !== $val ) {

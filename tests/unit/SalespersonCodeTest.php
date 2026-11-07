@@ -3,8 +3,7 @@
  * One person's salesperson code, read the same way everywhere (ZDZ_Salesperson_Code).
  *
  *   - the profile's code first, then the party code; either screen's code is seen;
- *   - an upgraded install's older key is read only while the current key is empty;
- *   - saving the profile field removes the older copy, so a cleared code never comes back;
+ *   - saving the profile field keeps the code as typed, at most ten characters, and an empty value clears it;
  *   - the theme's readers (ZDZ_Core_Settings, the contact bridge) ask this class.
  *
  * Neutral data only.
@@ -47,29 +46,12 @@ final class SalespersonCodeTest extends TestCase {
 		$this->assertSame( 'CD', ZDZ_Salesperson_Code::get( self::UID ), 'a code set only by the commission plan is still the person\'s code' );
 	}
 
-	public function test_a_migrated_install_reads_the_current_key(): void {
-		// After the rename migration copies the code and the older key is cleaned up, only the current key is left.
+	public function test_saving_the_profile(): void {
 		$this->meta( array( ZDZ_Salesperson_Code::PROFILE_KEY => 'AB' ) );
-		$this->assertSame( 'AB', ZDZ_Salesperson_Code::get( self::UID ) );
-	}
-
-	public function test_the_older_key_only_while_the_current_one_is_empty(): void {
-		$this->meta( array( ZDZ_Salesperson_Code::OLD_PROFILE_KEY => 'AB' ) );
-		$this->assertSame( 'AB', ZDZ_Salesperson_Code::get( self::UID ), 'not migrated yet: the older key is read' );
-		$this->meta( array( ZDZ_Salesperson_Code::OLD_PROFILE_KEY => 'AB', ZDZ_Salesperson_Code::PROFILE_KEY => 'EF' ) );
-		$this->assertSame( 'EF', ZDZ_Salesperson_Code::get( self::UID ), 'the current key wins over an older copy' );
-		$this->meta( array( ZDZ_Salesperson_Code::OLD_PARTY_KEY => 'GH' ) );
-		$this->assertSame( 'GH', ZDZ_Salesperson_Code::party( self::UID ) );
-		$this->assertSame( 'GH', ZDZ_Salesperson_Code::get( self::UID ) );
-	}
-
-	public function test_saving_the_profile_removes_the_older_copy(): void {
-		$this->meta( array( ZDZ_Salesperson_Code::OLD_PROFILE_KEY => 'AB' ) );
 		ZDZ_Salesperson_Code::save_profile( self::UID, '' );
-		$this->assertSame( '', ZDZ_Salesperson_Code::get( self::UID ), 'a cleared code does not come back from the older key' );
+		$this->assertSame( '', ZDZ_Salesperson_Code::get( self::UID ), 'an empty value clears the code' );
 		ZDZ_Salesperson_Code::save_profile( self::UID, '  JK-LONGER-THAN-TEN  ' );
 		$this->assertSame( 'JK-LONGER-', ZDZ_Salesperson_Code::profile( self::UID ), 'kept as typed, at most ten characters' );
-		$this->assertArrayNotHasKey( ZDZ_Salesperson_Code::OLD_PROFILE_KEY, $GLOBALS['zdz_test_user_meta'][ self::UID ] );
 	}
 
 	public function test_only_short_text_is_a_code(): void {
@@ -88,10 +70,6 @@ final class SalespersonCodeTest extends TestCase {
 		$this->assertStringContainsString( 'ZDZ_Salesperson_Code::get( $user_id )', $settings );
 		$this->assertStringContainsString( 'ZDZ_Salesperson_Code::party( $uid )', $bridge );
 		$this->assertStringContainsString( 'ZDZ_Salesperson_Code::save_profile(', $ui );
-		foreach ( array( $settings, $bridge, $ui ) as $src ) {
-			$this->assertStringNotContainsString( "'" . ZDZ_Salesperson_Code::OLD_PROFILE_KEY . "'", $src, 'no reader names an older key itself' );
-			$this->assertStringNotContainsString( "'" . ZDZ_Salesperson_Code::OLD_PARTY_KEY . "'", $src );
-		}
 		$this->assertStringContainsString( 'class-zdz-salesperson-code.php', (string) file_get_contents( $root . 'functions.php' ) );
 	}
 }

@@ -13,6 +13,34 @@ there is a third, optional download: the reference Charts hub
 
 ---
 
+## [2.0.1] - 2026-11-07
+
+A tidy-up release. Older internal names and aliases that Zorderz no longer uses are gone, two stored names are
+renamed once on upgrade, and the bug report list works as intended. Install the theme first, then the apps. Nothing
+to configure.
+
+### Upgrade notes
+- **Messages answers only under `zim/v1`.** The older REST namespace alias is removed. Zorderz's own pages already
+  use `zim/v1`; an outside script that called the alias needs the new path.
+- **Two stored names are renamed once**, the first time the site loads after the upgrade: chat attachments (so they
+  stay out of the Media Library and their links keep working) and bug reports (status, category, priority and
+  captured details). Nothing to do.
+
+### Fixed
+- **Bug reports:** the admin list's Status and Category columns never appeared, and the edit screen's fields did not
+  save, because both were hooked to the wrong post type. They now work.
+- **Inbox** reads quantities in supplier e-mail with the business's own count nouns (the unit nouns of countable
+  items in the Item Engine, plus any a site adds on the `zib_enrich_count_nouns` filter) instead of a fixed trade list.
+
+### Changed
+- Removed class aliases, option, meta and cron fallbacks, and Ajax aliases that only existed for names Zorderz has
+  not used since before 2.0, plus their comments and tests. The rename migration in Core now ships empty; apps keep
+  the three app-id renames that public 1.x grants need.
+- Neutral examples: an invoice number in Receipts, example e-mail addresses on `example.com`, the Receipts result
+  field's element id, and an Item Engine comment.
+
+---
+
 ## [2.0.0] - 2026-11-06
 
 A major release. Zorderz grows from 20 to 30 apps, gains a shared Ai router with customer-detail coding and spend
@@ -124,7 +152,7 @@ A security and repair release. It closes an administrator-escalation path in kio
 - **Debug capture** writes to a directory named from the site's salt, with deny rules, instead of the fixed public `wp-content/zorderz-debug.log`.
 
 ### Fixed
-- **Sketch Pad, Camera and Media work again.** Their server hooks were still registered under pre-rename action names, so every save, upload, list and delete failed and camera captures stayed in the offline queue. The old names remain as aliases for one release so queued uploads from an older build still land.
+- **Sketch Pad, Camera and Media work again.** Their server hooks were still registered under older action names, so every save, upload, list and delete failed and camera captures stayed in the offline queue. The old names remain as aliases for one release so queued uploads from an older build still land.
 - **Inbox mail client is reachable.** The folder list now falls back to Inbox and Sent when no folder index exists, so the message list opens. Compose, reply, forward and triage appear when the new *Sending & triage* setting is on (Settings, Zorderz Inbox) and the user has granted `Mail.Send` and `Mail.ReadWrite`; the server enforces the same rule. Nothing is ever sent automatically.
 - **Settings, App Authorizations** reported every connection as "not connected" and its connect buttons failed with "plugin is not active". Status and the company Nutshell save now use the Core credential store; the FreshBooks button explains where the connection is made (in-dashboard authorization is not available yet).
 - **Leads background batches reach the CRM.** The pipeline called two methods that did not exist, so no lead was created in the CRM and no batch summary was written. Test batches are never pushed. A fresh install now also gets the full Leads schema (the forward-to-team table and four columns) and the default permission set.
@@ -720,7 +748,7 @@ drives its own schema migrations); it is the distribution that is single-numbere
   Profile, Identity Pack and the Item Engine admin returned "you are not allowed to
   access this page," because the submenus registered before their parent menu
   existed. The parent is now registered first.
-- **User Management rendered blank**, gated on a stale pre-rename hook id. Corrected.
+- **User Management rendered blank**, gated on a stale hook id. Corrected.
 - **The Estimates app was unusable without a billing API.** It hung forever on a
   failed call (now degrades to an honest error), required an external provider to
   create an estimate (now falls back to a local number), and priced everything at
@@ -860,7 +888,7 @@ Named honestly rather than shipped half-done:
   nothing is broken); a later release aligns it with the others.
 - The identity-free cosmetic/UX delta (status-chip
   palette, widget-header navigation, layout-shift guards, mobile tap-target
-  utilities) is not in this release and still carries its pre-rename class names.
+  utilities) is not in this release and still carries its older class names.
 
 ### Verification
 

@@ -37,9 +37,7 @@ All endpoints require the `read` capability and an `X-WP-Nonce: wp_rest` header.
 ## Data discipline
 
 The scores table ships **empty**: activation creates the schema only, nothing
-is seeded. Deactivation preserves the table. The table and DB-version option
-carry deprecated-alias rename-map entries (`zdz_rename_map`) so an existing
-install upgrades in place.
+is seeded. Deactivation preserves the table.
 
 ## Configuration
 
