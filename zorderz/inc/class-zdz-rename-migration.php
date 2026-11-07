@@ -57,201 +57,21 @@ class ZDZ_Rename_Migration {
 	 * @return array{tables:array,options:array,user_meta:array,roles:array,caps:array,cron:array}
 	 */
 	public static function map() {
+		// Core ships no entries of its own: an app or a private add-on declares the names it renames on the
+		// `zdz_rename_map` filter, in this same shape.
 		$map = [
-			// old table suffix => new table suffix (without $wpdb->prefix)
-			'tables' => [
-				'zdz_user_media'       => 'zdz_user_media',
-				'zdz_user_goals'       => 'zdz_user_goals',
-				'zdz_personal_records' => 'zdz_personal_records',
-				'zdz_notifications'    => 'zdz_notifications',
-				'zdz_audit_log'        => 'zdz_audit_log',
-				'zdz_contacts'         => 'zdz_contacts',
-				'zdz_media_shares'     => 'zdz_media_shares',
-				'zdz_places'           => 'zdz_places',
-				'zdz_llm_ledger'       => 'zdz_llm_ledger',
-				'zdz_llm_holds'        => 'zdz_llm_holds',
-				'zdz_usage_daily'      => 'zdz_usage_daily',     // the usage rollups pruning keeps
-				'zdz_sealed'           => 'zdz_sealed',          // the access-code vault
-				'zdz_sealed_views'     => 'zdz_sealed_views',    // its openings and refusals
-				'zdz_price_book_entitlements' => 'zdz_price_book_entitlements',
-			],
-			// exact option keys
-			'options' => [
-				'zdz_theme_db_version'      => 'zdz_theme_db_version',
-				'zdz_media_schema'          => 'zdz_media_schema',
-				'zdz_notifications_schema'  => 'zdz_notifications_schema',
-				'zdz_audit_log_version'     => 'zdz_audit_log_version',
-				'zdz_alert_channel_config'  => 'zdz_alert_channel_config',
-				'zdz_company_phone'         => 'zdz_company_phone',
-				'zdz_receptionist_hours'    => 'zdz_receptionist_hours',
-				'zdz_field_prefs_version'   => 'zdz_field_prefs_version',
-				'zdz_sw_register'           => 'zdz_sw_register',
-				'zdz_consent_card_on'       => 'zdz_consent_card_on',
-				// Zorderz → Settings: the model, the Review Bridge address and key (copied as stored; the reader
-				// decodes any at-rest format), and the typed Google review count with the day it was entered.
-				'zdz_core_ai_model'                  => 'zdz_core_ai_model',
-				'zdz_core_review_bridge_url'         => 'zdz_core_review_bridge_url',
-				'zdz_core_review_bridge_key'         => 'zdz_core_review_bridge_key',
-				'zdz_core_google_reviews_count'      => 'zdz_core_google_reviews_count',
-				'zdz_core_google_reviews_entered_at' => 'zdz_core_google_reviews_entered_at',
-				// Credentials: Core's own row of every service on Zorderz → Credentials.
-				// Values are copied as stored; every reader decodes any at-rest format, and
-				// the salts that key the encrypted ones travel with wp-config.php. The
-				// screen's own state and Undo backups are NOT carried: they name the old
-				// copy rows, so the administrator chooses again on the new install.
-				'zdz_core_poe_api_key'               => 'zdz_core_poe_api_key',
-				'zdz_core_ns_email'                  => 'zdz_core_ns_email',
-				'zdz_core_ns_api_key'                => 'zdz_core_ns_api_key',
-				'zdz_core_fb_client_id'              => 'zdz_core_fb_client_id',
-				'zdz_core_fb_client_secret'          => 'zdz_core_fb_client_secret',
-				'zdz_core_fb_access_token'           => 'zdz_core_fb_access_token',
-				'zdz_core_fb_refresh_token'          => 'zdz_core_fb_refresh_token',
-				'zdz_core_fb_account_id'             => 'zdz_core_fb_account_id',
-				'zdz_core_fb_consolidated'           => 'zdz_core_fb_consolidated',
-				// The surveys app's own billing-app copy, which Leads still reads as a fallback and the
-				// token service keeps in step as a legacy family (zdz_surveys_fb_).
-				'zdz_surveys_fb_client_id'           => 'zdz_surveys_fb_client_id',
-				'zdz_surveys_fb_client_secret'       => 'zdz_surveys_fb_client_secret',
-				'zdz_surveys_fb_access_token'        => 'zdz_surveys_fb_access_token',
-				'zdz_surveys_fb_refresh_token'       => 'zdz_surveys_fb_refresh_token',
-				'zdz_surveys_fb_account_id'          => 'zdz_surveys_fb_account_id',
-				'zdz_surveys_fb_expires_at'          => 'zdz_surveys_fb_expires_at',
-				'zdz_surveys_fb_version'             => 'zdz_surveys_fb_version',
-				'zdz_surveys_fb_reauth_needed'       => 'zdz_surveys_fb_reauth_needed',
-				'zdz_surveys_fb_cooldown_until'      => 'zdz_surveys_fb_cooldown_until',
-				'zdz_surveys_fb_last_refresh'        => 'zdz_surveys_fb_last_refresh',
-				'zdz_surveys_fb_retired_rt'          => 'zdz_surveys_fb_retired_rt',
-				'zdz_core_anthropic_api_key'         => 'zdz_core_anthropic_api_key',
-				'zdz_core_google_cal_client_id'      => 'zdz_core_google_cal_client_id',
-				'zdz_core_google_cal_client_secret'  => 'zdz_core_google_cal_client_secret',
-				'zdz_core_ms_cal_client_id'          => 'zdz_core_ms_cal_client_id',
-				'zdz_core_ms_cal_client_secret'      => 'zdz_core_ms_cal_client_secret',
-				'zdz_core_ms_sync_tenant_id'         => 'zdz_core_ms_sync_tenant_id',
-				'zdz_core_ms_sync_client_id'         => 'zdz_core_ms_sync_client_id',
-				'zdz_core_ms_sync_client_secret'     => 'zdz_core_ms_sync_client_secret',
-				'zdz_core_ms_inbox_tenant_id'        => 'zdz_core_ms_inbox_tenant_id',
-				'zdz_core_ms_inbox_client_id'        => 'zdz_core_ms_inbox_client_id',
-				'zdz_core_ms_inbox_client_secret'    => 'zdz_core_ms_inbox_client_secret',
-				'zdz_core_ms_vault_tenant_id'        => 'zdz_core_ms_vault_tenant_id',
-				'zdz_core_ms_vault_client_id'        => 'zdz_core_ms_vault_client_id',
-				'zdz_core_ms_vault_client_secret'    => 'zdz_core_ms_vault_client_secret',
-				'zdz_core_stripe_publishable'        => 'zdz_core_stripe_publishable',
-				'zdz_core_stripe_secret'             => 'zdz_core_stripe_secret',
-				'zdz_core_stripe_webhook_secret'     => 'zdz_core_stripe_webhook_secret',
-				'zdz_core_stripe_connected_account'  => 'zdz_core_stripe_connected_account',
-				'zdz_core_wordfence_feed_key'        => 'zdz_core_wordfence_feed_key',
-				'zdz_core_cred_expires'              => 'zdz_core_cred_expires',
-				// Google Business Profile: the OAuth client, the sealed sign-in (any sealed format reads), the
-				// location an administrator picked, and the last status.
-				'zdz_core_gbp_client_id'             => 'zdz_core_gbp_client_id',
-				'zdz_core_gbp_client_secret'         => 'zdz_core_gbp_client_secret',
-				'zdz_core_gbp_token'                 => 'zdz_core_gbp_token',
-				'zdz_core_gbp_location'              => 'zdz_core_gbp_location',
-				'zdz_core_gbp_status'                => 'zdz_core_gbp_status',
-				'zdz_notifications_bell_seed' => 'zdz_notifications_bell_seed',
-				'zdz_contacts_db_version'   => 'zdz_contacts_db_version',
-				'zdz_contacts_started'      => 'zdz_contacts_started',
-				'zdz_media_shares_schema'   => 'zdz_media_shares_schema',
-				'zdz_places_schema'         => 'zdz_places_schema',
-				'zdz_llm_ledger_db'         => 'zdz_llm_ledger_db',
-				'zdz_llm_role_overrides'    => 'zdz_llm_role_overrides',
-				'zdz_llm_quick_lines'      => 'zdz_llm_quick_lines',
-				'zdz_llm_openai_entries'    => 'zdz_llm_openai_entries',
-				'zdz_llm_alerts_sent'       => 'zdz_llm_alerts_sent',
-				'zdz_llm_checks_last'       => 'zdz_llm_checks_last',
-				'zdz_audit_prune_last'      => 'zdz_audit_prune_last',
-				'zdz_sealed_schema'         => 'zdz_sealed_schema',
-				'zdz_sealed_code_saved'     => 'zdz_sealed_code_saved',
-				'zdz_for_you_learn'         => 'zdz_for_you_learn',      // "Learn each person's apps"
-				// The vault's key check is NOT carried across: it is an HMAC under the old key context, so a copy
-				// would lock the vault. It is written again on first use, after the newest sealed code opens with
-				// today's key (ZDZ_SEALED_KEY holding the printed recovery code opens the carried-over codes).
-				'zdz_privacy_view_dm_to'    => 'zdz_privacy_view_dm_to',
-			],
-			// exact user meta keys
-			'user_meta' => [
-				'zdz_allowed_apps'        => 'zdz_allowed_apps',
-				'zdz_denied_apps'         => 'zdz_denied_apps',
-				'zdz_safe_mode'           => 'zdz_safe_mode',
-				'zdz_data_permissions'    => 'zdz_data_permissions',
-				'zdz_app_order'           => 'zdz_app_order',
-				'zdz_alert_prefs'         => 'zdz_alert_prefs',
-				'zdz_field_preferences'   => 'zdz_field_preferences',
-				'zdz_user_initials'       => 'zdz_user_initials',
-				'zdz_user_notes'          => 'zdz_user_notes',
-				'zdz_user_phone'          => 'zdz_user_phone',
-				'zdz_user_email_name'     => 'zdz_user_email_name',
-				'zdz_user_territories'    => 'zdz_user_territories',
-				'zdz_salesperson_initials' => 'zdz_salesperson_initials',
-				'zdz_dash_card_order'     => 'zdz_dash_card_order',
-				'zdz_dash_card_scope'     => 'zdz_dash_card_scope',
-				'zdz_dash_widget_order'   => 'zdz_dash_widget_order',
-				'zdz_dash_global_range'   => 'zdz_dash_global_range',
-				'zdz_home_pins'           => 'zdz_home_pins',           // the widgets a person keeps on home
-				'zdz_focus_view'          => 'zdz_focus_view',          // apps open as their own page, or not
-				'zdz_user_color'          => 'zdz_user_color',
-				'zdz_consent'             => 'zdz_consent',
-				'zdz_consent_seen'        => 'zdz_consent_seen',
-				'zdz_marks_show_all'      => 'zdz_marks_show_all',
-				// carried so an account in Privacy View stays in it: losing the flag would show it everything
-				'zdz_privacy_view'        => 'zdz_privacy_view',
-				'zdz_work_hours'          => 'zdz_work_hours',          // a person's work hours (home apps at work / after hours)
-				'zdz_for_you_reset_at'    => 'zdz_for_you_reset_at',    // "Reset my app order"
-				// a former employee stays out of every people picker
-				'zdz_inactive'            => 'zdz_inactive',
-			],
-			// role slug => new role slug
-			'roles' => [
-				'zdz_owner'    => 'zdz_owner',
-				'zdz_admin'    => 'zdz_admin',
-				'zdz_sales'    => 'zdz_sales',
-				'zdz_operator' => 'zdz_operator',
-				'zdz_mfg'      => 'zdz_mfg',
-				'zdz_tech'     => 'zdz_tech',
-				'zdz_general'  => 'zdz_general',
-			],
-			// capability => new capability
-			'caps' => [
-				'zdz_access_app'   => 'zdz_access_app',
-				'zdz_view_as'      => 'zdz_view_as',
-				'zdz_view_as_user' => 'zdz_view_as_user',
-			],
-			// cron hook => new cron hook
-			'cron' => [
-				'zdz_personal_records_streak_tick' => 'zdz_personal_records_streak_tick',
-				'zdz_contacts_drain'               => 'zdz_contacts_drain',
-				'zdz_llm_ledger_prune'             => 'zdz_llm_ledger_prune',
-				'zdz_audit_prune'                  => 'zdz_audit_prune',
-			],
+			'tables'      => [], // old table suffix => new table suffix (without $wpdb->prefix)
+			'options'     => [], // exact option keys
+			'user_meta'   => [], // exact user meta keys
+			'roles'       => [], // role slug => new role slug
+			'caps'        => [], // capability => new capability
+			'cron'        => [], // cron hook => new cron hook
 			/*
-			 * App-id VALUES stored inside meta arrays.
-			 *
-			 * Renaming a meta KEY is not enough: zdz_allowed_apps / zdz_denied_apps
-			 * hold app IDs as values, and those ids changed too. Without this, a
-			 * user's grant list keeps pointing at app ids nothing registers any
-			 * more, so their tile silently disappears — no error, just a missing
-			 * app. Found by the boot test, not by reading the code.
+			 * App-id VALUES stored inside meta arrays. Renaming a meta KEY is not enough: zdz_allowed_apps /
+			 * zdz_denied_apps / zdz_home_pins hold app ids as values. Without the value rename, a grant keeps
+			 * pointing at an id nothing registers and the person's tile silently disappears.
 			 */
-			'app_ids' => [
-				'ts-camera'     => 'zdz-camera',
-				'ts-media'      => 'zdz-media',
-				'ts-media-all'  => 'zdz-media-all',
-				'ts-sketch-pad' => 'zdz-sketch-pad',
-				/*
-				 * Jobs registers `jobs` and declares this row on the
-				 * `zdz_rename_map` filter too. It is kept here as well, so a
-				 * grant naming the older id is carried across even when the
-				 * migration runs before the Jobs app is active; otherwise the
-				 * grant would point at an id nothing registers and the tile
-				 * would disappear.
-				 *
-				 * The other apps declare their own older ids on that filter
-				 * (Leads, Surveys, Stock, Inbox, Charts, Dot Plot, Route
-				 * Planner, Team Roles, Commission, Analytics, Invoice). An app
-				 * whose id did not change needs no row.
-				 */
-				'ts-jobs'       => 'jobs',
-			],
+			'app_ids'     => [],
 			// Meta keys whose value is a list of app ids.
 			'app_id_meta' => [ 'zdz_allowed_apps', 'zdz_denied_apps', 'zdz_home_pins' ],
 		];

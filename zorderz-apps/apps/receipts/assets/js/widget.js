@@ -1798,7 +1798,7 @@
 
     var addrEl = $('zrcpt-w-res-address');
     var dateEl = $('zrcpt-w-res-date');
-    var ventsEl = $('zrcpt-w-res-vents');
+    var unitsEl = $('zrcpt-w-res-units');
     var photosEl = $('zrcpt-w-res-photos');
     var linkEl = $('zrcpt-w-view-link');
     var fbEl = $('zrcpt-w-res-fb');
@@ -1806,7 +1806,7 @@
 
     if (addrEl) addrEl.textContent = data.address || '--';
     if (dateEl) dateEl.textContent = data.install_date || '--';
-    if (ventsEl) ventsEl.textContent = data.vents || '--';
+    if (unitsEl) unitsEl.textContent = data.vents || '--';
     if (photosEl) photosEl.textContent = data.photo_count || '0';
     if (linkEl) linkEl.href = data.permalink || '#';
 

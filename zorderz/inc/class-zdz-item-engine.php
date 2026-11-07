@@ -481,7 +481,7 @@ class ZDZ_Item_Engine {
 	 * CORE MECHANISM, NAMES NOTHING. The trait pairs come from `zdz_item_conflict_pairs`
 	 * (ships EMPTY) — each pair `{ a:[token-prefix…], b:[token-prefix…], reason }`. A
 	 * token matches a prefix by str-starts-with (a trailing "*" is optional and stripped),
-	 * so "retract*" matches "retractable". The per-item stream also folds in the item's
+	 * so "fold*" matches "foldable". The per-item stream also folds in the item's
 	 * declared trait tokens (the material-class attribute), so a contradiction can be
 	 * caught from the catalog's own attributes, not only from words — the ONE
 	 * implementation the estimate parser and the receipt builder both call.

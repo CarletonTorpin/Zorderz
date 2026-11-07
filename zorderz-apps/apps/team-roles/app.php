@@ -218,29 +218,3 @@ function zro_enqueue_app( $user_id ) {
 	);
 }
 
-/**
- * Carry an install's earlier Team Roles data across to this app's names. The platform migration
- * performs the renames; a fresh install has none of these and every entry is a no-op.
- */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables']  = array_merge(
-			$map['tables'] ?? array(),
-			array(
-				'zro_answers' => 'zro_answers',
-				'zro_history' => 'zro_history',
-			)
-		);
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'zro_abilities'  => 'zro_abilities',
-				'zro_migration'  => 'zro_migration',
-				'zro_db_version' => 'zro_db_version',
-			)
-		);
-		$map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array( 'roles' => ZRO_APP_ID ) );
-		return $map;
-	}
-);

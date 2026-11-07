@@ -88,29 +88,3 @@ add_action( 'plugins_loaded', static function () {
 	}
 } );
 
-/**
- * Declare this module's legacy → current rename map to the platform migration.
- *
- * Plugins DECLARE; the theme's ZDZ_Rename_Migration performs the option-key moves and
- * user-meta moves in one place. This is what lets a legacy install (tsmi_ options, TS_
- * Mailbox_Identity / TSMI_* classes) upgrade cleanly in place to the zmi_ / zdz_ names
- * below. A fresh Zorderz install has no legacy rows, so every entry simply no-ops. Data
- * itself is never seeded here — only renamed if present.
- *
- * Note: the legacy `zsch_mailbox` → `zsch_mailbox` user-meta rename is already declared by
- * the Scheduler app (it owns that key); it is not repeated here.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-	$map['options'] = array_merge( $map['options'] ?? array(), array(
-		'zmi_service_mailboxes' => 'zmi_service_mailboxes',
-		'zmi_internal_domains'  => 'zmi_internal_domains',
-		'zmi_service_mailbox_reader_roles'      => 'zmi_service_mailbox_reader_roles',
-		'zmi_flags'             => 'zmi_flags',
-		'zmi_roster_text'       => 'zmi_roster_text',
-	) );
-	$map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
-		'zmi_mailbox_identity' => 'zmi_mailbox_identity',
-		'zdz_login_aliases'    => 'zdz_login_aliases',
-	) );
-	return $map;
-} );

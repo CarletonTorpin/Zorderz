@@ -523,11 +523,15 @@ class ZIB_ZANA_Bridge {
 	private static function singular_unit( string $u ): string {
 		$m = array(
 			'rolls' => 'roll', 'units' => 'unit', 'boxes' => 'box', 'cases' => 'case',
-			'pieces' => 'piece', 'screens' => 'screen', 'doors' => 'door', 'sheets' => 'sheet',
+			'pieces' => 'piece', 'sheets' => 'sheet',
 			'bundles' => 'bundle', 'pallets' => 'pallet', 'yards' => 'yard', 'feet' => 'foot',
-			'panels' => 'panel', 'vents' => 'vent',
+			'panels' => 'panel',
 		);
-		return $m[ strtolower( $u ) ] ?? $u;
+		$l = strtolower( $u );
+		if ( isset( $m[ $l ] ) ) {
+			return $m[ $l ];
+		}
+		return ( strlen( $l ) > 3 && 's' === substr( $l, -1 ) && 'ss' !== substr( $l, -2 ) ) ? substr( $u, 0, -1 ) : $u;
 	}
 
 	/** Whole number → int string; else a trimmed 2-dp string. Pure. */
