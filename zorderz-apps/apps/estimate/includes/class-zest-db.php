@@ -5,9 +5,6 @@
  * Two tables: the estimate mirror (a local index of what the app has drafted/sent, the
  * source of truth for ownership + history) and the background parse-job queue. SCHEMA
  * ONLY on activation — no estimate, customer, price or catalog row is ever seeded.
- * Tables under older names are renamed in place by the theme's ZDZ_Rename_Migration
- * from the map app.php declares, so an upgraded install keeps its rows; a fresh
- * Zorderz install simply creates these empty.
  *
  * @package Zorderz\Estimate
  */

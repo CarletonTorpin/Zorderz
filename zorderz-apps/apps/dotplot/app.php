@@ -113,24 +113,3 @@ add_action(
 	20
 );
 
-/**
- * Declare this module's pre-rename option and app id to the platform migration. A fresh Zorderz
- * install has no such rows, so every entry no-ops. The map carries no AI-key option because the
- * app keeps none. Apps DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place.
- */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'tsdotplot_version' => 'zdp_version',
-			)
-		);
-		$map['app_ids'] = array_merge(
-			$map['app_ids'] ?? array(),
-			array( 'dot-plot' => ZDP_APP_ID )
-		);
-		return $map;
-	}
-);

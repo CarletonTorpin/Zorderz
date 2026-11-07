@@ -127,7 +127,7 @@ class ZIM_Attachments {
 		$metadata = wp_generate_attachment_metadata( $attachment_id, $result['file'] );
 		wp_update_attachment_metadata( $attachment_id, $metadata );
 		// Tag as Messaging-owned so the media-library filter can exclude them.
-		update_post_meta( $attachment_id, '_tsim_chat_attachment', '1' );
+		update_post_meta( $attachment_id, '_zim_chat_attachment', '1' );
 
 		// Record in our own table for cheap message-join queries and for
 		// tracking soft-delete / purge lifecycle.
@@ -354,10 +354,10 @@ class ZIM_Attachments {
 		if ( $attachment_post_id <= 0 ) {
 			return '';
 		}
-		$tok = get_post_meta( $attachment_post_id, '_tsim_att_token', true );
+		$tok = get_post_meta( $attachment_post_id, '_zim_att_token', true );
 		if ( ! is_string( $tok ) || strlen( $tok ) < 24 ) {
 			$tok = bin2hex( random_bytes( 16 ) );
-			update_post_meta( $attachment_post_id, '_tsim_att_token', $tok );
+			update_post_meta( $attachment_post_id, '_zim_att_token', $tok );
 		}
 		return $tok;
 	}
@@ -402,7 +402,7 @@ class ZIM_Attachments {
 		}
 
 		// Constant-time token check.
-		$expected = get_post_meta( (int) $a->attachment_post_id, '_tsim_att_token', true );
+		$expected = get_post_meta( (int) $a->attachment_post_id, '_zim_att_token', true );
 		if ( ! is_string( $expected ) || '' === $expected || ! hash_equals( $expected, $token ) ) {
 			$fail();
 		}

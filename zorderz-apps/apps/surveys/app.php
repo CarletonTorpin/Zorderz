@@ -248,49 +248,13 @@ add_action(
 );
 
 /**
- * Declare this module's legacy->current rename map to the platform migration. Plugins
- * DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place. A fresh
- * Zorderz install has no legacy rows, so every entry no-ops. Data is never seeded — only
- * renamed if present. (The legacy operator-COLUMN rename lives in ZSV_DB, a real ALTER
- * guarded by zsv_db_version, because the platform map only renames whole tables/options,
- * not columns; person-named legacy columns come from a private pack via the
- * zsv_legacy_operator_column_renames filter, so Core names no person.)
+ * The app's earlier id, kept in people's app grants by older Zorderz releases, becomes the current one
+ * (the theme's ZDZ_Rename_Migration performs it; a fresh install has nothing to rename).
  */
 add_filter(
 	'zdz_rename_map',
 	function ( $map ) {
-		$map['tables'] = array_merge(
-			$map['tables'] ?? array(),
-			array(
-				'ts_survey_batches'  => 'zdz_survey_batches',
-				'ts_survey_leads'    => 'zdz_survey_leads',
-				'ts_invoice_memory'  => 'zdz_survey_invoice_memory',
-				'ts_survey_forwards' => 'zdz_survey_forwards',
-			)
-		);
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'ts_surveys_db_version'          => 'zsv_db_version',
-				'ts_surveys_survey_count'        => 'zsv_batch_size',
-				'ts_surveys_ai_model'            => 'zsv_ai_model',
-				'ts_surveys_dns_tag_name'        => 'zsv_do_not_survey_tag',
-				'ts_surveys_ns_assignee_user_id' => 'zsv_operator_user_id',
-				'ts_surveys_ns_assignee_name'    => 'zsv_operator_name',
-				'ts_surveys_sync_window_days'    => 'zsv_sync_window_days',
-			)
-		);
-		$map['cron'] = array_merge(
-			$map['cron'] ?? array(),
-			array(
-				'ts_surveys_review_check' => ZSV_Review_Checker::CRON_HOOK,
-				'ts_surveys_auto_close'  => ZSV_Auto_Closer::CRON_HOOK,
-			)
-		);
-		$map['app_ids'] = array_merge(
-			$map['app_ids'] ?? array(),
-			array( 'satisfaction-surveys' => ZSV_APP_ID )
-		);
+		$map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array( 'satisfaction-surveys' => ZSV_APP_ID ) );
 		return $map;
 	}
 );

@@ -220,11 +220,6 @@ class ZDZ_Party {
 		if ( get_user_meta( (int) $user->ID, 'zdz_inactive', true ) ) {
 			return false;
 		}
-		// The pre-rename key, read until ZDZ_Rename_Migration has copied it (an
-		// inactive person must never reappear in a picker in between).
-		if ( get_user_meta( (int) $user->ID, 'ts_inactive', true ) ) {
-			return false;
-		}
 		return true;
 	}
 

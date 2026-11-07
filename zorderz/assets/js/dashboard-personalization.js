@@ -31,7 +31,7 @@
 
 	try {
 		if ( window.sessionStorage && sessionStorage.getItem( 'zdz_disable_personalization' ) === '1' ) {
-			console.info( '[ts] personalization disabled by kill switch' );
+			console.info( '[zdz] personalization disabled by kill switch' );
 			return;
 		}
 	} catch ( _ ) {}
@@ -52,7 +52,7 @@
 
 	function tripKillSwitch( err ) {
 		try {
-			console.warn( '[ts] personalization tripped — disabling for this session', err );
+			console.warn( '[zdz] personalization tripped — disabling for this session', err );
 			sessionStorage.setItem( 'zdz_disable_personalization', '1' );
 		} catch ( _ ) {}
 	}

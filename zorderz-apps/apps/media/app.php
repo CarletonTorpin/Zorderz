@@ -226,17 +226,6 @@ add_action( 'init', function () {
 	add_action( 'wp_ajax_nopriv_zml_set_owner', 'zml_deny_nopriv' );
 	add_action( 'wp_ajax_zml_owner_people', 'zml_ajax_owner_people' );   // who it can be moved to (administrators)
 	add_action( 'wp_ajax_nopriv_zml_owner_people', 'zml_deny_nopriv' );
-	// Legacy aliases (pre-rename names), kept for pages cached by an older build.
-	add_action( 'wp_ajax_tsml_list', 'zml_ajax_list' );
-	add_action( 'wp_ajax_nopriv_tsml_list', 'zml_deny_nopriv' );
-	add_action( 'wp_ajax_tsml_save_note', 'zml_ajax_save_note' );
-	add_action( 'wp_ajax_nopriv_tsml_save_note', 'zml_deny_nopriv' );
-	add_action( 'wp_ajax_tsml_save_visibility', 'zml_ajax_save_visibility' );
-	add_action( 'wp_ajax_nopriv_tsml_save_visibility', 'zml_deny_nopriv' );
-	add_action( 'wp_ajax_tsml_upload', 'zml_ajax_upload' );
-	add_action( 'wp_ajax_nopriv_tsml_upload', 'zml_deny_nopriv' );
-	add_action( 'wp_ajax_tsml_delete', 'zml_ajax_delete' );
-	add_action( 'wp_ajax_nopriv_tsml_delete', 'zml_deny_nopriv' );
 } );
 
 function zml_deny_nopriv() {
@@ -1079,13 +1068,3 @@ function zml_ajax_recipients() {
 	wp_send_json_success( [ 'people' => $out ] );
 }
 
-/**
- * Register this plugin's rename map with the platform migration.
- * Plugins declare; the kernel migrates. No per-plugin migration code.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-		$map['options'] = array_merge( $map['options'] ?? [], [
-			'tsml_seeded_apps_v2' => 'zml_seeded_apps_v2',
-		] );
-	return $map;
-} );

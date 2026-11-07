@@ -339,25 +339,6 @@ add_action( 'plugins_loaded', 'zdh_maybe_upgrade' );
 /** The vision job: a WP-Cron single event, never a public route. */
 add_action( 'zdh_run_vision_job', array( 'ZDH_REST', 'run_job_cron' ) );
 
-/**
- * An install that ran this app under its earlier option and table names is carried across by the platform's rename
- * migration. Declared here; the theme performs it. A fresh install has none of these, so every entry is a no-op.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-	$map['tables'] = array_merge( $map['tables'] ?? array(), array(
-		'tsdh_drops'     => 'zdh_drops',
-		'tsdh_addresses' => 'zdh_addresses',
-		'tsdh_streets'   => 'zdh_streets',
-		'tsdh_nosolicit' => 'zdh_nosolicit',
-	) );
-	$map['options'] = array_merge( $map['options'] ?? array(), array(
-		'tsdh_settings'     => 'zdh_settings',
-		'tsdh_db_version'   => 'zdh_db_version',
-		'tsdh_diag_reports' => 'zdh_diag_reports',
-	) );
-	return $map;
-} );
-
 /* -------------------------------------------------------------------------
  * The theme's seams: the app itself.
  * ---------------------------------------------------------------------- */

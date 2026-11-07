@@ -7,10 +7,9 @@
  *   - find the lead(s) for a job, and pick/assemble its measurement block,
  *   - list leads sitting in the configurable "ready to cut" pipeline stage,
  *   - write the cut-completion note and advance/promote the pipeline stage,
- * all recognising the neutral, VERSIONED data-contract blocks defined in app.php (with
- * legacy prior-build headers accepted as deprecated aliases). Nothing hardcodes a block
- * string inline, and the product-line gate is the configurable QUEUE (tag/subtype), not a
- * baked-in product test.
+ * all recognising the neutral, VERSIONED data-contract blocks defined in app.php. Nothing
+ * hardcodes a block string inline, and the product-line gate is the configurable QUEUE
+ * (tag/subtype).
  *
  * @package Zorderz\Prep
  */

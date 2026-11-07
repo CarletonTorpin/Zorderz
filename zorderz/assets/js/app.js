@@ -1537,13 +1537,13 @@ function openApp(appId, options) {
 // instead of dumping the user on the dashboard. The theme's responsibility is to
 // open the right app and PRESERVE the hash; the Analytics widget reads
 // '#zana-session=' to select the exact session (it already does this for in-chat
-// recall links). The legacy '#tsa-session=' form is still accepted for old links.
+// recall links).
 // Guarded so it can never block boot and never fires for a user who doesn't
 // actually have the Analytics app (e.g. a forwarded link).
 function zdzRouteDeepLink() {
   try {
     var hash = window.location.hash || '';
-    var m = hash.match(/#(?:zana|tsa)-session=(\d+)/);
+    var m = hash.match(/#zana-session=(\d+)/);
     if (!m) return;
     var sessionId = parseInt(m[1], 10);
     if (!sessionId) return;

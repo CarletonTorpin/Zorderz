@@ -195,13 +195,6 @@ add_action( 'init', function () {
 	add_action( 'wp_ajax_nopriv_zcam_video_chunk', 'zcam_deny_nopriv' );
 	add_action( 'wp_ajax_zcam_video_finalize', 'zcam_ajax_video_finalize' );
 	add_action( 'wp_ajax_nopriv_zcam_video_finalize', 'zcam_deny_nopriv' );
-	// Legacy aliases (pre-rename names), kept for records queued by an older build.
-	add_action( 'wp_ajax_tscam_save_photo', 'zcam_ajax_save_photo' );
-	add_action( 'wp_ajax_nopriv_tscam_save_photo', 'zcam_deny_nopriv' );
-	add_action( 'wp_ajax_tscam_list_photos', 'zcam_ajax_list_photos' );
-	add_action( 'wp_ajax_nopriv_tscam_list_photos', 'zcam_deny_nopriv' );
-	add_action( 'wp_ajax_tscam_delete_photo', 'zcam_ajax_delete_photo' );
-	add_action( 'wp_ajax_nopriv_tscam_delete_photo', 'zcam_deny_nopriv' );
 } );
 
 function zcam_deny_nopriv() { wp_send_json_error( 'Authentication required.', 403 ); }

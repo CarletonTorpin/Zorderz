@@ -125,12 +125,6 @@ Appointment and availability state values (`confirmed`/`tentative`/`cancelled`,
 they bind to a tenant-declared state machine via a documented Flow hook; until
 then they stay in-app and no competing taxonomy is invented.
 
-## Legacy upgrade
-
-A legacy install upgrades in place: the module declares its `tssch_* → zsch_*`
-table, option, user-meta and cron renames through the `zdz_rename_map` filter, and
-the theme's `ZDZ_Rename_Migration` performs them. Fresh installs no-op.
-
 ## Tables
 
 `wp_zsch_appointments` · `wp_zsch_availability` · `wp_zsch_graph_map` ·

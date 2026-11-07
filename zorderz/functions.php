@@ -16,7 +16,7 @@
  * toast. One constant now feeds all of them.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '2.0.0' );
+	define( 'ZDZ_THEME_VER_FLOOR', '2.0.1' );
 }
 /**
  * The REST namespace, in exactly one place.
@@ -131,10 +131,10 @@ require_once get_template_directory() . '/inc/class-zdz-maps.php'; // ZDZ_Maps �
 require_once get_template_directory() . '/inc/class-zdz-rest-api.php';
 require_once get_template_directory() . '/inc/class-zdz-user-roles.php';
 
-// ── Zorderz transition: rename migration ──────────────────────────────
-// Carries a legacy install onto the current identifier scheme (options,
-// user meta, roles, capabilities, tables, cron). Idempotent and guarded by
-// a stored version; a no-op on a fresh install. Must load before anything
+// ── Rename migration ─────────────────────────────────────────────────
+// Applies the identifier renames that apps declare on `zdz_rename_map` (options,
+// user meta, roles, capabilities, tables, cron, app ids). Idempotent and guarded
+// by a stored version; a no-op on a fresh install. Must load before anything
 // that reads a renamed option or resolves a role.
 require_once get_template_directory() . '/inc/class-zdz-rename-migration.php';
 // Runs at the earliest point a theme can act. NOTE: WordPress loads plugins

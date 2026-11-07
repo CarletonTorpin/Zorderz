@@ -55,9 +55,7 @@ Any signed-in, non-kiosk person on the homepage. Narrow or widen with the
 ## Per-person card fields
 
 Set under **Users → Profile → Quick-ID Card**: card name override, title, cell,
-and email override. Values from an install upgraded from the pre-rename lineage
-(`tsqid_*` user meta) are read as a fallback and migrated to `zqid_*` on the next
-profile save.
+and email override (`zqid_*` user meta).
 
 ## Notes
 

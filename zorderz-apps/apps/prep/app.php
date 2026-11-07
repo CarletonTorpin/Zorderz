@@ -35,17 +35,15 @@
  *                        so the future Flow service can consume the same ledger. The
  *                        CRM pipeline stage that means "ready to cut" is configurable.
  *
- * ── QUEUE TAG (was a hardcoded product line) ──────────────────────────
- * The legacy build hard-filtered every record to a single reference token and treated
- * that one product line as THE product. Here the queue is generic: `ZPREP_Settings::queue_tag()`
+ * ── QUEUE TAG ─────────────────────────────────────────────────────────
+ * The queue is generic: `ZPREP_Settings::queue_tag()`
  * is an admin-chosen reference token (EMPTY default = accept everything) and
  * `ZPREP_Settings::queue_subtype()` binds the queue to an Item Engine subtype, so the
  * product-line gate reads the item's own subtype rather than a string in a routing code.
  *
- * ── DATA-CONTRACT BLOCKS (was CRM-note IPC) ───────────────────────────
+ * ── DATA-CONTRACT BLOCKS ──────────────────────────────────────────────
  * The blocks Prep reads out of / writes into CRM notes are neutral, VERSIONED contract
- * names held in ONE constant each (see below), never typed twice. Legacy prior-build
- * headers are recognised as deprecated aliases so historical notes still parse.
+ * names held in ONE constant each (see below), never typed twice.
  *
  * @package Zorderz\Prep
  */
@@ -72,7 +70,6 @@ define( 'ZPREP_APP_ID', 'prep' );
  *      estimate app's own header twice. Matching is by substring, case-insensitive.
  *        - ZPREP_CONTRACT_MEAS_MARKER  : primary marker the estimate app emits.
  *        - ZPREP_CONTRACT_MEAS_MARKER2 : secondary confirmation marker.
- *        - ZPREP_CONTRACT_MEAS_LEGACY* : deprecated prior-build aliases (upgrade only).
  *      The base/adjustment framing Prep wraps around the parser input is also here so the
  *      wording lives in one place.
  *
@@ -80,7 +77,6 @@ define( 'ZPREP_APP_ID', 'prep' );
  *      recognised as "already cut" so a job isn't re-queued.
  *        - ZPREP_CONTRACT_CUT_COMPLETE : the completion-note header (versioned).
  *        - ZPREP_CONTRACT_SIGNATURE    : the machine-note footer signature.
- *        - ZPREP_CONTRACT_CUT_LEGACY   : deprecated prior-build header/footer aliases.
  *
  * Consumers read these via ZPREP_Crm; nothing hardcodes a block string inline.
  */
@@ -302,55 +298,3 @@ add_action(
 	20
 );
 
-/**
- * Declare this module's legacy->current rename map to the platform migration. Plugins
- * DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place. A fresh
- * Zorderz install has no legacy rows, so every entry no-ops. Data is never seeded — only
- * renamed if present. (The leftovers TABLE rename is a real migration recorded in
- * db/migrate-2.3.0.php; the platform map handles whole tables/options/crons/app-ids.)
- */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables'] = array_merge(
-			$map['tables'] ?? array(),
-			array( 'tsemc_leftovers' => 'zdz_prep_leftovers' )
-		);
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'tsemc_settings'              => 'zprep_settings',
-				'tsemc_version'               => 'zprep_version',
-				'tsemc_fb_ground_truth'       => 'zprep_billing_ground_truth',
-				'tsemc_fb_promotions'         => 'zprep_billing_promotions',
-				'tsemc_fb_status_filter'      => 'zprep_billing_status_filter',
-				'tsemc_fb_status_filter_ver'  => 'zprep_billing_status_filter_ver',
-				'tsemc_ns_activity_type_id'   => 'zprep_crm_activity_type_id',
-				'tsemc_ns_cut_stage_name'     => 'zprep_cut_stage_name',
-				'tsemc_upcoming_audience'     => 'zprep_upcoming_audience',
-			)
-		);
-		$map['tables'] = array_merge(
-			$map['tables'],
-			array(
-				'tsemc_cut_state'       => ZPREP_Cut_State::TABLE,
-				'tsemc_sections'        => ZPREP_Sections::TABLE,
-				'tsemc_job_assignments' => ZPREP_Assignments::TABLE,
-				'tsemc_remakes'         => ZPREP_Remakes::TABLE,
-			)
-		);
-		$map['cron'] = array_merge(
-			$map['cron'] ?? array(),
-			array(
-				'tsemc_fb_sync'                        => 'zprep_billing_sync',
-				'tsemc_leftovers_expire_reservations'  => ZPREP_Leftovers::CRON_HOOK,
-				'tsemc_queue_counts_refresh'           => ZPREP_Queue_Counts::CRON_HOOK,
-			)
-		);
-		// NOTE: a tenant upgrading from a differently-named legacy cut/prep app maps its
-		// old app-id to ZPREP_APP_ID through this same `zdz_rename_map` filter from its own
-		// (private) pack, so user app-grants survive the rename. The public module ships
-		// no legacy product/brand id of its own.
-		return $map;
-	}
-);

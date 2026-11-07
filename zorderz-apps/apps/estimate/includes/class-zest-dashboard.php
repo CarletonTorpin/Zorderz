@@ -105,18 +105,11 @@ class ZEST_Dashboard {
 	}
 
 	private static function user_code( int $uid ): string {
-		$code = strtoupper( trim( (string) get_user_meta( $uid, 'zdz_user_initials', true ) ) );
-		if ( '' === $code ) {
-			$code = strtoupper( trim( (string) get_user_meta( $uid, 'ts_user_initials', true ) ) );
-		}
-		return $code;
+		return strtoupper( trim( (string) get_user_meta( $uid, 'zdz_user_initials', true ) ) );
 	}
 
 	private static function output_ctx( int $uid ): array {
 		$paren = (string) get_user_meta( $uid, 'zdz_user_parenthetical', true );
-		if ( '' === $paren ) {
-			$paren = (string) get_user_meta( $uid, 'ts_user_parenthetical', true );
-		}
 		return array( 'initials' => self::user_code( $uid ), 'parenthetical' => $paren, 'user_id' => $uid );
 	}
 

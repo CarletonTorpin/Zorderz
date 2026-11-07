@@ -6,11 +6,6 @@
  * WHO does the work; the CRM (when configured) mirrors it as a child lead
  * (crm_child_lead_id).
  *
- * Legacy note: this table was `wp_ts_handoffs` in the legacy build. The
- * platform migration (ZDZ_Rename_Migration, driven by the `zdz_rename_map`
- * filter declared in app.php) renames it to `wp_zdz_jobs` in place, so an
- * existing install upgrades cleanly. A fresh Zorderz install just creates it.
- *
  * @package Zorderz\Jobs
  */
 

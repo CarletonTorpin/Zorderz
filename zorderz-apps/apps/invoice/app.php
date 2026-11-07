@@ -30,10 +30,8 @@
  *   - Stripe Connect is now OPTIONAL: with no connected account the module makes
  *     a plain charge on the site's own Stripe account (and no platform fee is
  *     possible), so a single business can invoice without a Connect setup.
- *   - Renamed off the old ts/tsic identifiers to the short `zic` prefix; REST is
- *     registered under the theme's single ZDZ_REST_NS constant (never typed
- *     twice). Tables and options carry deprecated-alias rename-map entries so an
- *     existing install upgrades in place.
+ *   - Identifiers use the short `zic` prefix; REST is registered under the
+ *     theme's single ZDZ_REST_NS constant (never typed twice).
  *   - Dropped the delegation to the shared cross-plugin token service: this app
  *     keeps its OWN FreshBooks OAuth credentials and refreshes them in isolation
  *     (a separate connection instance), so a primary-account refresh can never
@@ -216,51 +214,6 @@ add_action(
 		}
 	},
 	5
-);
-
-/* ── Deprecated-alias rename map (kernel migrates; plugins declare) ──── */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables'] = array_merge(
-			$map['tables'] ?? array(),
-			array(
-				'tsic_invoices'       => 'zic_invoices',
-				'tsic_payments'       => 'zic_payments',
-				'tsic_webhook_events' => 'zic_webhook_events',
-			)
-		);
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'tsic_stripe_secret'            => 'zic_stripe_secret',
-				'tsic_stripe_publishable'       => 'zic_stripe_publishable',
-				'tsic_stripe_webhook_secret'    => 'zic_stripe_webhook_secret',
-				'tsic_stripe_connected_account' => 'zic_stripe_connected_account',
-				'tsic_freshbooks_token'         => 'zic_freshbooks_token',
-				'tsic_freshbooks_account_id'    => 'zic_freshbooks_account_id',
-				'tsic_fb_client_id'             => 'zic_fb_client_id',
-				'tsic_fb_client_secret'         => 'zic_fb_client_secret',
-				'tsic_fb_redirect_uri'          => 'zic_fb_redirect_uri',
-				'tsic_fb_access_token'          => 'zic_fb_access_token',
-				'tsic_fb_refresh_token'         => 'zic_fb_refresh_token',
-				'tsic_fb_token_expires_at'      => 'zic_fb_token_expires_at',
-				'tsic_fb_oauth_state'           => 'zic_fb_oauth_state',
-				'tsic_notify_email'             => 'zic_notify_email',
-				'tsic_rewrite_flushed'          => 'zic_rewrite_flushed',
-			)
-		);
-		$map['cron'] = array_merge(
-			$map['cron'] ?? array(),
-			array( 'tsic_fb_token_refresh_cron' => 'zic_fb_token_refresh_cron' )
-		);
-		// App-id values inside people's grant lists: the older id, so a grant names the app that answers.
-		$map['app_ids'] = array_merge(
-			$map['app_ids'] ?? array(),
-			array( 'tsic' => 'invoice' )
-		);
-		return $map;
-	}
 );
 
 /* ── Hosted pay route + shortcode ───────────────────────────────────── */

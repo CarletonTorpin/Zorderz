@@ -12,11 +12,6 @@
  * code first. Every reader of "this person's code" in the theme goes through here, so a code set on either screen is
  * seen by both.
  *
- * AN UPGRADED INSTALL. Before their rename the two screens kept the code under older keys (OLD_PROFILE_KEY,
- * OLD_PARTY_KEY). The rename migration copies them to the current keys; until it has (or when the app that declares
- * the row was not installed when it ran) the older key is read, but only while the current one is empty. Saving the
- * profile field removes the older copy, so a code cleared there never comes back from it.
- *
  * @package Zorderz
  */
 
@@ -32,10 +27,6 @@ class ZDZ_Salesperson_Code {
 	/** The person's party code (the commission plan's). */
 	const PARTY_KEY = 'zdz_party_code';
 
-	/** The keys the two screens used before their rename: read only while the current key is empty. */
-	const OLD_PROFILE_KEY = 'tsl_salesperson_code';
-	const OLD_PARTY_KEY   = 'tscc_salesperson_code';
-
 	/** The longest code the profile field keeps. */
 	const MAX = 10;
 
@@ -48,29 +39,17 @@ class ZDZ_Salesperson_Code {
 		return '' !== $code ? $code : self::party( $user_id );
 	}
 
-	/** The profile field's code: the current key, else the key from before the rename. */
+	/** The profile field's code. */
 	public static function profile( int $user_id ): string {
-		return $user_id > 0 ? self::pick( self::read( $user_id, array( self::PROFILE_KEY, self::OLD_PROFILE_KEY ) ), self::PROFILE_KEY, self::OLD_PROFILE_KEY ) : '';
+		return $user_id > 0 ? self::clean( self::read( $user_id, self::PROFILE_KEY ) ) : '';
 	}
 
-	/** The party code: the current key, else the key from before the rename. */
+	/** The party code. */
 	public static function party( int $user_id ): string {
-		return $user_id > 0 ? self::pick( self::read( $user_id, array( self::PARTY_KEY, self::OLD_PARTY_KEY ) ), self::PARTY_KEY, self::OLD_PARTY_KEY ) : '';
+		return $user_id > 0 ? self::clean( self::read( $user_id, self::PARTY_KEY ) ) : '';
 	}
 
-	/**
-	 * PURE: the code from one person's meta values (key => value): the current key when it holds a code, else the
-	 * older key's. A value that is not a short line of text is no code.
-	 */
-	public static function pick( array $meta, string $key, string $old_key ): string {
-		$now = self::clean( $meta[ $key ] ?? '' );
-		if ( '' !== $now ) {
-			return $now;
-		}
-		return self::clean( $meta[ $old_key ] ?? '' );
-	}
-
-	/** PURE: a stored value as a code: trimmed text without line breaks, or ''. */
+	/** PURE: a stored value as a code: trimmed text without line breaks, or ''. A value that is not a short line of text is no code. */
 	public static function clean( $v ): string {
 		if ( ! is_string( $v ) && ! is_int( $v ) ) {
 			return '';
@@ -84,7 +63,7 @@ class ZDZ_Salesperson_Code {
 
 	/**
 	 * Save the profile field. The code is kept as typed (codes are matched exactly), at most MAX characters; an empty
-	 * value clears it. The older copy is removed, so it is never read in its place.
+	 * value clears it.
 	 */
 	public static function save_profile( int $user_id, string $code ): void {
 		if ( $user_id <= 0 ) {
@@ -92,17 +71,10 @@ class ZDZ_Salesperson_Code {
 		}
 		$code = substr( trim( $code ), 0, self::MAX );
 		update_user_meta( $user_id, self::PROFILE_KEY, $code );
-		if ( function_exists( 'delete_user_meta' ) ) {
-			delete_user_meta( $user_id, self::OLD_PROFILE_KEY );
-		}
 	}
 
-	/** @return array key => stored value */
-	private static function read( int $user_id, array $keys ): array {
-		$out = array();
-		foreach ( $keys as $k ) {
-			$out[ $k ] = function_exists( 'get_user_meta' ) ? get_user_meta( $user_id, $k, true ) : '';
-		}
-		return $out;
+	/** @return mixed The stored value. */
+	private static function read( int $user_id, string $key ) {
+		return function_exists( 'get_user_meta' ) ? get_user_meta( $user_id, $key, true ) : '';
 	}
 }

@@ -49,13 +49,14 @@ class ZDZ_Bug_Tracker {
 	 * ────────────────────────────────────────────── */
 
 	public function __construct() {
+		add_action( 'init', [ $this, 'migrate_meta_keys' ], 5 );
 		add_action( 'init', [ $this, 'register_cpt' ] );
 		add_action( 'rest_api_init', [ $this, 'register_rest_routes' ] );
 		add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
 
 		// Custom admin columns.
-		add_filter( 'manage_ts_bug_report_posts_columns', [ $this, 'set_admin_columns' ] );
-		add_action( 'manage_ts_bug_report_posts_custom_column', [ $this, 'render_admin_column' ], 10, 2 );
+		add_filter( 'manage_zdz_bug_report_posts_columns', [ $this, 'set_admin_columns' ] );
+		add_action( 'manage_zdz_bug_report_posts_custom_column', [ $this, 'render_admin_column' ], 10, 2 );
 		add_filter( 'manage_edit-zdz_bug_report_sortable_columns', [ $this, 'sortable_columns' ] );
 
 		// Row actions.
@@ -69,7 +70,32 @@ class ZDZ_Bug_Tracker {
 
 		// Meta boxes on the bug report edit screen.
 		add_action( 'add_meta_boxes', [ $this, 'add_meta_boxes' ] );
-		add_action( 'save_post_ts_bug_report', [ $this, 'save_meta_boxes' ] );
+		add_action( 'save_post_zdz_bug_report', [ $this, 'save_meta_boxes' ] );
+	}
+
+	/**
+	 * Reports saved by Zorderz 2.0.0 and earlier carry older meta key names. Rename them once, so their status,
+	 * category, priority and captured debug data keep showing. Idempotent; a fresh install has nothing to rename.
+	 * Removed in a later release.
+	 */
+	public function migrate_meta_keys() {
+		if ( '1' === get_option( 'zdz_bug_meta_keys_v2' ) ) {
+			return;
+		}
+		global $wpdb;
+		$renames = [
+			'_ts_bug_status'   => '_zdz_bug_status',
+			'_ts_bug_category' => '_zdz_bug_category',
+			'_ts_bug_priority' => '_zdz_bug_priority',
+			'_ts_bug_app'      => '_zdz_bug_app',
+			'_ts_bug_view'     => '_zdz_bug_view',
+			'_ts_debug_data'   => '_zdz_bug_debug_data',
+		];
+		foreach ( $renames as $old => $new ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time key rename.
+			$wpdb->update( $wpdb->postmeta, [ 'meta_key' => $new ], [ 'meta_key' => $old ] );
+		}
+		update_option( 'zdz_bug_meta_keys_v2', '1', false );
 	}
 
 	/* ──────────────────────────────────────────────
@@ -136,7 +162,7 @@ class ZDZ_Bug_Tracker {
 	public function render_admin_column( $column, $post_id ) {
 		switch ( $column ) {
 			case 'zdz_status':
-				$status = get_post_meta( $post_id, '_ts_bug_status', true ) ?: 'new';
+				$status = get_post_meta( $post_id, '_zdz_bug_status', true ) ?: 'new';
 				$info   = self::STATUS_LABELS[ $status ] ?? self::STATUS_LABELS['new'];
 				printf(
 					'<span class="zdz-bug-status-badge" style="background:%s20;color:%s;border:1px solid %s40;">%s</span>',
@@ -148,7 +174,7 @@ class ZDZ_Bug_Tracker {
 				break;
 
 			case 'zdz_category':
-				$cat  = get_post_meta( $post_id, '_ts_bug_category', true ) ?: 'bug';
+				$cat  = get_post_meta( $post_id, '_zdz_bug_category', true ) ?: 'bug';
 				$info = self::CATEGORY_LABELS[ $cat ] ?? self::CATEGORY_LABELS['bug'];
 				printf(
 					'<span style="color:%s;">%s</span>',
@@ -171,7 +197,7 @@ class ZDZ_Bug_Tracker {
 				break;
 
 			case 'zdz_context':
-				$debug = get_post_meta( $post_id, '_ts_debug_data', true );
+				$debug = get_post_meta( $post_id, '_zdz_bug_debug_data', true );
 				if ( $debug ) {
 					$data = json_decode( $debug, true );
 					if ( is_array( $data ) ) {
@@ -203,7 +229,7 @@ class ZDZ_Bug_Tracker {
 			return $actions;
 		}
 
-		$current = get_post_meta( $post->ID, '_ts_bug_status', true ) ?: 'new';
+		$current = get_post_meta( $post->ID, '_zdz_bug_status', true ) ?: 'new';
 
 		// Add status change actions.
 		foreach ( self::STATUSES as $status ) {
@@ -255,8 +281,8 @@ class ZDZ_Bug_Tracker {
 			return;
 		}
 
-		$old_status = get_post_meta( $post_id, '_ts_bug_status', true ) ?: 'new';
-		update_post_meta( $post_id, '_ts_bug_status', $new_status );
+		$old_status = get_post_meta( $post_id, '_zdz_bug_status', true ) ?: 'new';
+		update_post_meta( $post_id, '_zdz_bug_status', $new_status );
 
 		// Audit log.
 		if ( class_exists( 'ZDZ_Admin_Dashboard' ) ) {
@@ -345,11 +371,11 @@ class ZDZ_Bug_Tracker {
 	public function render_details_meta_box( $post ) {
 		wp_nonce_field( 'zdz_save_bug_report_meta', 'zdz_bug_report_nonce' );
 
-		$status   = get_post_meta( $post->ID, '_ts_bug_status', true ) ?: 'new';
-		$category = get_post_meta( $post->ID, '_ts_bug_category', true ) ?: 'bug';
-		$priority = get_post_meta( $post->ID, '_ts_bug_priority', true ) ?: 'normal';
+		$status   = get_post_meta( $post->ID, '_zdz_bug_status', true ) ?: 'new';
+		$category = get_post_meta( $post->ID, '_zdz_bug_category', true ) ?: 'bug';
+		$priority = get_post_meta( $post->ID, '_zdz_bug_priority', true ) ?: 'normal';
 
-		$debug_data_raw = get_post_meta( $post->ID, '_ts_debug_data', true );
+		$debug_data_raw = get_post_meta( $post->ID, '_zdz_bug_debug_data', true );
 		$debug_data     = $debug_data_raw ? json_decode( $debug_data_raw, true ) : [];
 
 		$reporter_name = $debug_data['userName'] ?? 'Unknown';
@@ -432,7 +458,7 @@ class ZDZ_Bug_Tracker {
 	 * @param WP_Post $post The post object.
 	 */
 	public function render_debug_meta_box( $post ) {
-		$debug_data_raw = get_post_meta( $post->ID, '_ts_debug_data', true );
+		$debug_data_raw = get_post_meta( $post->ID, '_zdz_bug_debug_data', true );
 		$debug_data     = $debug_data_raw ? json_decode( $debug_data_raw, true ) : [];
 
 		if ( empty( $debug_data ) ) {
@@ -659,8 +685,8 @@ class ZDZ_Bug_Tracker {
 		if ( isset( $_POST['zdz_bug_status'] ) ) {
 			$new_status = sanitize_text_field( wp_unslash( $_POST['zdz_bug_status'] ) );
 			if ( in_array( $new_status, self::STATUSES, true ) ) {
-				$old_status = get_post_meta( $post_id, '_ts_bug_status', true ) ?: 'new';
-				update_post_meta( $post_id, '_ts_bug_status', $new_status );
+				$old_status = get_post_meta( $post_id, '_zdz_bug_status', true ) ?: 'new';
+				update_post_meta( $post_id, '_zdz_bug_status', $new_status );
 
 				// Audit log status change.
 				if ( $old_status !== $new_status && class_exists( 'ZDZ_Admin_Dashboard' ) ) {
@@ -679,7 +705,7 @@ class ZDZ_Bug_Tracker {
 		if ( isset( $_POST['zdz_bug_category'] ) ) {
 			$category = sanitize_text_field( wp_unslash( $_POST['zdz_bug_category'] ) );
 			if ( in_array( $category, self::CATEGORIES, true ) ) {
-				update_post_meta( $post_id, '_ts_bug_category', $category );
+				update_post_meta( $post_id, '_zdz_bug_category', $category );
 			}
 		}
 	}
@@ -782,9 +808,9 @@ class ZDZ_Bug_Tracker {
 		}
 
 		// Store meta.
-		update_post_meta( $post_id, '_ts_bug_status', 'new' );
-		update_post_meta( $post_id, '_ts_bug_category', $category );
-		update_post_meta( $post_id, '_ts_debug_data', wp_json_encode( $debug_data ) );
+		update_post_meta( $post_id, '_zdz_bug_status', 'new' );
+		update_post_meta( $post_id, '_zdz_bug_category', $category );
+		update_post_meta( $post_id, '_zdz_bug_debug_data', wp_json_encode( $debug_data ) );
 
 		// Auto-detect priority from error count.
 		$error_count = 0;
@@ -792,14 +818,14 @@ class ZDZ_Bug_Tracker {
 			$error_count = count( $debug_data['recentErrors'] );
 		}
 		$priority = $error_count >= 3 ? 'high' : ( $error_count >= 1 ? 'medium' : 'normal' );
-		update_post_meta( $post_id, '_ts_bug_priority', $priority );
+		update_post_meta( $post_id, '_zdz_bug_priority', $priority );
 
 		// Store context fields for easy admin filtering.
 		if ( ! empty( $debug_data['currentApp'] ) && 'None' !== $debug_data['currentApp'] ) {
-			update_post_meta( $post_id, '_ts_bug_app', sanitize_text_field( $debug_data['currentApp'] ) );
+			update_post_meta( $post_id, '_zdz_bug_app', sanitize_text_field( $debug_data['currentApp'] ) );
 		}
 		if ( ! empty( $debug_data['currentView'] ) ) {
-			update_post_meta( $post_id, '_ts_bug_view', sanitize_text_field( $debug_data['currentView'] ) );
+			update_post_meta( $post_id, '_zdz_bug_view', sanitize_text_field( $debug_data['currentView'] ) );
 		}
 
 		// Audit log.
@@ -844,7 +870,7 @@ class ZDZ_Bug_Tracker {
 		$status = $request->get_param( 'status' );
 		if ( ! empty( $status ) && in_array( $status, self::STATUSES, true ) ) {
 			$args['meta_query'][] = [
-				'key'   => '_ts_bug_status',
+				'key'   => '_zdz_bug_status',
 				'value' => $status,
 			];
 		}
@@ -852,7 +878,7 @@ class ZDZ_Bug_Tracker {
 		$category = $request->get_param( 'category' );
 		if ( ! empty( $category ) && in_array( $category, self::CATEGORIES, true ) ) {
 			$args['meta_query'][] = [
-				'key'   => '_ts_bug_category',
+				'key'   => '_zdz_bug_category',
 				'value' => $category,
 			];
 		}
@@ -861,7 +887,7 @@ class ZDZ_Bug_Tracker {
 		$items = [];
 
 		foreach ( $query->posts as $post ) {
-			$debug_raw = get_post_meta( $post->ID, '_ts_debug_data', true );
+			$debug_raw = get_post_meta( $post->ID, '_zdz_bug_debug_data', true );
 			$debug     = $debug_raw ? json_decode( $debug_raw, true ) : [];
 			$author    = get_userdata( $post->post_author );
 
@@ -869,9 +895,9 @@ class ZDZ_Bug_Tracker {
 				'id'          => $post->ID,
 				'title'       => $post->post_title,
 				'description' => $post->post_content,
-				'status'      => get_post_meta( $post->ID, '_ts_bug_status', true ) ?: 'new',
-				'category'    => get_post_meta( $post->ID, '_ts_bug_category', true ) ?: 'bug',
-				'priority'    => get_post_meta( $post->ID, '_ts_bug_priority', true ) ?: 'normal',
+				'status'      => get_post_meta( $post->ID, '_zdz_bug_status', true ) ?: 'new',
+				'category'    => get_post_meta( $post->ID, '_zdz_bug_category', true ) ?: 'bug',
+				'priority'    => get_post_meta( $post->ID, '_zdz_bug_priority', true ) ?: 'normal',
 				'reporter'    => $author ? $author->display_name : 'Unknown',
 				'reporter_role' => $author && ! empty( $author->roles ) ? $author->roles[0] : '',
 				'debug_data'  => is_array( $debug ) ? $debug : [],
@@ -905,8 +931,8 @@ class ZDZ_Bug_Tracker {
 			return new WP_Error( 'not_found', __( 'Report not found.', 'zorderz' ), [ 'status' => 404 ] );
 		}
 
-		$old_status = get_post_meta( $post_id, '_ts_bug_status', true ) ?: 'new';
-		update_post_meta( $post_id, '_ts_bug_status', $new_status );
+		$old_status = get_post_meta( $post_id, '_zdz_bug_status', true ) ?: 'new';
+		update_post_meta( $post_id, '_zdz_bug_status', $new_status );
 
 		// Audit log.
 		if ( class_exists( 'ZDZ_Admin_Dashboard' ) ) {
@@ -932,7 +958,7 @@ class ZDZ_Bug_Tracker {
 				'post_type'      => 'zdz_bug_report',
 				'posts_per_page' => 1,
 				'fields'         => 'ids',
-				'meta_key'       => '_ts_bug_status',
+				'meta_key'       => '_zdz_bug_status',
 				'meta_value'     => $status,
 			] );
 			$counts[ $status ] = $q->found_posts;
@@ -945,7 +971,7 @@ class ZDZ_Bug_Tracker {
 			'fields'         => 'ids',
 			'meta_query'     => [
 				[
-					'key'     => '_ts_bug_status',
+					'key'     => '_zdz_bug_status',
 					'compare' => 'NOT EXISTS',
 				],
 			],
@@ -972,11 +998,11 @@ class ZDZ_Bug_Tracker {
 			'meta_query'     => [
 				'relation' => 'OR',
 				[
-					'key'   => '_ts_bug_status',
+					'key'   => '_zdz_bug_status',
 					'value' => 'new',
 				],
 				[
-					'key'     => '_ts_bug_status',
+					'key'     => '_zdz_bug_status',
 					'compare' => 'NOT EXISTS',
 				],
 			],

@@ -4,4 +4,4 @@ Every business-specific value (products, towns, people, prompt wording, colours,
 identity pack (pack.py), every place-specific one from the region pack (region.py), and the business's own
 records from its source adapter (adapters/).
 """
-HUB_VERSION = "2.0.0"
+HUB_VERSION = "2.0.1"

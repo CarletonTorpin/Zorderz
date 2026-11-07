@@ -215,7 +215,7 @@ def rules_read(sents):
 
 # --------------------------------------------------------------------------------------------------------- model read
 SYSTEM = """You read the transcript of a salesperson's drive through a neighborhood. While driving they speak short notes
-about what the HOMES have (vents, artificial turf, sliding doors, old screens, gated communities, no-soliciting signs),
+about what the HOMES have (the features the survey listens for, gated communities, no-soliciting signs),
 and sometimes correct themselves ("scratch that", "delete that", "no wait", "I mean").
 
 For every sentence id in WINDOW decide exactly one of:

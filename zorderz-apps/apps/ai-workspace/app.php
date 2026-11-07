@@ -148,22 +148,3 @@ add_action(
 	20
 );
 
-/**
- * Earlier option, table and cron names, carried across by the platform's rename migration. A fresh install has none
- * of them, so every entry is a no-op there.
- */
-add_filter(
-	'zdz_rename_map',
-	function ( $map ) {
-		$map['tables']  = array_merge( $map['tables'] ?? array(), array( 'tsaw_convs' => 'zaw_convs', 'tsaw_turns' => 'zaw_turns' ) );
-		$map['options'] = array_merge(
-			$map['options'] ?? array(),
-			array(
-				'tsaw_grants'     => 'zaw_grants',
-				'tsaw_db_version' => 'zaw_db_version',
-			)
-		);
-		$map['cron']    = array_merge( $map['cron'] ?? array(), array( 'tsaw_sweep' => 'zaw_sweep', 'tsaw_prune' => 'zaw_prune' ) );
-		return $map;
-	}
-);

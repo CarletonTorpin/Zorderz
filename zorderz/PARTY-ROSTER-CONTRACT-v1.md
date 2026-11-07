@@ -21,7 +21,7 @@ $people = ZDZ_Party::selectable_people( array(
 // => [ [ 'id'=>7, 'name'=>'Robin Q', 'initials'=>'RQ', 'role'=>'zdz_sales' ], ... ]
 ```
 
-Excludes the shared-kiosk role (`zdz_general`, a device, not a person), users flagged inactive (`zdz_inactive` user-meta, with a read-time alias to the pre-rename `ts_inactive` key; multisite spam/deleted), and anyone without a valid email. Ordered by display name. Memoized per request.
+Excludes the shared-kiosk role (`zdz_general`, a device, not a person), users flagged inactive (`zdz_inactive` user-meta; multisite spam/deleted), and anyone without a valid email. Ordered by display name. Memoized per request.
 
 ### Filter (extend, don't rebuild)
 ```php

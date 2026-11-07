@@ -6,11 +6,6 @@
  * offcut produced by a cut plan auto-logs a row here; a later plan can consume them
  * (reserve -> commit/release) with the "Use available leftovers?" toggle.
  *
- * TABLE RENAME (real migration, recorded in schema_migrations): the legacy
- * `wp_tsemc_leftovers` table is renamed to `wp_zdz_prep_leftovers` by the platform
- * ZDZ_Rename_Migration (declared in app.php's zdz_rename_map); this class then dbDelta's
- * the neutral table so a fresh install and an upgraded install converge.
- *
  * @package Zorderz\Prep
  */
 

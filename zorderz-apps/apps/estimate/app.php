@@ -574,53 +574,6 @@ add_action( 'after_setup_theme', function () {
 	} );
 }, 20 );
 
-/**
- * Declare this module's legacy→current rename map to the platform migration. Plugins
- * DECLARE; the theme's ZDZ_Rename_Migration performs the renames in one place. A fresh
- * Zorderz install has no legacy rows, so every entry no-ops — data is never seeded, only
- * renamed if present.
- */
-add_filter( 'zdz_rename_map', function ( $map ) {
-	$map['tables'] = array_merge( $map['tables'] ?? array(), array(
-		'tsec_estimates'    => 'zest_estimates',
-		'tsec_parse_jobs'   => 'zest_parse_jobs',
-		'tsec_client_index' => 'zest_client_index',   // same columns: an existing copy of the client list is kept
-	) );
-	$map['options'] = array_merge( $map['options'] ?? array(), array(
-		'tsec_db_version'      => 'zest_db_version',
-		'tsec_blind_pricing'   => 'zest_blind_pricing',
-		'tsec_pricing_guide'   => 'zest_legacy_pricing_guide', // superseded by the Item Engine
-		'tsec_model_parse'     => 'zest_model_parse',
-		'tsec_model_classify'  => 'zest_model_classify',
-		'tsec_model_fallback'  => 'zest_model_fallback',
-		'tsec_ai_model'        => 'zest_ai_model',
-		'tsec_model_registry'  => 'zest_model_registry',
-		'tsec_territory_rules' => 'zest_legacy_territory_rules', // superseded by Service Area
-		'tsec_payment_notes_mode'  => 'zest_payment_notes_mode',
-		'tsec_client_index_state'  => 'zest_client_index_state',
-		'tsec_client_index_db'     => 'zest_client_index_db',
-		'tsec_accept_watch'        => 'zest_accept_watch',
-		'tsec_accept_watch_since'  => 'zest_accept_watch_since',
-	) );
-	$map['user_meta'] = array_merge( $map['user_meta'] ?? array(), array(
-		'ts_user_initials'      => 'zdz_user_initials',      // Party short code
-		'ts_user_parenthetical' => 'zdz_user_parenthetical', // Party document pref
-		'tsec_notation_profile' => 'zdz_notation_profile',   // Party document pref
-		'tsec_can_create_estimate' => 'zest_can_create_estimate',
-		'tsec_can_create_invoice'  => 'zest_can_create_invoice',
-	) );
-	$map['cron'] = array_merge( $map['cron'] ?? array(), array(
-		'tsec_daily_sync' => 'zest_daily_sync',
-	) );
-	$map['caps'] = array_merge( $map['caps'] ?? array(), array(
-		'tsec_create_zero_estimates' => 'zest_create_zero_estimates',
-	) );
-	$map['app_ids'] = array_merge( $map['app_ids'] ?? array(), array(
-		'estimate-creator' => ZEST_APP_ID, // id unchanged; recorded for completeness
-	) );
-	return $map;
-} );
-
 /* ── Estimate lifecycle expressed as Flow states (expression only) ─────
  * No migration this release: the live `status` column keeps its current handling (the
  * provider-signal map stays authoritative). We DECLARE the documented state set and the
