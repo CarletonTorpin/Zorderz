@@ -114,7 +114,7 @@ Bundled in `zorderz-apps-<version>.zip`. An app whose dependencies aren't presen
 
 ## Requirements
 
-- **WordPress 6.0 or newer** (tested up to 6.9)
+- **WordPress 6.5 or newer** (tested up to 6.9)
 - **PHP 8.0 or newer**
 - **MySQL 5.7+ or MariaDB 10.3+** (WordPress's own database requirement)
 - **Pretty permalinks** set to **Post name**, see the install steps below

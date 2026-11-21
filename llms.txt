@@ -16,6 +16,6 @@
 
 ## Notes
 
-- Requirements: WordPress 6.0+, PHP 8.0+, MySQL 5.7+ or MariaDB 10.3+, pretty permalinks set to Post name, HTTPS recommended.
+- Requirements: WordPress 6.5+, PHP 8.0+, MySQL 5.7+ or MariaDB 10.3+, pretty permalinks set to Post name, HTTPS recommended.
 - Two-layer design: a GPL platform that names no business, plus a business's own identity supplied as configuration (Business Profile, Identity Pack, or a Company Data bundle), never in the code.
 - License: GPL-2.0-or-later. Self-hostable on your own domain, under a license nobody can revoke.
