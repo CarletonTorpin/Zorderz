@@ -175,7 +175,9 @@ class ZDZ_Integration_Tests {
 		return [
 			'name'   => 'Plugin Discovery (zdz_register_apps)',
 			'pass'   => $count >= 1,
-			'detail' => $count >= 1 ? "{$count} apps registered" : 'No apps registered: is the Zorderz Apps plugin active?',
+			// It counts app screens, not apps: an app that works in the background registers
+			// none, and one with two screens registers both, so it rarely equals the bundle's count.
+			'detail' => $count >= 1 ? ( 1 === $count ? '1 app screen registered' : "{$count} app screens registered" ) : 'No apps registered: is the Zorderz Apps plugin active?',
 		];
 	}
 

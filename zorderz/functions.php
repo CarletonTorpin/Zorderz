@@ -16,7 +16,7 @@
  * toast. One constant now feeds all of them.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '2.1.1' );
+	define( 'ZDZ_THEME_VER_FLOOR', '2.1.2' );
 }
 /**
  * The REST namespace, in exactly one place.
@@ -1294,6 +1294,12 @@ add_action( 'admin_print_scripts', function () {
  * the profile, and a path to a theme folder that no longer existed. It is now generated from the
  * Business Profile and served at /zdz-manifest.json (extension-less routes are
  * unreliable on some managed hosts, so this one keeps its extension).
+ *
+ * It is served to everyone, signed in or not, ahead of the access control below.
+ * Browsers fetch a manifest WITHOUT cookies (unless the link asks for credentials),
+ * so a signed-in person adding the app to a home screen is a signed-out request
+ * here; behind the sign-in gate the browser got the sign-in page instead of the
+ * name, colours and icons. The manifest holds only what a home screen shows.
  */
 add_action( 'init', function () {
 	add_rewrite_rule( '^zdz-manifest\\.json$', 'index.php?zdz_manifest=1', 'top' );
@@ -1303,8 +1309,11 @@ add_action( 'template_redirect', function () {
 	if ( ! get_query_var( 'zdz_manifest' ) ) {
 		return;
 	}
+	// The main query can mark this request 404 before template_redirect runs, and a
+	// browser rejects a manifest that comes with an error status (as with /zdz-sw).
+	status_header( 200 );
 	nocache_headers();
 	header( 'Content-Type: application/manifest+json; charset=utf-8' );
 	echo wp_json_encode( ZDZ_Business_Profile::manifest() );
 	exit;
-} );
+}, 1 ); // Priority 1: before access control and the sign-in redirects.
