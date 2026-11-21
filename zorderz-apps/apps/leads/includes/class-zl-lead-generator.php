@@ -1212,7 +1212,7 @@ class ZL_Lead_Generator {
 
 		// If no AI available, fall back to simple keyword matching with parsed terms
 		if ( ! $this->poe || empty( $unique_names ) ) {
-			$reason = ! $this->poe ? 'Poe AI client not initialized' : 'No line item names found in invoice data';
+			$reason = ! $this->poe ? 'Poe Ai client not initialized' : 'No line item names found in invoice data';
 			error_log( 'ZL AI filter expansion skipped: ' . $reason );
 			return array(
 				'matched_names' => array(),
@@ -3077,7 +3077,7 @@ class ZL_Lead_Generator {
 	 */
 	public function ai_batch_summary( $batch_id ) {
 		if ( ! $this->poe ) {
-			return 'AI summary not available (Poe API key not configured).';
+			return 'Ai summary not available (Poe API key not configured).';
 		}
 
 		global $wpdb;
@@ -3115,7 +3115,7 @@ class ZL_Lead_Generator {
 			) );
 		} catch ( \Throwable $e ) {
 			error_log( 'ZL AI summary error: ' . $e->getMessage() );
-			return 'AI summary generation failed. ' . count( $leads ) . ' leads generated successfully.';
+			return 'Ai summary generation failed. ' . count( $leads ) . ' leads generated successfully.';
 		}
 	}
 

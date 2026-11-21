@@ -169,7 +169,7 @@ PROMPT;
 					'deadline' => time() + 150,
 				) );
 			} catch ( Throwable $e ) {
-				return new WP_Error( 'zdh_ai_threw', __( 'The AI could not read the picture.', 'zorderz' ) );
+				return new WP_Error( 'zdh_ai_threw', __( 'The Ai could not read the picture.', 'zorderz' ) );
 			}
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -183,7 +183,7 @@ PROMPT;
 			}
 			$parsed = is_array( $r['json'] ?? null ) && false === strpos( wp_json_encode( $r['json'] ), '⟦' ) ? $r['json'] : self::extract_json( $raw );
 			if ( ! is_array( $parsed ) ) {
-				return new WP_Error( 'zdh_ai_parse', __( 'The AI did not answer in the expected shape.', 'zorderz' ) );
+				return new WP_Error( 'zdh_ai_parse', __( 'The Ai did not answer in the expected shape.', 'zorderz' ) );
 			}
 			$parsed['_model'] = (string) ( $r['model'] ?? '' );
 			$parsed['_usage'] = $r['usage'] ?? null;
@@ -383,7 +383,7 @@ PROMPT;
 					'messages' => array( array( 'role' => 'user', 'content' => 'Reply with the single word OK.' ) ),
 				), array( 'caller' => self::CALLER, 'user_id' => (int) get_current_user_id(), 'deadline' => time() + 40 ) );
 			} catch ( Throwable $e ) {
-				return new WP_Error( 'zdh_ai_threw', __( 'The AI router could not answer.', 'zorderz' ) );
+				return new WP_Error( 'zdh_ai_threw', __( 'The Ai router could not answer.', 'zorderz' ) );
 			}
 			if ( is_wp_error( $r ) ) {
 				return $r;

@@ -512,9 +512,9 @@ class ZKV_Email_Ingest {
 		$lines   = array();
 		$lines[] = 'Filed in the Knowledge Vault: "' . $final['title'] . '"';
 		if ( ! empty( $final['is_private'] ) ) {
-			$lines[] = 'Kept Private: never sent to an AI service, stored encrypted · Tagged: ' . self::TAG_LABEL;
+			$lines[] = 'Kept Private: never sent to an Ai service, stored encrypted · Tagged: ' . self::TAG_LABEL;
 		} else {
-			$lines[] = 'Category: ' . ( $final['category_label'] ?: 'General' ) . ' (AI-chosen) · Tagged: ' . self::TAG_LABEL;
+			$lines[] = 'Category: ' . ( $final['category_label'] ?: 'General' ) . ' (Ai-chosen) · Tagged: ' . self::TAG_LABEL;
 		}
 		if ( 'admin_only' === $final['visibility'] ) {
 			$lines[] = 'Visibility: Admin only';
@@ -553,7 +553,7 @@ class ZKV_Email_Ingest {
 			return;
 		}
 		self::send_mail( $notify['to'], 'Knowledge Vault: filing needs a retry', array(
-			'Your forwarded email "' . ( $doc['title'] ?? '' ) . '" was received and saved, but the AI indexing step failed:',
+			'Your forwarded email "' . ( $doc['title'] ?? '' ) . '" was received and saved, but the Ai indexing step failed:',
 			$error,
 			'',
 			'An admin can re-run indexing from the Knowledge Vault screen. Nothing was lost.',

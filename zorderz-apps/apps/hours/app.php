@@ -8,7 +8,7 @@
  *   person sets the time they finished -- the app never makes one up. Door-hanger walks start and stop the clock by
  *   themselves. Everyone sees their own hours, simply; the admin tier sees everyone's, against the standard hours, with
  *   how much of each stretch the app's own record backs up, and sets the standard hours and the business's rules.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -46,7 +46,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ZHR_VERSION', '1.0.0' );
+define( 'ZHR_VERSION', '1.0.1' );
 define( 'ZHR_DB_VERSION', '1.0.0' );
 define( 'ZHR_APP_ID', 'hours' );
 define( 'ZHR_FILE', __FILE__ );
@@ -253,7 +253,7 @@ add_filter(
 	'cron_schedules',
 	function ( $s ) {
 		if ( ! isset( $s['zhr_15min'] ) ) {
-			$s['zhr_15min'] = array( 'interval' => 15 * MINUTE_IN_SECONDS, 'display' => __( 'Every 15 minutes (Hours)', 'zorderz' ) );
+			$s['zhr_15min'] = array( 'interval' => 15 * MINUTE_IN_SECONDS, 'display' => did_action( 'init' ) ? __( 'Every 15 minutes (Hours)', 'zorderz' ) : 'Every 15 minutes (Hours)' );
 		}
 		return $s;
 	}

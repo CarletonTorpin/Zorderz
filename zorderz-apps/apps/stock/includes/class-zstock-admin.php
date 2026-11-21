@@ -75,7 +75,7 @@ class ZSTOCK_Admin {
 			<div style="background:#fff;padding:14px 18px;border:1px solid #ccd0d4;margin:16px 0;max-width:640px;">
 				<h3 style="margin-top:0;"><?php esc_html_e( 'Status', 'zorderz' ); ?></h3>
 				<p>
-					<?php esc_html_e( 'AI (Poe):', 'zorderz' ); ?>
+					<?php esc_html_e( 'Ai (Poe):', 'zorderz' ); ?>
 					<?php echo $poe_ok ? '<span style="color:green;">&#10003; ' . esc_html__( 'configured', 'zorderz' ) . '</span>' : '<span style="color:#b32d2e;">&#10007; ' . esc_html__( 'not configured', 'zorderz' ) . '</span>'; ?>
 					&nbsp;|&nbsp;
 					<?php esc_html_e( 'Billing (FreshBooks):', 'zorderz' ); ?>
@@ -109,7 +109,7 @@ class ZSTOCK_Admin {
 						<td>
 							<input type="text" id="zstock_assistant" name="zstock_assistant" class="regular-text"
 								value="<?php echo esc_attr( get_option( 'zstock_assistant', '' ) ); ?>" />
-							<p class="description"><?php esc_html_e( 'Optional Poe bot to answer inventory questions. Leave blank to use the platform’s default AI model with the built-in prompt template.', 'zorderz' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Optional Poe bot to answer inventory questions. Leave blank to use the platform’s default Ai model with the built-in prompt template.', 'zorderz' ); ?></p>
 						</td>
 					</tr>
 					<tr>

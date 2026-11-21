@@ -167,7 +167,7 @@
 				hintEl.innerHTML = '<em style="color:#888;">Lead found on Nutshell but no install notes matched; proceed with photos only.</em>';
 				return;
 			}
-			hintEl.innerHTML = '<strong>' + notes.length + ' install note' + (notes.length === 1 ? '' : 's') + ' found on Nutshell:</strong> <span style="color:var(--sys-brand,#5150D6);">AI will include them when generating the receipt.</span>';
+			hintEl.innerHTML = '<strong>' + notes.length + ' install note' + (notes.length === 1 ? '' : 's') + ' found on Nutshell:</strong> <span style="color:var(--sys-brand,#5150D6);">Ai will include them when generating the receipt.</span>';
 			// Stash notes on the app for submission.
 			if (app) app.dataset.installNotes = JSON.stringify(notes);
 		}).catch(function () { /* ignore */ });

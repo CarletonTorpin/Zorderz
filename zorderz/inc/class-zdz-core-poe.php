@@ -91,7 +91,7 @@ class ZDZ_Core_Poe {
 		if ( '' === $bot ) {
 			return new WP_Error(
 				'zdz_no_model',
-				__( 'No AI model is configured. Set one under Settings, Zorderz Core.', 'zorderz' ),
+				__( 'No Ai model is configured. Set one under Settings, Zorderz Core.', 'zorderz' ),
 				array( 'status' => 0, 'model' => '' )
 			);
 		}

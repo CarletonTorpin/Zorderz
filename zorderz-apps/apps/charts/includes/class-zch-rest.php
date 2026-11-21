@@ -125,7 +125,10 @@ class ZCH_Rest {
 			if ( ! empty( $reply['error']['local'] ) ) {
 				$err['local'] = true;              // no hub here: the page shows local mode, not an outage.
 			}
-			return new WP_REST_Response( array( 'ok' => false, 'error' => $err ), 'hub_unavailable' === $code ? 503 : 200 );
+			// 503 only when a hub is set up and cannot be reached. Local mode is how this site runs, so it answers 200
+			// (hosts that count 5xx answers would otherwise alert on every Home Screen load).
+			$status = ( 'hub_unavailable' === $code && empty( $err['local'] ) ) ? 503 : 200;
+			return new WP_REST_Response( array( 'ok' => false, 'error' => $err ), $status );
 		}
 		$data = $fn ? call_user_func( $fn, $reply['data'] ) : $reply['data'];
 		return new WP_REST_Response( array( 'ok' => true, 'data' => $data ), 200 );

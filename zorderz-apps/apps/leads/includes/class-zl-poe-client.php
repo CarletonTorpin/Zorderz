@@ -119,7 +119,7 @@ class ZL_Poe_Client {
      */
     public function query( $prompt, $bot_name = null, $system_prompt = '', $temperature = null, $extra_params = array() ) {
         if ( ! class_exists( 'ZDZ_Core_Poe' ) ) {
-            throw new Exception( 'AI gateway (ZDZ_Core_Poe) is unavailable.' );
+            throw new Exception( 'Ai gateway (ZDZ_Core_Poe) is unavailable.' );
         }
 
         $service = $this->service();
@@ -127,7 +127,7 @@ class ZL_Poe_Client {
         // Short-circuit a sick upstream: don't hold a worker on a service that is
         // already paused by the breaker.
         if ( class_exists( 'Zdz_Service_Breaker' ) && Zdz_Service_Breaker::is_open( $service ) ) {
-            throw new Exception( 'AI service temporarily paused (circuit breaker open).' );
+            throw new Exception( 'Ai service temporarily paused (circuit breaker open).' );
         }
 
         $model = $this->resolve_model( $bot_name );
@@ -160,7 +160,7 @@ class ZL_Poe_Client {
             $status  = ( is_array( $data ) && isset( $data['status'] ) ) ? (int) $data['status'] : 0;
             $message = $result->get_error_message();
             $this->note_failure( $service, $status, $message );
-            throw new Exception( 'AI error: ' . $message );
+            throw new Exception( 'Ai error: ' . $message ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- caught by the lead generator: written to the server log and returned in JSON that the progress log shows through escapeHtml(); never echoed as HTML.
         }
 
         $text = (string) $result;

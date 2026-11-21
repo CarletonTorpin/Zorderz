@@ -7,7 +7,7 @@
  *   (ZDZ_Core_LLM, customer details coded before anything leaves), and passes every reply through the single outbound
  *   gate (ZDZ_Answer_Authority) so it states facts only. What it may ask an app to do goes through the verb registry
  *   (ZDZ_Capabilities): a lookup is answered by the app, a change waits for a person's Confirm press.
- * Version:     1.4.0
+ * Version:     1.4.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -42,7 +42,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZANA_VERSION', '1.4.0' );
+define( 'ZANA_VERSION', '1.4.1' );
 define( 'ZANA_FILE', __FILE__ );
 define( 'ZANA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZANA_URL', plugin_dir_url( __FILE__ ) );

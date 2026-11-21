@@ -46,7 +46,7 @@ class ZL_Rejection_Ledger {
 		'over_limit'     => 'beyond the batch limit',
 		'demographic'    => 'demographic filter',
 		'duplicate'      => 'already a lead (duplicate)',
-		'ai_validation'  => 'AI strict review',
+		'ai_validation'  => 'Ai strict review',
 	);
 
 	/**
@@ -229,7 +229,7 @@ class ZL_Rejection_Ledger {
 				// The AI review gate speaks in the operator's terms.
 				$passed = $matched + $dn;
 				$parts[] = sprintf(
-					'%d passed every filter, then the AI review dropped %s, not a territory or product miss.',
+					'%d passed every filter, then the Ai review dropped %s, not a territory or product miss.',
 					$passed,
 					$dn === $passed ? 'them all' : ( $dn . ' of them' )
 				);

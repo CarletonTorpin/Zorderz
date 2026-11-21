@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Messaging
  * Plugin URI:  https://zorderz.org
  * Description: One-to-one direct messages and team channels inside the Zorderz Field OS. @mentions, phone notifications held to quiet hours, estimate and invoice cards shared one document at a time.
- * Version:     1.10.0
+ * Version:     1.10.1
  * Author:      Zorderz
  * Text Domain: zdz-internal-messaging
  * Requires PHP: 8.0
@@ -109,7 +109,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIM_VERSION', '1.10.0' );
+define( 'ZIM_VERSION', '1.10.1' );
 define( 'ZIM_PLUGIN_FILE', __FILE__ );
 define( 'ZIM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -500,6 +500,7 @@ function zim_enqueue_nav_inject() {
 	wp_localize_script( 'zim-nav-inject', 'zimNavData', array(
 		'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 		'nonce'   => wp_create_nonce( ZIM_NONCE ),
+		'label'   => __( 'Team', 'zorderz' ),   // the bottom bar's word, in the site's language
 	) );
 }
 

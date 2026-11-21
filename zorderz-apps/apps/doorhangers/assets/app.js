@@ -503,7 +503,7 @@
 		}
 		if (ses && S.tab !== 'deliver') { html += '<div class="zdh-banner" id="zdh-banner"><span>Delivering <strong>' + esc(ses.name || ('cluster #' + ses.id)) + '</strong>: ' + Object.keys(ses.delivered).length + ' of ' + ses.total + ' done</span><span class="zdh-banner-btns"><button type="button" class="zdh-mini zdh-mini-primary" id="zdh-banner-resume">Resume</button><button type="button" class="zdh-mini" id="zdh-banner-leave" title="Stop for now; you can resume it from Clusters">Stop</button></span></div>'; }
 		html += '<main class="zdh-main" id="zdh-main"></main>';
-		html += '<footer class="zdh-footer">' + (C.llmReady ? '' : '<span class="zdh-warn">Map reading is off: no AI key or vision model on Zorderz → Settings.</span> &bull; ') + '<button type="button" class="zdh-linkbtn" id="zdh-refresh">↻ Reload data</button> &bull; <button type="button" class="zdh-linkbtn" id="zdh-help-link">How it works</button> &bull; <button type="button" class="zdh-linkbtn" id="zdh-diag-link">Diagnostics</button></footer>';
+		html += '<footer class="zdh-footer">' + (C.llmReady ? '' : '<span class="zdh-warn">Map reading is off: no Ai key or vision model on Zorderz → Settings.</span> &bull; ') + '<button type="button" class="zdh-linkbtn" id="zdh-refresh">↻ Reload data</button> &bull; <button type="button" class="zdh-linkbtn" id="zdh-help-link">How it works</button> &bull; <button type="button" class="zdh-linkbtn" id="zdh-diag-link">Diagnostics</button></footer>';
 		teardownMaps();
 		document.body.classList.remove('zdh-has-bar'); // the views that need the bottom bar add it back
 		root.innerHTML = html;
@@ -694,7 +694,7 @@
 				'<h2>Log a drop</h2>' +
 				'<p class="zdh-help">Two ways to record which houses got a hanger. Streets you already covered show up in blue so you only mark the new ones.</p>' +
 				'<button type="button" class="zdh-choice" id="c-map"><span class="zdh-choice-title">Draw on the map</span><span class="zdh-choice-sub">Trace the streets you walked (or circle the blocks) with your finger. Instant, no screenshot needed.</span></button>' +
-				'<button type="button" class="zdh-choice" id="c-shot"><span class="zdh-choice-title">Upload a marked-up screenshot</span><span class="zdh-choice-sub">Circle or trace the area in Apple/Google Maps, screenshot it, and the AI reads it.</span></button>' +
+				'<button type="button" class="zdh-choice" id="c-shot"><span class="zdh-choice-title">Upload a marked-up screenshot</span><span class="zdh-choice-sub">Circle or trace the area in Apple/Google Maps, screenshot it, and the Ai reads it.</span></button>' +
 			'</div>' +
 			(nd.error ? '<div class="zdh-error">' + esc(nd.error) + '</div>' : '');
 		document.getElementById('c-map').addEventListener('click', function () { nd.mode = 'map'; nd.step = 'draw'; nd.error = ''; render(); });
@@ -994,7 +994,7 @@
 			'</div>' +
 			(nd.error ? '<div class="zdh-error">' + esc(nd.error) + '</div>' : '') +
 			'<div class="zdh-actions"><button class="zdh-secondary" id="f-back">← Back</button><button class="zdh-primary" id="f-go"' + (C.llmReady ? '' : ' disabled') + '>Upload &amp; analyze →</button></div>' +
-			(C.llmReady ? '' : '<p class="zdh-help zdh-warn">Map reading needs the AI key and a vision model on Zorderz → Settings first.</p>');
+			(C.llmReady ? '' : '<p class="zdh-help zdh-warn">Map reading needs the Ai key and a vision model on Zorderz → Settings first.</p>');
 
 		var thumbs = document.getElementById('zdh-thumbs');
 		function drawThumbs() {
@@ -1301,7 +1301,7 @@
 		var canGeoref = canGeorefOf(nd), isPaper = /paper/.test(a.source_type || '');
 		main.innerHTML =
 			'<div class="zdh-card">' +
-				'<h2>' + (nd.batchItem ? 'What was read off ' + esc(sheetTitle(nd.batchItem)) : '3. Confirm what the AI read') + '</h2>' +
+				'<h2>' + (nd.batchItem ? 'What was read off ' + esc(sheetTitle(nd.batchItem)) : '3. Confirm what the Ai read') + '</h2>' +
 				'<div class="zdh-ai-summary">' +
 					'<div><strong>' + esc(isPaper ? 'Paper map' + (a.sheet_label ? ' “' + a.sheet_label + '”' : '') : (a.map_app || 'Map')) + '</strong> &bull; marking: <strong>' + esc(a.marking_style || '?') + '</strong> &bull; confidence: <strong>' + esc(a.confidence || '?') + '</strong></div>' +
 					(a.pin_label ? '<div>📌 ' + esc(a.pin_label) + '</div>' : '') +
@@ -4606,7 +4606,7 @@
 			'<div class="zdh-export-btns">' +
 				'<a class="zdh-primary" href="' + esc(u + 'addresses') + '">Download addresses CSV</a><p class="zdh-muted">One row per house: address, ZIP, coordinates, APN, drop date, hanger type and side, deliverer, weather and wind, fire zone, neighborhood stats.</p>' +
 				'<a class="zdh-primary" href="' + esc(u + 'drops') + '">Download drops CSV</a><p class="zdh-muted">One row per distribution run (and planned route) with totals, revisit dates, uptake and screenshot links.</p>' +
-				'<a class="zdh-secondary" href="' + esc(u + 'json') + '">Download full JSON backup</a><p class="zdh-muted">Raw tables (drops, addresses, streets) including the AI analysis and geometry.</p>' +
+				'<a class="zdh-secondary" href="' + esc(u + 'json') + '">Download full JSON backup</a><p class="zdh-muted">Raw tables (drops, addresses, streets) including the Ai analysis and geometry.</p>' +
 			'</div><div id="ex-stats" class="zdh-muted"></div></div>' +
 			'<div class="zdh-card" id="zdh-diag"><h2>Diagnostics</h2><p class="zdh-help">If a walk did not record the way you expected, this report shows what this phone did: GPS fixes and gaps, ticks, what reached the server, what is still waiting, errors. It holds no customer data: only addresses, times and counts.</p>' +
 				'<div class="zdh-actions zdh-diag-btns"><button type="button" class="zdh-primary" id="dg-share">Share report…</button><button type="button" class="zdh-secondary" id="dg-copy">Copy</button><button type="button" class="zdh-secondary" id="dg-send">Send to the site</button></div>' +

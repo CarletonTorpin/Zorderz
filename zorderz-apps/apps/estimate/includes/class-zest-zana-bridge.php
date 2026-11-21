@@ -271,14 +271,14 @@ class ZEST_ZANA_Bridge {
 			$docs[] = array( 'kind' => 'estimate', 'number' => (string) $r['billing_doc_num'], 'customer' => (string) $r['customer_name'], 'status' => (string) $r['status'], 'date' => substr( (string) $r['created_at'], 0, 10 ), 'total' => $money ? round( $total, 2 ) : null );
 		}
 		// invoices (and estimates made outside this app) from the chat's stored ledger, by its own rules
-		if ( class_exists( 'ZANA_Ledger' ) && class_exists( 'ZANA_Ledger_Access' ) && method_exists( 'ZANA_Ledger', 'table' ) && ! ( $all && self::is_kiosk( $uid ) ) ) {
+		if ( class_exists( 'ZANA_Ledger_Store' ) && class_exists( 'ZANA_Ledger_Access' ) && method_exists( 'ZANA_Ledger_Store', 'table' ) && ! ( $all && self::is_kiosk( $uid ) ) ) {
 			try {
 				$ctx   = ZANA_Ledger_Access::context( $uid );
 				$codes = ZANA_Ledger_Access::codes_for( $uid );
 				$see   = $all && ZANA_Ledger_Access::may( $ctx, 'doc_all' );
 				$own   = ! $see && $codes && ZANA_Ledger_Access::may( $ctx, 'doc_own' );
 				foreach ( array( 'invoice' => array( 'invoices', 'invoice_number', 'inv_date', 'pay_status' ), 'estimate' => array( 'estimates', 'estimate_number', 'est_date', 'status_label' ) ) as $kind => $c ) {
-					$t = ZANA_Ledger::table( $c[0] );
+					$t = ZANA_Ledger_Store::table( $c[0] );
 					if ( '' === $t ) {
 						continue;
 					}

@@ -248,7 +248,7 @@ class ZL_Dashboard {
 							<option value="male">Male</option>
 							<option value="female">Female</option>
 						</select>
-						<span class="zl-filter-hint">Filter by likely customer gender (uses AI inference from names)</span>
+						<span class="zl-filter-hint">Filter by likely customer gender (uses Ai inference from names)</span>
 					</div>
 
 					<div class="zl-gen-row zl-gen-buttons">
@@ -368,7 +368,7 @@ class ZL_Dashboard {
 									<div class="zl-leads-container" id="zl-leads-container-<?php echo (int) $b['id']; ?>">
 										<?php if ( ! empty( $b['ai_summary'] ) ) : ?>
 											<div class="zl-ai-summary">
-												<strong>AI Summary:</strong> <?php echo esc_html( $b['ai_summary'] ); ?>
+												<strong>Ai Summary:</strong> <?php echo esc_html( $b['ai_summary'] ); ?>
 											</div>
 										<?php endif; ?>
 										<div class="zl-leads-loading">Loading leads...</div>
@@ -1330,7 +1330,7 @@ class ZL_Dashboard {
 			if ( ! $gen->has_ai() ) {
 				wp_send_json_success( array(
 					'skipped' => true,
-					'reason'  => 'No AI configured: keeping all leads',
+					'reason'  => 'No Ai configured: keeping all leads',
 				) );
 				return;
 			}
@@ -1429,7 +1429,7 @@ class ZL_Dashboard {
 			$gen->init_clients();
 
 			if ( ! $gen->has_ai() ) {
-				wp_send_json_success( array( 'refined' => 0, 'done' => true, 'skipped' => true, 'reason' => 'No AI configured' ) );
+				wp_send_json_success( array( 'refined' => 0, 'done' => true, 'skipped' => true, 'reason' => 'No Ai configured' ) );
 				return;
 			}
 
@@ -1675,7 +1675,7 @@ class ZL_Dashboard {
 				ZL_Progress::complete( $batch_id );
 			}
 			wp_send_json_success( array(
-				'summary'    => 'Batch complete (AI summary unavailable).',
+				'summary'    => 'Batch complete (Ai summary unavailable).',
 				'lead_count' => 0,
 			) );
 		}
@@ -3010,7 +3010,7 @@ class ZL_Dashboard {
 			$expanded_filter = '';
 			if ( ! empty( $product_filter ) && $gen->has_ai() ) {
 				$this->update_batch_progress( $batch_id, 'expand_filter', 18,
-					"AI expanding filter \"{$product_filter}\"..." );
+					"Ai expanding filter \"{$product_filter}\"..." );
 				try {
 					$unique_names = array();
 					foreach ( $all_invoices as $inv ) {
@@ -3037,7 +3037,7 @@ class ZL_Dashboard {
 				$mn = is_array( $expanded_filter ) ? count( $expanded_filter['matched_names'] ?? array() ) : 0;
 				$kw = is_array( $expanded_filter ) ? count( $expanded_filter['keywords'] ?? array() ) : 0;
 				$this->update_batch_progress( $batch_id, 'expand_filter', 20,
-					"AI found {$mn} product matches + {$kw} keywords from " . count( $unique_names ) . ' line items.' );
+					"Ai found {$mn} product matches + {$kw} keywords from " . count( $unique_names ) . ' line items.' );
 			}
 
 			// v2.0.0: Free $all_invoices now that filter expansion is done (~10-15MB)
@@ -3505,7 +3505,7 @@ class ZL_Dashboard {
 			// ── Step 4.5: AI Validate ──
 			if ( ! empty( $product_filter ) && $gen->has_ai() ) {
 				@set_time_limit( 120 );
-				$this->update_batch_progress( $batch_id, 'ai_validate', 60, 'AI strict validation...' );
+				$this->update_batch_progress( $batch_id, 'ai_validate', 60, 'Ai strict validation...' );
 				try {
 					$db_leads = $wpdb->get_results( $wpdb->prepare(
 						"SELECT * FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d ORDER BY score DESC", $batch_id
@@ -3542,7 +3542,7 @@ class ZL_Dashboard {
 			// ── Step 5: AI Refine ──
 			if ( $gen->has_ai() ) {
 				@set_time_limit( 120 );
-				$this->update_batch_progress( $batch_id, 'ai_refine', 70, 'AI description refinement...' );
+				$this->update_batch_progress( $batch_id, 'ai_refine', 70, 'Ai description refinement...' );
 				try {
 					$db_leads = $wpdb->get_results( $wpdb->prepare(
 						"SELECT * FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d", $batch_id
@@ -3606,7 +3606,7 @@ class ZL_Dashboard {
 			// ── Step 7: AI Summary ──
 			if ( $gen->has_ai() ) {
 				@set_time_limit( 120 );
-				$this->update_batch_progress( $batch_id, 'ai_summary', 90, 'Generating AI summary...' );
+				$this->update_batch_progress( $batch_id, 'ai_summary', 90, 'Generating Ai summary...' );
 				try {
 					$db_leads = $wpdb->get_results( $wpdb->prepare(
 						"SELECT id FROM {$wpdb->prefix}zl_leads WHERE batch_id = %d LIMIT 1", $batch_id

@@ -85,7 +85,7 @@ final class ReceiptsGuardsTest extends TestCase {
 	public function test_invoice_reading_caption_names_no_model_or_provider(): void {
 		$root = dirname( __DIR__, 2 ) . '/zorderz-apps/apps/receipts/';
 		$php  = (string) file_get_contents( $root . 'includes/class-zrcpt-receipt.php' );
-		$this->assertSame( 1, preg_match( "/\\['Sending invoice to AI[^\\]]*\\]/u", $php, $m ), 'the generator step list is present' );
+		$this->assertSame( 1, preg_match( "/\\['Sending invoice to Ai[^\\]]*\\]/u", $php, $m ), 'the generator step list is present' );
 		$this->assertDoesNotMatchRegularExpression( '/gemini|claude|opus|sonnet|gpt|llama|mistral|poe\b/i', $m[0] );
 		$js = (string) file_get_contents( $root . 'assets/js/widget.js' );
 		$this->assertSame( 1, preg_match( '/[^\n]*is reading the invoice[^\n]*/', $js, $j ) );

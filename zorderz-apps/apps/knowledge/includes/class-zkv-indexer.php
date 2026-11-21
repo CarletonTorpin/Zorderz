@@ -162,11 +162,11 @@ class ZKV_Indexer {
 		$parsed = ZKV_Dashboard::parse_llm_json( $response );
 		if ( ! $parsed || ! is_array( $parsed ) ) {
 			$wpdb->update( $wpdb->prefix . 'zkv_documents',
-				array( 'status' => 'failed', 'processing_error' => 'AI returned invalid JSON.', 'updated_at' => current_time( 'mysql' ) ),
+				array( 'status' => 'failed', 'processing_error' => 'Ai returned invalid JSON.', 'updated_at' => current_time( 'mysql' ) ),
 				array( 'id' => (int) $document_id ), array( '%s', '%s', '%s' ), array( '%d' )
 			);
-			if ( class_exists( 'ZKV_Email_Ingest' ) ) { ZKV_Email_Ingest::after_failed( (int) $document_id, $doc, 'AI returned invalid JSON.' ); }
-			return array( 'success' => false, 'error' => 'AI returned invalid JSON.' );
+			if ( class_exists( 'ZKV_Email_Ingest' ) ) { ZKV_Email_Ingest::after_failed( (int) $document_id, $doc, 'Ai returned invalid JSON.' ); }
+			return array( 'success' => false, 'error' => 'Ai returned invalid JSON.' );
 		}
 
 		// Made Private while the AI was reading it - keep nothing the AI wrote.
@@ -795,7 +795,7 @@ Content:
 	public static function process_large_pdf( $document_id, $text, $doc ) {
 		global $wpdb;
 		if ( ! empty( $doc['is_private'] ) ) { // never for a Private document
-			return array( 'success' => false, 'error' => 'A Private document is not sent to the AI service.' );
+			return array( 'success' => false, 'error' => 'A Private document is not sent to the Ai service.' );
 		}
 
 		// Get API key and model.

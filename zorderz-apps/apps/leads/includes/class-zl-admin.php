@@ -73,7 +73,7 @@ class ZL_Admin {
             array( $this, 'settings_page_html' )
         );
         // Hidden OAuth callback endpoint (no UI rendered, handled in admin_init)
-        add_submenu_page( null, 'OAuth Callback', 'OAuth Callback', 'manage_options', 'zl-callback', '__return_false' );
+        add_submenu_page( '', 'OAuth Callback', 'OAuth Callback', 'manage_options', 'zl-callback', '__return_false' );
     }
 
     // ── Encryption helpers ──────────────────────────────────────────
@@ -764,7 +764,7 @@ class ZL_Admin {
 
         $fb_status  = $fb_token ? '<span style="color:green;font-weight:bold;">✅ Connected</span>' : '<span style="color:red;font-weight:bold;">❌ Not Connected</span>';
         $ns_status  = $ns_key ? '<span style="color:green;font-weight:bold;">✅ Configured</span>' : '<span style="color:red;font-weight:bold;">❌ Not Configured</span>';
-        $poe_status = $poe_key ? '<span style="color:green;font-weight:bold;">✅ Configured</span>' : '<span style="color:gray;font-weight:bold;">⚠️ Not Set (AI features disabled)</span>';
+        $poe_status = $poe_key ? '<span style="color:green;font-weight:bold;">✅ Configured</span>' : '<span style="color:gray;font-weight:bold;">⚠️ Not Set (Ai features disabled)</span>';
 
         // Load salespeople configuration
         $salespeople = json_decode( get_option( 'zl_salespeople', '[]' ), true );
@@ -787,9 +787,9 @@ class ZL_Admin {
 
             <div style="background:#fff;padding:15px;border:1px solid #ccd0d4;margin-bottom:20px;">
                 <h3>Connection Status</h3>
-                <p><strong>FreshBooks:</strong> <?php echo $fb_status; ?><?php echo $survey_fb && empty( get_option( 'zl_fb_access_token' ) ) ? ' <em style="color:#6b7280;">(shared from Survey plugin)</em>' : ''; ?></p>
-                <p><strong>Nutshell CRM:</strong> <?php echo $ns_status; ?><?php echo $survey_ns && empty( get_option( 'zl_ns_api_key' ) ) ? ' <em style="color:#6b7280;">(shared from Survey plugin)</em>' : ''; ?></p>
-                <p><strong>Poe AI:</strong> <?php echo $poe_status; ?><?php echo $survey_poe && empty( get_option( 'zl_poe_api_key' ) ) ? ' <em style="color:#6b7280;">(shared from Survey plugin)</em>' : ''; ?></p>
+                <p><strong>FreshBooks:</strong> <?php echo wp_kses_post( $fb_status ); ?><?php echo $survey_fb && empty( get_option( 'zl_fb_access_token' ) ) ? ' <em style="color:#6b7280;">(shared from Survey plugin)</em>' : ''; ?></p>
+                <p><strong>Nutshell CRM:</strong> <?php echo wp_kses_post( $ns_status ); ?><?php echo $survey_ns && empty( get_option( 'zl_ns_api_key' ) ) ? ' <em style="color:#6b7280;">(shared from Survey plugin)</em>' : ''; ?></p>
+                <p><strong>Poe Ai:</strong> <?php echo wp_kses_post( $poe_status ); ?><?php echo $survey_poe && empty( get_option( 'zl_poe_api_key' ) ) ? ' <em style="color:#6b7280;">(shared from Survey plugin)</em>' : ''; ?></p>
             </div>
 
             <form action="options.php" method="post">
@@ -1063,7 +1063,7 @@ class ZL_Admin {
                 </table>
                 <?php endif; ?>
                 <hr>
-                <h2>🤖 Poe AI (LLM Integration)</h2>
+                <h2>🤖 Poe Ai (LLM Integration)</h2>
 
                 <p class="description">Used for purchase description refinement and batch summaries. Leave blank to use Survey plugin credentials.</p>
 
@@ -1078,7 +1078,7 @@ class ZL_Admin {
                         <?php endif; ?>
                     </tr>
                     <tr>
-                        <th>AI Model</th>
+                        <th>Ai Model</th>
                         <td>
                             <?php
                             // Choices come from config (the model registry / connections
@@ -1107,7 +1107,7 @@ class ZL_Admin {
                                 );
                             }
                             ?>
-                            <p class="description">The AI model is provided by your connections pack; leave blank to use the platform default.</p>
+                            <p class="description">The Ai model is provided by your connections pack; leave blank to use the platform default.</p>
                         </td>
                     </tr>
                 </table>

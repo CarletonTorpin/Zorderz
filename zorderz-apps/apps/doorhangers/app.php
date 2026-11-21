@@ -5,7 +5,7 @@
  *   weather and neighborhood context, look an address up ("did they get a hanger?"), digitize old screenshots and
  *   paper maps (a stack of photos or a PDF of printed route sheets, each read and lined up with the street map),
  *   cross-check a person's CRM customers, export. Ships with NO business data: no areas, no walkers, no offer.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -38,7 +38,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ZDH_VERSION', '1.0.0' );
+define( 'ZDH_VERSION', '1.0.1' );
 define( 'ZDH_DB_VERSION', '1.0.0' );         // the schema's own number; bump when create_tables() changes
 define( 'ZDH_APP_ID', 'doorhangers' );       // the app id the theme knows (tiles, access, groups, capabilities)
 define( 'ZDH_MAPLIBRE_REL', '5.24.0' );      // assets/vendor/maplibre/maplibre-gl.js (+ leaflet-maplibre-gl.js 0.1.4)
@@ -598,7 +598,7 @@ function zdh_settings_page() {
 	<div class="wrap">
 		<h1><?php esc_html_e( 'Doorhangers', 'zorderz' ); ?></h1>
 		<p><?php esc_html_e( 'The app is on the home screen of everyone who holds it. Its keys live on', 'zorderz' ); ?> <a href="<?php echo esc_url( $cred_url ); ?>"><?php esc_html_e( 'the platform\'s credentials page', 'zorderz' ); ?></a>:
-			<?php esc_html_e( 'AI', 'zorderz' ); ?> <strong><?php echo ZDH_LLM::ready() ? esc_html__( 'set', 'zorderz' ) : esc_html__( 'not set', 'zorderz' ); ?></strong><?php if ( '' !== ZDH_LLM::model() ) : ?> (<?php esc_html_e( 'model', 'zorderz' ); ?> <code><?php echo esc_html( ZDH_LLM::model() ); ?></code>)<?php endif; ?>,
+			<?php esc_html_e( 'Ai', 'zorderz' ); ?> <strong><?php echo ZDH_LLM::ready() ? esc_html__( 'set', 'zorderz' ) : esc_html__( 'not set', 'zorderz' ); ?></strong><?php if ( '' !== ZDH_LLM::model() ) : ?> (<?php esc_html_e( 'model', 'zorderz' ); ?> <code><?php echo esc_html( ZDH_LLM::model() ); ?></code>)<?php endif; ?>,
 			<?php esc_html_e( 'CRM', 'zorderz' ); ?> <strong><?php echo ZDH_Nutshell::has_key() ? esc_html__( 'set', 'zorderz' ) : esc_html__( 'not set', 'zorderz' ); ?></strong>.</p>
 		<p><strong><?php esc_html_e( 'Database:', 'zorderz' ); ?></strong> <?php echo (int) $stats['drops']; ?> <?php esc_html_e( 'drops', 'zorderz' ); ?>, <?php echo (int) $stats['addresses']; ?> <?php esc_html_e( 'addresses', 'zorderz' ); ?>, <?php echo (int) $stats['streets']; ?> <?php esc_html_e( 'street records', 'zorderz' ); ?>.</p>
 		<form method="post" action="options.php">
@@ -704,7 +704,7 @@ function zdh_settings_page() {
 		<pre id="zdh-import-out" style="background:#fff;border:1px solid #ccd0d4;padding:10px;max-width:700px;white-space:pre-wrap"></pre>
 
 		<h2><?php esc_html_e( 'Connection check', 'zorderz' ); ?></h2>
-		<p><?php esc_html_e( 'Runs from this server: the AI reader, the address source, the weather service, the neighborhood figures, the hazard layers, the CRM.', 'zorderz' ); ?></p>
+		<p><?php esc_html_e( 'Runs from this server: the Ai reader, the address source, the weather service, the neighborhood figures, the hazard layers, the CRM.', 'zorderz' ); ?></p>
 		<p><button type="button" class="button" id="zdh-diag-btn"><?php esc_html_e( 'Run connection check', 'zorderz' ); ?></button></p>
 		<pre id="zdh-diag-out" style="background:#fff;border:1px solid #ccd0d4;padding:10px;max-width:700px;white-space:pre-wrap"></pre>
 

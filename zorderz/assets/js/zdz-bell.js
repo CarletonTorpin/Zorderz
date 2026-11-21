@@ -47,7 +47,11 @@
 
   /* ---------------------------------------------------------------- the buttons and the badge */
 
-  function label(n) { return n > 0 ? 'Notices, ' + n + ' unread' : 'Notices'; }
+  var TEXT = window.zdzBellText || {};
+  function label(n) {
+    var one = TEXT.notices || 'Notices';
+    return n > 0 ? (TEXT.unread ? String(TEXT.unread).replace('%d', n) : one + ', ' + n + ' unread') : one;
+  }
 
   // Writes only what changed. Every write is a DOM mutation, and the observer in start() watches the page: writing the
   // same text again re-fired it forever and froze the tab when a bell's container was missing.
@@ -73,7 +77,8 @@
     b.type = 'button';
     b.className = 'zdz-bell zdz-bell--' + where;
     b.setAttribute('data-zdz-bell', where);
-    b.innerHTML = BELL_SVG + (where === 'nav' ? '<span class="ni-label">Notices</span>' : '');
+    b.innerHTML = BELL_SVG + (where === 'nav' ? '<span class="ni-label"></span>' : '');
+    if (where === 'nav') { b.querySelector('.ni-label').textContent = TEXT.notices || 'Notices'; }
     b.addEventListener('click', function () { open(); });   // (never the click event as opts)
     return b;
   }

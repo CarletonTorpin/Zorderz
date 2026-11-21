@@ -453,7 +453,7 @@ class ZSTOCK_Engine {
 	public static function parse_supplier_invoice( $file_url ) {
 		$poe = self::poe();
 		if ( ! $poe ) {
-			return array( 'error' => __( 'AI client not configured. Add a Poe API key in Zorderz settings.', 'zorderz' ) );
+			return array( 'error' => __( 'Ai client not configured. Add a Poe API key in Zorderz settings.', 'zorderz' ) );
 		}
 		$messages = array(
 			array( 'role' => 'system', 'content' => self::invoice_parse_prompt() ),
@@ -468,7 +468,7 @@ class ZSTOCK_Engine {
 		$response = $poe->query( $messages, 0.0, array( 'thinking_budget' => 8192 ), zstock_default_model() );
 		if ( 0 === strpos( $response, 'Error' ) ) {
 			zstock_log( 'invoice parse error: ' . substr( $response, 0, 300 ) );
-			return array( 'error' => __( 'AI parsing failed.', 'zorderz' ) );
+			return array( 'error' => __( 'Ai parsing failed.', 'zorderz' ) );
 		}
 		$parsed = $poe->parse_llm_json( $response );
 		if ( ! $parsed ) {
@@ -559,7 +559,7 @@ class ZSTOCK_Engine {
 	public static function query_assistant( $query, array $context = array() ) {
 		$poe = self::poe();
 		if ( ! $poe ) {
-			return __( 'AI client not configured. Add a Poe API key in Zorderz settings.', 'zorderz' );
+			return __( 'Ai client not configured. Add a Poe API key in Zorderz settings.', 'zorderz' );
 		}
 		$messages = array( array( 'role' => 'system', 'content' => self::assistant_system_prompt() ) );
 		if ( ! empty( $context ) ) {

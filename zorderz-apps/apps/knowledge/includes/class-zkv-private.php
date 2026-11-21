@@ -428,7 +428,7 @@ class ZKV_Private {
 		) );
 		if ( 1 !== (int) $got ) {
 			self::pending_drop( (int) $doc_id );
-			return 'The AI is reading this document right now. Try again in a minute.';
+			return 'The Ai is reading this document right now. Try again in a minute.';
 		}
 		$prev_status = (string) $doc['status'];
 		$stored      = (string) $doc['file_url']; // what the row names (a path, an old URL - not always what locate() found)

@@ -8,7 +8,7 @@
  *   configures it, the roster resolves through ZDZ_Party, product vocabulary binds through
  *   a filter with a neutral fallback, and the outbound email voice is a neutral default.
  *   Consumes Business Profile, Party, Core settings and the theme geocoder.
- * Version:     2.11.0
+ * Version:     2.11.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -87,7 +87,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 //   + leads legibility: "no matches is a result" and per-batch rejection accounting so
 //   the funnel balances (matched + Σ rejections == scanned). Legibility only — NO count
 //   moves, no new money/count authority; territory names in messages come from config.
-define( 'ZL_VERSION', '2.11.0' );
+define( 'ZL_VERSION', '2.11.1' );
 define( 'ZL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 

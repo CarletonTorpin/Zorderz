@@ -8,7 +8,7 @@
  *   item's Bill-of-Materials (its Item Engine `consumes[]`). Low-stock alerts, counts, usage
  *   forecasting and an ask-bar lookup (quantities only) round it out. Ships EMPTY: no catalog,
  *   no SKUs, no supplier list, no supplier costs, no seeds.
- * Version:     1.3.0-beta
+ * Version:     1.3.1-beta
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -71,7 +71,7 @@ if ( defined( 'ZSTOCK_DISABLE' ) && ZSTOCK_DISABLE ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZSTOCK_VERSION', '1.3.0-beta' );
+define( 'ZSTOCK_VERSION', '1.3.1-beta' );
 define( 'ZSTOCK_DB_VERSION', '1.3.0' );
 define( 'ZSTOCK_FILE', __FILE__ );
 define( 'ZSTOCK_DIR', plugin_dir_path( __FILE__ ) );

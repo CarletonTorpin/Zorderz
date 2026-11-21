@@ -163,7 +163,7 @@ class ZDZ_Core_Settings {
 							} else {
 								?>
 								<input type="text" id="<?php echo esc_attr( $model_optname ); ?>" name="<?php echo esc_attr( $model_optname ); ?>" value="<?php echo esc_attr( $current ); ?>" class="regular-text" autocomplete="off" placeholder="<?php esc_attr_e( 'Enter the model handle from your connections pack', 'zorderz' ); ?>" />
-								<p class="description"><?php esc_html_e( 'The exact model/bot handle your AI gateway expects. Your connections pack can supply a picklist here.', 'zorderz' ); ?></p>
+								<p class="description"><?php esc_html_e( 'The exact model/bot handle your Ai gateway expects. Your connections pack can supply a picklist here.', 'zorderz' ); ?></p>
 								<?php
 							}
 							?>
@@ -433,7 +433,7 @@ class ZDZ_Core_Settings {
 			'freeform_notes' => [
 				'type'  => 'string',
 				'label' => 'Freeform Notes',
-				'hint'  => 'Anything else the AI should know about how you do your work',
+				'hint'  => 'Anything else the Ai should know about how you do your work',
 			],
 		];
 	}

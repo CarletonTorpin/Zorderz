@@ -6,7 +6,7 @@
  *   platform. Optional per-document visibility, party-siloed transcripts, and a
  *   runtime pricing-authority context feed for the platform assistant. Ships
  *   EMPTY: no company facts, no product corpus, no seeded categories.
- * Version:     1.8.0
+ * Version:     1.8.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -190,7 +190,7 @@ if ( ! function_exists( 'zkv_serve_file_headers' ) ) {
 	}
 }
 
-define( 'ZKV_VERSION', '1.8.0' );
+define( 'ZKV_VERSION', '1.8.1' );
 define( 'ZKV_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZKV_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZKV_NONCE', 'zkv_nonce' );
@@ -1162,7 +1162,7 @@ function zkv_render_admin_page() {
 		</div>
 
 		<div class="card" style="max-width:600px;padding:20px;margin-bottom:20px;">
-			<h2>AI Settings</h2>
+			<h2>Ai Settings</h2>
 			<form method="post">
 				<?php wp_nonce_field( 'zkv_admin_settings' ); ?>
 				<table class="form-table">
@@ -1187,7 +1187,7 @@ function zkv_render_admin_page() {
 						</td>
 					</tr>
 					<tr>
-						<th>AI Model</th>
+						<th>Ai Model</th>
 						<td>
 							<?php if ( $model_choices ) : // the models the business offers (Model Registry roster) ?>
 							<select name="zkv_ai_model">
@@ -1217,7 +1217,7 @@ function zkv_render_admin_page() {
 			<h2>Email-In: Forward Mail to the Vault (Microsoft 365)</h2>
 			<p class="description" style="margin-bottom:10px;">
 				Staff forward an email to the address below and it is filed into the vault automatically:
-				the AI picks a category, tags it "<?php echo esc_html( class_exists( 'ZKV_Email_Ingest' ) ? ZKV_Email_Ingest::TAG_LABEL : 'Email Correspondence' ); ?>", records who sent it,
+				the Ai picks a category, tags it "<?php echo esc_html( class_exists( 'ZKV_Email_Ingest' ) ? ZKV_Email_Ingest::TAG_LABEL : 'Email Correspondence' ); ?>", records who sent it,
 				and replies with a confirmation link. Only emails from active staff accounts are accepted.
 				Requires the Azure app permission <code>Mail.Read</code> (Application, admin-consented).
 			</p>
@@ -1749,7 +1749,7 @@ add_action( 'after_setup_theme', function () {
 					'icon'        => 'library',
 					'cat'         => 'Admin',
 					'cc'          => '#0072B2',
-					'desc'        => 'Company document repository with AI indexing.',
+					'desc'        => 'Company document repository with Ai indexing.',
 					'roles'       => [ 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech' ],
 					'bridge_type' => 'inline_widget',
 					'admin_url'   => admin_url( 'admin.php?page=zkv-settings' ),
@@ -1857,7 +1857,7 @@ add_action( 'after_setup_theme', function () {
 									<?php endif; ?>
 								</div>
 								<div class="zkv-form-group">
-									<label for="zkv-settings-model">AI Model</label>
+									<label for="zkv-settings-model">Ai Model</label>
 									<?php $zkv_models = class_exists( 'ZKV_Dashboard' ) ? ZKV_Dashboard::model_choices() : array(); ?>
 									<?php if ( $zkv_models ) : // the models the business offers (Model Registry roster) ?>
 									<select id="zkv-settings-model">
@@ -1913,8 +1913,8 @@ add_action( 'after_setup_theme', function () {
 								<?php // Chosen FIRST, so nothing is read by the Ai before the person decides. ?>
 								<div class="zkv-private-pick" id="zkv-private-pick">
 									<label class="zkv-private-label"><input type="checkbox" id="zkv-private" /> <strong>Keep private</strong></label>
-									<span class="zkv-hint">Never sent to any AI service, and stored encrypted. Only its title and the Context you type are searchable, so keep sensitive details out of those. Choose this before picking the file.</span>
-									<span class="zkv-hint zkv-private-warn" id="zkv-private-warn" style="display:none;">The AI already read this file to suggest a title. Remove it and pick it again to keep it from the AI completely.</span>
+									<span class="zkv-hint">Never sent to any Ai service, and stored encrypted. Only its title and the Context you type are searchable, so keep sensitive details out of those. Choose this before picking the file.</span>
+									<span class="zkv-hint zkv-private-warn" id="zkv-private-warn" style="display:none;">The Ai already read this file to suggest a title. Remove it and pick it again to keep it from the Ai completely.</span>
 								</div>
 								<div class="zkv-input-toggle">
 									<button class="zkv-toggle-btn active" id="zkv-mode-file">Upload File</button>
@@ -2020,7 +2020,7 @@ add_action( 'after_setup_theme', function () {
 					'icon'        => 'library',
 					'cat'         => 'Admin',
 					'cc'          => '#0072B2',
-					'desc'        => 'Company document repository with AI indexing.',
+					'desc'        => 'Company document repository with Ai indexing.',
 					'roles'       => [ 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech' ],
 					'bridge_type' => 'iframe',
 					'admin_url'   => admin_url( 'admin.php?page=zkv-settings' ),

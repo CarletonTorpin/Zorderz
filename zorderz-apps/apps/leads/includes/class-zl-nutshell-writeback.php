@@ -66,7 +66,13 @@ class ZL_Nutshell_Writeback {
 	public static function init(): void {
 		add_action( self::CRON_HOOK, array( __CLASS__, 'drain_queue' ) );
 		add_filter( 'cron_schedules', array( __CLASS__, 'register_interval' ) );
+		// Scheduled once WordPress has loaded: scheduling at include time ran every app's cron_schedules filter before
+		// translations may load, which WordPress 6.7 and newer log as a notice.
+		add_action( 'init', array( __CLASS__, 'ensure_scheduled' ) );
+	}
 
+	/** The drain's five-minute event, scheduled when it is missing. */
+	public static function ensure_scheduled(): void {
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time() + 300, 'zl_five_minutes', self::CRON_HOOK );
 		}

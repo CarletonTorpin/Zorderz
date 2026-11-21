@@ -60,7 +60,7 @@ class ZEST_Accept_Watch {
 
 	public static function register_schedule( $s ) {
 		$s                   = is_array( $s ) ? $s : array();
-		$s[ self::SCHEDULE ] = array( 'interval' => self::INTERVAL, 'display' => __( 'Every 5 minutes', 'zorderz' ) );
+		$s[ self::SCHEDULE ] = array( 'interval' => self::INTERVAL, 'display' => did_action( 'init' ) ? __( 'Every 5 minutes', 'zorderz' ) : 'Every 5 minutes' );   // translated only from init on (WordPress 6.7+)
 		return $s;
 	}
 

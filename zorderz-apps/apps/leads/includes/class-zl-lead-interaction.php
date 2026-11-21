@@ -221,7 +221,7 @@ class ZL_Lead_Interaction {
 		if ( ! empty( $lead['salesperson_notes'] ) ) {
 			$local_notes[] = array(
 				'date'   => '',
-				'author' => 'AI Summary',
+				'author' => 'Ai Summary',
 				'text'   => $lead['salesperson_notes'],
 				'type'   => 'local',
 			);
