@@ -24,8 +24,8 @@ class ZANA_App implements \Zorderz\App_Interface {
 			'nm'          => __( 'Chat', 'zorderz' ),
 			'icon'        => 'message-circle',
 			'cat'         => 'Sales',
-			'cc'          => '#6366F1',
-			'desc'        => __( 'Ask your data a question — conversational analytics.', 'zorderz' ),
+			'cc'          => '#E69F00',
+			'desc'        => __( 'Ask your data a question in plain words.', 'zorderz' ),
 			'roles'       => array( 'zdz_owner', 'zdz_admin', 'zdz_sales' ),
 			'bridge_type' => 'ajax_html',
 			// Reached through the permanent Chat tab, so it is not a separate tile.

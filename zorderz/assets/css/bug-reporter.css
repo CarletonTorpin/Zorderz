@@ -39,7 +39,7 @@
 }
 .bnav-bug:hover {
   color: var(--sys-text-sec, #64748B);
-  background: var(--sys-brand-light, rgba(44,95,138,.08));
+  background: var(--sys-brand-light, rgba(81,80,214,.08));
 }
 .bnav-bug:active {
   transform: scale(.9);
@@ -65,9 +65,9 @@
     color: var(--sys-text-sec, #64748B);
   }
   .bnav-bug:hover {
-    border-color: var(--sys-brand, #2C5F8A);
-    background: var(--sys-brand-light, rgba(44,95,138,.08));
-    color: var(--sys-brand, #2C5F8A);
+    border-color: var(--sys-brand, #5150D6);
+    background: var(--sys-brand-light, rgba(81,80,214,.08));
+    color: var(--sys-brand, #5150D6);
   }
   .bnav-bug svg,
   .bnav-bug .zdz-ladybug-icon {
@@ -245,12 +245,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 .zdz-bug-cat-btn:hover {
-  border-color: var(--sys-brand, #2C5F8A);
-  color: var(--sys-brand, #2C5F8A);
+  border-color: var(--sys-brand, #5150D6);
+  color: var(--sys-brand, #5150D6);
 }
 .zdz-bug-cat-btn.active {
-  background: var(--sys-brand, #2C5F8A);
-  border-color: var(--sys-brand, #2C5F8A);
+  background: var(--sys-brand, #5150D6);
+  border-color: var(--sys-brand, #5150D6);
   color: var(--sys-text-brand, #fff);
 }
 .zdz-bug-cat-btn svg {
@@ -281,7 +281,7 @@
   color: var(--sys-text-ter, #94A3B8);
 }
 .zdz-bug-fg textarea:focus {
-  border-color: var(--sys-brand, #2C5F8A);
+  border-color: var(--sys-brand, #5150D6);
   outline: none;
 }
 

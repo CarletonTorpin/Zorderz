@@ -1,0 +1,50 @@
+/**
+ * Zorderz Analytics — Edit on a draft card, and "How you write" in the "About you" sheet (chat-drafts.js).
+ * Colours, type and sizes are the theme's tokens, as in chat.css; nothing here names a colour of its own.
+ */
+
+/* ── a draft being changed ── */
+.zana-style-editing { outline: 2px solid var(--sys-brand, currentColor); outline-offset: 2px; }
+.zana-style-box {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	margin: 0 0 12px;
+	padding: 10px 14px;
+	font: inherit;
+	line-height: var(--zdz-type-lh-body, 1.5);
+	color: var(--sys-text, inherit);
+	background: var(--sys-surface, transparent);
+	border: 1px solid var(--sys-border-strong, rgba(127, 127, 127, 0.5));
+	border-radius: var(--zdz-kit-radius, 12px);
+	resize: vertical;
+}
+.zana-style-box:focus-visible { outline: 2px solid var(--sys-focus, currentColor); outline-offset: 1px; }
+.zana-style-bar { align-items: center; }
+.zana-style-edit { margin-left: auto; }
+
+/* ── How you write ── */
+.zana-style { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--sys-border, rgba(127, 127, 127, 0.25)); }
+.zana-style-title { margin: 0 0 6px; font-size: var(--zdz-type-title, 18px); font-weight: var(--sys-font-wt-sb, 600); }
+.zana-style-group {
+	margin: 14px 0 0;
+	font-size: var(--zdz-type-meta, 14px);
+	font-weight: var(--sys-font-wt-sb, 600);
+	color: var(--sys-text-sec, inherit);
+}
+.zana-style-add { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.zana-style-who,
+.zana-style-words {
+	min-height: var(--zdz-kit-tap, 44px);
+	padding: 0 12px;
+	font: inherit;
+	color: var(--sys-text, inherit);
+	background: var(--sys-surface, transparent);
+	border: 1px solid var(--sys-border-strong, rgba(127, 127, 127, 0.5));
+	border-radius: var(--zdz-kit-radius, 12px);
+}
+.zana-style-words { flex: 1 1 220px; min-width: 0; }
+.zana-style-who:focus-visible,
+.zana-style-words:focus-visible { outline: 2px solid var(--sys-focus, currentColor); outline-offset: 1px; }
+.zana-style-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.zana-style-clear { margin-left: auto; }

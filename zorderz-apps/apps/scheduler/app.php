@@ -905,8 +905,8 @@ add_action( 'after_setup_theme', function () {
 		'nm'          => 'Schedule',
 		'icon'        => 'calendar',
 		'cat'         => 'Team',
-		'cc'          => '#0EA5E9',
-		'desc'        => 'Appointments, team availability & shared calendar — synced with Outlook.',
+		'cc'          => '#56B4E9',
+		'desc'        => 'Appointments, team availability & shared calendar, synced with Outlook.',
 		'roles'       => zsch_roles(),
 		// v1.3.0: Scheduler now gets a real app ICON like every other app —
 		// 'springboard' => true means it appears in the top quick-link dock, the

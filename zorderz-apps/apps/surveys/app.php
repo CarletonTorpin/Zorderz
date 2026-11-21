@@ -4,12 +4,12 @@
  * Description: Satisfaction-survey follow-up for the Zorderz dashboard. Pulls settled
  *   invoices from the configured billing provider, screens them, opens a follow-up per
  *   customer as a CRM lead, tracks a configurable SURVEY OPERATOR's call outcomes, sends
- *   a review invite routed to the tenant's review destination, and closes the loop — with
+ *   a review invite routed to the business's review destination, and closes the loop — with
  *   a non-overridable SAFETY FLOOR: a survey may never auto-close as "Won" without human
  *   review. Consumes the theme's Business Profile (senders + review dests), Party roster
  *   (operator + salesperson resolution), and the Core billing / CRM / AI / review-bridge
  *   services. No business data is shipped; every drop is a logged disposition.
- * Version:     2.13.0
+ * Version:     2.14.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -21,7 +21,7 @@
  * after_setup_theme and declines cleanly when the theme is absent.
  *
  * ── CORE-SERVICE BINDINGS ─────────────────────────────────────────────
- * Identity is READ from the theme, never hardcoded:
+ * Identity is READ from the theme:
  *   - Business Profile : sender identity (`ZDZ_Business_Profile::sender('surveys')`) and
  *                        review destinations (`web.review_google` / `web.review_page`).
  *   - Party            : the survey OPERATOR user + the salesperson roster
@@ -29,16 +29,16 @@
  *   - Connections      : billing (`ZDZ_Core_Freshbooks`), CRM (`ZDZ_Core_Nutshell`),
  *                        AI (`ZDZ_Core_Poe`), review bridge (`ZDZ_Core_ReviewBridge`).
  *   - Item Engine      : work-category vocabulary via the `zdz_survey_work_categories`
- *                        filter with a NEUTRAL fallback (no product taxonomy invented).
+ *                        filter with a generic fallback (no product taxonomy invented).
  *   - Flow             : states stay in-app for now; every drop/skip/close is fired on
  *                        `do_action('zdz_flow_disposition', ...)` for the Flow ledger.
  *
  * ── SAFETY FLOOR (non-overridable) ────────────────────────────────────
  * The auto-closer may NEVER close a survey as "Won" without human review. Statuses that
  * still need a human (needs_attention / excluded / follow-up / not-contacted / NULL) are
- * ESCALATED with a logged disposition, never system-Won — even if a tenant enables the
+ * ESCALATED with a logged disposition, never system-Won — even if a business enables the
  * optional `zsv_allow_system_close_won` policy (which only ever reaches genuinely
- * satisfied outcomes). This closes the "excluded customer auto-Won at 96h" defect.
+ * satisfied outcomes). An excluded customer is never closed as Won by time alone.
  *
  * ── 2.13.0 ────────────────────────────────────────────────────────────
  * - Review e-mails go one customer per request (the widget shows "Sending 2 of 6"), so a slow
@@ -54,6 +54,25 @@
  *   the site's time. A full voice mailbox is "not reached"; an unclear note no longer outranks a
  *   newer voicemail. Two staff actions are counted in the Usage view.
  *
+ * ── ONE E-MAIL PER CUSTOMER · NOTES READ IN CONTEXT · GOOGLE REVIEWS ──
+ * - A customer already e-mailed is not e-mailed again unless a person asks for it (ZSV_Send_Once):
+ *   the site decides, under one lock per customer and with a fresh read of the row; an e-mail that
+ *   went but whose time the row would not take is remembered apart, so the next press is refused
+ *   all the same. "Send again" is asked for on the Surveys settings screen, one customer at a
+ *   time, after a question; the app never asks.
+ * - A call note with an explicit send instruction is read sentence by sentence and clause by
+ *   clause (ZSV_Note_Reader): an aside that only says the customer may call later does not hold
+ *   the e-mail; a call still owed, a follow-up or unfinished work anywhere in the note does. The
+ *   word lists are the business's (ZSV_Settings::status_vocabulary / note_reading; an Identity
+ *   Pack's voice.yml through ZSV_Pack).
+ * - Once an administrator has connected the business's Google Business Profile, the hourly check
+ *   (ZSV_Google_Reviews) lists the business's own Google reviews in the widget and matches each
+ *   reviewer's public name to a surveyed customer. Watch-only until an administrator turns
+ *   automatic recording on; a person presses Confirm, or "Not them". Not connected: nothing runs
+ *   and the panel stays hidden.
+ * - A customer nobody has handled is listed with the call notes showing; "Check reviews" sits
+ *   beside the sync button for the people the site lets run it, and one press checks to the end.
+ *
  * @package Zorderz\Surveys
  */
 
@@ -62,7 +81,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZSV_VERSION', '2.13.0' );
+define( 'ZSV_VERSION', '2.14.0' );
 define( 'ZSV_FILE', __FILE__ );
 define( 'ZSV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZSV_URL', plugin_dir_url( __FILE__ ) );
@@ -101,12 +120,16 @@ require_once ZSV_DIR . 'includes/class-zsv-budget.php';
 require_once ZSV_DIR . 'includes/class-zsv-owed.php';
 require_once ZSV_DIR . 'includes/class-zsv-counts.php';
 require_once ZSV_DIR . 'includes/class-zsv-settings.php';
+require_once ZSV_DIR . 'includes/class-zsv-note-reader.php';
+require_once ZSV_DIR . 'includes/class-zsv-send-once.php';
 require_once ZSV_DIR . 'includes/class-zsv-survey-manager.php';
 require_once ZSV_DIR . 'includes/class-zsv-review-checker.php';
 require_once ZSV_DIR . 'includes/class-zsv-auto-closer.php';
 require_once ZSV_DIR . 'includes/class-zsv-admin.php';
 require_once ZSV_DIR . 'includes/class-zsv-dashboard.php';
 require_once ZSV_DIR . 'includes/class-zsv-chat-bridge.php';
+require_once ZSV_DIR . 'includes/class-zsv-google-reviews.php';
+require_once ZSV_DIR . 'includes/class-zsv-pack.php';
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest entry).
@@ -117,6 +140,7 @@ function zsv_activate() {
 	ZSV_DB::install();
 	ZSV_Review_Checker::schedule();
 	ZSV_Auto_Closer::schedule();
+	ZSV_Google_Reviews::schedule();
 	update_option( 'zsv_db_version', ZSV_DB::DB_VERSION, false );
 }
 
@@ -124,6 +148,7 @@ function zsv_activate() {
 function zsv_deactivate() {
 	ZSV_Review_Checker::unschedule();
 	ZSV_Auto_Closer::unschedule();
+	ZSV_Google_Reviews::unschedule();
 }
 
 // ── Boot ───────────────────────────────────────────────────────────
@@ -139,6 +164,7 @@ add_action(
 		ZSV_Auto_Closer::init();
 		ZSV_Chat_Bridge::init();
 		ZSV_Counts::init();
+		ZSV_Google_Reviews::init();
 
 		if ( is_admin() ) {
 			ZSV_Admin::init();
@@ -217,6 +243,9 @@ add_filter(
 		return $p;
 	}
 );
+
+// The business's own call-note wording and review windows may come from an Identity Pack.
+add_filter( 'zdz_identity_pack_consumers', array( 'ZSV_Pack', 'register' ) );
 
 // ── Ensure HTML content-type only for our own outbound survey mail ──
 add_filter(

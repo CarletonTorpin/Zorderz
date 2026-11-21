@@ -89,7 +89,7 @@ class ZPREP_Billing {
 			$matches = $this->search_by_name( $query );
 		}
 
-		// QUEUE gate (the queue filter): keep only jobs that qualify.
+		// QUEUE gate: keep only jobs that qualify.
 		$in_queue = array_values(
 			array_filter(
 				$matches,

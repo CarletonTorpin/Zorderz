@@ -66,7 +66,7 @@ class ZJOB_Order_Gate {
 		if ( ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $ymd, $m ) || ! checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
 			return '';
 		}
-		return gmdate( 'l, F j', gmmktime( 12, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1] ) );
+		return gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'l, F j' ) : 'l, F j' ), gmmktime( 12, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1] ) );
 	}
 
 	/** The long refusals, by key. */
@@ -136,7 +136,7 @@ class ZJOB_Order_Gate {
 			case 'window':
 				preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', (string) $a['cancel_by'], $m );
 				/* translators: %s: a short day such as "Wed, Nov 4" */
-				return sprintf( __( 'Wait to order: can cancel until %s', 'zorderz' ), gmdate( 'D, M j', gmmktime( 12, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1] ) ) );
+				return sprintf( __( 'Wait to order: can cancel until %s', 'zorderz' ), gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D, M j' ) : 'D, M j' ), gmmktime( 12, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1] ) ) );
 			default:
 				return __( 'Wait to order', 'zorderz' );
 		}

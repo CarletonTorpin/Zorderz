@@ -51,6 +51,72 @@
     return /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? String(c) : fallback;
   }
 
+  // ------------------------------------------------------------------------------------------------ money and dates
+  // Figures and dates follow the business's Locale (Business Profile): zdzData.currencySign ("£") and zdzData.locale
+  // ("en-GB"), else the page's own language; "$" and "en-US" only when neither is known. Read on each call, so a page
+  // that sets zdzData after the kit loads is followed too.
+
+  function locale() {
+    var pd = w.zdzData || {};
+    var l = String(pd.locale || (d.documentElement && d.documentElement.lang) || '');
+    try { if (l && Intl.NumberFormat.supportedLocalesOf([l]).length) { return l; } } catch (e) { /* a tag the browser refuses */ }
+    return 'en-US';
+  }
+
+  function sign() {
+    var s = (w.zdzData || {}).currencySign;
+    return typeof s === 'string' && s !== '' ? s : '$';
+  }
+
+  /** A sum in the business's money: cash(1200) → "$1,200.00" / "£1,200.00"; places 0 for whole sums. '' when not a number. */
+  function cash(v, places) {
+    var n = Number(v);
+    if (v === null || v === '' || !isFinite(n)) { return ''; }
+    var p = places == null ? 2 : places;
+    return (n < 0 ? '-' : '') + sign() + Math.abs(n).toLocaleString(locale(), { minimumFractionDigits: p, maximumFractionDigits: p });
+  }
+
+  /** A plain number grouped the business's way: num(12500) → "12,500" / "12.500". */
+  function num(v, places) {
+    var n = Number(v);
+    if (!isFinite(n)) { return ''; }
+    var p = places == null ? 0 : places;
+    return n.toLocaleString(locale(), { minimumFractionDigits: p, maximumFractionDigits: p });
+  }
+
+  /** A calendar date ("2026-11-19") written the business's way: "11/19/2026", "19/11/2026" ... Anything else as given. */
+  function ymd(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+    if (!m) { return String(v || ''); }
+    try {
+      return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString(locale(), { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
+    } catch (e) { return m[2] + '/' + m[3] + '/' + m[1]; }
+  }
+
+  // The rest of the business's Locale (zdzData.l10n): units, the words for postal code and region. US when unknown.
+  function l10n() { var x = (w.zdzData || {}).l10n; return x && typeof x === 'object' ? x : {}; }
+
+  /** "us" or "metric". */
+  function units() { return l10n().units === 'metric' ? 'metric' : 'us'; }
+
+  /** What the business calls a postal code ("ZIP", "Postcode") and the region an address names ("State", "County"). */
+  function postcodeLabel() { var v = l10n().postcodeLabel; return typeof v === 'string' && v !== '' ? v : 'ZIP'; }
+  function regionLabel() { var v = l10n().regionLabel; return typeof v === 'string' && v !== '' ? v : 'State'; }
+
+  /** A temperature given in °F, the business's way: temp(72) → "72°F" / "22°C". '' when not a number. */
+  function temp(f) {
+    var n = Number(f);
+    if (f === null || f === '' || !isFinite(n)) { return ''; }
+    return units() === 'metric' ? Math.round((n - 32) * 5 / 9) + '°C' : Math.round(n) + '°F';
+  }
+
+  /** Rain given in inches, the business's way: rain(0.25) → "0.25 in" / "6 mm". '' when not a number. */
+  function rain(inches) {
+    var n = Number(inches);
+    if (inches === null || inches === '' || !isFinite(n)) { return ''; }
+    return units() === 'metric' ? num(Math.round(n * 25.4), 0) + ' mm' : num(n, 2) + ' in';
+  }
+
   function el(tag, cls, text) {
     var n = d.createElement(tag);
     if (cls) { n.className = cls; }
@@ -624,7 +690,7 @@
   var peopleById = {};
   (data.people || []).forEach(function (p) { peopleById[String(p.id)] = p; });
 
-  /** {id, initials, color, ink} for a user id, or for initials ('FR'); null when unknown. */
+  /** {id, initials, color, ink} for a user id, or for initials ('JB'); null when unknown. */
   function person(key) {
     if (key == null) { return null; }
     var p = peopleById[String(key)];
@@ -709,15 +775,6 @@
    * Text nodes only: nothing from a document is ever read as HTML. Amounts appear only when doc.money is true.
    * Returns the element (a wrapper holding a small bar and the paper); the caller places it.
    */
-  function cash2(v) {
-    var n = Number(v);
-    if (!isFinite(n)) { return ''; }
-    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-  function usDate(v) {
-    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
-    return m ? m[2] + '/' + m[3] + '/' + m[1] : String(v || '');
-  }
   function have(v) { return v !== null && v !== undefined && v !== ''; }
   function paper(doc, opts) {
     doc = doc || {};
@@ -772,8 +829,8 @@
     (doc.billed_to || []).forEach(function (x) { billed.appendChild(el('div', 'zdz-paper-value', String(x))); });
     meta.appendChild(billed);
     var c1 = el('div', 'zdz-paper-col');
-    c1.appendChild(field(inv ? 'Date of Issue' : 'Estimate Date', usDate(doc.issued)));
-    if (inv && doc.due) { c1.appendChild(field('Due Date', usDate(doc.due))); }
+    c1.appendChild(field(inv ? 'Date of Issue' : 'Estimate Date', ymd(doc.issued)));
+    if (inv && doc.due) { c1.appendChild(field('Due Date', ymd(doc.due))); }
     meta.appendChild(c1);
     var c2 = el('div', 'zdz-paper-col');
     c2.appendChild(field(noun + ' Number', doc.number || ''));
@@ -784,7 +841,7 @@
     if (inv && money && have(due)) {
       var big = el('div', 'zdz-paper-due');
       big.appendChild(el('div', 'zdz-paper-label', 'Amount Due (' + cur + ')'));
-      big.appendChild(el('div', 'zdz-paper-big', '$' + cash2(due)));
+      big.appendChild(el('div', 'zdz-paper-big', cash(due)));
       meta.appendChild(big);
     }
     page.appendChild(meta);
@@ -803,9 +860,9 @@
       d0.appendChild(el('div', 'zdz-paper-item', String(l.name || '')));
       if (l.description) { d0.appendChild(el('div', 'zdz-paper-item-desc', String(l.description))); }
       tr.appendChild(d0);
-      var cells = [['Rate', money && have(l.rate) ? '$' + cash2(l.rate) : ''],
+      var cells = [['Rate', money && have(l.rate) ? cash(l.rate) : ''],
         ['Qty', have(l.qty) ? String(l.qty) : ''],
-        ['Line Total', money && have(l.amount) ? '$' + cash2(l.amount) : '']];
+        ['Line Total', money && have(l.amount) ? cash(l.amount) : '']];
       cells.forEach(function (c) {
         var td = el('td', 'num', c[1]);
         td.setAttribute('data-label', c[0]);
@@ -821,7 +878,7 @@
       var row = function (label, v, cls) {
         var r = el('div', 'zdz-paper-trow' + (cls ? ' ' + cls : ''));
         r.appendChild(el('span', '', label));
-        r.appendChild(el('span', 'num', have(v) ? cash2(v) : ''));
+        r.appendChild(el('span', 'num', have(v) ? num(v, 2) : ''));
         tot.appendChild(r);
       };
       var any = false;
@@ -832,14 +889,14 @@
       if (!inv && have(T.total)) {
         var et = el('div', 'zdz-paper-trow is-due');
         et.appendChild(el('span', '', 'Estimate Total (' + cur + ')'));
-        et.appendChild(el('span', 'num', '$' + cash2(T.total)));
+        et.appendChild(el('span', 'num', cash(T.total)));
         tot.appendChild(et);
       }
       if (inv && have(T.paid)) { row('Amount Paid', T.paid); }
       if (inv && have(due)) {
         var r2 = el('div', 'zdz-paper-trow is-due');
         r2.appendChild(el('span', '', 'Amount Due (' + cur + ')'));
-        r2.appendChild(el('span', 'num', '$' + cash2(due)));
+        r2.appendChild(el('span', 'num', cash(due)));
         tot.appendChild(r2);
       }
       page.appendChild(tot);
@@ -2178,7 +2235,7 @@
   // ------------------------------------------------------------------------------------------------ export
 
   ZDZ.ui = {
-    version: '1.6.0',
+    version: '1.8.0',
     RequestError: RequestError,
     request: request,
     ajax: ajax,
@@ -2196,6 +2253,16 @@
     badge: badge,
     paper: paper,
     paperGhost: paperGhost,
+    money: cash,
+    num: num,
+    ymd: ymd,
+    locale: locale,
+    sign: sign,
+    units: units,
+    postcodeLabel: postcodeLabel,
+    regionLabel: regionLabel,
+    temp: temp,
+    rain: rain,
     marks: {
       attach: markLayer,
       editing: function () { return !!marking; },

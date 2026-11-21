@@ -25,7 +25,7 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 			'nm'          => __( 'Prep', 'zorderz' ),
 			'icon'        => 'scissors',
 			'cat'         => 'Field',
-			'cc'          => '#D4881C',
+			'cc'          => '#009E73',
 			'desc'        => __( 'Plan cuts from a job with colour-accurate nesting layouts.', 'zorderz' ),
 			'roles'       => (array) apply_filters( 'zprep_roles', array( 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_mfg', 'zdz_sales' ) ),
 			'bridge_type' => 'inline_widget',
@@ -77,6 +77,8 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 			'letterhead' => ZPREP_Settings::letterhead(),
 			'colors'     => array_values( ZPREP_Settings::roll_colors() ),
 			'kindLabels' => $kind_labels,
+			// What the internal-order form offers. Only a manager makes one, so only a manager is sent it.
+			'internal'   => 'manager' === $mode ? $this->internal_form_data() : null,
 			'contract'   => array(
 				'cutComplete' => ZPREP_CONTRACT_CUT_COMPLETE,
 				'signature'   => ZPREP_CONTRACT_SIGNATURE,
@@ -85,6 +87,36 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 				'name'     => wp_get_current_user()->display_name ?? '',
 				'is_admin' => current_user_can( 'manage_options' ),
 			),
+		);
+	}
+
+	/**
+	 * What the internal-order form offers, all of it the business's: what an order may be for, the kinds of piece
+	 * (the catalog's, cut as typed, and Custom), the stock sheet the form starts from (none until the business sets
+	 * one) and the roll widths. The year-end page's address is sent only to someone who may open it.
+	 */
+	private function internal_form_data(): array {
+		$purposes = array();
+		foreach ( ZPREP_Remakes::purposes() as $key => $p ) {
+			$purposes[] = array( 'key' => (string) $key, 'label' => (string) $p['label'] );
+		}
+		$kinds = array();
+		foreach ( ZPREP_Settings::internal_kinds() as $id => $label ) {
+			$kinds[] = array( 'id' => (string) $id, 'label' => (string) $label );
+		}
+		$widths = array();
+		foreach ( ZPREP_Settings::rolls() as $r ) {
+			if ( ! empty( $r['available'] ) ) {
+				$widths[ (int) $r['width_in'] ] = (int) $r['width_in'];
+			}
+		}
+		sort( $widths );
+		return array(
+			'purposes'  => $purposes,
+			'kinds'     => $kinds,
+			'sheet'     => ZPREP_Settings::internal_default_sheet(),
+			'widths'    => array_values( $widths ),
+			'reportUrl' => current_user_can( ZPREP_Internal_Report::CAP ) ? admin_url( 'admin.php?page=' . ZPREP_Internal_Report::SLUG ) : '',
 		);
 	}
 
@@ -123,6 +155,7 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 						<h3><?php esc_html_e( 'Ready to Cut', 'zorderz' ); ?></h3>
 						<?php if ( 'manager' === ZPREP_Dashboard::queue_mode( $user_id ) ) : ?>
 						<button id="zprep-w-remakes-btn" class="zprep-w-btn zprep-w-btn-ghost" type="button"><?php esc_html_e( 'Remakes', 'zorderz' ); ?></button>
+						<button id="zprep-w-internal-btn" class="zprep-w-btn zprep-w-btn-ghost" type="button"><?php esc_html_e( 'Internal orders', 'zorderz' ); ?></button>
 						<?php endif; ?>
 						<button id="zprep-w-atc-reload" class="zprep-w-btn zprep-w-btn-ghost" type="button"><?php esc_html_e( 'Reload', 'zorderz' ); ?></button>
 					</div>
@@ -151,7 +184,7 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 				<p class="zprep-w-lead"><?php esc_html_e( 'Plan cuts from a CRM lead or billing estimate.', 'zorderz' ); ?></p>
 				<label class="zprep-w-label" for="zprep-w-search"><?php esc_html_e( 'Lead #, estimate #, customer name, or phone', 'zorderz' ); ?></label>
 				<div class="zprep-w-search-row">
-					<input type="text" id="zprep-w-search" class="zprep-w-input" placeholder="<?php esc_attr_e( 'e.g. 2585 or a customer name', 'zorderz' ); ?>" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+					<input type="text" id="zprep-w-search" class="zprep-w-input" placeholder="<?php esc_attr_e( 'e.g. 1001 or a customer name', 'zorderz' ); ?>" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
 					<button id="zprep-w-lookup-btn" class="zprep-w-btn zprep-w-btn-primary"><?php esc_html_e( 'Find', 'zorderz' ); ?></button>
 				</div>
 				<div id="zprep-w-lookup-status" class="zprep-w-status" style="display:none;">
@@ -218,7 +251,7 @@ class ZPREP_App implements \Zorderz\Widget_App_Interface {
 				<div id="zprep-w-cost" class="zprep-w-cost"></div>
 
 				<div class="zprep-w-actions">
-					<button id="zprep-w-sync" class="zprep-w-btn zprep-w-btn-primary zprep-w-btn-full"><?php esc_html_e( '✓ Finished — Send to CRM', 'zorderz' ); ?></button>
+					<button id="zprep-w-sync" class="zprep-w-btn zprep-w-btn-primary zprep-w-btn-full"><?php esc_html_e( '✓ Finished · Send to CRM', 'zorderz' ); ?></button>
 					<button id="zprep-w-print" class="zprep-w-btn zprep-w-btn-ghost zprep-w-btn-full"><?php esc_html_e( '🖨 Print Cut Sheets', 'zorderz' ); ?></button>
 					<button id="zprep-w-back-to-match" class="zprep-w-btn zprep-w-btn-secondary zprep-w-btn-full"><?php esc_html_e( 'Back to Measurements', 'zorderz' ); ?></button>
 				</div>

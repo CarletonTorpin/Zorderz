@@ -71,9 +71,31 @@ class ZANA_Markers {
 		);
 	}
 
-	/** Wrap a block of fetched data in the platform's fence so the model treats it as inert. */
+	/**
+	 * The fence's words in any spelling: any case, and spaces, underscores, hyphens or other dashes between the parts
+	 * (the bracketed form, still read, is the same words inside brackets).
+	 */
+	const MARK_PATTERN = '/ZDZ[\s_\-\x{2010}-\x{2015}]*DATA[\s_\-\x{2010}-\x{2015}]*(START|END)/iu';
+
+	/** Text in which every spelling of the fence's words reads as a quoted mark, so it can never open or close a fence. */
+	public static function quote_marks( string $s ): string {
+		$out = preg_replace( self::MARK_PATTERN, '(a quoted data mark: $1)', $s );
+		return is_string( $out ) ? $out : (string) preg_replace( '/ZDZ[\s_\-]*DATA[\s_\-]*(START|END)/i', '(a quoted data mark: $1)', $s );
+	}
+
+	/** Text with every spelling of the fence's words taken out (for words that go somewhere a quoted mark would not help). */
+	public static function drop_marks( string $s ): string {
+		$out = preg_replace( self::MARK_PATTERN, '', $s );
+		return is_string( $out ) ? $out : (string) preg_replace( '/ZDZ[\s_\-]*DATA[\s_\-]*(START|END)/i', '', $s );
+	}
+
+	/**
+	 * Wrap a block of fetched data in the platform's fence so the model treats it as inert. The fence's own words inside
+	 * the data, in any spelling, become a quoted mark first: a record, a page or an e-mail that holds one can never
+	 * close the fence early.
+	 */
 	public static function fence( string $data ): string {
-		return self::data_start() . "\n" . $data . "\n" . self::data_end();
+		return self::data_start() . "\n" . self::quote_marks( $data ) . "\n" . self::data_end();
 	}
 
 	/** Every fence token this app recognises on read: the kernel's, then the older bracketed ones. */

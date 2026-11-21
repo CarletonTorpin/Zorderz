@@ -876,8 +876,8 @@ class ZDZ_Item_Engine {
 	}
 
 	/**
-	 * A phrase like "3 screens" using the item's own unit noun — the one helper that
-	 * replaces every hardcoded "screen(s)"/"door(s)" sprintf across the modules.
+	 * A phrase like "3 units" using the item's own unit noun — the one helper every module
+	 * uses to say a count.
 	 */
 	public static function count_phrase( $item_id, $n ) {
 		$meta = self::count_meta( $item_id );
@@ -1917,7 +1917,7 @@ class ZDZ_Item_Engine {
 
 	private static function money( $n ) {
 		$sign = (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '' );
-		return $sign . number_format( (float) $n, 2 );
+		return $sign . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) $n, 2 ) : number_format( (float) $n, 2 ) );
 	}
 
 	private static function sanitize_explain( $expr ) {

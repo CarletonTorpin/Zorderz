@@ -365,7 +365,7 @@ class ZL_Nutshell {
 
 		$this->_discover();
 		if ( ! $this->_api_url ) {
-			throw new Exception( 'Nutshell discovery failed — cannot bulk search.' );
+			throw new Exception( 'Nutshell discovery failed: cannot bulk search.' );
 		}
 
 		// Deduplicate + lowercase BEFORE firing requests. A single batch of

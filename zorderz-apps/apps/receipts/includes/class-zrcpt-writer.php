@@ -263,7 +263,7 @@ class ZRCPT_Writer {
 		$h   = array();
 		$h[] = '<!DOCTYPE html>';
 		$h[] = '<html lang="' . self::attr( (string) ( $ctx['lang'] ?? 'en' ) ) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
-		$h[] = '<title>' . self::html( $heading . ( '' !== $address ? ' — ' . $address : '' ) ) . '</title>';
+		$h[] = '<title>' . self::html( $heading . ( '' !== $address ? ' · ' . $address : '' ) ) . '</title>';
 		$h[] = '<style>body{margin:0;background:#f4f5f7;color:#1d2327;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'
 			. '.zrcpt-page{max-width:760px;margin:0 auto;background:#fff}.zrcpt-body{padding:20px 28px 28px}'
 			. '.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}'

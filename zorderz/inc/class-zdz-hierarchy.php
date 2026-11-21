@@ -39,7 +39,6 @@
  * call this (the endpoint, not the UI, is the boundary).
  *
  * @package Zorderz
- * @since   2.32.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

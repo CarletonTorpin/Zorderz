@@ -496,14 +496,14 @@ class ZANA_Charts_Tool {
 
 	private static function num( $v, string $unit ): string {
 		if ( null === $v || '' === $v ) {
-			return '—';
+			return '–';
 		}
 		if ( ! is_numeric( $v ) ) {
 			return (string) $v;
 		}
 		$v = (float) $v;
-		if ( '$' === $unit ) {
-			return '$' . number_format( $v, 2 );
+		if ( '$' === $unit ) {   // the money unit: written in the business's money
+			return ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $v, 2 ) : number_format( $v, 2 ) );
 		}
 		return floor( $v ) == $v ? number_format( $v ) : number_format( $v, 2 );   // phpcs:ignore Universal.Operators.StrictComparisons
 	}

@@ -52,8 +52,31 @@ class ZCC_Audit {
 	 * the error log never holds customer details.
 	 */
 	public static function log( string $event, array $context = [] ): void {
+		if ( self::$muted > 0 ) {
+			return;
+		}
 		do_action( 'zdz_flow_disposition', 'commission', $event, $context );
 		error_log( 'ZCC disposition [' . $event . ']: ' . wp_json_encode( $context ) );
+	}
+
+	/** How many synthetic runs are in progress (the self-test); their deliberate misses are not real ones. */
+	private static $muted = 0;
+
+	/**
+	 * Run $fn without logging its dispositions. Only for synthetic ledgers such as ZCC_Self_Test, whose
+	 * missing rate is made on purpose: logged, it reads as a real person's unresolved pay on every visit
+	 * to the settings screen. The result still carries every disposition; only the log is skipped.
+	 *
+	 * @param callable $fn
+	 * @return mixed what $fn returns
+	 */
+	public static function muted( callable $fn ) {
+		++self::$muted;
+		try {
+			return $fn();
+		} finally {
+			--self::$muted;
+		}
 	}
 
 	public static function get_entries( array $args = [] ): array {

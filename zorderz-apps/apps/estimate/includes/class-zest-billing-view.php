@@ -377,7 +377,7 @@ class ZEST_Billing_View {
 			return $no;
 		}
 		$initials  = class_exists( 'ZEST_Salesperson' ) ? ZEST_Salesperson::initials_of( $uid ) : '';
-		$new_notes = ZEST_Line_Edits::edited_by( $notes, $initials, function_exists( 'wp_date' ) ? (string) wp_date( 'n/j/Y' ) : gmdate( 'n/j/Y' ) );
+		$new_notes = ZEST_Line_Edits::edited_by( $notes, $initials, function_exists( 'wp_date' ) ? (string) wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format() : 'n/j/Y' ) ) : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format() : 'n/j/Y' ) ) );
 		if ( 'estimate' === $kind && class_exists( 'ZEST_Warranty_Note' ) ) {
 			$new_notes = ZEST_Warranty_Note::add( $new_notes, ZEST_Line_Edits::to_wire_lines( $res['lines'] ) );
 		}

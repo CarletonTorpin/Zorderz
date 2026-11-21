@@ -110,6 +110,16 @@ final class SchedulerHealthTzdataTest extends TestCase {
 		}
 	}
 
+	public function test_a_fixed_offset_zone_is_fingerprinted_without_a_warning(): void {
+		// A new WordPress site's time zone is "UTC+0", which reaches here as "+00:00": a zone with no
+		// transitions, where getTransitions() answers false. Its offset is the whole fact.
+		$a = ZSCH_Tzdata::fingerprint( array( 'UTC', '+00:00' ) );
+		$this->assertMatchesRegularExpression( '/^[0-9a-f]{16}$/', $a );
+		$this->assertSame( $a, ZSCH_Tzdata::fingerprint( array( '+00:00', 'UTC' ) ), 'order-independent' );
+		$this->assertNotSame( $a, ZSCH_Tzdata::fingerprint( array( 'UTC', '+05:30' ) ), 'another offset, another fingerprint' );
+		$this->assertNotSame( '', ZSCH_Tzdata::fingerprint( array( '-08:00' ) ) );
+	}
+
 	public function test_core_declares_only_utc_and_the_business_zone_comes_from_configuration(): void {
 		$this->assertSame( array( 'UTC' ), ZSCH_Tzdata::DEFAULT_ZONES );
 		$this->assertSame( array( 'UTC' ), ZSCH_Tzdata::zones(), 'nothing configured: UTC only' );

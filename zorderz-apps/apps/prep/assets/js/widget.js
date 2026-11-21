@@ -128,8 +128,9 @@
   'use strict';
 
   var PALETTE = {
-    black: { meshBg: '#1a1a1a', cutLine: '#ffffff', label: '#ffffff', grungy: 'rgba(255,255,255,0.12)' },
-    white: { meshBg: '#f0efe8', cutLine: '#222222', label: '#222222', grungy: 'rgba(0,0,0,0.08)' },
+    /* selected: the picked piece, in the platform's brand indigo - light on black stock (5.6:1), dark on white (6.8:1) */
+    black: { meshBg: '#1a1a1a', cutLine: '#ffffff', label: '#ffffff', grungy: 'rgba(255,255,255,0.12)', selected: '#7D87FB' },
+    white: { meshBg: '#f0efe8', cutLine: '#222222', label: '#222222', grungy: 'rgba(0,0,0,0.08)', selected: '#433FBD' },
     pageBg: '#c8c8c8',
     /* v2.2.2: dimension callouts + margin caption + cut-here line draw on the
        PAGE backdrop, not the mesh — with black mesh their old color (white
@@ -188,6 +189,19 @@
     if (root) { setTimeout(function () { root.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); }
   }
   function setErr(id, msg) { var el = $(id); if (!el) return; if (msg) { el.textContent = msg; el.style.display = 'block'; } else { el.textContent = ''; el.style.display = 'none'; } }
+  // The rough-edge margin of a page, in inches: 0 on a stock sheet; else the page's own (the Prep setting it was planned
+  // with), else the setting, else ½". A margin set to 0 stays 0.
+  function pageMargin(page) {
+    if (page.stock_sheet) return 0;
+    if (page.grungy_margin != null && !isNaN(page.grungy_margin)) return Number(page.grungy_margin);
+    var cfg = (typeof zprepWidgetData !== 'undefined' && zprepWidgetData) ? zprepWidgetData.grungyMarginIn : null;
+    return (cfg != null && !isNaN(cfg)) ? Number(cfg) : 0.5;
+  }
+  // A margin as it is printed: the common fractions as fractions (½", ¼", ¾"), any other in decimals.
+  function marginLabel(gm) {
+    var f = { '0.25': '¼', '0.5': '½', '0.75': '¾' }[String(Number(gm))];
+    return (f || fmtIn(gm)) + '" margin';
+  }
   function fmtIn(n) { if (n == null || isNaN(n)) return ''; n = Number(n); if (Math.abs(n - Math.round(n)) < 0.001) return String(Math.round(n)); return String(Number(n.toFixed(2))).replace(/\.?0+$/, ''); }
 
   /* ── INSTALL DATE (DISPLAY-ONLY) ──
@@ -209,15 +223,20 @@
   }
 
   /* ── APPROVED TO CUT (configured cut stage) ── */
+  // Only the newest load may paint: a reload started after a shop job is marked cut must not be
+  // overtaken by an older one still on its way and bring the job back.
+  var atcLoads = 0;
   function loadApprovedToCut() {
     var listEl = $('zprep-w-atc-list');
     var emptyEl = $('zprep-w-atc-empty');
     var statusEl = $('zprep-w-atc-status');
     if (!listEl) return;
+    var mine = ++atcLoads;
     hide(emptyEl);
     listEl.innerHTML = '';
     show(statusEl, 'flex');
     post('zprep_approved_to_cut', {}).then(function (res) {
+      if (mine !== atcLoads) return;
       hide(statusEl);
       if (!res || !res.success) {
         // Fail silently-but-visibly: a calm note, never red error text, since
@@ -227,22 +246,32 @@
       }
       var d = res.data || {};
       if (d.configured === false) {
+        if (zprepWidgetData.canManage) {
+          // The shop's own jobs (remakes, internal orders) are made from this section's buttons and do
+          // not come from the CRM, so a manager keeps the section; there are just no customer jobs in it.
+          renderApprovedEmpty('The CRM is not set up, so no customer jobs are listed. Remakes and internal orders still work.');
+          return;
+        }
         // CRM not set up — hide the whole section quietly.
         var wrap = $('zprep-w-atc'); if (wrap) wrap.style.display = 'none';
         var div = document.querySelector('.zprep-w-atc-divider'); if (div) div.style.display = 'none';
         return;
       }
       var jobs = d.jobs || [];
-      jobs.forEach(function (j) { if (j.kind !== 'remake') j.install_fallback = absorbInstall(jobKeys(j), j.install_fallback); });
+      jobs.forEach(function (j) { if (!isShopCard(j)) j.install_fallback = absorbInstall(jobKeys(j), j.install_fallback); });
       state.approvedJobs = jobs;
       renderApprovedToCut(jobs, d.stage || '');
       // v2.1.18 — role-aware health notice (e.g. billing token expired).
       renderHealthNotice(d.billing_health || 'off', !!d.is_admin);
     }).catch(function () {
+      if (mine !== atcLoads) return;
       hide(statusEl);
       renderApprovedEmpty('Couldn’t load approved jobs right now. Use search below, or tap Reload.');
     });
   }
+
+  // A remake or an internal order: the shop's own job, with its own rows and no CRM lead.
+  function isShopCard(j) { return !!j && (j.kind === 'remake' || j.kind === 'internal'); }
 
   function renderApprovedEmpty(msg) {
     var listEl = $('zprep-w-atc-list'); if (listEl) listEl.innerHTML = '';
@@ -303,7 +332,7 @@
         if (note) {
           var done = document.createElement('div');
           done.className = 'zprep-w-atc-report-done';
-          done.textContent = (res.data && res.data.message) || 'Thanks — your report was sent.';
+          done.textContent = (res.data && res.data.message) || 'Thanks, your report was sent.';
           note.appendChild(done);
         }
       } else {
@@ -326,7 +355,7 @@
     return j.assignee_name ? '<span class="zprep-w-atc-assignee">' + esc('Assigned: ' + j.assignee_name) + '</span>' : '';
   }
   function cardJobKey(j) {
-    if (j.kind === 'remake') return j.job_key || '';
+    if (isShopCard(j)) return j.job_key || '';
     if (j.estimate_number) return 'est:' + j.estimate_number;
     return j.lead_id ? 'lead:' + j.lead_id : '';
   }
@@ -360,7 +389,47 @@
     return wrapWithAssign(btn, j);
   }
 
+  // An internal order in the cut list: its name, then its code, what it is for, who for; marked so
+  // it is told from a customer's job at a glance. No money is on the card (the server sends none).
+  function buildInternalCard(j) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'zprep-w-atc-card zprep-w-atc-internal';
+    btn.setAttribute('data-job', j.job_key || '');
+    var meta = ['Internal'];
+    if (j.ref_code) meta.push(j.ref_code);
+    if (j.purpose_label) meta.push(j.purpose_label);
+    if (j.for_whom) meta.push('for ' + j.for_whom);
+    var tags = '<span class="zprep-io-tag">Internal order</span>';
+    if (j.status === 'cut' || j.status === 'done') tags += '<span class="zprep-io-tag zprep-io-tag-cut">✓ Cut</span>';
+    if (zprepWidgetData.canManage) {
+      tags += '<span class="zprep-io-tag zprep-io-tag-plain">' + esc(j.assignee_name ? '→ ' + j.assignee_name : 'Unassigned') + '</span>';
+    } else if (j.assignee_name) {
+      // Someone who is not a manager is sent only nobody's and their own, so a named one is theirs.
+      tags += '<span class="zprep-io-tag zprep-io-tag-plain">Assigned to you</span>';
+    }
+    var n = Number(j.pieces) || 0;
+    btn.innerHTML =
+      '<span class="zprep-w-atc-card-body">' +
+        '<span class="zprep-w-atc-card-name">' + esc(j.title || 'Internal order') + '</span>' +
+        '<span class="zprep-w-atc-card-meta">' + esc(meta.join(' · ')) + '</span>' +
+        '<span class="zprep-io-tags">' + tags + '</span>' +
+      '</span>' +
+      (n > 0 ? '<span class="zprep-w-atc-count">' + n + ' piece' + (n === 1 ? '' : 's') + '</span>' : '') +
+      '<span class="zprep-w-atc-chev" aria-hidden="true">›</span>';
+    btn.addEventListener('click', function () {
+      btn.disabled = true; btn.classList.add('zprep-io-busy');
+      planInternal(j, {
+        // Whatever comes back, the card is never left waiting.
+        onSettled: function () { btn.disabled = false; btn.classList.remove('zprep-io-busy'); },
+        onFail: function (m) { setErr('zprep-w-lookup-error', m); }
+      });
+    });
+    return wrapWithAssign(btn, j);
+  }
+
   function buildApprovedCard(j) {
+    if (j.kind === 'internal') return buildInternalCard(j);
     if (j.kind === 'remake') return buildRemakeCard(j);
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -426,17 +495,23 @@
     }
     hide(emptyEl);
 
+    // The shop's own jobs the server pinned (open internal orders, a person's assigned remakes) come
+    // first and are all shown: the fold below is for the customer jobs.
+    var pinned = jobs.filter(function (j) { return !!j.pinned; });
+    var rest = jobs.filter(function (j) { return !j.pinned; });
+    pinned.forEach(function (j) { listEl.appendChild(buildApprovedCard(j)); });
+
     // Show the first ATC_VISIBLE (jobs already arrive newest-first), then a
     // "Show More" button reveals the rest in place.
-    var shown = Math.min(ATC_VISIBLE, jobs.length);
-    for (var i = 0; i < shown; i++) listEl.appendChild(buildApprovedCard(jobs[i]));
+    var shown = Math.min(ATC_VISIBLE, rest.length);
+    for (var i = 0; i < shown; i++) listEl.appendChild(buildApprovedCard(rest[i]));
 
-    var remaining = jobs.length - shown;
+    var remaining = rest.length - shown;
     if (remaining > 0 && moreEl) {
       moreEl.textContent = 'Show ' + remaining + ' more';
       moreEl.style.display = 'block';
       moreEl.onclick = function () {
-        for (var k = shown; k < jobs.length; k++) listEl.appendChild(buildApprovedCard(jobs[k]));
+        for (var k = shown; k < rest.length; k++) listEl.appendChild(buildApprovedCard(rest[k]));
         moreEl.style.display = 'none';
         moreEl.onclick = null;
       };
@@ -446,6 +521,7 @@
   // Tap a job -> load that lead straight into the parse->plan flow. We already
   // know the lead id, so the parse step fetches notes by id (no text search).
   function planFromLead(job) {
+    if (job && job.kind === 'internal') { planInternal(job); return; }
     if (job && job.kind === 'remake') { planRemake(job); return; }
     if (!job || !job.lead_id) return;
     state.remake = null;
@@ -510,7 +586,8 @@
   function buildCustomerCardHtml() {
     var c = state.customer || {};
     return '<div class="zprep-w-customer-card"><div class="zprep-w-customer-name">' + esc(c.name || '(unknown)') + '</div><div class="zprep-w-customer-meta">' +
-      (c.estimate_number ? '<span>Est #' + esc(c.estimate_number) + '</span>' : '') +
+      // A shop job has no estimate: it is named by its own reference.
+      (isShopJob() ? '<span>' + esc(shopJobRef(state.remake)) + '</span>' : (c.estimate_number ? '<span>Est #' + esc(c.estimate_number) + '</span>' : '')) +
       (c.salesperson ? '<span class="zprep-w-sep">·</span><span>SP: ' + esc(c.salesperson) + '</span>' : '') +
       (c.total ? '<span class="zprep-w-sep">·</span><span>' + esc(c.total) + '</span>' : '') +
       '</div>' + (c.address ? '<div class="zprep-w-customer-addr">' + esc(c.address) + '</div>' : '') +
@@ -759,7 +836,7 @@
     // v2.1.16 — let the cutter know the quantities reflect salesperson notes,
     // not just the base measurement block, so an adjusted count isn't a surprise.
     if (state.appliedAdjustments) {
-      html += '<p class="zprep-w-hint zprep-w-adj-hint">✎ Salesperson adjustment note(s) applied — quantities reflect the notes on the lead, not just the base estimate. Check the per-row note and edit any value before computing.</p>';
+      html += '<p class="zprep-w-hint zprep-w-adj-hint">✎ Salesperson adjustment note(s) applied: quantities reflect the notes on the lead, not just the base estimate. Check the per-row note and edit any value before computing.</p>';
     }
     html += '<div class="zprep-w-m-grid">';
     rows.forEach(function (r, i) {
@@ -829,6 +906,22 @@
   function calcPageSqFt(page) {
     return Math.round((page.roll_width_in * page.sheet_length) / 144 * 10) / 10;
   }
+  // What a cut sheet is cut from, in words: a roll (its width and colour) or a stock sheet.
+  function pageStockLabel(page) {
+    var col = String(page.color || '').toUpperCase();
+    if (page.stock_sheet) return fmtIn(page.stock_sheet.w) + '" x ' + fmtIn(page.stock_sheet.l) + '" SHEET · ' + col;
+    return page.roll_width_in + '" ' + col;
+  }
+  // Is the job on the screen a shop job (a remake or an internal order)? Both marks must agree:
+  // state.remake alone can be left over from a shop job whose plan never opened, and a customer's
+  // card drawn after that must still show the customer's estimate number.
+  function isShopJob() { return !!state.remake && state.source === 'remake'; }
+  // How a shop job is named where a customer job shows its estimate number.
+  function shopJobRef(card) {
+    if (!card) return '';
+    if (card.kind === 'internal') return 'Internal order' + (card.ref_code ? ' ' + card.ref_code : '');
+    return 'Remake' + (card.remake_id ? ' #' + card.remake_id : '');
+  }
 
   /* ── RENDER CUT PLAN ── */
   function renderPlan() {
@@ -840,6 +933,19 @@
 
     // v2.0.3 — Customer card at top of plan view
     var planSummaryHtml = buildCustomerCardHtml();
+
+    // An internal order says what it is for and who for, and that it is the shop's own.
+    if (isShopJob() && state.remake.kind === 'internal') {
+      var io = state.remake;
+      planSummaryHtml += '<div class="zprep-io-banner">' +
+        '<strong>Internal order' + (io.ref_code ? ' · ' + esc(io.ref_code) : '') + '</strong>' + (io.purpose_label ? ': ' + esc(io.purpose_label) : '') +
+        (io.for_whom ? (' · for ' + esc(io.for_whom)) : '') +
+        (io.reason_text ? ('<div class="zprep-w-hint">' + esc(io.reason_text) + '</div>') : '') +
+        (io.sheet ? ('<div class="zprep-w-hint">Cut from ' + esc(fmtIn(io.sheet.w)) + '" x ' + esc(fmtIn(io.sheet.l)) + '" sheets.</div>') : '') +
+        (io.assignee_name ? ('<div class="zprep-w-hint">Assigned to <strong>' + esc(io.assignee_name) + '</strong></div>') : '') +
+        '<div class="zprep-w-hint">The shop cutting for itself: nothing goes to the CRM or to billing.</div>' +
+        '</div>';
+    }
 
     // v2.0.3 — "Cut Sheets" instead of "Roll Pages", sq ft instead of dollars
     planSummaryHtml += '<div class="zprep-w-summary-grid"><div><strong>' + (p.summary.total_pieces || 0) + '</strong><span>Pieces</span></div><div><strong>' + pages.length + '</strong><span>Cut Sheet' + (pages.length !== 1 ? 's' : '') + '</span></div><div><strong>' + totalSqFt + '</strong><span>Sq Ft Used</span></div></div>' +
@@ -856,7 +962,9 @@
       var svg = renderNestingSVG(page, false, { fontIn: screenFont });
       var sqft = calcPageSqFt(page);
       var delHtml = (page.deliverables || []).map(function(d){ return '<div class="zprep-w-page-del">• ' + esc(d.qty) + ' × ' + esc(d.label) + (d.dims ? ' [' + esc(d.dims) + ']' : '') + '</div>'; }).join('');
-      pagesHtml += '<div class="zprep-w-page-card"><div class="zprep-w-page-header"><strong>' + esc(page.roll_width_in) + '" ' + esc(page.color.toUpperCase()) + '</strong><span>Sheet ' + (idx+1) + ' of ' + pages.length + '</span></div><div class="zprep-w-page-meta">Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft) · ' + page.piece_count + ' pcs · ' + sqft + ' sq ft</div><div class="zprep-w-diagram" tabindex="0" role="button" aria-label="Tap to enlarge">' + svg + '</div><div class="zprep-w-page-cardactions"><button type="button" class="zprep-w-editbtn" data-idx="' + idx + '">✎ Edit layout</button></div><div class="zprep-w-page-deliverables">' + delHtml + '</div>' + (window.ZPREPSections ? window.ZPREPSections.pageExtra(page) : '') + '</div>';
+      // A page of a stock-sheet plan is one sheet: it is named by the sheet's size, not by a roll and a
+      // length to pull, and its layout is not dragged (a sheet cannot be made longer).
+      pagesHtml += '<div class="zprep-w-page-card"><div class="zprep-w-page-header"><strong>' + esc(pageStockLabel(page)) + '</strong><span>Sheet ' + (idx+1) + ' of ' + pages.length + '</span></div><div class="zprep-w-page-meta">' + (page.stock_sheet ? 'One sheet' : ('Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft)')) + ' · ' + page.piece_count + ' pcs · ' + sqft + ' sq ft</div><div class="zprep-w-diagram" tabindex="0" role="button" aria-label="Tap to enlarge">' + svg + '</div>' + (page.stock_sheet ? '' : '<div class="zprep-w-page-cardactions"><button type="button" class="zprep-w-editbtn" data-idx="' + idx + '">✎ Edit layout</button></div>') + '<div class="zprep-w-page-deliverables">' + delHtml + '</div>' + (window.ZPREPSections ? window.ZPREPSections.pageExtra(page) : '') + '</div>';
     });
     $('zprep-w-pages').innerHTML = pagesHtml;
     document.querySelectorAll('#zprep-w-pages .zprep-w-diagram').forEach(function(d){ d.addEventListener('click', function(){ openModal(d.innerHTML); }); });
@@ -880,6 +988,8 @@
     // v2.0.3 — Material table: sq ft, no dollar amounts
     var costHtml = '<table class="zprep-w-cost-table"><tbody>';
     (p.material_cost && p.material_cost.rolls || []).forEach(function(r){
+      // A stock-sheet row counts sheets, not feet of a roll.
+      if (r.sheets) { costHtml += '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.sheets) + ' sheet' + (Number(r.sheets) !== 1 ? 's' : '') + '</td><td>' + esc(r.sq_ft) + ' sq ft</td></tr>'; return; }
       var rollW = 36;
       if (r.label.indexOf('60') !== -1) rollW = 60;
       var sqft = Math.round(r.feet * (rollW / 12) * 10) / 10;
@@ -889,6 +999,10 @@
     $('zprep-w-cost').innerHTML = costHtml;
 
     renderCutState(p.cut_state || null);
+    // An internal order was not reviewed on the measurements screen (its rows are the order's own), so
+    // the way back from its plan is the list.
+    var backBtn = $('zprep-w-back-to-match');
+    if (backBtn) backBtn.textContent = (isShopJob() && state.remake.kind === 'internal') ? 'Back to the list' : 'Back to Measurements';
     renderDebugUI();
   }
 
@@ -906,8 +1020,9 @@
   }
 
   /* ── CUT STATE ──
-   * What has been cut on this job (shop pieces; field runs when the plan has them). A remake
-   * has no CRM lead to send to, so its plan offers "Mark all cut" instead. */
+   * What has been cut on this job (shop pieces; field runs when the plan has them). A shop job (a
+   * remake or an internal order) has no CRM lead to send to, so its plan offers "Mark as cut" instead
+   * (shopDoneBar()). */
   function renderCutState(cs) {
     var host = $('zprep-w-cutstate');
     if (!host) {
@@ -919,27 +1034,11 @@
     }
     var html = '';
     if (cs && cs.headline) html += '<div class="zprep-w-cutstate-line">' + esc(cs.headline) + '</div>';
-    if (state.remake && cs && cs.bench && cs.bench.total > cs.bench.cut) {
-      html += '<button type="button" id="zprep-w-mark-all" class="zprep-w-btn zprep-w-btn-primary">Mark all cut</button>';
-    }
     host.innerHTML = html;
     host.style.display = html ? 'block' : 'none';
-    var b = $('zprep-w-mark-all');
-    if (b) b.addEventListener('click', function () { markAllCut(cs); });
     var sync = $('zprep-w-sync');
     if (sync) sync.style.display = state.remake ? 'none' : '';
-  }
-  function markAllCut(cs) {
-    var items = [];
-    (cs && cs.remaining || []).forEach(function (r) {
-      if (r.class === 'bench') items.push({ work_class: 'bench', item_key: r.item_key, item_label: r.label, qty_total: r.panels, qty_cut: r.panels });
-    });
-    if (!items.length) return;
-    var b = $('zprep-w-mark-all'); if (b) { b.disabled = true; b.textContent = 'Saving…'; }
-    post('zprep_cut_state_mark', { lead_id: 0, source_job: state.remake ? state.remake.job_key : '', items: items }).then(function (res) {
-      if (res && res.success && res.data) { renderCutState(res.data.state || null); }
-      else if (b) { b.disabled = false; b.textContent = 'Mark all cut'; setErr('zprep-w-parse-error', (res && res.data && res.data.message) || 'Could not save.'); }
-    }).catch(function () { if (b) { b.disabled = false; b.textContent = 'Mark all cut'; } });
+    shopDoneBar();
   }
 
   /* ── REMAKES ──
@@ -947,6 +1046,7 @@
   function planRemake(r) {
     if (!r) return;
     state.remake = r;
+    state.plan = null;
     state.cardRef = '';
     state.source = 'remake';
     state.leadId = null;
@@ -1036,7 +1136,7 @@
       RM.reasons = d.reasons || {}; RM.colors = d.colors || []; RM.widths = d.widths || [];
       withUsers(function (users) {
         var reasons = Object.keys(RM.reasons).map(function (k) { return { v: k, t: RM.reasons[k] }; });
-        var list = (d.remakes || []).map(function (r) {
+        var list = (d.remakes || []).filter(function (r) { return r.kind !== 'internal'; }).map(function (r) {
           return '<div class="zprep-rm-item" data-id="' + esc(r.remake_id) + '"><strong>' + esc(r.title) + '</strong> · ' + esc(r.reason_label) +
             ' · <em>' + esc(r.status) + '</em>' + (r.assignee_name ? ' · ' + esc(r.assignee_name) : '') +
             ' <button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-rm-st" data-st="done">Done</button>' +
@@ -1091,6 +1191,402 @@
           });
         });
       });
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+   * INTERNAL ORDERS
+   *
+   * Work the shop cuts for itself. An internal order is a shop job like a remake (its own rows, no CRM
+   * lead, nothing sent to billing), with a purpose, who it is for, and the stock it is cut from: sheets
+   * of a stated size, or a roll. What the form offers (purposes, kinds of piece, a starting sheet size)
+   * is the business's own and arrives from the server. No money is shown in this app: what a piece
+   * would sell for is typed on the form and read only by the year-end page. Nothing here uses a browser
+   * alert or confirm.
+   * ══════════════════════════════════════════════════════════════════ */
+
+  // For a value inside an attribute (esc() leaves quotes alone).
+  function ioAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+  // Only the ok / err mark changes: the element keeps its other classes.
+  function ioSay(el, text, kind) { if (!el) return; el.classList.remove('ok', 'err'); if (kind) el.classList.add(kind); el.textContent = text || ''; }
+  function ioHoursText(h) { var n = Number(h); if (isNaN(n)) return ''; return String(Math.round(n * 100) / 100); }
+  var ioCards = [];
+
+  // A card the server just sent replaces the copies the lists hold, so opening the job again shows
+  // what was saved.
+  function ioRemember(card) {
+    if (!card || !card.job_key) return;
+    [state.approvedJobs, ioCards].forEach(function (list) {
+      if (!list) return;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].job_key === card.job_key) { if (list[i].pinned) card.pinned = true; list[i] = card; }
+      }
+    });
+  }
+
+  // An internal order is planned from its own saved rows and stock (the server reads them from the
+  // order, whatever the request carries), so opening one goes straight to its plan. opts.onOk() runs
+  // when the plan is in hand; opts.onFail(message) is told a failure; opts.onSettled() runs when the
+  // reply is in, whatever it was. A reply that lands after another job was opened is dropped: it is not
+  // that job's plan.
+  function planInternal(card, opts) {
+    if (!card || !card.job_key) return;
+    opts = opts || {};
+    var mine = card.job_key;
+    var stillMine = function () { return isShopJob() && state.remake.job_key === mine; };
+    var settled = function () { if (opts.onSettled) opts.onSettled(); };
+    var failed = function (message) {
+      if (!stillMine()) return;
+      state.remake = null; state.source = null;
+      if (opts.onFail) opts.onFail(message); else setErr('zprep-w-lookup-error', message);
+    };
+    state.remake = card;
+    state.plan = null;
+    state.cardRef = '';
+    state.source = 'remake';
+    state.leadId = null;
+    state.cachedNotes = null;
+    state.batchLeadIds = [];
+    state.install = null;
+    state.measurements = [];
+    state.reservedLeftoverIds = [];
+    state.customer = { name: card.title || '', email: '', phone: '', address: '', estimate_number: '', salesperson: '', total: '' };
+    setErr('zprep-w-lookup-error', '');
+    post('zprep_compute_cuts', {
+      measurements: [],
+      use_leftovers: '0',
+      source_job: mine,
+      lead_id: 0,
+      customer_name: '',
+      customer_id: '',
+      card_ref: '',
+      workspace: 'flat',
+      force_roll: card.force_roll || 0,
+      debug: state.debug ? '1' : '0'
+    }).then(function (res) {
+      settled();
+      if (!res || !res.success) { failed((res && res.data && res.data.message) || 'Could not open this order.'); return; }
+      if (!stillMine()) return;
+      state.plan = res.data;
+      if (opts.onOk) opts.onOk();
+      renderPlan();
+    }).catch(function (err) { settled(); failed('Network error: ' + err); });
+  }
+
+  /* The bar under a shop job's plan, where a customer job has "Send to CRM": "Mark as cut" (with "Not
+   * cut yet" to take it back) and, on an internal order, the hours spent. */
+  function shopDoneBar() {
+    var bar = $('zprep-io-donebar');
+    var sync = $('zprep-w-sync');
+    if (!isShopJob() || !state.plan || !state.remake.remake_id) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); return; }
+    if (!bar) {
+      if (!sync || !sync.parentNode) return;
+      bar = document.createElement('div'); bar.id = 'zprep-io-donebar'; bar.className = 'zprep-io-donebar';
+      sync.parentNode.insertBefore(bar, sync);
+    }
+    var card = state.remake;
+    var myId = String(card.remake_id);
+    // A reply belongs to the job that asked. If another job is on the screen when it lands, it is dropped.
+    var mine = function () { return isShopJob() && String(state.remake.remake_id) === myId; };
+    var cs = (state.plan && state.plan.cut_state) || {};
+    var cut = (cs.state === 'complete');
+    var internal = (card.kind === 'internal');
+    // Hours typed and not yet saved survive a redraw of the bar for the same job (Mark as cut redraws it).
+    var oldIn = $('zprep-io-hours-in');
+    var typed = (oldIn && bar.getAttribute('data-id') === myId) ? oldIn.value : null;
+    bar.setAttribute('data-id', myId);
+    var shown = (typed !== null) ? typed : (card.labor_set ? ioHoursText(card.labor_hours) : '');
+    var html = '';
+    if (internal) {
+      html += '<div class="zprep-io-hours">' +
+        '<label for="zprep-io-hours-in">Hours spent on this order</label>' +
+        '<div class="zprep-io-hours-row"><input id="zprep-io-hours-in" type="number" inputmode="decimal" min="0" max="1000" step="0.25" class="zprep-w-input" value="' + ioAttr(shown) + '">' +
+        '<button type="button" id="zprep-io-hours-save" class="zprep-w-btn zprep-w-btn-secondary">Save hours</button></div>' +
+        '<div id="zprep-io-hours-msg" class="zprep-io-msg" role="status">' + (card.labor_set ? ('Entered' + (card.labor_by_name ? ' by ' + esc(card.labor_by_name) : '') + '.') : 'Typed by a person; the app does not time the work.') + '</div>' +
+        '</div>';
+    }
+    html += cut
+      ? '<div class="zprep-io-cutline"><span class="zprep-io-state is-cut">✓ Marked as cut</span><button type="button" id="zprep-io-uncut" class="zprep-w-btn zprep-w-btn-secondary">Not cut yet</button></div>'
+      : '<button type="button" id="zprep-io-markcut" class="zprep-w-btn zprep-w-btn-primary zprep-w-btn-full">✓ Mark as cut</button>';
+    html += '<div id="zprep-io-cut-msg" class="zprep-io-msg" role="status"></div>';
+    bar.innerHTML = html;
+
+    var press = function (btn, undo) {
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var was = btn.textContent; btn.disabled = true; btn.textContent = 'Saving…';
+        post('zprep_remake_mark_cut', { remake_id: card.remake_id, undo: undo ? '1' : '0' }).then(function (res) {
+          var d = (res && res.success && res.data) || null;
+          if (d && d.remake) ioRemember(d.remake);
+          // The list behind the plan is read again: the job leaves it (or comes back).
+          if (d && (d.changed || d.complete)) loadApprovedToCut();
+          if (!mine()) return;
+          if (!d) { btn.disabled = false; btn.textContent = was; ioSay($('zprep-io-cut-msg'), (res && res.data && res.data.message) || 'That was not saved.', 'err'); return; }
+          if (d.remake) state.remake = d.remake;
+          if (state.plan && d.cut_state) state.plan.cut_state = d.cut_state;
+          renderCutState(state.plan ? state.plan.cut_state : null);   // redraws this bar too
+          var m = $('zprep-io-cut-msg');
+          if (d.refused) ioSay(m, d.refused, 'err');
+          else if (undo) ioSay(m, 'Put back to not cut.', 'ok');
+          else if (d.complete) ioSay(m, 'Recorded as cut by you.', 'ok');
+          else if (d.nothing) ioSay(m, 'Nothing to mark: this job has no pieces on its plan.', 'err');
+          else ioSay(m, 'The bench pieces are marked. Some long pieces are still to cut.', 'ok');
+        }).catch(function () { if (!mine()) return; btn.disabled = false; btn.textContent = was; ioSay($('zprep-io-cut-msg'), 'Network error. That was not saved.', 'err'); });
+      });
+    };
+    press($('zprep-io-markcut'), false);
+    press($('zprep-io-uncut'), true);
+
+    var hs = $('zprep-io-hours-save');
+    if (hs) hs.addEventListener('click', function () {
+      var inp = $('zprep-io-hours-in'); var msg = $('zprep-io-hours-msg');
+      var v = inp ? String(inp.value).trim() : '';
+      if (v === '' || isNaN(Number(v)) || Number(v) < 0) { ioSay(msg, 'Type the hours as a number.', 'err'); return; }
+      hs.disabled = true;
+      post('zprep_internal_set_labor', { remake_id: card.remake_id, hours: v }).then(function (res) {
+        var d = (res && res.success && res.data) || null;
+        if (d && d.remake) ioRemember(d.remake);
+        if (!mine()) return;
+        hs.disabled = false;
+        if (!d) { ioSay(msg, (res && res.data && res.data.message) || 'The hours were not saved.', 'err'); return; }
+        if (d.remake) state.remake = d.remake;
+        ioSay(msg, 'Saved: ' + ioHoursText(state.remake.labor_hours || 0) + ' h' + (state.remake.labor_by_name ? ', entered by ' + state.remake.labor_by_name : '') + '.', 'ok');
+      }).catch(function () { if (!mine()) return; hs.disabled = false; ioSay(msg, 'Network error. The hours were not saved.', 'err'); });
+    });
+  }
+
+  function ioForm() { return zprepWidgetData.internal || { purposes: [], kinds: [], sheet: null, widths: [], reportUrl: '' }; }
+
+  function ioRowHtml() {
+    var kinds = (ioForm().kinds || []).map(function (k) { return '<option value="' + ioAttr(k.id) + '">' + esc(k.label) + '</option>'; }).join('');
+    return '<div class="zprep-io-row">' +
+      '<label class="zprep-io-f zprep-io-f-kind"><span>Kind</span><select class="zprep-w-input zprep-io-v-kind">' + kinds + '</select></label>' +
+      '<label class="zprep-io-f"><span>Qty</span><input class="zprep-w-input zprep-io-v-qty" type="number" inputmode="numeric" min="1" value="1"></label>' +
+      '<label class="zprep-io-f"><span>Width, in.</span><input class="zprep-w-input zprep-io-v-w" type="number" inputmode="decimal" step="0.25" min="0"></label>' +
+      '<label class="zprep-io-f"><span>Height, in.</span><input class="zprep-w-input zprep-io-v-h" type="number" inputmode="decimal" step="0.25" min="0"></label>' +
+      '<label class="zprep-io-f"><span>Would sell for, each</span><input class="zprep-w-input zprep-io-v-sell" type="number" inputmode="decimal" step="0.01" min="0" placeholder="optional"></label>' +
+      '<button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-io-v-del" aria-label="Remove this row">×</button>' +
+      '<label class="zprep-io-f zprep-io-f-notes"><span>Notes</span><input class="zprep-w-input zprep-io-v-notes" type="text" maxlength="191"></label>' +
+      '</div>';
+  }
+
+  function ioShellHtml() {
+    var f = ioForm();
+    var purposes = (f.purposes || []).map(function (p) { return { v: p.key, t: p.label }; });
+    // With one purpose on file there is nothing to pick: it is the one.
+    var purposeHtml = '<select id="zprep-io-purpose" class="zprep-w-input">' + optionList(purposes, purposes.length === 1 ? purposes[0].v : '', purposes.length === 1 ? null : 'Pick one…') + '</select>';
+    var stock = [{ v: 'sheet', t: 'Sheets' }, { v: '0', t: 'A roll (picked for you)' }].concat((f.widths || []).map(function (w) { return { v: String(w), t: w + '" roll' }; }));
+    var colors = (zprepWidgetData.colors || []).map(function (c) { return { v: c, t: c }; });
+    var sw = f.sheet ? fmtIn(f.sheet.w) : '', sl = f.sheet ? fmtIn(f.sheet.l) : '';
+    return '<div class="zprep-w-form zprep-io-mgr">' +
+      '<h3>Internal orders</h3>' +
+      '<p class="zprep-w-hint">Work the shop cuts for itself. Nothing goes to the CRM or to billing.</p>' +
+
+      '<h4>New order</h4>' +
+      '<label class="zprep-w-label" for="zprep-io-name">Order name</label>' +
+      '<input id="zprep-io-name" type="text" class="zprep-w-input" maxlength="191">' +
+      '<label class="zprep-w-label" for="zprep-io-purpose">What it is for</label>' + purposeHtml +
+      '<label class="zprep-w-label" for="zprep-io-for">Who it is for (optional)</label>' +
+      '<input id="zprep-io-for" type="text" class="zprep-w-input" maxlength="191">' +
+      '<label class="zprep-w-label" for="zprep-io-why">Why (a line for the record, optional)</label>' +
+      '<input id="zprep-io-why" type="text" class="zprep-w-input" maxlength="255">' +
+
+      '<h4>Cut from</h4>' +
+      '<label class="zprep-w-label" for="zprep-io-stock">Stock</label>' +
+      '<select id="zprep-io-stock" class="zprep-w-input">' + optionList(stock, 'sheet') + '</select>' +
+      '<div id="zprep-io-sheetsize"><span class="zprep-w-label">Sheet size, inches</span>' +
+        '<div class="zprep-io-sheetrow"><input id="zprep-io-sheet-w" type="number" inputmode="numeric" min="1" max="120" step="1" class="zprep-w-input" value="' + ioAttr(sw) + '" aria-label="Sheet width, inches"><span>×</span>' +
+        '<input id="zprep-io-sheet-l" type="number" inputmode="decimal" min="1" max="120" step="0.5" class="zprep-w-input" value="' + ioAttr(sl) + '" aria-label="Sheet length, inches"></div></div>' +
+      '<label class="zprep-w-label" for="zprep-io-color">Colour</label>' +
+      '<select id="zprep-io-color" class="zprep-w-input">' + optionList(colors, colors.length ? colors[0].v : '') + '</select>' +
+
+      '<h4>Pieces</h4>' +
+      '<div id="zprep-io-rows">' + ioRowHtml() + '</div>' +
+      '<button type="button" id="zprep-io-addrow" class="zprep-w-btn zprep-w-btn-ghost">Add a row</button>' +
+      '<div id="zprep-io-msg" class="zprep-io-msg" role="status"></div>' +
+      '<div class="zprep-w-form-row"><button type="button" id="zprep-io-save" class="zprep-w-btn zprep-w-btn-primary">Save order</button></div>' +
+
+      '<h4>Orders</h4>' +
+      '<div id="zprep-io-list"><p class="zprep-w-hint">Loading…</p></div>' +
+      (f.reportUrl ? '<p class="zprep-w-hint"><a href="' + ioAttr(f.reportUrl) + '">Year-end totals and the spreadsheet</a></p>' : '') +
+      '</div>';
+  }
+
+  function openInternal() {
+    if (!zprepWidgetData.canManage) return;
+    openModal(ioShellHtml());
+    var stock = $('zprep-io-stock');
+    // The sheet-size boxes show only while Sheets is the stock.
+    if (stock) stock.addEventListener('change', function () {
+      var box = $('zprep-io-sheetsize'); if (box) box.style.display = (stock.value === 'sheet') ? '' : 'none';
+    });
+    var add = $('zprep-io-addrow');
+    if (add) add.addEventListener('click', function () { $('zprep-io-rows').insertAdjacentHTML('beforeend', ioRowHtml()); });
+    // One listener on the holder removes a row, whichever row it is (and never the last one).
+    var holder = $('zprep-io-rows');
+    if (holder) holder.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('.zprep-io-v-del') : null; if (!b) return;
+      if (holder.querySelectorAll('.zprep-io-row').length > 1) { var row = b.closest('.zprep-io-row'); if (row) row.remove(); }
+    });
+    var save = $('zprep-io-save'); if (save) save.addEventListener('click', ioSubmit);
+    ioReloadList();
+  }
+
+  function ioCollectRows() {
+    var out = [];
+    document.querySelectorAll('#zprep-io-rows .zprep-io-row').forEach(function (r) {
+      var qty = parseInt(r.querySelector('.zprep-io-v-qty').value, 10) || 0; if (qty <= 0) return;
+      out.push({
+        kind: r.querySelector('.zprep-io-v-kind').value || 'custom',
+        qty: qty,
+        width: r.querySelector('.zprep-io-v-w').value,
+        height: r.querySelector('.zprep-io-v-h').value,
+        color: '',
+        notes: r.querySelector('.zprep-io-v-notes').value,
+        sell_each: r.querySelector('.zprep-io-v-sell').value
+      });
+    });
+    return out;
+  }
+
+  function ioSubmit() {
+    var g = function (id) { var e = $(id); return e ? String(e.value).trim() : ''; };
+    var msg = $('zprep-io-msg'); ioSay(msg, '');
+    var stock = g('zprep-io-stock') || 'sheet';
+    var sheet = (stock === 'sheet');
+    var args = {
+      kind: 'internal',
+      customer_label: g('zprep-io-name'),
+      purpose_code: g('zprep-io-purpose'),
+      for_whom: g('zprep-io-for'),
+      reason_text: g('zprep-io-why'),
+      color: g('zprep-io-color'),
+      stock: sheet ? 'sheet' : 'roll',
+      force_roll: sheet ? '0' : stock,
+      sheet_w: sheet ? g('zprep-io-sheet-w') : '',
+      sheet_l: sheet ? g('zprep-io-sheet-l') : '',
+      pieces: ioCollectRows()
+    };
+    // The server checks all of this again; these only save a round trip.
+    if (!args.customer_label) { ioSay(msg, 'Give the order a name.', 'err'); return; }
+    if (!args.purpose_code) { ioSay(msg, 'Pick what the order is for.', 'err'); return; }
+    if (sheet && (!(Number(args.sheet_w) > 0) || !(Number(args.sheet_l) > 0))) { ioSay(msg, 'The sheet size needs a width and a length.', 'err'); return; }
+    if (!args.pieces.length) { ioSay(msg, 'Add at least one row.', 'err'); return; }
+    if (args.pieces.some(function (v) { return !(Number(v.width) > 0) || !(Number(v.height) > 0); })) { ioSay(msg, 'Every row needs a width and a height.', 'err'); return; }
+    var save = $('zprep-io-save'); if (save) { save.disabled = true; save.textContent = 'Saving…'; }
+    var done = function () { if (save) { save.disabled = false; save.textContent = 'Save order'; } };
+    post('zprep_remake_create', args).then(function (res) {
+      done();
+      if (!res || !res.success) { ioSay(msg, (res && res.data && res.data.message) || 'The order was not saved.', 'err'); return; }
+      var c = (res.data && res.data.remake) || {};
+      ioSay(msg, 'Saved' + (c.ref_code ? ' as ' + c.ref_code : '') + '. Assign it below, or open its plan.', 'ok');
+      // Clear what was typed, keep the stock choices (the next order is usually cut from the same).
+      ['zprep-io-name', 'zprep-io-for', 'zprep-io-why'].forEach(function (id) { var e = $(id); if (e) e.value = ''; });
+      var ps = $('zprep-io-purpose'); if (ps && ps.options.length > 1) ps.value = '';
+      var holder = $('zprep-io-rows'); if (holder) holder.innerHTML = ioRowHtml();
+      ioReloadList();
+      loadApprovedToCut();
+    }).catch(function () { done(); ioSay(msg, 'Network error. The order was not saved.', 'err'); });
+  }
+
+  function ioReloadList() {
+    var host = $('zprep-io-list'); if (host) host.innerHTML = '<p class="zprep-w-hint">Loading…</p>';
+    postForm('zprep_remakes_list', {}).then(function (res) {
+      if (!res.success) { if ($('zprep-io-list')) $('zprep-io-list').innerHTML = '<p class="zprep-w-hint">Couldn’t load the orders.</p>'; return; }
+      ioCards = ((res.data && res.data.remakes) || []).filter(function (c) { return c.kind === 'internal'; });
+      withUsers(ioRenderList);
+    }).catch(function () { if ($('zprep-io-list')) $('zprep-io-list').innerHTML = '<p class="zprep-w-hint">Couldn’t load the orders.</p>'; });
+  }
+
+  function ioCardLine(c) {
+    var bits = [];
+    if (c.purpose_label) bits.push(esc(c.purpose_label));
+    if (c.for_whom) bits.push('for ' + esc(c.for_whom));
+    bits.push(c.sheet ? (esc(fmtIn(c.sheet.w)) + '" × ' + esc(fmtIn(c.sheet.l)) + '" sheets') : (c.force_roll ? esc(String(c.force_roll)) + '" roll' : 'roll'));
+    bits.push(esc(String(c.pieces || 0)) + ' piece' + (Number(c.pieces) === 1 ? '' : 's'));
+    return bits.join(' · ');
+  }
+
+  function ioRenderList(users) {
+    var host = $('zprep-io-list'); if (!host) return;
+    if (!ioCards.length) { host.innerHTML = '<p class="zprep-w-hint">No internal orders yet. Add one above.</p>'; return; }
+    users = users || [];
+    host.innerHTML = ioCards.map(function (c) {
+      var cut = (c.status === 'cut' || c.status === 'done');
+      var people = optionList(users.map(function (u) { return { v: u.id, t: u.name + (u.role_label ? ' (' + u.role_label + ')' : '') }; }), c.assignee_id || '', 'Pick a person…');
+      return '<div class="zprep-io-item" data-job="' + ioAttr(c.job_key) + '" data-id="' + ioAttr(c.remake_id) + '">' +
+        '<div class="zprep-io-item-title">' + esc(c.title) + (c.ref_code ? ' <span class="zprep-io-ref">' + esc(c.ref_code) + '</span>' : '') +
+          '<span class="zprep-io-state' + (cut ? ' is-cut' : '') + '">' + (cut ? 'Cut' : 'Not cut yet') + '</span></div>' +
+        '<div class="zprep-w-hint">' + ioCardLine(c) + (c.reason_text ? ' · ' + esc(c.reason_text) : '') + '</div>' +
+        '<div class="zprep-io-item-actions">' +
+          '<select class="zprep-w-input zprep-io-assignee" aria-label="Who cuts it">' + people + '</select>' +
+          '<button type="button" class="zprep-w-btn zprep-w-btn-primary zprep-io-assign">' + (c.assignee_id ? 'Reassign' : 'Assign') + '</button>' +
+          (c.assignee_id ? '<button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-io-unassign">Unassign</button>' : '') +
+          '<button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-io-open">Open plan</button>' +
+          '<button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-io-void">Remove</button>' +
+        '</div>' +
+        '<div class="zprep-io-item-msg zprep-io-msg" role="status">' + (c.assignee_name ? 'Assigned to ' + esc(c.assignee_name) + '.' : '') + '</div>' +
+        // Removing takes two presses, the second one in the row itself.
+        '<div class="zprep-io-voidask" hidden>' +
+          '<span>Remove ' + esc(c.ref_code || 'this order') + '? It leaves this list and the year-end page. Its number is not used again.</span>' +
+          '<button type="button" class="zprep-w-btn zprep-w-btn-primary zprep-io-void-yes">Remove it</button>' +
+          '<button type="button" class="zprep-w-btn zprep-w-btn-ghost zprep-io-void-no">Keep it</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    ioWireList();
+  }
+
+  function ioWireList() {
+    document.querySelectorAll('#zprep-io-list .zprep-io-item').forEach(function (row) {
+      var job = row.getAttribute('data-job');
+      var card = ioCards.filter(function (x) { return x.job_key === job; })[0] || null;
+      var say = function (t, k) { ioSay(row.querySelector('.zprep-io-item-msg'), t, k); };
+      var a = row.querySelector('.zprep-io-assign');
+      if (a) a.addEventListener('click', function () {
+        var sel = row.querySelector('.zprep-io-assignee'); var uid = parseInt(sel && sel.value, 10) || 0;
+        if (uid <= 0) { say('Pick a person first.', 'err'); return; }
+        var was = a.textContent; a.disabled = true; a.textContent = 'Assigning…';
+        postForm('zprep_assign', { job_key: job, assignee_id: uid, job_label: card ? card.title : '', reason: 'internal' }).then(function (res) {
+          if (!res.success) { a.disabled = false; a.textContent = was; say((res.data && res.data.message) || 'It was not assigned.', 'err'); return; }
+          ioReloadList(); loadApprovedToCut();
+        }).catch(function () { a.disabled = false; a.textContent = was; say('Network error. It was not assigned.', 'err'); });
+      });
+      var u = row.querySelector('.zprep-io-unassign');
+      if (u) u.addEventListener('click', function () {
+        u.disabled = true;
+        postForm('zprep_unassign', { job_key: job }).then(function (res) {
+          if (!res.success) { u.disabled = false; say((res.data && res.data.message) || 'It was not unassigned.', 'err'); return; }
+          ioReloadList(); loadApprovedToCut();
+        }).catch(function () { u.disabled = false; say('Network error.', 'err'); });
+      });
+      var o = row.querySelector('.zprep-io-open');
+      if (o) o.addEventListener('click', function () {
+        if (!card) return;
+        o.disabled = true; say('Opening the plan…');
+        planInternal(card, {
+          onSettled: function () { o.disabled = false; say(''); },
+          onOk: function () { closeModal(); },
+          onFail: function (m) { say(m, 'err'); }
+        });
+      });
+      // Remove: asked for in the row, and the second button waits a moment so a double tap cannot do it.
+      var vb = row.querySelector('.zprep-io-void'), ask = row.querySelector('.zprep-io-voidask');
+      var vy = row.querySelector('.zprep-io-void-yes'), vn = row.querySelector('.zprep-io-void-no');
+      if (vb && ask && vy && vn) {
+        vb.addEventListener('click', function () {
+          ask.hidden = false; vb.disabled = true; vy.disabled = true;
+          setTimeout(function () { vy.disabled = false; }, 700);
+        });
+        vn.addEventListener('click', function () { ask.hidden = true; vb.disabled = false; });
+        vy.addEventListener('click', function () {
+          vy.disabled = true; vn.disabled = true;
+          postForm('zprep_remake_set_status', { remake_id: row.getAttribute('data-id'), status: 'void' }).then(function (res) {
+            if (!res.success) { vy.disabled = false; vn.disabled = false; say((res.data && res.data.message) || 'It was not removed.', 'err'); return; }
+            ioReloadList(); loadApprovedToCut();
+          }).catch(function () { vy.disabled = false; vn.disabled = false; say('Network error. It was not removed.', 'err'); });
+        });
+      }
     });
   }
 
@@ -1167,7 +1663,7 @@
   // Build a plain-text packing report the user can paste into a bug note.
   function buildDebugReport(dbg) {
     var L = [];
-    L.push(((zprepWidgetData.contract && zprepWidgetData.contract.signature) || 'Prep') + ' — packing report');
+    L.push(((zprepWidgetData.contract && zprepWidgetData.contract.signature) || 'Prep') + ': packing report');
     L.push('version: ' + (dbg.version || '?') + '  ·  workspace: ' + (dbg.workspace || '?') + '  ·  force_roll: ' + (dbg.force_roll || 'auto'));
     if (state.customer) L.push('job: ' + (state.customer.name || '') + (state.customer.estimate_number ? '  (Est #' + state.customer.estimate_number + ')' : ''));
     L.push('');
@@ -1195,7 +1691,7 @@
       }
       L.push('');
     });
-    L.push('— end report —');
+    L.push('(end of report)');
     return L.join('\n');
   }
 
@@ -1264,7 +1760,7 @@
     if (!state.plan || !state.plan.pages || !state.plan.pages[idx]) return;
     var page = state.plan.pages[idx];
     var rollW = page.roll_width_in;
-    var gm = page.grungy_margin || 0.5;
+    var gm = pageMargin(page); // a stock sheet has no rough edge to keep off
     var usableW = rollW - gm; // pieces live in across ∈ [0, usableW]
     var GRID = 0.5;
 
@@ -1282,7 +1778,7 @@
     var html =
       '<div class="zprep-ed">' +
         '<div class="zprep-ed-head">' +
-          '<strong>Edit layout — Sheet ' + (idx + 1) + ' (' + esc(rollW) + '" ' + esc(String(page.color).toUpperCase()) + ')</strong>' +
+          '<strong>Edit layout · Sheet ' + (idx + 1) + ' (' + esc(rollW) + '" ' + esc(String(page.color).toUpperCase()) + ')</strong>' +
           '<div class="zprep-ed-hint">Click a piece to lift it · drag to move · double-click (or Ctrl/Alt/right-click) to rotate 90° · click again to drop</div>' +
         '</div>' +
         '<div id="zprep-ed-canvas" class="zprep-ed-canvas"></div>' +
@@ -1335,10 +1831,10 @@
     EDIT.pieces.forEach(function (p, i) {
       var rx = pad + p.y, ry = pad + p.x, rw = p.h, rh = p.w;
       var selected = (i === EDIT.sel);
-      var fill = selected ? '#D4881C' : pal.meshBg;
+      var fill = selected ? (pal.selected || '#5150D6') : pal.meshBg;
       var fop = selected ? '0.35' : '1';
       s += '<g class="zprep-ed-piece" data-i="' + i + '" style="cursor:grab;">';
-      s += '<rect x="' + rx + '" y="' + ry + '" width="' + rw + '" height="' + rh + '" fill="' + fill + '" fill-opacity="' + fop + '" stroke="' + (selected ? '#D4881C' : pal.cutLine) + '" stroke-width="' + (selected ? '0.4' : '0.15') + '"/>';
+      s += '<rect x="' + rx + '" y="' + ry + '" width="' + rw + '" height="' + rh + '" fill="' + fill + '" fill-opacity="' + fop + '" stroke="' + (selected ? (pal.selected || '#5150D6') : pal.cutLine) + '" stroke-width="' + (selected ? '0.4' : '0.15') + '"/>';
       var cx = rx + rw / 2, cy = ry + rh / 2, vert = rh > rw * 1.4;
       var t = vert ? ' transform="rotate(-90 ' + cx + ' ' + cy + ')"' : '';
       s += '<text x="' + cx + '" y="' + cy + '" font-family="Inter,sans-serif" font-size="' + fontIn.toFixed(2) + '" font-weight="800" fill="' + pal.label + '" text-anchor="middle" dominant-baseline="middle"' + t + '>' + esc(p.label) + '</text>';
@@ -1491,7 +1987,7 @@
 
   function edShowOverlapWarning() {
     var bad = edOverlaps();
-    if (bad.length) edWarn(bad.length + ' overlapping piece' + (bad.length > 1 ? 's' : '') + ' — adjust before saving.');
+    if (bad.length) edWarn(bad.length + ' overlapping piece' + (bad.length > 1 ? 's' : '') + '; adjust before saving.');
     else { var w = $('zprep-ed-warn'); if (w) w.textContent = ''; }
   }
 
@@ -1522,13 +2018,12 @@
     var rollW = page.roll_width_in;
     var sheetLen = page.sheet_length;
     var color = page.color;
-    var gm = page.grungy_margin || 0.5;
+    var gm = pageMargin(page); // a stock sheet has no rough edge to keep off
     var pal = PALETTE[color] || PALETTE.black;
-    // v2.1.4 — ALL sheets render landscape: the roll-width dimension (36"/60")
-    // is the SHORT/vertical side of the page and the cut-length runs along the
-    // WIDE/horizontal side. This maximizes printed area (long sheets fill the
-    // page width) and standardizes orientation across 36" and 60" alike, on
-    // screen and on print. (Previously only 60" rolls were rotated this way.)
+    // ALL sheets render landscape: the roll-width dimension is the SHORT/vertical
+    // side of the page and the cut-length runs along the WIDE/horizontal side.
+    // This maximizes printed area (long sheets fill the page width) and keeps one
+    // orientation for every roll width, on screen and on print.
     var is60 = true;
 
     var pad = forPrint ? 5 : 3.5;
@@ -1580,7 +2075,8 @@
     // Margin zone
     if (is60) {
       svg += '<rect x="' + pad + '" y="' + (pad + rollW - gm) + '" width="' + drawW + '" height="' + gm + '" fill="' + pal.grungy + '"/>';
-      svg += '<text x="' + (pad + drawW + 0.5) + '" y="' + (pad + rollW - gm/2) + '" font-family="Inter,Helvetica,sans-serif" font-size="1.2" fill="' + PALETTE.dim + '" opacity="0.75" dominant-baseline="middle">½" margin</text>';
+      // No band on a stock sheet (gm is 0), so no label for one.
+      if (gm > 0) svg += '<text x="' + (pad + drawW + 0.5) + '" y="' + (pad + rollW - gm/2) + '" font-family="Inter,Helvetica,sans-serif" font-size="1.2" fill="' + PALETTE.dim + '" opacity="0.75" dominant-baseline="middle">' + marginLabel(gm) + '</text>';
     } else {
       svg += '<rect x="' + (pad + rollW - gm) + '" y="' + pad + '" width="' + gm + '" height="' + drawH + '" fill="' + pal.grungy + '"/>';
     }
@@ -1606,14 +2102,15 @@
       }
     });
 
-    // Dimension callouts
+    // Dimension callouts (a roll is cut to this length; a stock sheet simply is this long)
     var dimFont = forPrint ? 1.4 : 1.6;
+    var lenLabel = page.stock_sheet ? (fmtIn(sheetLen) + '" long') : ('Cut ' + fmtIn(sheetLen) + '"');
     if (is60) {
       svg += '<text x="' + (pad - 1.5) + '" y="' + (pad + rollW/2) + '" font-family="Inter,Helvetica,sans-serif" font-size="' + dimFont + '" font-weight="700" fill="' + PALETTE.dim + '" text-anchor="middle" transform="rotate(-90 ' + (pad-1.5) + ' ' + (pad+rollW/2) + ')">' + fmtIn(rollW) + '" wide</text>';
-      svg += '<text x="' + (pad + sheetLen/2) + '" y="' + (pad - 1.5) + '" font-family="Inter,Helvetica,sans-serif" font-size="' + dimFont + '" font-weight="700" fill="' + PALETTE.dim + '" text-anchor="middle">Cut ' + fmtIn(sheetLen) + '"</text>';
+      svg += '<text x="' + (pad + sheetLen/2) + '" y="' + (pad - 1.5) + '" font-family="Inter,Helvetica,sans-serif" font-size="' + dimFont + '" font-weight="700" fill="' + PALETTE.dim + '" text-anchor="middle">' + lenLabel + '</text>';
     } else {
       svg += '<text x="' + (pad + rollW/2) + '" y="' + (pad - 1.5) + '" font-family="Inter,Helvetica,sans-serif" font-size="' + dimFont + '" font-weight="700" fill="' + PALETTE.dim + '" text-anchor="middle">' + fmtIn(rollW) + '" wide</text>';
-      svg += '<text x="' + (pad - 1.5) + '" y="' + (pad + sheetLen/2) + '" font-family="Inter,Helvetica,sans-serif" font-size="' + dimFont + '" font-weight="700" fill="' + PALETTE.dim + '" text-anchor="middle" transform="rotate(-90 ' + (pad-1.5) + ' ' + (pad+sheetLen/2) + ')">Cut ' + fmtIn(sheetLen) + '"</text>';
+      svg += '<text x="' + (pad - 1.5) + '" y="' + (pad + sheetLen/2) + '" font-family="Inter,Helvetica,sans-serif" font-size="' + dimFont + '" font-weight="700" fill="' + PALETTE.dim + '" text-anchor="middle" transform="rotate(-90 ' + (pad-1.5) + ' ' + (pad+sheetLen/2) + ')">' + lenLabel + '</text>';
     }
 
     // Cut-here dashed line
@@ -1637,7 +2134,7 @@
     $('zprep-w-sync').disabled = true; $('zprep-w-sync').textContent = 'Posting note…';
     var sourceJob = (state.customer && state.customer.estimate_number) ? String(state.customer.estimate_number) : '';
     post('zprep_sync_crm', { lead_id: state.leadId, body: body, reserved_leftover_ids: state.reservedLeftoverIds || [], source_job: sourceJob }).then(function (res) {
-      $('zprep-w-sync').disabled = false; $('zprep-w-sync').textContent = '✓ Finished — Send to CRM';
+      $('zprep-w-sync').disabled = false; $('zprep-w-sync').textContent = '✓ Finished · Send to CRM';
       if (res && res.success) {
         var d = res.data || {};
         // Note always posted here (a failed note comes back as res.success=false).
@@ -1653,13 +2150,13 @@
           // v2.2.4: the stage genuinely did NOT move — make it unmissable so the
           // cutter knows to advance the lead by hand instead of assuming it moved.
           html = '<span class="zprep-w-ok-text">' + okMsg + '</span>'
-               + '<div class="zprep-w-warn-text zprep-w-sync-warn">⚠ The pipeline stage did <strong>not</strong> advance automatically — please move this lead forward in CRM.</div>';
+               + '<div class="zprep-w-warn-text zprep-w-sync-warn">⚠ The pipeline stage did <strong>not</strong> advance automatically. Please move this lead forward in CRM.</div>';
         }
         $('zprep-w-sync-result').innerHTML = html;
         state.reservedLeftoverIds = [];
       } else { $('zprep-w-sync-result').innerHTML = '<span class="zprep-w-err-text">' + esc((res && res.data && res.data.message) || 'Sync failed.') + '</span>'; }
       show($('zprep-w-sync-result'));
-    }).catch(function (err) { $('zprep-w-sync').disabled = false; $('zprep-w-sync').textContent = '✓ Finished — Send to CRM'; $('zprep-w-sync-result').innerHTML = '<span class="zprep-w-err-text">Network error: ' + esc(err) + '</span>'; show($('zprep-w-sync-result')); });
+    }).catch(function (err) { $('zprep-w-sync').disabled = false; $('zprep-w-sync').textContent = '✓ Finished · Send to CRM'; $('zprep-w-sync-result').innerHTML = '<span class="zprep-w-err-text">Network error: ' + esc(err) + '</span>'; show($('zprep-w-sync-result')); });
   }
 
   function buildSyncNoteBody() {
@@ -1683,7 +2180,7 @@
       if (d.not_cut) { notCutList.push(entry); } else { lines.push(entry); }
     });
     if (notCutList.length) {
-      lines.push('', '── Included (NOT cut from roll stock — pre-made units) ──');
+      lines.push('', '── Included (NOT cut from roll stock; pre-made units) ──');
       notCutList.forEach(function(e){ lines.push(e); });
     }
     lines.push('', '── Material Used ──');
@@ -1733,7 +2230,7 @@
     // ── Single uniform label font across ALL sheets ──
     var globalFont = computeGlobalFont(pages);
 
-    var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cut Sheets — ' + esc(c.name || 'Prep') + '</title><style>';
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cut Sheets · ' + esc(c.name || 'Prep') + '</title><style>';
     html += buildPrintCSS();
     html += '</style></head><body>';
 
@@ -1752,12 +2249,12 @@
 
       var premadeHtml = '';
       if (idx === pages.length - 1 && notCutDeliv.length) {
-        premadeHtml = '<div class="zprep-print-premade"><strong>INCLUDED — NOT CUT (pre-made units):</strong>' +
+        premadeHtml = '<div class="zprep-print-premade"><strong>INCLUDED, NOT CUT (pre-made units):</strong>' +
           notCutDeliv.map(function(d){
             var dims = Object.keys(d.dimensions || {})[0] || '';
             return '<label class="zprep-pc-del"><input type="checkbox"> ' + esc(d.qty) + ' × ' + esc(d.label) + (dims ? ' [' + esc(dims) + ']' : '') + '</label>';
           }).join('') +
-          '<div class="zprep-print-premade-note">Ships with the order. Not cut from roll stock — not the cutter\u2019s responsibility for this job.</div></div>';
+          '<div class="zprep-print-premade-note">Ships with the order. Not cut from roll stock; not the cutter\u2019s responsibility for this job.</div></div>';
       }
 
       // Install line: a REAL install date, distinct from the print moment. Rendered only
@@ -1765,14 +2262,14 @@
       // (jobs resolver absent) — the relabels below still ship. Never a fault/overdue token.
       var installRow = installLine() ? ('<div><strong>Install:</strong> ' + esc(installLine()) + '</div>') : '';
       html += '<div class="zprep-print-page">' +
-        '<div class="zprep-print-header"><h1>' + esc(zprepWidgetData.letterhead || '') + ' — CUT SHEET</h1></div>' +
-        '<div class="zprep-print-job"><div><strong>Customer:</strong> ' + esc(c.name||'') + '</div><div><strong>Est #:</strong> ' + esc(c.estimate_number||'—') + '</div><div><strong>Address:</strong> ' + esc(c.address||'') + '</div><div><strong>Salesperson:</strong> ' + esc(c.salesperson||'') + '</div><div><strong>Phone:</strong> ' + esc(c.phone||'') + '</div>' + installRow + '<div><strong>Printed:</strong> ' + new Date().toLocaleDateString() + '</div></div>' +
-        '<div class="zprep-print-roll"><strong>' + page.roll_width_in + '" ' + page.color.toUpperCase() + '</strong> — Sheet ' + (idx+1) + ' of ' + pages.length + ' — Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft · ' + sqft + ' sq ft)</div>' +
+        '<div class="zprep-print-header"><h1>' + esc(zprepWidgetData.letterhead || '') + ' · CUT SHEET</h1></div>' +
+        '<div class="zprep-print-job"><div><strong>' + (isShopJob() ? 'Job:' : 'Customer:') + '</strong> ' + esc(c.name||'') + '</div><div><strong>' + (isShopJob() ? 'Ref:' : 'Est #:') + '</strong> ' + esc(isShopJob() ? shopJobRef(state.remake) : (c.estimate_number||'–')) + '</div><div><strong>Address:</strong> ' + esc(c.address||'') + '</div><div><strong>Salesperson:</strong> ' + esc(c.salesperson||'') + '</div><div><strong>Phone:</strong> ' + esc(c.phone||'') + '</div>' + installRow + '<div><strong>Printed:</strong> ' + new Date().toLocaleDateString() + '</div></div>' +
+        '<div class="zprep-print-roll"><strong>' + esc(pageStockLabel(page)) + '</strong> · Sheet ' + (idx+1) + ' of ' + pages.length + (page.stock_sheet ? (' · one sheet (' + sqft + ' sq ft)') : (' · Cut ' + fmtIn(page.sheet_length) + '" (' + page.linear_feet.toFixed(1) + ' ft · ' + sqft + ' sq ft)')) + '</div>' +
         '<div class="zprep-print-svg">' + svg + '</div>' +
         '<div class="zprep-print-checklist"><strong>CUT LIST:</strong>' + delHtml + '</div>' +
         (window.ZPREPSections ? window.ZPREPSections.pageExtra(page) : '') +
         premadeHtml +
-        '<div class="zprep-print-cost">Material: ' + page.linear_feet.toFixed(1) + ' ft of ' + page.roll_width_in + '" ' + page.color + ' — ' + sqft + ' sq ft</div>' +
+        '<div class="zprep-print-cost">Material: ' + (page.stock_sheet ? ('one ' + esc(fmtIn(page.stock_sheet.w)) + '" x ' + esc(fmtIn(page.stock_sheet.l)) + '" sheet, ' + esc(page.color)) : (page.linear_feet.toFixed(1) + ' ft of ' + page.roll_width_in + '" ' + esc(page.color))) + ', ' + sqft + ' sq ft</div>' +
         '<div class="zprep-print-signoff"><div>Cut by: <span class="zprep-sig-line"></span></div><div>Date cut: <span class="zprep-sig-line"></span></div></div>' +
         '<div class="zprep-print-footer">v' + zprepWidgetData.version + ' · ' + esc((zprepWidgetData.contract && zprepWidgetData.contract.signature) || 'Prep') + '</div></div>';
     });
@@ -1804,8 +2301,8 @@
     var bar = document.createElement('div');
     bar.style.cssText = 'flex:0 0 auto;display:flex;gap:8px;align-items:center;padding:10px 12px;background:#0f172a;border-bottom:1px solid #334155;flex-wrap:wrap;';
     bar.innerHTML =
-      '<strong style="color:#e2e8f0;font:600 14px Inter,system-ui,sans-serif;margin-right:auto;">Cut Sheets — ' + esc((c && c.name) || 'Prep') + '</strong>' +
-      '<button id="zprep-po-print"  style="font:600 13px Inter,system-ui,sans-serif;padding:9px 14px;border-radius:8px;border:0;background:#D4881C;color:#fff;cursor:pointer;">🖨 Print</button>' +
+      '<strong style="color:#e2e8f0;font:600 14px Inter,system-ui,sans-serif;margin-right:auto;">Cut Sheets · ' + esc((c && c.name) || 'Prep') + '</strong>' +
+      '<button id="zprep-po-print"  style="font:600 13px Inter,system-ui,sans-serif;padding:9px 14px;border-radius:8px;border:0;background:var(--sys-brand,#5150D6);color:var(--sys-text-brand,#fff);cursor:pointer;">🖨 Print</button>' +
       '<button id="zprep-po-open"   style="font:600 13px Inter,system-ui,sans-serif;padding:9px 14px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;cursor:pointer;">Open in new tab</button>' +
       '<button id="zprep-po-save"   style="font:600 13px Inter,system-ui,sans-serif;padding:9px 14px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;cursor:pointer;">Download</button>' +
       '<button id="zprep-po-close"  style="font:600 13px Inter,system-ui,sans-serif;padding:9px 14px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;cursor:pointer;">Close</button>';
@@ -1913,7 +2410,8 @@
   }
 
   function resetAll() {
-    state = { source:null, match:null, customer:null, leadId:null, cachedNotes:null, parsed:null, measurements:[], plan:null, useLeftovers:false, reservedLeftoverIds:[], pendingLeads:[], batchLeadIds:[], approvedJobs:[], appliedAdjustments:false, debug:false, install:null, installByKey: state.installByKey || {}, remake:null, cardRef:'' };
+    // The list of jobs stays on the screen through a reset, so what it was drawn from is kept with it.
+    state = { source:null, match:null, customer:null, leadId:null, cachedNotes:null, parsed:null, measurements:[], plan:null, useLeftovers:false, reservedLeftoverIds:[], pendingLeads:[], batchLeadIds:[], approvedJobs: state.approvedJobs || [], appliedAdjustments:false, debug:false, install:null, installByKey: state.installByKey || {}, remake:null, cardRef:'' };
     if ($('zprep-w-search')) $('zprep-w-search').value = ''; setErr('zprep-w-lookup-error', ''); showView('zprep-w-lookup');
   }
 
@@ -1928,7 +2426,8 @@
         state.debug = e.target.checked;
         // If a plan is already computed, recompute so the engine returns the
         // trace (and to refresh it); otherwise it'll be included on next Compute.
-        if (state.measurements && state.measurements.length) computeCuts();
+        if (isShopJob() && state.remake.kind === 'internal' && state.plan) planInternal(state.remake);
+        else if (state.measurements && state.measurements.length) computeCuts();
         else { var p = $('zprep-w-debug-panel'); if (p && !state.debug) p.remove(); }
       });
     }
@@ -1941,11 +2440,17 @@
     if (searchBox) searchBox.addEventListener('keydown', function(e){ if (e.key==='Enter') doLookup(); });
     var rmBtn = $('zprep-w-remakes-btn');
     if (rmBtn) rmBtn.addEventListener('click', openRemakes);
+    var ioBtn = $('zprep-w-internal-btn');
+    if (ioBtn) ioBtn.addEventListener('click', openInternal);
     $('zprep-w-refresh-notes').addEventListener('click', startParse);
     $('zprep-w-compute').addEventListener('click', computeCuts);
     $('zprep-w-reset').addEventListener('click', resetAll);
     $('zprep-w-sync').addEventListener('click', syncCRM);
-    $('zprep-w-back-to-match').addEventListener('click', function(){ showView('zprep-w-match'); });
+    $('zprep-w-back-to-match').addEventListener('click', function(){
+      // An internal order has no measurements screen (its rows are the order's own): back is the list.
+      if (isShopJob() && state.remake.kind === 'internal') { showView('zprep-w-lookup'); return; }
+      showView('zprep-w-match');
+    });
     $('zprep-w-modal-close').addEventListener('click', closeModal);
     $('zprep-w-modal').addEventListener('click', function(e){ if (e.target===$('zprep-w-modal')||e.target.classList.contains('zprep-w-modal-bg')) closeModal(); });
     document.addEventListener('keydown', function(e){ if (e.key==='Escape' && $('zprep-w-modal').style.display!=='none') closeModal(); });

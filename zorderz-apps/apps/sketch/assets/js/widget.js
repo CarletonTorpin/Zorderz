@@ -288,7 +288,7 @@
 
     // Auto-title: "Sketch — May 10, 2:31 PM"
     var now = new Date();
-    var title = 'Sketch — ' + now.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ', ' +
+    var title = 'Sketch · ' + now.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ', ' +
       now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 
     var canvasData = JSON.stringify(st.strokes);
@@ -498,7 +498,7 @@
       // View-mode action banner — explicit confirmation before drawing.
       (st.viewMode
         ? '<div class="zsp-w-fs-viewbar" id="zsp-fs-viewbar">' +
-            '<span class="zsp-w-fs-viewbar-label">Saved sketch — read only</span>' +
+            '<span class="zsp-w-fs-viewbar-label">Saved sketch · read only</span>' +
             '<button type="button" class="zsp-w-btn zsp-w-btn-primary zsp-w-fs-editbtn" id="zsp-fs-edit">' + editSVG + ' Add to this sketch</button>' +
           '</div>'
         : '') +

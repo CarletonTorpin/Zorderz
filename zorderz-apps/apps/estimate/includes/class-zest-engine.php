@@ -501,7 +501,7 @@ class ZEST_Estimate_Engine {
 			}
 			$conf = isset( $li['confidence'] ) ? (int) $li['confidence'] : 100;
 			if ( $conf > 0 && $conf < ZEST_Catalog::CONFIDENCE_THRESHOLD ) {
-				$warnings[] = sprintf( 'Low confidence (%d%%) on "%s" — please verify.', $conf, $desc );
+				$warnings[] = sprintf( 'Low confidence (%d%%) on "%s". Please verify.', $conf, $desc );
 			}
 			$accepted[] = $li;
 		}
@@ -780,7 +780,7 @@ class ZEST_Estimate_Engine {
 			$delta = round( (float) $t['total'] - $stated, 2 );
 			if ( abs( $delta ) > 0.01 ) {
 				$warnings[] = sprintf(
-					'Totals mismatch: computed %s vs printed %s (off by %s). Check the line items — nothing was auto-corrected.',
+					'Totals mismatch: computed %s vs printed %s (off by %s). Check the line items: nothing was auto-corrected.',
 					number_format( (float) $t['total'], 2 ),
 					number_format( $stated, 2 ),
 					number_format( $delta, 2 )
@@ -844,22 +844,54 @@ class ZEST_Estimate_Engine {
 		$p[] = "## Line items\n"
 			. "Each printed table row becomes one item, in order. Set each line's \"kind\":\n"
 			. "- \"item\": a billable product/service line (the default).\n"
-			. "- \"context\": a \$0 metadata line that is NOT a charge — e.g. a \"Location\" line, a heading, or a closing \"Tax & installation\" note. Keep it as its own line with line_total 0.\n"
+			. "- \"context\": a zero-amount metadata line that is NOT a charge — e.g. a \"Location\" line, a heading, or a closing \"Tax & installation\" note. Keep it as its own line with line_total 0.\n"
 			. "- \"discount\": a credit/discount line shown IN the items table (negative line_total).\n"
 			. "- \"fee\": an explicit surcharge/fee line.\n"
 			. "- \"note\": a free-text note line with no charge.\n"
 			. "Copy each line's description and any secondary text (into sub_description). Put the printed quantity in \"quantity\", the printed unit price in \"unit_price\", and the printed line total in \"line_total\". If only a line total is printed, set quantity 1 and unit_price equal to that total.";
 		$p[] = "## Currency\n"
-			. "Return every money value as a number. When reading, strip \"\$\" and thousands commas, and treat wrapping parentheses \"(175.00)\" or a leading minus (\"-\" or the U+2212 \u{2212} sign) as NEGATIVE.";
-		$p[] = "## House-paperwork rules to encode (common FreshBooks exports)\n"
-			. "- A rep/initials code such as \"(AB)\" or a trailing \"- (CD)\" identifies the SALESPERSON: put the code (letters only, e.g. \"AB\" or \"CD\") in \"salesperson\". STILL keep the \"Location\" line itself as a kind:\"context\" line — do not delete it and do not move its text.\n"
-			. "- A line worded like \"per Alex\" or \"per Jordan\" is a manual DISCOUNT/credit: kind:\"discount\", negative line_total, and put the name (\"Alex\"/\"Jordan\") in \"attribution\".\n"
-			. "- A totals-section line like \"5% Discount\" is a HEADER discount, not an item: set discount_type:\"percent\" and discount_value:5 (the number only). A flat total-section discount like \"Discount -\$50\" → discount_type:\"amount\", discount_value:50. Do NOT also emit it as a line item.\n"
-			. "- A grouped/lot line like \"(4) ... Total for Lot\" is ONE item: kind:\"item\", is_lot:true, quantity 1, and line_total equal to the printed lot total (keep the \"(4)\" in the description).";
+			. "Return every money value as a number. When reading, strip the currency sign (\"" . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . "\" or any other) and thousands separators, and treat wrapping parentheses \"(175.00)\" or a leading minus (\"-\" or the U+2212 \u{2212} sign) as NEGATIVE.";
+		$p[] = "## Paperwork conventions to encode\n" . implode( "\n", $this->import_paperwork_rules() );
 		$p[] = "## Customer\n"
 			. "Fill customer.name, org (company, if any), email, phone, street, city, state, zip from the bill-to / prepared-for block. Use \"\" for anything not printed. Never guess.";
 		$p[] = $this->import_schema_block();
 		return implode( "\n\n", array_filter( array_map( 'trim', $p ) ) );
+	}
+
+	/**
+	 * The house conventions an imported document is read by, one "- " rule each. The salesperson's code is written the
+	 * way the business's Document conventions write initials ("(AB)" by default). A business whose paperwork reads
+	 * otherwise gives its own list, which replaces these: Identity Pack document-conventions.yml estimate.import_rules
+	 * (option zest_import_paperwork_rules); code changes the list with the zest_import_paperwork_rules filter (strings;
+	 * anything else is dropped).
+	 *
+	 * @return string[]
+	 */
+	private function import_paperwork_rules(): array {
+		$one  = class_exists( 'ZDZ_Doc_Conventions' ) ? ZDZ_Doc_Conventions::format_initials( array( 'AB' ) ) : '(AB)';
+		$one  = '' !== $one ? $one : '(AB)';
+		$two  = class_exists( 'ZDZ_Doc_Conventions' ) ? ZDZ_Doc_Conventions::format_initials( array( 'CD' ) ) : '(CD)';
+		$two  = '' !== $two ? $two : '(CD)';
+		$sign = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$';
+		$rules = array(
+			'- A rep/initials code such as "' . $one . '" or a trailing "- ' . $two . '" identifies the SALESPERSON: put the code (letters only, e.g. "AB" or "CD") in "salesperson". STILL keep the "Location" line itself as a kind:"context" line — do not delete it and do not move its text.',
+			'- A line worded like "per Alex" or "per Jordan" is a manual DISCOUNT/credit: kind:"discount", negative line_total, and put the name ("Alex"/"Jordan") in "attribution".',
+			'- A totals-section line like "5% Discount" is a HEADER discount, not an item: set discount_type:"percent" and discount_value:5 (the number only). A flat total-section discount like "Discount -' . $sign . '50" → discount_type:"amount", discount_value:50. Do NOT also emit it as a line item.',
+			'- A grouped/lot line like "(4) ... Total for Lot" is ONE item: kind:"item", is_lot:true, quantity 1, and line_total equal to the printed lot total (keep the "(4)" in the description).',
+		);
+		$own   = function_exists( 'get_option' ) ? get_option( 'zest_import_paperwork_rules', array() ) : array();
+		if ( is_array( $own ) && array_filter( $own, 'is_string' ) ) {
+			$rules = array_values( array_filter( $own, 'is_string' ) );
+		}
+		$rules = function_exists( 'apply_filters' ) ? apply_filters( 'zest_import_paperwork_rules', $rules ) : $rules;
+		$out   = array();
+		foreach ( is_array( $rules ) ? $rules : array() as $r ) {
+			if ( is_string( $r ) && '' !== trim( $r ) ) {
+				$r     = trim( preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $r ) );
+				$out[] = 0 === strpos( $r, '- ' ) ? $r : '- ' . $r;
+			}
+		}
+		return array_slice( $out, 0, 20 );
 	}
 
 	/** The strict JSON schema the import model must return (canonical $doc + review aids). */
@@ -948,7 +980,7 @@ class ZEST_Estimate_Engine {
 	private function build_modify_prompt( array $context ): string {
 		$p = array();
 		$p[] = 'You edit an existing estimate\'s line items per the instruction. Input is JSON: {"existing_line_items":[...],"instruction":"...","field_notes_transcript":"..."}.';
-		$p[] = 'Apply ONLY what the instruction asks. Preserve every other line unchanged, in order. $0.00 metadata lines (location, closing notes) are preserved as-is unless the instruction targets them.';
+		$p[] = 'Apply ONLY what the instruction asks. Preserve every other line unchanged, in order. Zero-amount metadata lines (location, closing notes) are preserved as-is unless the instruction targets them.';
 		$p[] = 'If "field_notes_transcript" is non-empty, it is a faithful transcription of a photographed measurement sheet. Fold each measurement into the matching line\'s "sub_description" WITHOUT changing that line\'s quantity or unit_price. Do NOT create new priced lines for measurements. If the instruction asks to leave the pricing as-is, change no price and no quantity.';
 		$p[] = 'If a line contains mutually contradictory product traits, FLAG it in that line\'s "notes" — do not silently pick one reading.';
 		$p[] = $this->casing_block();
@@ -981,7 +1013,7 @@ class ZEST_Estimate_Engine {
 	private function business_line(): string {
 		$name = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::name() : '';
 		$name = '' !== $name ? $name : 'the business';
-		$trade = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'trade_descriptor', '' ) : '';
+		$trade = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'identity.industry', '' ) : ''; // Business Profile → Industry
 		return '' !== $trade ? ( $name . ', ' . $trade ) : $name;
 	}
 

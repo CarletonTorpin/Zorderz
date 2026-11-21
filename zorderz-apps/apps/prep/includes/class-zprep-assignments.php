@@ -44,11 +44,16 @@ class ZPREP_Assignments {
 	}
 
 	public static function migrate(): void {
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		dbDelta( self::schema_sql() );
+	}
+
+	/** The table, as dbDelta() is handed it. */
+	public static function schema_sql(): string {
 		global $wpdb;
 		$table   = self::table_name();
 		$charset = $wpdb->get_charset_collate();
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( "CREATE TABLE {$table} (
+		return "CREATE TABLE {$table} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			created_at DATETIME NOT NULL,
 			assigned_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -63,7 +68,7 @@ class ZPREP_Assignments {
 			PRIMARY KEY  (id),
 			KEY idx_assignee (assignee_id, revoked_at),
 			KEY idx_job (job_key, revoked_at)
-		) {$charset};" );
+		) {$charset};";
 	}
 
 	public static function register_hooks(): void {

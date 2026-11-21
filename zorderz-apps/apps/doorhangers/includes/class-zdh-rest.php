@@ -535,7 +535,7 @@ class ZDH_REST {
 			return new WP_Error( 'not_found', 'Cluster not found.', array( 'status' => 404 ) );
 		}
 		if ( 'done' === $d['status'] ) {
-			return new WP_Error( 'done', 'This cluster is already completed — use Edit if you need to change it.', array( 'status' => 400 ) );
+			return new WP_Error( 'done', 'This cluster is already completed. Use Edit if you need to change it.', array( 'status' => 400 ) );
 		}
 		ZDH_DB::reset_delivery( $id );
 		return rest_ensure_response( ZDH_DB::get_drop( $id ) );
@@ -618,7 +618,7 @@ class ZDH_REST {
 			return new WP_Error( 'not_found', 'Cluster not found.', array( 'status' => 404 ) );
 		}
 		if ( 'done' === $d['status'] ) {
-			return new WP_Error( 'done', 'Completed drops are a record — plan a new cluster instead.', array( 'status' => 400 ) );
+			return new WP_Error( 'done', 'Completed drops are a record. Plan a new cluster instead.', array( 'status' => 400 ) );
 		}
 		$addresses = self::clean_addresses( $req->get_param( 'addresses' ) );
 		$streets   = self::clean_streets( $req->get_param( 'streets' ) );
@@ -829,7 +829,7 @@ class ZDH_REST {
 		$track_in  = $req->get_param( 'track' );
 		$walk_only = isset( $d['method'] ) && 'quick' === $d['method'] && is_array( $track_in ) && count( $track_in ) > 1;
 		if ( ! $addresses && ! $streets && ! $live && ! $walk_only ) {
-			return new WP_Error( 'empty', 'Nothing to save — select at least one address or street.', array( 'status' => 400 ) );
+			return new WP_Error( 'empty', 'Nothing to save: select at least one address or street.', array( 'status' => 400 ) );
 		}
 		// one Quick Start walk is one record. A walk counted on the site (via "Count the houses") could be saved again
 		// later from the walker's phone, which still had the walk, and every hanger would count twice. A walk is

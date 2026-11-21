@@ -203,7 +203,7 @@ add_action( 'after_setup_theme', function () {
 				'name'        => 'Game',
 				'icon'        => 'gamepad-2',
 				'cat'         => 'Tools',
-				'cc'          => '#8B5CF6',
+				'cc'          => '#CC79A7',
 				'desc'        => 'Casual block-breaker game.',
 				'description' => 'Casual block-breaker game.',
 				// Declarative intent. Live access is granted per user via

@@ -272,7 +272,7 @@
 			if ( rec ) { any = true; }
 			html += '<div class="zdz-record-tile">' +
 				'<div class="zdz-record-label">' + p[1] + '</div>' +
-				'<div class="zdz-record-value">' + ( rec ? p[2]( Number( rec.record_value ) ) : '—' ) + '</div>' +
+				'<div class="zdz-record-value">' + ( rec ? p[2]( Number( rec.record_value ) ) : '–' ) + '</div>' +
 				( rec && rec.achieved_at ? '<div class="zdz-record-date">' + String( rec.achieved_at ).split( ' ' )[0] + '</div>' : '' ) +
 			'</div>';
 		}
@@ -292,7 +292,7 @@
 	}
 
 	function fmtMoney( n ) {
-		try { return new Intl.NumberFormat( 'en-US', { maximumFractionDigits: 0 } ).format( n ); }
+		try { return new Intl.NumberFormat( ( window.ZDZ && window.ZDZ.ui && window.ZDZ.ui.locale ) ? window.ZDZ.ui.locale() : 'en-US', { maximumFractionDigits: 0 } ).format( n ); }
 		catch ( _ ) { return String( Math.round( n ) ); }
 	}
 

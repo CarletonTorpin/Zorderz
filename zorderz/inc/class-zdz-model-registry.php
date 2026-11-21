@@ -92,7 +92,7 @@ class ZDZ_Model_Registry {
 
 	/**
 	 * The model handles offered in the Settings AI-model chooser. Ships EMPTY — Core
-	 * names no model; a tenant/connections pack supplies the roster via the
+	 * names no model; the business's connections pack supplies the roster via the
 	 * `zdz_model_choices` filter, either as a flat list of handles
 	 * (array( 'Handle-A', 'Handle-B' )) or as handle => label pairs. When this is
 	 * empty the Settings UI renders a free-text field so an operator on any gateway

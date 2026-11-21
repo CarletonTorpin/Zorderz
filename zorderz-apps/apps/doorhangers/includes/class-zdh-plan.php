@@ -469,7 +469,7 @@ class ZDH_Plan {
 			'zip'        => $drop['zip'],
 			'for'        => array( 'id' => (int) $who['id'], 'name' => (string) $who['name'], 'is_you' => (int) $who['id'] === $uid ),
 			'due_by'     => $due,
-			'due_text'   => $due ? date_i18n( 'D, M j', strtotime( $due ) ) : '',
+			'due_text'   => $due ? date_i18n( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D, M j' ) : 'D, M j' ), strtotime( $due ) ) : '',
 			'hours'      => $hours,
 			'hours_text' => self::hours_text( $hours ),
 			'piece'      => $piece,
@@ -531,7 +531,7 @@ class ZDH_Plan {
 			'for'     => $row['who'],
 			'due_by'  => (string) ( $drop['due_by'] ?: '' ),
 			'hours'   => (string) $drop['hours'],
-			'message' => 'Route #' . $id . ' is planned in Doorhangers' . ( ! empty( $row['who']['name'] ) ? ' for ' . $row['who']['name'] : '' ) . ': ' . count( (array) $row['addresses'] ) . ' houses on ' . (string) $drop['streets_summary'] . ( $drop['due_by'] ? ', by ' . date_i18n( 'M j', strtotime( $drop['due_by'] ) ) : '' ) . ( $drop['hours'] ? ', ' . self::hours_text( (string) $drop['hours'] ) : '' ) . '.',
+			'message' => 'Route #' . $id . ' is planned in Doorhangers' . ( ! empty( $row['who']['name'] ) ? ' for ' . $row['who']['name'] : '' ) . ': ' . count( (array) $row['addresses'] ) . ' houses on ' . (string) $drop['streets_summary'] . ( $drop['due_by'] ? ', by ' . date_i18n( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j' ) : 'M j' ), strtotime( $drop['due_by'] ) ) : '' ) . ( $drop['hours'] ? ', ' . self::hours_text( (string) $drop['hours'] ) : '' ) . '.',
 		);
 	}
 

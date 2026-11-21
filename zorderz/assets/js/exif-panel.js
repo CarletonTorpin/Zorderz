@@ -19,8 +19,6 @@
  *
  * No external deps. Uses fetch + the WP REST nonce if present
  * (window.wpApiSettings or a data-nonce attribute).
- *
- * @since 2.21.0
  */
 (function (global) {
 	'use strict';
@@ -213,7 +211,7 @@
 		}
 
 		function providerLabel(p) {
-			if (p === 'offline-local' || p === 'offline-sdcounty') return 'Place: offline';
+			if (typeof p === 'string' && p.indexOf('offline-') === 0) return 'Place: offline'; // the offline place lookup, whatever its data set
 			if (p === 'filter') return 'Place: custom';
 			return 'Place: ' + p;
 		}

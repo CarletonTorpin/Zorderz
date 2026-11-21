@@ -29,11 +29,10 @@
  * only ADDS a key; it never reorders, filters or drops a card. `status`/`state` are for
  * presentation (a chip style) alone.
  *
- * WORDING IS NOT RE-HARDCODED. The three-state paper wording (scheduled date / "unscheduled" /
+ * ONE SOURCE OF WORDING. The three-state paper wording (scheduled date / "unscheduled" /
  * "unknown" / "not applicable") is owned by the resolver and produced by
  * ZJOB_Install_Date::paper_line() — a value that never returns empty and prints the non-scheduled
- * states distinctly. Prep REUSES paper_line() and never re-hardcodes those status
- * strings.
+ * states distinctly. Prep REUSES paper_line() rather than writing those status strings again.
  *
  * 0000-00-00 GUARD. The resolver guards the zeroed MySQL sentinel at the source (a real date
  * rides ONLY state==='known'; every other state has date===null). Prep adds defence in depth:
@@ -382,7 +381,7 @@ class ZPREP_Install_Date {
 		}
 		$line = trim( $line );
 		if ( '' === $line ) {
-			$line = '—'; // never blank on paper — a blank reads as "nobody filled this in".
+			$line = '–'; // never blank on paper — a blank reads as "nobody filled this in".
 		}
 
 		return array(

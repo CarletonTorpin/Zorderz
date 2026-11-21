@@ -70,13 +70,36 @@ FOLLOWUP_WORDS = re.compile(
 
 def is_followup(question):
     """Is this question about the chart already on screen? A short phrase, one
-    that starts like a continuation ("now by month", "as a pie", "only GT"), or
+    that starts like a continuation ("now by month", "as a pie", "only JB"), or
     one that talks about the chart itself. Anything else is a new question."""
     q = question.strip()
     if not q:
         return False
     words = len(q.split())
     return words <= 4 or bool(FOLLOWUP_START.search(q)) or (words <= 12 and bool(FOLLOWUP_WORDS.search(q)))
+
+
+# What may stand between the words of a search term, in the term and in a line: spaces, hyphens, slashes.
+WORD_GAP = r"[\s\-/]+"
+# The plain endings the last word of a term may carry ("bracket" finds "brackets", "paint" finds "painted").
+PLAIN_ENDINGS = ("s", "es", "ed", "d", "ing")
+
+
+def whole_words_pattern(text):
+    """The pattern a whole-word line search uses, or None when the text holds no word.
+
+    The words of the text must stand in a line as whole words, side by side and in order, with only spaces,
+    hyphens or slashes between them; the last word may carry a plain ending (s, es, ed, d, ing). So "stand" finds
+    "stand" and "stands" and never "standard", and "floor stand" finds "floor stands" and "floor-stand" and never
+    "stand ... floor" or "floor ... stand". A doubled letter is not a plain ending: "run" does not find "running".
+    Matching is on case-folded text; a letter or digit beside the match means it is part of a longer word.
+    """
+    words = [w for w in re.split(WORD_GAP, str(text).casefold()) if w]
+    if not words:
+        return None
+    body = WORD_GAP.join(re.escape(w) for w in words)
+    endings = "|".join(PLAIN_ENDINGS)
+    return re.compile(rf"(?<![^\W_]){body}(?:{endings})?(?![^\W_])")
 
 
 class OpError(Exception):
@@ -1234,7 +1257,7 @@ class Hub:
         first["spec"]["title"] = title[:90]
         audit["drill"] = first["spec"].get("split")
         audit["bars"] = len(bars)
-        # under a comparison the only jobs to list are the person's own -- not "GT's jobs"
+        # under a comparison the only jobs to list are the person's own -- not "JB's jobs"
         can_list = "list_jobs" in access["ops"] and not acc.is_comparison(spec, access)
         prof = self._zip_profile(spec, group)            # a tapped ZIP shows what it's like
         return {"spec": first["spec"], "result": first["result"],
@@ -2356,9 +2379,19 @@ class Hub:
         rows = compute.select(data, self.pack, spec)
         ids = set(rows["line_id"])
         lines = data.work[data.work["line_id"].isin(ids)]
-        words = [w for w in re.split(r"\s+", text.casefold()) if w]
-        hay = lines["description_clean"].str.casefold()
-        mask = hay.map(lambda h: all(w in h for w in words))
+        # a line with no text is never a match; it must not stop the search for the lines that have some
+        hay = lines["description_clean"].fillna("").astype(str).str.casefold()
+        # whole_words (a caller asks for it; the Charts page's own search does not): the words as whole words, side
+        # by side, the last with a plain ending allowed. Without it: every word anywhere in the line, inside longer
+        # words too. The answer's `method` says which search ran.
+        whole = body.get("whole_words") is True
+        if whole:
+            pattern = whole_words_pattern(text)
+            mask = hay.map(lambda h: pattern is not None and pattern.search(h) is not None)
+        else:
+            words = [w for w in re.split(r"\s+", text.casefold()) if w]
+            mask = hay.map(lambda h: all(w in h for w in words))
+        mask = mask.astype(bool)                       # no lines to look through is no match, not an error
         hits = lines[mask].sort_values("issued", ascending=False).head(limit)
         audit["rows"] = int(len(hits))
         return {"lines": [{
@@ -2368,7 +2401,8 @@ class Hub:
             "town": r.area, "invoice_no": r.invoice_no,
             "dollars": None if not money or r.line_cents is None or str(r.line_cents) == "<NA>"
             else round(int(r.line_cents) / 100, 2),
-        } for r in hits.itertuples()], "total_matches": int(mask.sum()), "method": "keyword"}
+        } for r in hits.itertuples()], "total_matches": int(mask.sum()),
+            "method": "whole_words" if whole else "keyword"}
 
     def op_put_counts(self, body, audit):
         """The website hands over measured counts for one product: invoice

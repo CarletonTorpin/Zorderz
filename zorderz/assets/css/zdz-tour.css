@@ -1,0 +1,309 @@
+/*
+ * Zorderz guided tour: the ring around what a step talks about, the step card and the Home Screen offer.
+ * Colours come from the --sys tokens, so light, dark and sunlight follow by themselves.
+ */
+
+.zdz-tour-ring {
+	position: fixed;
+	z-index: 2147483590; /* above app pages and their dialogs (Send as job sits at 100000) */
+	pointer-events: none;
+	border-radius: 14px;
+	box-shadow: 0 0 0 3px var(--sys-brand, #433FBD), 0 0 0 9999px rgba(10, 12, 40, .55);
+	transition: left .2s ease, top .2s ease, width .2s ease, height .2s ease;
+}
+
+.zdz-tour-veil {
+	position: fixed;
+	inset: 0;
+	z-index: 2147483590;
+	pointer-events: none;
+	background: rgba(10, 12, 40, .55);
+}
+
+.zdz-tour-ring[hidden],
+.zdz-tour-veil[hidden],
+.zdz-tour-card[hidden] {
+	display: none;
+}
+
+.zdz-tour-card {
+	position: fixed;
+	z-index: 2147483600;
+	box-sizing: border-box;
+	/* The card is measured right after it is moved or resized. A page-wide rule such as the theme's Reduce Motion
+	   one gives every property a tiny transition, and a measurement in the middle of one reads the old size. */
+	transition: none !important;
+	width: min(380px, calc(100vw - 24px));
+	max-height: calc(100vh - 24px);
+	overflow: auto;
+	padding: 16px 16px 12px;
+	border: 1px solid var(--sys-border-strong, #b8bdcc);
+	border-radius: 16px;
+	background: var(--sys-surface-raised, var(--sys-surface, #FFFFFF));
+	color: var(--sys-text, #1A1A1A);
+	box-shadow: var(--sys-shadow-lg, 0 12px 32px rgba(0, 0, 0, .25));
+	font-size: 15px;
+	line-height: 1.45;
+	text-align: left;
+}
+
+.zdz-tour-card:focus {
+	outline: none;
+}
+
+.zdz-tour-meta {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 6px;
+	color: var(--sys-text-sec, #5A6070);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .04em;
+	text-transform: uppercase;
+}
+
+.zdz-tour-title {
+	margin: 0 0 6px;
+	color: var(--sys-text, #1A1A1A);
+	font-size: 18px;
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+.zdz-tour-body {
+	margin: 0 0 10px;
+}
+
+/* A step's list: "What your role can do", "Your other apps". */
+.zdz-tour-list {
+	margin: -4px 0 10px;
+	padding: 0 0 0 1.2em;
+	font-size: 14px;
+	line-height: 1.4;
+}
+
+.zdz-tour-list li {
+	margin: 3px 0;
+}
+
+.zdz-tour-do {
+	margin: 0 0 10px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var(--sys-tint-info-bg, #EAF3FF);
+	color: var(--sys-tint-info-fg, #0B3D75);
+}
+
+.zdz-tour-do strong {
+	font-weight: 700;
+}
+
+.zdz-tour-note {
+	margin: 0 0 10px;
+	color: var(--sys-text-sec, #5A6070);
+	font-size: 13px;
+}
+
+.zdz-tour-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.zdz-tour-bar .zdz-tour-end {
+	margin-right: auto;
+}
+
+.zdz-tour-btn {
+	min-height: 40px;
+	padding: 8px 14px;
+	border: 1px solid var(--sys-border-strong, #B8BDCC);
+	border-radius: 10px;
+	background: var(--sys-surface, #FFFFFF);
+	color: var(--sys-text, #1A1A1A);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.zdz-tour-btn-primary {
+	border-color: var(--sys-brand, #433FBD);
+	background: var(--sys-brand, #433FBD);
+	color: var(--sys-text-brand, #FFFFFF);
+}
+
+.zdz-tour-btn:focus-visible,
+.zdz-tour-link:focus-visible {
+	outline: 3px solid var(--sys-focus, #7D87FB);
+	outline-offset: 2px;
+}
+
+.zdz-tour-link {
+	padding: 8px 4px;
+	border: 0;
+	background: none;
+	color: var(--sys-text-sec, #5A6070);
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+/* Hide: the card folds to a tab in the corner while the person works; the ring stays. */
+.zdz-tour-meta-right {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.zdz-tour-fold {
+	padding: 2px 8px;
+	border: 1px solid var(--sys-border, #D0D4E0);
+	border-radius: 8px;
+	background: none;
+	color: var(--sys-text-sec, #5A6070);
+	font: inherit;
+	letter-spacing: inherit;
+	text-transform: inherit;
+	cursor: pointer;
+}
+
+.zdz-tour-tab {
+	display: none;
+	padding: 8px 12px;
+	border: 0;
+	border-radius: 10px;
+	background: var(--sys-brand, #433FBD);
+	color: var(--sys-text-brand, #FFFFFF);
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.zdz-tour-card.is-min {
+	width: auto;
+	padding: 6px;
+	border-radius: 14px;
+}
+
+.zdz-tour-card.is-min > * {
+	display: none;
+}
+
+.zdz-tour-card.is-min > .zdz-tour-tab {
+	display: block;
+}
+
+.zdz-tour-fold:focus-visible,
+.zdz-tour-tab:focus-visible {
+	outline: 3px solid var(--sys-focus, #7D87FB);
+	outline-offset: 2px;
+}
+
+/* The offer on the Home Screen. */
+.zdz-tour-offer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 16px;
+	margin: 0 0 16px;
+	padding: 14px 16px;
+	border: 1px solid var(--sys-border, #D0D4E0);
+	border-left: 4px solid var(--sys-brand, #433FBD);
+	border-radius: 14px;
+	background: var(--sys-surface, #FFFFFF);
+	color: var(--sys-text, #1A1A1A);
+}
+
+.zdz-tour-offer-text {
+	flex: 1 1 260px;
+	min-width: 0;
+}
+
+.zdz-tour-offer-title {
+	margin: 0 0 2px;
+	font-size: 16px;
+	font-weight: 700;
+}
+
+.zdz-tour-offer-body {
+	margin: 0;
+	color: var(--sys-text-sec, #5A6070);
+	font-size: 14px;
+}
+
+.zdz-tour-offer .zdz-tour-bar {
+	justify-content: flex-start;
+}
+
+/* A short message after the tour is paused. */
+.zdz-tour-toast {
+	position: fixed;
+	left: 50%;
+	bottom: 20px;
+	z-index: 2147483600;
+	max-width: calc(100vw - 24px);
+	padding: 10px 14px;
+	border-radius: 10px;
+	background: var(--sys-text, #1A1A1A);
+	color: var(--sys-bg, #FFFFFF);
+	font-size: 14px;
+	transform: translateX(-50%);
+}
+
+@media (max-width: 640px) {
+	.zdz-tour-card:not(.is-min) {
+		top: auto !important;
+		right: 12px;
+		bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+		left: 12px !important;
+		width: auto !important;
+		max-height: 60vh;
+		overflow-y: auto;
+	}
+
+	.zdz-tour-card.is-top:not(.is-min) {
+		top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+		bottom: auto;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.zdz-tour-ring {
+		transition: none;
+	}
+}
+
+/* Settings → Guided tour: the row's buttons wrap on a narrow screen, inside the row, never past its edge. */
+.zdz-tour-settings-actions,
+.zdz-consent-row .zdz-tour-settings-actions {
+	display: flex;
+	flex: 1 1 auto;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+	max-width: 100%;
+}
+
+/* Settings → Guided tour, for an administrator: the team tours' switch, then a link per role to see its tour. */
+.zdz-tour-previews {
+	padding: 4px 0 8px;
+}
+
+.zdz-tour-previews-lead {
+	margin: 0 0 8px;
+	color: var(--sys-text-sec, #5A6070);
+	font-size: 13px;
+}
+
+.zdz-tour-previews-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.zdz-tour-previews-list .zdz-btn {
+	text-decoration: none;
+}

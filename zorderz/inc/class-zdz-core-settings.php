@@ -413,7 +413,7 @@ class ZDZ_Core_Settings {
 			'layout_style' => [
 				'type'  => 'string',
 				'label' => 'Layout Style',
-				'hint'  => 'How you organize notes on paper — boxed unit numbers, section separators, etc.',
+				'hint'  => 'How you organize notes on paper: boxed unit numbers, section separators, etc.',
 			],
 			'service_types' => [
 				'type'  => 'string_array',

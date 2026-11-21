@@ -584,7 +584,7 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 				$sig = Zjob_Project_Signal::table();
 				$sql = "SELECT wi.* FROM {$wi} wi LEFT JOIN {$sig} sig ON sig.project_id = wi.id WHERE "
 					. implode( ' AND ', $where )
-					. ' ORDER BY COALESCE(sig.signal, 0) DESC, wi.created_at DESC LIMIT ' . $limit;
+					. ' ORDER BY COALESCE(sig.`signal`, 0) DESC, wi.created_at DESC LIMIT ' . $limit;
 			} else {
 				$sql = "SELECT wi.* FROM {$wi} wi WHERE " . implode( ' AND ', $where ) . ' ORDER BY wi.created_at DESC LIMIT ' . $limit;
 			}
@@ -842,6 +842,25 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 			$name = substr( 'zjobprj_' . md5( $key ), 0, 64 ); // GET_LOCK names cap at 64 chars.
 			$got  = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 2 ) );
 			return '1' === (string) $got;
+		}
+
+		/**
+		 * Who made the estimate: its row's created_by, carried onto the Project it mints as its originator.
+		 * 0 when the Estimates app is not here, the row is gone or nobody is recorded: the Project is then
+		 * made with no originator, as a Project from any other system is.
+		 *
+		 * @param int $estimate_id
+		 * @return int a user id, or 0.
+		 */
+		private static function estimate_created_by( int $estimate_id ): int {
+			global $wpdb;
+			if ( $estimate_id <= 0 || ! isset( $wpdb ) || ! class_exists( 'ZEST_DB' ) || ! method_exists( 'ZEST_DB', 'estimates_table' ) ) {
+				return 0;
+			}
+			$table = ZEST_DB::estimates_table();
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is the Estimates app's own constant name.
+			$by = $wpdb->get_var( $wpdb->prepare( "SELECT created_by FROM {$table} WHERE id = %d", $estimate_id ) );
+			return max( 0, (int) $by );
 		}
 
 		/** Release the advisory mint lock. Idempotent / harmless if not held. */

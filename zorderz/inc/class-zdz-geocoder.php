@@ -18,7 +18,7 @@
  *     a network call — a privacy cost the platform deliberately avoids by default.
  *     Core ships NO API key and makes NO network call. With nothing configured,
  *     resolve_address() returns null.
- *   - IDENTITY-CONFIGURABLE. A tenant opts in to networked resolution and names a
+ *   - IDENTITY-CONFIGURABLE. A business opts in to networked resolution and names a
  *     provider ENDPOINT + a `secret://` credential reference through the
  *     `connections` Identity pack (resolved via filters below). No provider name
  *     is compiled into Core.
@@ -317,7 +317,7 @@ class ZDZ_Geocoder {
 		$s = trim( (string) $s, " \t\n\r\0\x0B," );
 		$abbr = self::abbreviations();
 		if ( $abbr && '' !== $s ) {
-			// Whole words only: " street " -> " st ", so "Streetman" is never touched.
+			// Whole words only: " street " -> " st ", so "Streetcar" is never touched.
 			$s = trim( preg_replace( '/\s+/', ' ', strtr( ' ' . str_replace( ',', ' , ', $s ) . ' ', $abbr ) ) );
 			$s = str_replace( ' ,', ',', $s );
 		}

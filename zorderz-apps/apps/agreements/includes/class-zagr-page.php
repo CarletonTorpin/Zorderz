@@ -114,12 +114,12 @@ class ZAGR_Page {
 			$v = (string) ( $ramp[ $k ] ?? '' );
 			return preg_match( '/^#[0-9A-Fa-f]{6}$/', $v ) ? strtolower( $v ) : $fallback;
 		};
-		$css = ':root{--paper-b1:' . $c( '700', '#162d4a' ) . ';--paper-b2:' . $c( '600', '#1e3a5f' ) . ';--paper-b3:' . $c( '500', '#2c5f8a' )
-			. ';--paper-b4:' . $c( '400', '#4796f7' ) . ';--paper-b5:' . $c( '300', '#7ab3ff' )
-			. ';--paper-c1:' . $c( '800', '#0f1f35' ) . ';--paper-c2:' . $c( '700', '#162d4a' ) . ';--paper-c3:' . $c( '600', '#1e3a5f' )
-			. ';--paper-c4:' . $c( '500', '#2c5f8a' ) . ';--paper-c5:' . $c( '500', '#2c5f8a' )
-			. ';--paper-brand:' . $c( '600', '#1e3a5f' ) . ';--paper-soft:' . $c( '50', '#ebf5ff' ) . ';--paper-hello:' . $c( '500', '#2c5f8a' ) . '}'
-			. '@media (prefers-color-scheme: dark){:root{--paper-brand:' . $c( '200', '#adcfff' ) . ';--paper-soft:' . $c( '900', '#091526' ) . ';--paper-hello:' . $c( '300', '#7ab3ff' ) . '}}';
+		$css = ':root{--paper-b1:' . $c( '700', '#36339c' ) . ';--paper-b2:' . $c( '600', '#433fbd' ) . ';--paper-b3:' . $c( '500', '#5150d6' )
+			. ';--paper-b4:' . $c( '400', '#7d87fb' ) . ';--paper-b5:' . $c( '300', '#b1bcff' )
+			. ';--paper-c1:' . $c( '800', '#282876' ) . ';--paper-c2:' . $c( '700', '#36339c' ) . ';--paper-c3:' . $c( '600', '#433fbd' )
+			. ';--paper-c4:' . $c( '500', '#5150d6' ) . ';--paper-c5:' . $c( '500', '#5150d6' )
+			. ';--paper-brand:' . $c( '600', '#433fbd' ) . ';--paper-soft:' . $c( '50', '#f5f6fe' ) . ';--paper-hello:' . $c( '500', '#5150d6' ) . '}'
+			. '@media (prefers-color-scheme: dark){:root{--paper-brand:' . $c( '200', '#d3daff' ) . ';--paper-soft:' . $c( '900', '#1D1D56' ) . ';--paper-hello:' . $c( '300', '#b1bcff' ) . '}}';
 		return $css;
 	}
 

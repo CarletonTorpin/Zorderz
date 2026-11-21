@@ -415,7 +415,7 @@ class ZDH_DB {
 		// tie the screenshots to the drop in the media library
 		foreach ( $data['attachment_ids'] as $aid ) {
 			update_post_meta( (int) $aid, '_zdh_drop_id', $drop_id );
-			wp_update_post( array( 'ID' => (int) $aid, 'post_title' => sprintf( 'Door hanger %s #%d — %s %s', 'planned' === $data['status'] ? 'plan' : 'drop', $drop_id, $data['drop_date'], $data['streets_summary'] ) ) );
+			wp_update_post( array( 'ID' => (int) $aid, 'post_title' => sprintf( 'Door hanger %s #%d: %s %s', 'planned' === $data['status'] ? 'plan' : 'drop', $drop_id, $data['drop_date'], $data['streets_summary'] ) ) );
 		}
 		return $drop_id;
 	}
@@ -961,7 +961,7 @@ class ZDH_DB {
 		if ( 2 === $d && $long >= 8 ) {
 			return 3 + $type_pen;
 		}
-		// sounds the same ("Northfeild" / "Northfield", "Tuskan" / "Tuscan"): same sound-code (or its start), first letter equal
+		// sounds the same ("Lindenfeild" / "Lindenfield", "Brookvayle" / "Brookvale"): same sound-code (or its start), first letter equal
 		if ( $long >= 6 && $a[0] === $b[0] && $d <= 4 ) {
 			$ma = metaphone( $a ); $mb = metaphone( $b );
 			if ( $ma !== '' && strlen( $ma ) >= 4 && ( $ma === $mb || 0 === strpos( $mb, $ma ) ) ) {

@@ -1073,7 +1073,7 @@ class ZSM_Codescan {
 				'installed_version' => '',
 				'fixed_version'     => '',
 				'cve'               => '',
-				'title'             => $h['message'] . ' — ' . $h['file'] . ( $h['line'] ? ':' . $h['line'] : '' ) . ' [' . $h['rule'] . ']',
+				'title'             => $h['message'] . ' in ' . $h['file'] . ( $h['line'] ? ':' . $h['line'] : '' ) . ' [' . $h['rule'] . ']',
 				'severity'          => $h['severity'],
 				'cvss_score'        => null,
 				'context_note'      => __( 'Found by reading your own code on this site (the Security Monitor\'s code check).', 'zorderz' ),

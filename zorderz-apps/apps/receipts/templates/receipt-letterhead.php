@@ -34,8 +34,8 @@ if ( ! function_exists( 'zrcpt_letterhead_identity' ) ) {
         $logo = '';
         $addr = '';
         $phone = '';
-        $primary = '#1E3A5F';
-        $accent  = '#2C5F8A';
+        $primary = '#433FBD';
+        $accent  = '#5150D6';
         if ( class_exists( 'ZDZ_Business_Profile' ) ) {
             $name    = ZDZ_Business_Profile::name();
             $logo    = ZDZ_Business_Profile::logo_html( 'wide', 'dark', 40 );

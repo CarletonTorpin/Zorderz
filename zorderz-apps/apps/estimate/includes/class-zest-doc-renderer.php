@@ -32,13 +32,13 @@ class ZEST_Doc_Renderer {
 			: htmlspecialchars( (string) $s, ENT_QUOTES, 'UTF-8' );
 	}
 
-	/** Money like FreshBooks: "$1,080.00", "−$175.00", or (dollar=false) "1,080.00". */
+	/** Money as billing paperwork prints it: "$1,080.00", "−$175.00", or (dollar=false) "1,080.00"; the business's sign. */
 	private static function money( $v, $dollar = true ) {
 		$v   = (float) $v;
 		$neg = $v < 0;
 		$s   = number_format( abs( $v ), 2 );
 		if ( $dollar ) {
-			$s = '$' . $s;
+			$s = ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . $s;
 		}
 		if ( $neg ) {
 			$s = "\u{2212}" . $s; // U+2212 MINUS SIGN, matching the source docs
@@ -351,7 +351,7 @@ table.items tbody td.desc{text-align:left}
 		if ( '' === $date || '0000-00-00' === $date ) {
 			$date = substr( (string) ( $r['created_at'] ?? '' ), 0, 10 );
 		}
-		$date_disp = $date ? date( 'm/d/Y', strtotime( $date ) ) : '';
+		$date_disp = $date ? date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format( true ) : 'm/d/Y' ), strtotime( $date ) ) : '';
 
 		$terms = (string) ( $r['terms'] ?? '' );
 		if ( '' === $terms ) {
@@ -486,7 +486,7 @@ table.items tbody td.desc{text-align:left}
 		$zip  = trim( (string) ( $r['customer_zip'] ?? '' ) );
 		$cl   = trim( $city . ( '' !== $st ? ', ' . $st : '' ) . ( '' !== $zip ? '  ' . $zip : '' ), ' ,' );
 		$push( $cl );
-		$fmt = function ( $d ) { $d = (string) $d; return ( $d && '0000-00-00' !== $d ) ? date( 'm/d/Y', strtotime( $d ) ) : ''; };
+		$fmt = function ( $d ) { $d = (string) $d; return ( $d && '0000-00-00' !== $d ) ? date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format( true ) : 'm/d/Y' ), strtotime( $d ) ) : ''; }; // the business's date format, as paper writes it
 		$terms = (string) ( $r['terms'] ?? '' );
 		if ( '' === $terms ) {
 			$terms = (string) apply_filters( 'zdz_doc_terms', '' );
@@ -708,7 +708,7 @@ table.items tbody td.desc{text-align:left}
 		$aurl   = $ctx['asset_base'] ?? ( defined( 'ZEST_URL' ) ? ZEST_URL : '' );
 		$aver   = $ctx['asset_ver'] ?? ( function_exists( 'zest_asset_ver' ) ? zest_asset_ver( 'assets/js/import.js' ) : ( defined( 'ZEST_VERSION' ) ? ZEST_VERSION : '1' ) );
 
-		$fmt = function ( $d ) { $d = (string) $d; return ( $d && '0000-00-00' !== $d ) ? date( 'm/d/Y', strtotime( $d ) ) : ''; };
+		$fmt = function ( $d ) { $d = (string) $d; return ( $d && '0000-00-00' !== $d ) ? date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format( true ) : 'm/d/Y' ), strtotime( $d ) ) : ''; }; // the business's date format, as paper writes it
 		$cust = function ( $r ) {
 			$n = trim( (string) ( $r['customer_name'] ?? '' ) );
 			$o = trim( (string) ( $r['customer_org'] ?? '' ) );
@@ -799,7 +799,7 @@ table.items tbody td.desc{text-align:left}
 			. '</div>'
 			. '<div id="imp-status" class="impstatus" hidden></div>'
 			. '<div id="imp-manual" class="manual" hidden>'
-			. '<p class="hint">Little or no text was found — this PDF may be scanned images. Paste the document text here (or type the details), then parse.</p>'
+			. '<p class="hint">Little or no text was found: this PDF may be scanned images. Paste the document text here (or type the details), then parse.</p>'
 			. '<textarea id="imp-text" rows="8" placeholder="Paste the estimate or invoice text here…"></textarea>'
 			. '<div><button class="btn primary" id="imp-parse-text">Parse pasted text</button></div>'
 			. '</div>'

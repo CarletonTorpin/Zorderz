@@ -8,7 +8,6 @@
  * instead of showing a dead end.
  *
  * @package Zorderz
- * @version 2.14.3.1
  */
 
 if ( is_user_logged_in() && file_exists( get_theme_file_path( 'front-page.php' ) ) ) {

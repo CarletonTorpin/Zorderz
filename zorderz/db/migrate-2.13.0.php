@@ -16,7 +16,6 @@
  * checks `zdz_theme_db_version` option, uses dbDelta.
  *
  * @package Zorderz
- * @since   2.13.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

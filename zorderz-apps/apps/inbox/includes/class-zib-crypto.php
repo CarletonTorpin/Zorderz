@@ -6,7 +6,7 @@
  * fallback) but with a SEPARATE key domain ('zib-content-v1'), so mail bodies
  * and OAuth tokens never share a key. Used to encrypt message BODIES at rest;
  * subject / snippet / participants stay plaintext in the sealed, Gatekeeper-only
- * tables so MySQL FULLTEXT search stays fast (the D4 hybrid the owner chose).
+ * tables so MySQL FULLTEXT search stays fast (a deliberate hybrid).
  *
  * Threat model: a DB-only compromise (backup leak, cross-plugin SQLi, DB-level
  * access) yields ciphertext for every mail BODY — the bulk of the sensitive

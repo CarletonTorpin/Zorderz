@@ -443,7 +443,7 @@ class ZSM_Admin {
 			printf( '<td>%s</td>', esc_html( (string) $f['plane'] ) );
 			printf( '<td><strong>%1$s</strong><br><span style="color:#777">%2$s</span></td>', esc_html( (string) ( $f['name'] ? $f['name'] : $f['slug'] ) ), esc_html( (string) $f['slug'] ) );
 			printf( '<td>%s</td>', esc_html( (string) $f['installed_version'] ) );
-			printf( '<td>%s</td>', esc_html( (string) ( $f['fixed_version'] ? $f['fixed_version'] : '—' ) ) );
+			printf( '<td>%s</td>', esc_html( (string) ( $f['fixed_version'] ? $f['fixed_version'] : '–' ) ) );
 			echo '<td>' . esc_html( (string) $f['title'] );
 			if ( ! empty( $f['context_note'] ) ) {
 				echo '<br><em style="color:#666;font-size:11px">' . esc_html( (string) $f['context_note'] ) . '</em>';
@@ -452,7 +452,7 @@ class ZSM_Admin {
 			if ( ! empty( $f['ref_url'] ) ) {
 				echo '<a href="' . esc_url( (string) $f['ref_url'] ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( (string) ( $f['cve'] ? $f['cve'] : __( 'reference', 'zorderz' ) ) ) . '</a>';
 			} else {
-				echo esc_html( (string) ( $f['cve'] ? $f['cve'] : '—' ) );
+				echo esc_html( (string) ( $f['cve'] ? $f['cve'] : '–' ) );
 			}
 			echo '</td>';
 			printf( '<td>%s</td>', esc_html( (string) $f['status'] ) );
@@ -508,7 +508,7 @@ class ZSM_Admin {
 					/* translators: %s: number of components */
 					$what = sprintf( __( 'baseline recorded for %s components', 'zorderz' ), $e['to'] );
 			}
-			printf( '<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td></tr>', esc_html( (string) $when ), esc_html( (string) ( $e['name'] ? $e['name'] : '—' ) ), esc_html( (string) $what ) );
+			printf( '<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td></tr>', esc_html( (string) $when ), esc_html( (string) ( $e['name'] ? $e['name'] : '–' ) ), esc_html( (string) $what ) );
 		}
 		echo '</tbody></table>';
 	}

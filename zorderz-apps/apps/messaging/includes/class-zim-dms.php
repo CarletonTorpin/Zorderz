@@ -2,7 +2,7 @@
 /**
  * ZIM_DMs
  *
- * One-to-one direct messages. No group DMs in first release.
+ * One-to-one direct messages. No group DMs.
  *
  * DETERMINISTIC CONVERSATION ID:
  *   Opening a DM from user 12 ↔ 47 always produces the same conversation_id,
@@ -12,7 +12,7 @@
  * On first open we create the conversation row + two member rows.
  * Subsequent opens just return the existing id.
  *
- * first release LIMIT: no group DMs. If three people need to talk, they use a channel.
+ * LIMIT: no group DMs. If three people need to talk, they use a channel.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

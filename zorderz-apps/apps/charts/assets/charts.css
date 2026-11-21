@@ -264,7 +264,7 @@ html.zch-full-open, html.zch-full-open body { overflow: hidden; }
 .zch-trail-sep { color: var(--zch-muted, #646970); }
 .zch-floor { margin: 10px 0 4px; padding: 10px 12px 12px; border: 1px solid var(--sys-border, #dcdcde);
   border-left: 4px solid var(--sys-brand, #2271b1); border-radius: 12px; background: var(--sys-surface-subtle, rgba(128,128,128,.06)); }
-.zch-floor-n { padding: 1px 8px; border-radius: 999px; background: var(--sys-brand, #2271b1); color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.zch-floor-n { padding: 1px 8px; border-radius: 999px; background: var(--sys-brand, #2271b1); color: var(--sys-text-brand, #FFFFFF); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .zch-floor .zch-chart .zch-canvas { height: 240px; }
 .zch-floor-fresh { margin: 0 0 6px; font-size: 13px; color: var(--zch-muted, #646970); }
 .zch-flash { animation: zch-flash 1.6s ease-out; }

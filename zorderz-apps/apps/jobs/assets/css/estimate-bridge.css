@@ -13,21 +13,21 @@
 /* Injected history-row button (inherits .zest-btn; add a teal accent). */
 .zjobx-send {
 	color: var(--sys-text-brand, #FFFFFF) !important;
-	background: #0E9F8E !important;
-	border-color: #0E9F8E !important;
+	background: var(--sys-brand, #5150D6) !important;
+	border-color: var(--sys-brand, #5150D6) !important;
 	white-space: nowrap;
 }
-.zjobx-send:hover { background: #0B8073 !important; border-color: #0B8073 !important; }
+.zjobx-send:hover { background: var(--sys-brand-hover, #433FBD) !important; border-color: var(--sys-brand-hover, #433FBD) !important; }
 .zjobx-send-ic { font-weight: 700; }
 
 /* Review/edit view button (sits next to the estimate send control). */
 .zjobx-send-review {
 	margin-left: 8px;
-	color: #FFFFFF !important;
-	background: #0E9F8E !important;
-	border-color: #0E9F8E !important;
+	color: var(--sys-text-brand, #FFFFFF) !important;
+	background: var(--sys-brand, #5150D6) !important;
+	border-color: var(--sys-brand, #5150D6) !important;
 }
-.zjobx-send-review:hover { background: #0B8073 !important; border-color: #0B8073 !important; }
+.zjobx-send-review:hover { background: var(--sys-brand-hover, #433FBD) !important; border-color: var(--sys-brand-hover, #433FBD) !important; }
 
 /* ==========================================================================
  * MODAL
@@ -82,7 +82,7 @@
 }
 .zjobx-table td { padding: 8px 6px; border-bottom: 1px solid var(--sys-border, #E2E8F0); vertical-align: middle; }
 .zjobx-c-check { width: 34px; text-align: center; }
-.zjobx-pick { width: 18px; height: 18px; accent-color: #0E9F8E; }
+.zjobx-pick { width: 18px; height: 18px; accent-color: var(--sys-brand, #5150D6); }
 .zjobx-c-desc { color: var(--sys-text, #0F172A); }
 .zjobx-sub { color: var(--sys-text-sec, #475569); }
 .zjobx-meta { display: block; font-size: var(--ref-font-xs, 11px); color: var(--sys-text-ter, #64748B); margin-top: 2px; }
@@ -132,7 +132,7 @@
 }
 .zjobx-note { resize: vertical; line-height: 1.5; }
 .zjobx-assignee:focus, .zjobx-note:focus, .zjobx-comp:focus {
-	outline: none; border-color: #0E9F8E; box-shadow: 0 0 0 2px rgba(14, 159, 142, 0.2);
+	outline: none; border-color: var(--sys-brand, #5150D6); box-shadow: 0 0 0 2px rgba(81, 80, 214, 0.2);
 }
 
 .zjobx-foot {
@@ -151,8 +151,8 @@
 }
 .zjobx-cancel { background: var(--sys-bg-alt, #F1F5F9); color: var(--sys-text, #0F172A); border-color: var(--sys-border, #E2E8F0); }
 .zjobx-cancel:hover { border-color: var(--sys-border-strong, #CBD5E1); }
-.zjobx-send-go { background: #0E9F8E; color: #FFFFFF; border-color: #0E9F8E; }
-.zjobx-send-go:hover:not(:disabled) { background: #0B8073; border-color: #0B8073; }
+.zjobx-send-go { background: var(--sys-brand, #5150D6); color: var(--sys-text-brand, #FFFFFF); border-color: var(--sys-brand, #5150D6); }
+.zjobx-send-go:hover:not(:disabled) { background: var(--sys-brand-hover, #433FBD); border-color: var(--sys-brand-hover, #433FBD); }
 .zjobx-send-go:disabled { opacity: 0.55; cursor: default; }
 
 /* Toast for load errors. */

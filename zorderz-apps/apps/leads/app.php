@@ -97,19 +97,18 @@ define( 'ZL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZL_TRANSIENT_TTL', 14400 );
 
 /**
- * v2.1.0 — Tunable enrichment concurrency caps (SPEED, no result change).
+ * Tunable enrichment concurrency caps (SPEED, no result change).
  *
  * Concurrency only affects how FAST the background pipeline runs; it never
  * changes which leads are selected, how they're scored, or what's written to
- * Nutshell. These caps were previously hardcoded (Nutshell=8, FreshBooks=4);
- * raising them modestly speeds up enrichment on healthy connections. Each is
- * overridable per-environment via a filter (and clamped to a safe ceiling by
- * the dispatcher, which also halves on HTTP 429). Set conservatively if your
- * APIs rate-limit aggressively.
+ * the CRM. Raising these caps modestly speeds up enrichment on healthy
+ * connections. Each is overridable per-environment via a filter (and clamped
+ * to a safe ceiling by the dispatcher, which also halves on HTTP 429). Set
+ * conservatively if your APIs rate-limit aggressively.
  *
- *   zlg_nutshell_parallel  — bulk Nutshell email lookups   (was 8 → 10)
- *   zlg_fb_parallel        — FreshBooks client fetches      (was 4 → 6)
- *   zlg_poe_parallel       — AI classification (unchanged 4, 429-aware)
+ *   zlg_nutshell_parallel  — bulk Nutshell email lookups   (default 10)
+ *   zlg_fb_parallel        — FreshBooks client fetches      (default 6)
+ *   zlg_poe_parallel       — AI classification (default 4; halves on HTTP 429)
  */
 if ( ! defined( 'ZL_NUTSHELL_PARALLEL' ) ) { define( 'ZL_NUTSHELL_PARALLEL', 10 ); }
 if ( ! defined( 'ZL_FB_PARALLEL' ) )       { define( 'ZL_FB_PARALLEL', 6 ); }
@@ -172,8 +171,7 @@ function zl_single_word_product_terms(): array {
 /**
  * Service-area territory map (postal code → territory code).
  *
- * Replaces the old hardcoded zip table and its "Strict Territory Rule". Ships EMPTY, and an
- * empty map means ALLOW-ALL: with nothing configured, no lead is ever dropped for being out
+ * Ships EMPTY, and an empty map means ALLOW-ALL: with nothing configured, no lead is ever dropped for being out
  * of area. The map is admin/settings data (`zl_territories` option) and/or the
  * `zl_zip_territories` filter. A lead whose postal code is not in a NON-empty map is never
  * silently skipped — the caller records a logged disposition (see
@@ -214,9 +212,8 @@ function zl_coverage_configured(): bool {
  *
  * Used only to make an empty-result message read well ("Candidates were in <name> …").
  * Ships EMPTY: with nothing configured, the legibility layer shows the territory CODE
- * itself — which is already tenant config (from the coverage map / roster), never a
- * hardcoded place literal. A tenant supplies friendlier names via the filter; the
- * territories Identity Pack is the canonical home. NO place name is ever compiled in.
+ * itself (from the coverage map / roster). A business supplies friendlier names via the
+ * filter; the territories Identity Pack is the canonical home.
  *
  * @return array<string,string> territory_code => display_name   (empty = show codes)
  */
@@ -665,18 +662,16 @@ function zl_maybe_upgrade() {
 
     // v1.2.0 migration — extend lookback option and add new filter columns
     if ( version_compare( $db_ver, '1.2.0', '<' ) ) {
-        // Extend lookback to support up to "all history"
+        // Extend lookback to support the longest window (all history)
         $current_lookback = (int) get_option( 'zl_lookback_days', 730 );
         // No forced change — just ensure new options are available via UI
         error_log( 'ZL v1.2.0 migration: Schema updated with new filter columns, extended lookback support.' );
     }
 
-    // NOTE: the legacy v1.1.2 migration is intentionally omitted. It hardcoded a specific
-    // territory-code alias and force-overwrote the admin's stored AI model. Both are
-    // anti-patterns here: a territory alias is now DECLARED tenant data (the territory map /
-    // zl_zip_territories filter), and the AI model is a tenant choice the platform never
-    // rewrites (a retired model is forward-resolved at read time via a settings alias table,
-    // never mutated in place).
+    // No migration rewrites a territory alias or the admin's stored AI model: a territory
+    // alias is the business's declared data (the territory map / zl_zip_territories filter),
+    // and the AI model is the business's choice the platform never rewrites (a retired model
+    // is forward-resolved at read time via a settings alias table, never mutated in place).
 
     // ── Failsafe: Verify all 3 required tables exist before stamping version ──
     $required_tables = array( $t_batches, $t_leads, $t_history );
@@ -785,7 +780,7 @@ add_action( 'after_setup_theme', function() {
                     'nm'          => 'Leads',
                     'icon'        => 'target',
                     'cat'         => 'Sales',
-                    'cc'          => '#10B981',
+                    'cc'          => '#E69F00',
                     'desc'        => 'Weekly sales lead generation.',
                     'roles'       => (array) apply_filters( 'zl_app_roles', [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales' ] ),
                     'bridge_type' => 'inline_widget',
@@ -990,7 +985,7 @@ add_action( 'after_setup_theme', function() {
                                         ?>
                                     </span>
                                 <?php else : ?>
-                                    <span class="zl-w-leadbanner-label zl-w-leadbanner-clear-label">You’re all caught up — no leads waiting</span>
+                                    <span class="zl-w-leadbanner-label zl-w-leadbanner-clear-label">You’re all caught up; no leads waiting</span>
                                 <?php endif; ?>
                             </span>
                             <?php if ( $banner_has_work ) : ?>
@@ -1044,7 +1039,7 @@ add_action( 'after_setup_theme', function() {
                                     <select id="zl-filter-salesperson"></select>
                                     <!-- v2.6.0: the roster is Nutshell-linked reps only, by design -->
                                     <p class="zl-w-field-hint">Only reps with linked Nutshell accounts are listed.</p>
-                                    <p class="zl-w-field-hint zl-w-field-hint-warn" id="zl-sp-unlinked-hint" hidden>Your Nutshell account isn’t linked — ask an admin to add your code on the Leads settings page.</p>
+                                    <p class="zl-w-field-hint zl-w-field-hint-warn" id="zl-sp-unlinked-hint" hidden>Your Nutshell account isn’t linked: ask an admin to add your code on the Leads settings page.</p>
                                 </div>
                                 <?php endif; ?>
 
@@ -1065,8 +1060,8 @@ add_action( 'after_setup_theme', function() {
                                 <div class="zl-w-filter-row zl-w-filter-row-pair" id="zl-row-spend">
                                     <label>Spend Range</label>
                                     <div class="zl-w-spend-inputs">
-                                        <span>$</span><input type="number" id="zl-filter-spend-min" min="0" step="50" placeholder="Min" />
-                                        <span>to $</span><input type="number" id="zl-filter-spend-max" min="0" step="50" placeholder="Max" />
+                                        <span><?php echo esc_html( class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '$' ) : '$' ); ?></span><input type="number" id="zl-filter-spend-min" min="0" step="50" placeholder="Min" />
+                                        <span>to <?php echo esc_html( class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '$' ) : '$' ); ?></span><input type="number" id="zl-filter-spend-max" min="0" step="50" placeholder="Max" />
                                     </div>
                                 </div>
                                 <?php if ( $gender_demographic ) : /* OFF by default — ethics/product review (zl_gender_demographic_enabled) */ ?>
@@ -1185,7 +1180,7 @@ add_action( 'after_setup_theme', function() {
                     'nm'          => 'Leads',
                     'icon'        => 'target',
                     'cat'         => 'Sales',
-                    'cc'          => '#10B981',
+                    'cc'          => '#E69F00',
                     'desc'        => 'Weekly sales lead generation.',
                     'roles'       => (array) apply_filters( 'zl_app_roles', [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales' ] ),
                     'bridge_type' => 'iframe',

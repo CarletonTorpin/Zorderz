@@ -98,7 +98,7 @@ class ZEST_Sale_Form {
 				if ( (int) $dp['cap'] <= 0 || $cents !== (int) $dp['cap'] ) {
 					return (int) $dp['cap'] > 0
 						/* translators: %s: the form's downpayment */
-						? $no( 'down', sprintf( __( 'The downpayment on this form can only be $%s (the business\'s deposit, within the deposit limit), or left for you to write.', 'zorderz' ), self::money( (int) $dp['cap'] ) ) )
+						? $no( 'down', sprintf( __( 'The downpayment on this form can only be %s (the business\'s deposit, within the deposit limit), or left for you to write.', 'zorderz' ), ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . self::money( (int) $dp['cap'] ) ) )
 						: $no( 'down', __( 'No downpayment is set for this business, so leave it for you to write.', 'zorderz' ) );
 				}
 				$down = $cents;
@@ -475,7 +475,7 @@ class ZEST_Sale_Form {
 			$usd = max( $usd, self::cents( $doc['deposit']['amount'] ?? 0 ) );
 		}
 		if ( $pct > 0 || $usd > 0 ) {
-			$words[] = array( 'where' => "The billing system's deposit request", 'text' => $usd > 0 ? '$' . self::money( $usd ) : self::qty( $pct ) . '%' );
+			$words[] = array( 'where' => "The billing system's deposit request", 'text' => $usd > 0 ? ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . self::money( $usd ) : self::qty( $pct ) . '%' );
 		}
 		return array( 'figures' => $figures, 'words' => $words, 'all' => $all );
 	}

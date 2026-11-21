@@ -47,6 +47,77 @@ class ZPREP_Admin {
 				'default'           => ZPREP_Settings::defaults(),
 			)
 		);
+		// How the business numbers a building's sides (one line the cut-list reader is told; empty keeps Core's).
+		register_setting(
+			'zprep_settings_group',
+			ZPREP_Settings::SIDES_OPT,
+			array(
+				'sanitize_callback' => array( 'ZPREP_Settings', 'clean_side_convention' ),
+				'default'           => '',
+			)
+		);
+		// Internal orders: what an order may be for, the sheet the form starts from, what the material costs.
+		register_setting(
+			'zprep_settings_group',
+			ZPREP_Settings::INTERNAL_OPT,
+			array(
+				'sanitize_callback' => array( __CLASS__, 'sanitize_internal_orders' ),
+				'default'           => array(),
+			)
+		);
+		register_setting(
+			'zprep_settings_group',
+			ZPREP_Settings::COST_RATES_OPT,
+			array(
+				'sanitize_callback' => array( __CLASS__, 'sanitize_cost_rates' ),
+				'default'           => array(),
+			)
+		);
+	}
+
+	/**
+	 * The internal-orders settings as stored: { purposes, default_sheet }. From the settings page the purposes come
+	 * as lines of "key,CODE,Label" and the sheet as two boxes; a value already in the stored shape (an Identity Pack
+	 * writes one) is cleaned the same way. Whatever does not read as a purpose or a sheet is left out.
+	 */
+	public static function sanitize_internal_orders( $input ): array {
+		$input = is_array( $input ) ? $input : array();
+		if ( isset( $input['purposes_text'] ) ) {
+			$list = array();
+			foreach ( preg_split( '/\r\n|\r|\n/', (string) $input['purposes_text'] ) as $line ) {
+				$parts = array_map( 'trim', explode( ',', $line, 3 ) ); // the label comes last, so it may hold a comma
+				if ( 3 === count( $parts ) ) {
+					$list[] = array( 'key' => $parts[0], 'code' => $parts[1], 'label' => sanitize_text_field( $parts[2] ) );
+				}
+			}
+		} else {
+			$list = $input['purposes'] ?? array();
+		}
+		$sheet = ( isset( $input['sheet_w'] ) || isset( $input['sheet_l'] ) )
+			? array( 'w' => $input['sheet_w'] ?? 0, 'l' => $input['sheet_l'] ?? 0 )
+			: ( $input['default_sheet'] ?? null );
+		return array(
+			'purposes'      => ZPREP_Settings::clean_internal_purposes( $list ),
+			'default_sheet' => ZPREP_Settings::clean_sheet( $sheet ),
+		);
+	}
+
+	/**
+	 * What the material costs per square inch, as stored: colour (or * for every colour) => cost. From the settings
+	 * page it comes as lines of "colour,cost"; a number or a map (an Identity Pack writes one) is cleaned the same way.
+	 */
+	public static function sanitize_cost_rates( $input ): array {
+		if ( is_array( $input ) && isset( $input['rates_text'] ) && ! is_numeric( $input['rates_text'] ) ) {
+			$map = array();
+			foreach ( preg_split( '/\r\n|\r|\n/', (string) $input['rates_text'] ) as $line ) {
+				$parts = array_map( 'trim', explode( ',', $line ) );
+				if ( 2 === count( $parts ) ) {
+					$map[ $parts[0] ] = $parts[1];
+				}
+			}
+			$input = $map;
+		}
+		return ZPREP_Settings::clean_cost_rates( $input );
 	}
 
 	public static function sanitize_settings( $input ): array {
@@ -112,6 +183,18 @@ class ZPREP_Admin {
 				}
 			}
 		}
+
+		// Internal orders, in the forms the boxes below take.
+		$io            = ZPREP_Settings::internal_orders();
+		$purposes_text = '';
+		foreach ( $io['purposes'] as $key => $p ) {
+			$purposes_text .= $key . ',' . $p['code'] . ',' . $p['label'] . "\n";
+		}
+		$cost_text = '';
+		foreach ( ZPREP_Settings::clean_cost_rates( get_option( ZPREP_Settings::COST_RATES_OPT, array() ) ) as $color => $rate ) {
+			$cost_text .= $color . ',' . rtrim( rtrim( number_format( (float) $rate, 6, '.', '' ), '0' ), '.' ) . "\n";
+		}
+		$io_core = ZPREP_Settings::default_internal_purposes();
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Prep Settings', 'zorderz' ); ?></h1>
@@ -121,7 +204,7 @@ class ZPREP_Admin {
 
 				<h2><?php esc_html_e( 'Roll / Material Stock', 'zorderz' ); ?></h2>
 				<p class="description">
-					<?php esc_html_e( 'One roll per line: width_in,color,cost_per_ft,available (1/0). Costs ship EMPTY — enter your own per-foot costs (used only for the material-cost summary). Availability is data: a width/colour that "does not exist" is simply omitted.', 'zorderz' ); ?>
+					<?php esc_html_e( 'One roll per line: width_in,color,cost_per_ft,available (1/0). Costs ship EMPTY: enter your own per-foot costs (used only for the material-cost summary). Availability is data: a width/colour that "does not exist" is simply omitted.', 'zorderz' ); ?>
 				</p>
 				<table class="form-table">
 					<tr>
@@ -140,7 +223,7 @@ class ZPREP_Admin {
 					</tr>
 					<tr>
 						<th><label for="min_saveable_in"><?php esc_html_e( 'Minimum saveable leftover', 'zorderz' ); ?></label></th>
-						<td><input type="number" step="0.1" min="0" id="min_saveable_in" name="zprep_settings[min_saveable_in]" value="<?php echo esc_attr( $s['min_saveable_in'] ); ?>" class="regular-text" /> <span class="description"><?php esc_html_e( 'inches — a leftover with BOTH dimensions ≥ this becomes "Save for future use".', 'zorderz' ); ?></span></td>
+						<td><input type="number" step="0.1" min="0" id="min_saveable_in" name="zprep_settings[min_saveable_in]" value="<?php echo esc_attr( $s['min_saveable_in'] ); ?>" class="regular-text" /> <span class="description"><?php esc_html_e( 'inches: a leftover with BOTH dimensions ≥ this becomes "Save for future use".', 'zorderz' ); ?></span></td>
 					</tr>
 					<tr>
 						<th><label for="black_tiebreaker"><?php esc_html_e( 'Roll tiebreaker', 'zorderz' ); ?></label></th>
@@ -161,7 +244,7 @@ class ZPREP_Admin {
 						<td>
 							<?php if ( $subtypes ) : ?>
 								<select id="queue_subtype" name="zprep_settings[queue_subtype]">
-									<option value=""><?php esc_html_e( '— any —', 'zorderz' ); ?></option>
+									<option value=""><?php esc_html_e( 'Any', 'zorderz' ); ?></option>
 									<?php foreach ( $subtypes as $slug => $lbl ) : ?>
 										<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( $s['queue_subtype'], $slug ); ?>><?php echo esc_html( $lbl ); ?></option>
 									<?php endforeach; ?>
@@ -179,6 +262,41 @@ class ZPREP_Admin {
 					<tr>
 						<th><label for="cut_stage_name"><?php esc_html_e( 'CRM cut stage', 'zorderz' ); ?></label></th>
 						<td><input type="text" id="cut_stage_name" name="zprep_settings[cut_stage_name]" value="<?php echo esc_attr( $s['cut_stage_name'] ); ?>" class="regular-text" /> <span class="description"><?php esc_html_e( 'The pipeline stage that means "ready to cut". Empty disables the auto-queue.', 'zorderz' ); ?></span></td>
+					</tr>
+					<tr>
+						<th><label for="zprep_side_convention"><?php esc_html_e( 'How sides are numbered', 'zorderz' ); ?></label></th>
+						<td>
+							<input type="text" id="zprep_side_convention" name="<?php echo esc_attr( ZPREP_Settings::SIDES_OPT ); ?>" value="<?php echo esc_attr( (string) get_option( ZPREP_Settings::SIDES_OPT, '' ) ); ?>" class="large-text" maxlength="300" placeholder="<?php echo esc_attr( ZPREP_Settings::DEFAULT_SIDES ); ?>" />
+							<p class="description"><?php esc_html_e( 'One line telling the cut-list reader how your paperwork numbers a building\'s sides. Leave it empty for the line shown.', 'zorderz' ); ?></p>
+						</td>
+					</tr>
+				</table>
+
+				<h2><?php esc_html_e( 'Internal orders', 'zorderz' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Work the shop cuts for itself. These are yours to set: nothing here ships filled in.', 'zorderz' ); ?></p>
+				<table class="form-table">
+					<tr>
+						<th><label for="zprep_io_purposes"><?php esc_html_e( 'What an order may be for', 'zorderz' ); ?></label></th>
+						<td>
+							<textarea id="zprep_io_purposes" name="<?php echo esc_attr( ZPREP_Settings::INTERNAL_OPT ); ?>[purposes_text]" rows="4" class="large-text code" placeholder="<?php echo esc_attr( key( $io_core ) . ',' . reset( $io_core )['code'] . ',' . reset( $io_core )['label'] ); ?>"><?php echo esc_textarea( trim( $purposes_text ) ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'One per line: key,CODE,Label. The code (2 to 6 letters or digits) goes in each order\'s reference code. Leave this empty and the form offers one general purpose.', 'zorderz' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Stock sheet the form starts from', 'zorderz' ); ?></th>
+						<td>
+							<input type="number" min="1" max="<?php echo (int) ZPREP_Engine::SHEET_MAX_IN; ?>" step="1" name="<?php echo esc_attr( ZPREP_Settings::INTERNAL_OPT ); ?>[sheet_w]" value="<?php echo esc_attr( $io['default_sheet'] ? ZPREP_Remakes::num( (float) $io['default_sheet']['w'] ) : '' ); ?>" class="small-text" aria-label="<?php esc_attr_e( 'Sheet width, inches', 'zorderz' ); ?>" />
+							&times;
+							<input type="number" min="1" max="<?php echo (int) ZPREP_Engine::SHEET_MAX_IN; ?>" step="0.5" name="<?php echo esc_attr( ZPREP_Settings::INTERNAL_OPT ); ?>[sheet_l]" value="<?php echo esc_attr( $io['default_sheet'] ? ZPREP_Remakes::num( (float) $io['default_sheet']['l'] ) : '' ); ?>" class="small-text" aria-label="<?php esc_attr_e( 'Sheet length, inches', 'zorderz' ); ?>" />
+							<span class="description"><?php esc_html_e( 'inches. Leave both empty and the size is typed on each order.', 'zorderz' ); ?></span>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="zprep_io_cost"><?php esc_html_e( 'Material cost per square inch', 'zorderz' ); ?></label></th>
+						<td>
+							<textarea id="zprep_io_cost" name="<?php echo esc_attr( ZPREP_Settings::COST_RATES_OPT ); ?>[rates_text]" rows="3" class="large-text code"><?php echo esc_textarea( trim( $cost_text ) ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'One per line: colour,cost. Use * for every colour. It is read only for the internal orders year-end page, and kept on each order when the order is made. Leave this empty and that page says no rate is on file.', 'zorderz' ); ?></p>
+						</td>
 					</tr>
 				</table>
 

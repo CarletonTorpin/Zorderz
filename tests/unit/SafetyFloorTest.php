@@ -99,7 +99,7 @@ final class SafetyFloorTest extends TestCase {
 		foreach ( array(
 			array( 'Don Lee', 'Brandon Lee' ),
 			array( 'Ed Smith', 'Fred Smith' ),
-			array( 'Ann Vale', 'Joanne Leeson' ),
+			array( 'Ann Vale', 'Joanne Valeson' ),
 			array( 'Al Pike', 'Hal Turnpike' ),
 		) as $pair ) {
 			$this->assertFalse( ZDZ_Contact_Bridge::full_disclosure_ok( $pair[0], $pair[1] ), $pair[0] . ' must not unlock ' . $pair[1] );

@@ -13,7 +13,7 @@
  *   platform connects, and every sentence lands on the street the car was on at that moment. Notes describe homes,
  *   never people. Access codes said or typed are sealed. Other apps read the confirmed tags through the read verb
  *   routeplanner.street_tags.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -36,7 +36,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ZRP_VERSION', '1.0.0' );
+define( 'ZRP_VERSION', '1.0.1' );
 define( 'ZRP_DB_VERSION', '1.0.0' );
 define( 'ZRP_APP_ID', 'route-planner' );
 define( 'ZRP_FILE', __FILE__ );
@@ -361,7 +361,7 @@ function zrp_admin_page() {
 			<h2><?php esc_html_e( 'What the survey listens for', 'zorderz' ); ?></h2>
 			<table class="widefat striped" style="max-width:900px"><thead><tr><th><?php esc_html_e( 'Tag', 'zorderz' ); ?></th><th><?php esc_html_e( 'Product line', 'zorderz' ); ?></th><th><?php esc_html_e( 'Phrases', 'zorderz' ); ?></th></tr></thead><tbody>
 			<?php foreach ( $v as $slug => $row ) : ?>
-				<tr><td><strong><?php echo esc_html( $row['label'] ); ?></strong><br><code><?php echo esc_html( $slug ); ?></code></td><td><?php echo esc_html( $row['product_label'] ?: '—' ); ?></td><td><?php echo esc_html( implode( ', ', $row['phrases'] ) ); ?></td></tr>
+				<tr><td><strong><?php echo esc_html( $row['label'] ); ?></strong><br><code><?php echo esc_html( $slug ); ?></code></td><td><?php echo esc_html( $row['product_label'] ?: '–' ); ?></td><td><?php echo esc_html( implode( ', ', $row['phrases'] ) ); ?></td></tr>
 			<?php endforeach; ?>
 			</tbody></table>
 			<p><label for="zrp-vocab"><?php esc_html_e( 'Add tags or phrases, one per line:', 'zorderz' ); ?> <code>slug | label | product slug | product label | phrase, phrase</code>. <?php esc_html_e( 'An existing slug gets the extra phrases.', 'zorderz' ); ?></label><br>

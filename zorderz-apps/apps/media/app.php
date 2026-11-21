@@ -416,7 +416,7 @@ function zml_ajax_update_tags() {
 		wp_send_json_error( 'Not logged in.' );
 	}
 	if ( ! class_exists( 'ZDZ_User_Media' ) || ! method_exists( 'ZDZ_User_Media', 'apply_tags' ) ) {
-		wp_send_json_error( 'Tagging isn’t available yet — please update the Zorderz theme.' );
+		wp_send_json_error( 'Tagging isn’t available yet. Please update the Zorderz theme.' );
 	}
 
 	$add    = zml_tag_list_from_post( $_POST['add'] ?? '' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- zml_tag_list_from_post() unslashes and runs sanitize_text_field() on every tag
@@ -768,7 +768,7 @@ function zml_ajax_upload() {
 	// Auto-title: prefer the original filename (meaningful for picked photos),
 	// fall back to a timestamped label.
 	$orig_name = sanitize_file_name( $_FILES['photo']['name'] );
-	$title     = $orig_name !== '' ? $orig_name : ( 'Photo — ' . date( 'M j, g:i A' ) );
+	$title     = $orig_name !== '' ? $orig_name : ( 'Photo · ' . date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:i A' ) : 'M j, g:i A' ) ) );
 
 	// Batch-level envelope stored on EVERY photo of the batch. Deliberately
 	// open-ended so a future job/customer link is an additive field here.
@@ -955,7 +955,7 @@ function zml_ajax_share() {
 	// a normal user's way. Fail-open if the object cache is unavailable.
 	$rk   = 'zml_share_rl_' . $sender;
 	$hits = (int) get_transient( $rk );
-	if ( $hits >= 20 ) { wp_send_json_error( 'You are sharing too fast — give it a moment.', 429 ); }
+	if ( $hits >= 20 ) { wp_send_json_error( 'You are sharing too fast. Give it a moment.', 429 ); }
 	set_transient( $rk, $hits + 1, 60 );
 
 	$recipient = intval( wp_unslash( $_POST['recipient_id'] ?? 0 ) );

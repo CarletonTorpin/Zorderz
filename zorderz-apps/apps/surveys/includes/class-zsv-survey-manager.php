@@ -4,11 +4,11 @@
  *
  * Screen settled invoices -> open a follow-up per eligible customer as a CRM lead ->
  * track the survey OPERATOR's call outcomes -> send a review invite routed to the
- * tenant's review destination -> close the loop. Every drop is a logged disposition;
+ * business's review destination -> close the loop. Every drop is a logged disposition;
  * the auto-close path fails loudly and obeys the safety floor.
  *
- * Identity is read from Core services (ZSV_Settings). No roster, no company name, no
- * review URL, no from-name is hardcoded here.
+ * Identity is read from Core services (ZSV_Settings): the roster, the company name, the
+ * review URL and the from-name are all settings.
  *
  * @package Zorderz\Surveys
  */
@@ -75,7 +75,7 @@ class ZSV_Survey_Manager {
 
 	/**
 	 * Excluded by the admin-managed list (name or email fragment). The list ships
-	 * EMPTY, so this returns false until a tenant configures it.
+	 * EMPTY, so this returns false until the business adds to it.
 	 */
 	public function is_excluded_company( array $inv ): bool {
 		$name  = strtolower( trim( ( $inv['first_name'] ?? '' ) . ' ' . ( $inv['last_name'] ?? '' ) ) );
@@ -249,11 +249,18 @@ class ZSV_Survey_Manager {
 	}
 
 	/**
-	 * Parse a single operator note into a status, using the tenant status vocabulary.
+	 * Parse a single operator note into a status, using the business's status vocabulary.
 	 * Negation-aware: a negator before a "satisfied" phrase flips it to an issue, so
-	 * "screen isn't working well" is not read as satisfaction. An invite must be
+	 * "it isn't working well" is not read as satisfaction. An invite must be
 	 * EARNED by a recognised positive signal; anything reached-but-unclear defaults
 	 * to needs_attention.
+	 *
+	 * The order is load-bearing: a full voice mailbox, an open issue, a send that waits on
+	 * something, "no review", "no primary account" and a voicemail are settled first. Then
+	 * the attention words (a call still owed, a follow-up, somebody else to reach): they hold
+	 * the note for a person unless it carries an explicit send instruction that STANDS, read
+	 * in context by ZSV_Note_Reader (its own clean clause, and every attention word in the
+	 * note a soft aside). An instruction that stands earns the invite.
 	 *
 	 * @return string One of: satisfied|needs_attention|left_vm|no_online_review|no_primary_account|follow_up|not_contacted
 	 */
@@ -271,10 +278,18 @@ class ZSV_Survey_Manager {
 		if ( $vm_full && ! $this->matches_satisfied( $t, $vocab['satisfied'] ?? array() ) ) {
 			return 'left_vm';
 		}
-		// Issue language outranks positive language.
-		if ( $this->matches_any( $t, $vocab['issue'] ?? array() ) ) {
+		// Issue language outranks positive language. A clause that only says the customer may
+		// call later ("she will call back if she needs anything") is no evidence of an issue,
+		// so it is left out of this look.
+		$asides = ZSV_Note_Reader::soft_asides( $text );
+		$scan   = $asides ? str_replace( $asides, ' ', $t ) : $t;
+		if ( $this->matches_any( $scan, $vocab['issue'] ?? array() ) ) {
 			// An issue that also reports a resolution is a follow-up cleared later;
 			// bare issue language is a follow_up (open issue).
+			return 'follow_up';
+		}
+		// "Send the link after the rest of the work is done": the send waits on unfinished work.
+		if ( ZSV_Note_Reader::send_waits( $text ) ) {
 			return 'follow_up';
 		}
 		if ( $this->matches_any( $t, $vocab['no_review'] ?? array() ) ) {
@@ -285,6 +300,15 @@ class ZSV_Survey_Manager {
 		}
 		if ( $this->matches_any( $t, $vocab['voicemail'] ?? array() ) ) {
 			return 'left_vm';
+		}
+		// Attention words hold the note for a person, unless an explicit send instruction stands.
+		$attention = (array) ( $vocab['attention'] ?? array() );
+		$send      = ZSV_Note_Reader::send_instruction( $text, (array) ( $vocab['send_instruction'] ?? array() ), $attention );
+		if ( $send['stands'] ) {
+			return 'satisfied';
+		}
+		if ( $this->matches_any( $t, $attention ) ) {
+			return 'needs_attention';
 		}
 		if ( $this->matches_satisfied( $t, $vocab['satisfied'] ?? array() ) ) {
 			return 'satisfied';
@@ -418,13 +442,7 @@ class ZSV_Survey_Manager {
 
 	/** Lowercase, straighten smart punctuation, collapse whitespace. */
 	private function normalize( string $text ): string {
-		$t = str_replace(
-			array( "\xE2\x80\x99", "\xE2\x80\x98", "\xE2\x80\x9C", "\xE2\x80\x9D", "\xC2\xA0" ),
-			array( "'", "'", '"', '"', ' ' ),
-			$text
-		);
-		$t = strtolower( $t );
-		return trim( preg_replace( '/\s+/', ' ', $t ) );
+		return ZSV_Note_Reader::lower( $text );
 	}
 
 	/** Any phrase present as a substring? */
@@ -461,7 +479,7 @@ class ZSV_Survey_Manager {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * INVITES — routed to the tenant review destination.
+	 * INVITES — routed to the business's review destination.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/**
@@ -477,9 +495,47 @@ class ZSV_Survey_Manager {
 	}
 
 	/**
-	 * Send one review invite. Routes to the tenant's review destination and stamps the
-	 * chosen channel. Uses the Business Profile sender identity. Idempotency is the
-	 * caller's `from: [screened]` state guard; here we just send + record.
+	 * What holds this customer's invite back whatever else is true: no usable address, a call
+	 * outcome that does not earn one, or no review destination set up. '' when nothing does.
+	 * It needs no lock and sends nothing, so the send asks it before it takes the customer's
+	 * send lock. Each refusal that is a drop is a logged disposition.
+	 *
+	 * @param array $lead Row: id, email, operator_status.
+	 * @return string '' | no_email | status_holds_<status> | no_review_destination
+	 */
+	public function invite_hold( array $lead ): string {
+		$email  = (string) ( $lead['email'] ?? '' );
+		$status = (string) ( $lead['operator_status'] ?? '' );
+		if ( ! is_email( $email ) ) {
+			ZSV_DB::disposition( 'no_email', array( 'lead_id' => (int) ( $lead['id'] ?? 0 ) ) );
+			return 'no_email';
+		}
+		if ( ! $this->invite_permitted( $status ) ) {
+			return 'status_holds_' . ( $status ?: 'blank' );
+		}
+		$dest = ZSV_Settings::resolve_review_destination( $email, $status );
+		if ( 'none' === $dest['channel'] || '' === $dest['url'] ) {
+			ZSV_DB::disposition( 'no_review_destination', array( 'lead_id' => (int) ( $lead['id'] ?? 0 ) ) );
+			return 'no_review_destination';
+		}
+		return '';
+	}
+
+	/** Hand one message to the mail service. True when it took it. */
+	protected function deliver( string $to, string $subject, string $body, array $headers ): bool {
+		$GLOBALS['zsv_sending_html'] = true;
+		try {
+			return (bool) wp_mail( $to, $subject, $body, $headers );
+		} finally {
+			unset( $GLOBALS['zsv_sending_html'] );
+		}
+	}
+
+	/**
+	 * Send one review invite. Routes to the business's review destination and stamps the
+	 * chosen channel. Uses the Business Profile sender identity. Whether this customer may be
+	 * e-mailed at all (once, unless a person asks again) is the caller's rule
+	 * (ZSV_Dashboard::send_one, under the customer's send lock); here we just send.
 	 *
 	 * @param array $lead Row: id, email, first_name, last_name, operator_status.
 	 * @return array{sent:bool,channel:string,reason:string}
@@ -487,25 +543,17 @@ class ZSV_Survey_Manager {
 	public function send_invite( array $lead ): array {
 		$email  = (string) ( $lead['email'] ?? '' );
 		$status = (string) ( $lead['operator_status'] ?? '' );
-		if ( ! is_email( $email ) ) {
-			ZSV_DB::disposition( 'no_email', array( 'lead_id' => (int) ( $lead['id'] ?? 0 ) ) );
-			return array( 'sent' => false, 'channel' => 'none', 'reason' => 'no_email' );
+		$hold   = $this->invite_hold( $lead );
+		if ( '' !== $hold ) {
+			return array( 'sent' => false, 'channel' => 'none', 'reason' => $hold );
 		}
-		if ( ! $this->invite_permitted( $status ) ) {
-			return array( 'sent' => false, 'channel' => 'none', 'reason' => 'status_holds_' . ( $status ?: 'blank' ) );
-		}
-
 		$dest = ZSV_Settings::resolve_review_destination( $email, $status );
-		if ( 'none' === $dest['channel'] || '' === $dest['url'] ) {
-			ZSV_DB::disposition( 'no_review_destination', array( 'lead_id' => (int) ( $lead['id'] ?? 0 ) ) );
-			return array( 'sent' => false, 'channel' => 'none', 'reason' => 'no_review_destination' );
-		}
 
 		$name    = trim( ( $lead['first_name'] ?? '' ) . ' ' . ( $lead['last_name'] ?? '' ) );
 		$sender  = ZSV_Settings::sender();
 		$subject = sprintf(
 			/* translators: %s: business trading name */
-			__( 'How did we do? — %s', 'zorderz' ),
+			__( '%s: how did we do?', 'zorderz' ),
 			class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::name() : get_bloginfo( 'name' )
 		);
 		$body = $this->render_invite_html( $name, $dest['url'], $dest['channel'] );
@@ -515,9 +563,7 @@ class ZSV_Survey_Manager {
 			sprintf( 'From: %s <%s>', $sender['name'] ?: get_bloginfo( 'name' ), $sender['email'] ),
 		);
 
-		$GLOBALS['zsv_sending_html'] = true;
-		$ok = wp_mail( $email, $subject, $body, $headers );
-		unset( $GLOBALS['zsv_sending_html'] );
+		$ok = $this->deliver( $email, $subject, $body, $headers );
 
 		if ( ! $ok ) {
 			ZSV_DB::disposition( 'invite_send_failed', array( 'lead_id' => (int) ( $lead['id'] ?? 0 ) ) );
@@ -526,17 +572,20 @@ class ZSV_Survey_Manager {
 		return array( 'sent' => true, 'channel' => $dest['channel'], 'reason' => '' );
 	}
 
-	/** Minimal, neutral HTML invite. No company copy is hardcoded. */
+	/** Minimal HTML invite; its words are translatable strings and the business's settings. */
 	private function render_invite_html( string $name, string $url, string $channel ): string {
 		$greeting = $name !== '' ? sprintf( __( 'Hi %s,', 'zorderz' ), esc_html( $name ) ) : esc_html__( 'Hello,', 'zorderz' );
 		$cta      = 'deep_link' === $channel ? esc_html__( 'Leave a review', 'zorderz' ) : esc_html__( 'Rate your experience', 'zorderz' );
 		$biz      = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::name() : get_bloginfo( 'name' );
+		// the button wears the business's brand (Business Profile → Brand, step 600), else Zorderz' own
+		$btn = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.ramp.600', '#433FBD' ) : '#433FBD';
+		$btn = preg_match( '/^#[0-9A-Fa-f]{6}$/', $btn ) ? $btn : '#433FBD';
 		ob_start();
 		?>
 		<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a1a;">
 			<p><?php echo $greeting; ?></p>
 			<p><?php echo esc_html( sprintf( __( 'Thanks for choosing %s. Would you take a moment to tell us how it went?', 'zorderz' ), $biz ) ); ?></p>
-			<p><a href="<?php echo esc_url( $url ); ?>" style="display:inline-block;padding:10px 18px;background:#2C5F8A;color:#fff;text-decoration:none;border-radius:6px;"><?php echo $cta; ?></a></p>
+			<p><a href="<?php echo esc_url( $url ); ?>" style="display:inline-block;padding:10px 18px;background:<?php echo esc_attr( $btn ); ?>;color:#fff;text-decoration:none;border-radius:6px;"><?php echo $cta; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above with esc_html__(). ?></a></p>
 		</div>
 		<?php
 		return (string) ob_get_clean();
@@ -548,7 +597,7 @@ class ZSV_Survey_Manager {
 
 	/**
 	 * SAFETY FLOOR gate. A survey may NEVER auto-close as "Won" without human review.
-	 * A system actor may close as Won ONLY when the tenant has opted in AND the status
+	 * A system actor may close as Won ONLY when the business has opted in AND the status
 	 * is genuinely satisfied. needs_attention / excluded / follow_up / not_contacted /
 	 * left_vm / no_online_review are NEVER system-Won, regardless of the policy flag.
 	 *
@@ -598,13 +647,13 @@ class ZSV_Survey_Manager {
 		}
 
 		$labels   = array(
-			'emailed'      => 'Survey invite sent — closing as Won',
-			'reviewed'     => 'Review recorded — closing as Won',
-			'grace_expiry' => 'Grace window elapsed — closing as Won',
+			'emailed'      => 'Survey invite sent: closing as Won',
+			'reviewed'     => 'Review recorded: closing as Won',
+			'grace_expiry' => 'Grace window elapsed: closing as Won',
 			'manual'       => 'Marked Won',
 		);
 		$headline = $labels[ $reason ] ?? $labels['manual'];
-		$note     = '[Surveys] ' . $headline . "\n" . 'Closed: ' . wp_date( 'M j, Y g:i A' ) . "\n";
+		$note     = '[Surveys] ' . $headline . "\n" . 'Closed: ' . ZSV_Settings::stamp() . "\n";
 		foreach ( $context as $k => $v ) {
 			if ( '' === $v || null === $v ) {
 				continue;
@@ -744,14 +793,27 @@ class ZSV_Survey_Manager {
 	 * remembered as owed and the daily sweep makes it while the CRM still reads the lead
 	 * open. Never throws: the e-mail is sent, so the send succeeded either way.
 	 *
+	 * A send after the first ($send_no above 1, which only happens when a person asked for it)
+	 * also leaves its own durable note saying which send it was: the lead is closed by then, so
+	 * the Won mark writes nothing, and a second review request must not go unrecorded in the CRM.
+	 *
 	 * @return string 'won' | 'owed' | 'none'
 	 */
-	public function after_send_bookkeeping( int $wp_lead_id, int $crm_lead_id, string $channel ): string {
+	public function after_send_bookkeeping( int $wp_lead_id, int $crm_lead_id, string $channel, int $send_no = 1 ): string {
 		if ( $crm_lead_id < 1 ) {
 			return 'none';
 		}
 		$opened = ZSV_Budget::open( 'send', (float) self::SEND_BOOKKEEPING_S );
 		try {
+			if ( $send_no > 1 ) {
+				/* translators: %d: which send this was (2, 3, …) */
+				$body = '[Surveys] ' . sprintf( __( 'Review e-mail sent again: this is send #%d for this lead (a person asked for it)', 'zorderz' ), $send_no )
+					. "\n" . 'Sent: ' . ZSV_Settings::stamp() . "\n" . 'Channel: ' . $channel;
+				$state = $this->post_note_durably( 'emailed', $crm_lead_id, $wp_lead_id, $body );
+				if ( 'posted' !== $state ) {
+					ZSV_DB::disposition( 'send_note_owed', array( 'lead_id' => $wp_lead_id, 'crm_lead_id' => $crm_lead_id, 'state' => $state ) );
+				}
+			}
 			$ok = false;
 			if ( ZSV_Budget::can_start( 3 ) ) {
 				try {
@@ -837,9 +899,9 @@ class ZSV_Survey_Manager {
 
 	/**
 	 * Grace-window sweep. Closes ONLY genuinely-satisfied leads as Won, and only when
-	 * the tenant opted in; everything else past its window is ESCALATED with a logged
-	 * disposition, never system-Won. This is the enforcement of the safety floor and
-	 * the fix for "needs_attention/excluded/NULL auto-close as Won".
+	 * the business opted in; everything else past its window is ESCALATED with a logged
+	 * disposition, never system-Won. This is the enforcement of the safety floor: a
+	 * needs_attention, excluded or empty status never closes as Won on its own.
 	 *
 	 * @param bool $dry_run When true, decides but writes nothing.
 	 * @return array Stats + details.
@@ -989,7 +1051,7 @@ class ZSV_Survey_Manager {
 
 		$body  = self::EXCLUSION_MARKER . "\n";
 		$body .= 'Reason: ' . $reason . "\n";
-		$body .= 'Recorded: ' . wp_date( 'M j, Y g:i A' );
+		$body .= 'Recorded: ' . ZSV_Settings::stamp();
 		if ( '' !== $actor ) {
 			$body .= "\nBy: " . $actor;
 		}
@@ -1037,7 +1099,7 @@ class ZSV_Survey_Manager {
 	 * Run one batch. Fails loudly when a required Connection is missing (no silent
 	 * empty run). NO business data is seeded — this reads live billing data only.
 	 *
-	 * @param int $limit Max leads to create (0 = tenant batch size).
+	 * @param int $limit Max leads to create (0 = the configured batch size).
 	 * @return array Stats keyed by disposition + created.
 	 */
 	public function run_batch( int $limit = 0 ): array {
@@ -1119,8 +1181,8 @@ class ZSV_Survey_Manager {
 
 	/**
 	 * Fetch settled invoices from the billing provider. The "settled" filter + lookback
-	 * are a tenant Mapping — supplied via the `zdz_survey_billing_fetch_params` filter
-	 * with a neutral default — so no provider-specific status integer is hardcoded here.
+	 * are a mapping supplied via the `zdz_survey_billing_fetch_params` filter, with a
+	 * plain default; a provider's own status numbers belong to that mapping.
 	 *
 	 * @return array[] Raw invoice objects.
 	 */
@@ -1217,7 +1279,7 @@ class ZSV_Survey_Manager {
 	/**
 	 * Classify a work description into a category. Item Engine binding: the ordered
 	 * category vocabulary comes from ZSV_Settings::work_categories() (filter
-	 * `zdz_survey_work_categories`, NEUTRAL fallback). First case-insensitive match by
+	 * `zdz_survey_work_categories`, generic fallback). First case-insensitive match by
 	 * priority wins; the last category is the catch-all.
 	 *
 	 * @param string $desc
@@ -1274,7 +1336,7 @@ class ZSV_Survey_Manager {
 	public function create_survey_lead( array $inv ): array {
 		$name = trim( ( $inv['first_name'] ?? '' ) . ' ' . ( $inv['last_name'] ?? '' ) );
 		$note = sprintf(
-			'[Surveys] Follow-up opened for %s — %s (%s).',
+			'[Surveys] Follow-up opened for %s: %s (%s).',
 			$name !== '' ? $name : ( $inv['organization'] ?? '' ),
 			$inv['work_description'] ?? '',
 			$inv['category'] ?? ''
@@ -1282,7 +1344,7 @@ class ZSV_Survey_Manager {
 
 		$lead_payload = array(
 			'lead' => array(
-				'description' => sprintf( 'Satisfaction follow-up — %s', $inv['category'] ?? '' ),
+				'description' => sprintf( 'Satisfaction follow-up: %s', $inv['category'] ?? '' ),
 				'note'        => array( array( 'body' => $note ) ),
 			),
 		);

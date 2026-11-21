@@ -42,6 +42,9 @@ class ZPREP_Engine {
 	const CLASS_BENCH = 'bench';
 	const CLASS_FIELD = 'field';
 
+	/** A stock sheet is at most this many inches on a side (beyond it, a typing slip, not a sheet). */
+	const SHEET_MAX_IN = 120;
+
 	private float $grungy_margin;
 	private float $min_saveable;
 	private string $black_tiebreaker;
@@ -51,6 +54,14 @@ class ZPREP_Engine {
 	private array $pack_debug            = array();
 	private array $dropped               = array(); // measurements no sheet could take, each named
 	private array $runs                  = array(); // areas waiting for a field measurement
+
+	/*
+	 * STOCK SHEET. Null on every plan that does not name one, so those plan exactly as they always have. A plan cut
+	 * from sheets of a stated size (the `stock_sheet` option: { w: whole inches, l: inches }) treats the sheet as a
+	 * roll exactly w wide whose page can be no longer than l, with no rough edge: one page is one sheet. Nothing
+	 * longer than the sheet becomes a continuous pull (there is no roll to pull from); it is named as dropped.
+	 */
+	private ?array $sheet = null;
 
 	public function __construct() {
 		$this->grungy_margin    = ZPREP_Settings::grungy_margin_in();
@@ -62,6 +73,17 @@ class ZPREP_Engine {
 	 * PUBLIC — MAIN ENTRY POINT
 	 * ================================================================ */
 	public function compute_plan( array $measurements, array $options = array() ): array {
+		$margin_was = $this->grungy_margin;
+		try {
+			return $this->plan( $measurements, $options );
+		} finally {
+			// An engine that planned a sheet plans a roll afterwards as if it never had.
+			$this->grungy_margin = $margin_was;
+			$this->sheet         = null;
+		}
+	}
+
+	private function plan( array $measurements, array $options ): array {
 		$this->plan_options = array_merge(
 			array(
 				'use_leftovers' => false,
@@ -69,9 +91,17 @@ class ZPREP_Engine {
 				'workspace'     => 'flat',
 				'force_roll'    => 0,
 				'debug'         => false,
+				'stock_sheet'   => null, // array( 'w' => whole inches, 'l' => inches ): cut from sheets, not a roll
 			),
 			$options
 		);
+		// A stock sheet, when one is named and sane. A roll's rough edge does not apply to a sheet, and the leftover
+		// library (roll strips) is not drawn on. compute_plan() puts the margin back.
+		$this->sheet = self::clean_stock_sheet( $this->plan_options['stock_sheet'] );
+		if ( $this->sheet ) {
+			$this->grungy_margin                 = 0.0;
+			$this->plan_options['use_leftovers'] = false;
+		}
 		$this->leftover_reservations = array();
 		$this->pack_debug            = array();
 		$this->dropped               = array();
@@ -108,7 +138,7 @@ class ZPREP_Engine {
 				for ( $i = 0; $i < max( 1, (int) $batch['total_qty'] ); $i++ ) {
 					$this->drop(
 						array( 'kind' => (string) $batch['kind'], 'label' => $this->fmt_in( (float) $batch['width_in'] ) . '×' . $this->fmt_in( (float) $batch['height_in'] ), 'w' => (float) $batch['width_in'], 'h' => (float) $batch['height_in'] ),
-						(string) ( $batch['plan']['message'] ?? __( 'No roll can take it.', 'zorderz' ) )
+						$this->sheet ? $this->off_sheet_message() : (string) ( $batch['plan']['message'] ?? __( 'No roll can take it.', 'zorderz' ) )
 					);
 				}
 			}
@@ -165,7 +195,7 @@ class ZPREP_Engine {
 			);
 		}
 		$leftover_deliverables = $this->build_leftover_deliverables();
-		$material_cost         = $this->cost_summary( $linear_in_used );
+		$material_cost         = $this->sheet ? $this->sheet_summary( $pages ) : $this->cost_summary( $linear_in_used );
 		$leftover_savings      = $this->summarize_leftover_savings();
 
 		if ( ! empty( $leftover_savings['summary_line'] ) ) {
@@ -210,8 +240,81 @@ class ZPREP_Engine {
 		if ( ! empty( $leftover_savings['used_count'] ) ) {
 			$out['leftover_savings'] = $leftover_savings;
 		}
+		if ( $this->sheet ) {
+			$out['stock_sheet'] = $this->sheet; // the screen words a sheet plan as sheets, not feet of roll
+		}
 
 		return $out;
+	}
+
+	/**
+	 * A stock sheet from plan options, or null: { w: whole inches, l: inches to the half }, each from 1 to
+	 * SHEET_MAX_IN, with w the shorter side. The one rule for what a sheet is.
+	 *
+	 * The shorter side is the width, whichever way round it was given: the packer lays a turned piece with its long
+	 * side along the length, so on a sheet given wider than it is long a piece that plainly fits would be refused. A
+	 * sheet has no "across" and "along" of its own. The width is cut down to a whole inch (a roll width is a whole
+	 * number) and the length to a half inch: never rounded up, so nothing is planned past the real edge. PURE.
+	 */
+	public static function clean_stock_sheet( $sheet ): ?array {
+		if ( ! is_array( $sheet ) || ! isset( $sheet['w'], $sheet['l'] ) || ! is_numeric( $sheet['w'] ) || ! is_numeric( $sheet['l'] ) ) {
+			return null;
+		}
+		$a = (float) $sheet['w'];
+		$b = (float) $sheet['l'];
+		if ( $a > $b ) {
+			$t = $a;
+			$a = $b;
+			$b = $t;
+		}
+		$w = (int) floor( $a + 1e-9 );
+		$l = floor( $b * 2 + 1e-9 ) / 2;
+		if ( $w < 1 || $l < 1 || $w > self::SHEET_MAX_IN || $l > self::SHEET_MAX_IN ) {
+			return null;
+		}
+		return array( 'w' => $w, 'l' => (float) $l );
+	}
+
+	/** Why a piece is not on a sheet plan: it does not come out of the sheet. */
+	private function off_sheet_message(): string {
+		return sprintf(
+			/* translators: 1: sheet width, 2: sheet length (inches). */
+			__( 'It does not come out of a %1$s" x %2$s" sheet. Cut it from a roll.', 'zorderz' ),
+			$this->fmt_in( (float) $this->sheet['w'] ),
+			$this->fmt_in( (float) $this->sheet['l'] )
+		);
+	}
+
+	/**
+	 * The Material table of a sheet plan: how many sheets of each colour, never feet of a roll and never a roll
+	 * price (a sheet has neither). The same row shape as cost_summary() plus `sheets` and `sq_ft`.
+	 */
+	private function sheet_summary( array $pages ): array {
+		$n = array();
+		foreach ( $pages as $pg ) {
+			if ( empty( $pg['stock_sheet'] ) ) {
+				continue;
+			}
+			$c       = (string) $pg['color'];
+			$n[ $c ] = ( $n[ $c ] ?? 0 ) + 1;
+		}
+		ksort( $n );
+		$w     = (int) $this->sheet['w'];
+		$l     = (float) $this->sheet['l'];
+		$rolls = array();
+		foreach ( $n as $color => $count ) {
+			$rolls[] = array(
+				/* translators: 1: sheet width, 2: sheet length (inches), 3: colour. */
+				'label'  => sprintf( __( '%1$s" x %2$s" sheet · %3$s', 'zorderz' ), $this->fmt_in( (float) $w ), $this->fmt_in( $l ), ucfirst( $color ) ),
+				'feet'   => round( $count * $l / 12.0, 2 ),
+				'cost'   => 0.0,
+				'width'  => $w,
+				'color'  => $color,
+				'sheets' => $count,
+				'sq_ft'  => round( $count * $w * $l / 144.0, 1 ),
+			);
+		}
+		return array( 'rolls' => $rolls, 'total' => 0.0 );
 	}
 
 	/* ================================================================
@@ -273,13 +376,20 @@ class ZPREP_Engine {
 			$roll_w  = $group['roll_width_in'];
 			$color   = $group['color'];
 			$gm      = $this->grungy_margin;
-			$max_len = ZPREP_Settings::max_page_length_in( (int) $roll_w );
+			$max_len = $this->max_page_length( (int) $roll_w );
 
 			// Pieces at or under the sheet cap go to the packer exactly as before; a piece over it is a continuous pull
 			// printed on its own page; one too wide for the roll is named, never swallowed.
 			list( $normal, $oversize, $too_wide ) = $this->split_by_length( $group['pieces'], (int) $roll_w, $gm, $max_len );
 			foreach ( $too_wide as $p ) {
-				$this->drop( $p, sprintf( __( 'It is wider than the %d" roll can take.', 'zorderz' ), (int) $roll_w ) );
+				$this->drop( $p, $this->sheet ? $this->off_sheet_message() : sprintf( __( 'It is wider than the %d" roll can take.', 'zorderz' ), (int) $roll_w ) );
+			}
+			if ( $this->sheet ) {
+				// A sheet cannot be pulled longer. A piece over its length is named, never laid out.
+				foreach ( $oversize as $p ) {
+					$this->drop( $p, $this->off_sheet_message() );
+				}
+				$oversize = array();
 			}
 			foreach ( $this->emit_run_pages( (int) $roll_w, $color, $gm, $oversize ) as $rp ) {
 				$pages[] = $rp;
@@ -289,9 +399,10 @@ class ZPREP_Engine {
 			}
 			$packer = new ZPREP_Nesting( $roll_w, $gm, $max_len );
 			$packed = $packer->pack( $normal );
+			// What the packer was handed and did not place is named: a piece never leaves a plan unnoticed.
 			if ( method_exists( $packer, 'get_dropped' ) ) {
 				foreach ( (array) $packer->get_dropped() as $d ) {
-					$this->drop( (array) $d, (string) ( $d['message'] ?? __( 'The packer could not place it.', 'zorderz' ) ) );
+					$this->drop( (array) $d, (string) ( $d['message'] ?? __( 'The layout left this piece off its sheets. Lay it out by hand, and report it to an administrator.', 'zorderz' ) ) );
 				}
 			}
 
@@ -363,7 +474,7 @@ class ZPREP_Engine {
 				return $eligible;
 			}
 		}
-		if ( ! $field || (int) ( $this->plan_options['force_roll'] ?? 0 ) > 0 ) {
+		if ( ! $field || $this->sheet || (int) ( $this->plan_options['force_roll'] ?? 0 ) > 0 ) {
 			return $eligible; // what these cannot take is named as dropped
 		}
 		$stock = ZPREP_Settings::roll_widths_for_color( $color );
@@ -389,7 +500,7 @@ class ZPREP_Engine {
 			return 0;
 		}
 		foreach ( $candidates as $roll_w ) {
-			if ( $short <= ( $roll_w - $this->grungy_margin ) + 1e-6 && $long <= ZPREP_Settings::max_page_length_in( (int) $roll_w ) + 1e-6 ) {
+			if ( $short <= ( $roll_w - $this->grungy_margin ) + 1e-6 && $long <= $this->max_page_length( (int) $roll_w ) + 1e-6 ) {
 				return (int) $roll_w;
 			}
 		}
@@ -433,6 +544,29 @@ class ZPREP_Engine {
 		}
 		$leftover_strip    = round( max( 0, $usable_w - $max_piece_right ), 2 );
 		$leftover_saveable = ( $leftover_strip >= $this->min_saveable && $sheet_length >= $this->min_saveable );
+
+		if ( $this->sheet ) {
+			// One page is one sheet: its length is the sheet's, whatever the pieces reach to; it has no roll price,
+			// and its offcut is not logged into the roll-strip library.
+			$sheet_length = (float) $this->sheet['l'];
+			return array(
+				'roll_key'          => $roll_w . '_' . $color,
+				'roll_width_in'     => $roll_w,
+				'color'             => $color,
+				'sheet_length'      => round( $sheet_length, 2 ),
+				'sheet_length_in'   => round( $sheet_length, 2 ),
+				'linear_feet'       => round( $sheet_length / 12.0, 2 ),
+				'cost'              => 0.0,
+				'pieces'            => $pieces,
+				'piece_count'       => count( $pieces ),
+				'deliverables'      => $deliverables,
+				'leftover_strip'    => $leftover_strip,
+				'leftover_in'       => $leftover_strip,
+				'leftover_saveable' => false,
+				'grungy_margin'     => 0.0,
+				'stock_sheet'       => $this->sheet,
+			);
+		}
 
 		return array(
 			'roll_key'          => $roll_w . '_' . $color,
@@ -573,10 +707,18 @@ class ZPREP_Engine {
 	 * NORMALIZE
 	 * ================================================================ */
 	private function normalize_measurement( array $m ): array {
-		$kind  = (string) ( $m['kind'] ?? $m['vent_type'] ?? 'custom' ); // accept legacy key on input.
+		$kind  = (string) ( $m['kind'] ?? $m['vent_type'] ?? 'custom' ); // an older key name is read too.
 		$qty   = max( 0, (int) ( $m['qty'] ?? 0 ) );
 		$w     = ( isset( $m['width_in'] ) && '' !== $m['width_in'] && null !== $m['width_in'] ) ? (float) $m['width_in'] : null;
 		$h     = ( isset( $m['height_in'] ) && '' !== $m['height_in'] && null !== $m['height_in'] ) ? (float) $m['height_in'] : null;
+		// A size of nothing (0, less than 0, or text that is not a number) is no size: the piece is flagged as
+		// needing its dimensions, like one whose size was left blank. It is never laid out at nothing.
+		if ( null !== $w && $w <= 0 ) {
+			$w = null;
+		}
+		if ( null !== $h && $h <= 0 ) {
+			$h = null;
+		}
 		$shape = $m['shape'] ?? self::SHAPE_RECTANGLE;
 		$valid_colors = ZPREP_Settings::roll_colors();
 		$color = strtolower( (string) ( $m['color'] ?? '' ) );
@@ -632,6 +774,13 @@ class ZPREP_Engine {
 			return $said;
 		}
 		if ( null === $w || null === $h || self::SHAPE_RECTANGLE !== $shape ) {
+			return self::MEASURE_PIECE;
+		}
+		// On a stock-sheet plan nothing is a run: a run is an area waiting for somebody with a tape, pulled from a
+		// roll, and a sheet has neither. A piece that does not come out of the sheet stays a piece and is named as
+		// dropped. (A sheet as wide as a stocked roll must not borrow that roll's rule and file an ordinary piece as
+		// waiting for a field measurement.)
+		if ( $this->sheet ) {
 			return self::MEASURE_PIECE;
 		}
 		return self::classify( (float) $w, (float) $h, ZPREP_Settings::roll_widths_for_color( $color ), $this->grungy_margin, array( 'ZPREP_Settings', 'max_page_length_in' ) );
@@ -1084,7 +1233,7 @@ class ZPREP_Engine {
 			$length_this  = $rows_this * $square_dim;
 
 			$sheets[]   = array(
-				'label'              => sprintf( 'Sheet — %s"×%s" — %s', $this->fmt_in( $square_dim ), $this->fmt_in( $length_this ), ucfirst( $color ) ),
+				'label'              => sprintf( 'Sheet: %s"×%s", %s', $this->fmt_in( $square_dim ), $this->fmt_in( $length_this ), ucfirst( $color ) ),
 				'roll_width_in'      => $roll_w,
 				'color'              => $color,
 				'swath_width_in'     => $square_dim,
@@ -1142,7 +1291,7 @@ class ZPREP_Engine {
 		);
 
 		return array(
-			'label'                 => sprintf( 'Sheet — %s"×%s" — %s', $this->fmt_in( $swath_w ), $this->fmt_in( $sheet_len ), ucfirst( $color ) ),
+			'label'                 => sprintf( 'Sheet: %s"×%s", %s', $this->fmt_in( $swath_w ), $this->fmt_in( $sheet_len ), ucfirst( $color ) ),
 			'roll_width_in'         => $roll_w_used,
 			'color'                 => $color,
 			'swath_width_in'        => $swath_w,
@@ -1180,7 +1329,7 @@ class ZPREP_Engine {
 					'label'            => $label,
 					'customer_install' => (bool) $b['customer_install'],
 					'not_cut'          => $not_cut,
-					'not_cut_reason'   => $not_cut ? __( 'Pre-made unit — included with the order, not cut from roll stock.', 'zorderz' ) : '',
+					'not_cut_reason'   => $not_cut ? __( 'Pre-made unit: included with the order, not cut from roll stock.', 'zorderz' ) : '',
 					'qty'              => 0,
 					'dimensions'       => array(),
 					'color_mix'        => array(),
@@ -1232,6 +1381,10 @@ class ZPREP_Engine {
 	 * @return int[] Widths in preference order (empty if the colour has no roll).
 	 */
 	private function eligible_rolls( string $color ): array {
+		// A plan cut from stock sheets has exactly one "roll": the sheet's width, whatever the colour.
+		if ( $this->sheet ) {
+			return array( (int) $this->sheet['w'] );
+		}
 		$widths = ZPREP_Settings::roll_widths_for_color( $color );
 		if ( empty( $widths ) ) {
 			return array();
@@ -1255,6 +1408,14 @@ class ZPREP_Engine {
 		}
 		// Flat table: prefer the narrowest (most manageable) sheet.
 		return array( $widths[0] );
+	}
+
+	/** The longest page a roll prints. A page of a sheet plan is one sheet, so it is as long as the sheet. */
+	private function max_page_length( int $roll_w ): float {
+		if ( $this->sheet && $roll_w === (int) $this->sheet['w'] ) {
+			return (float) $this->sheet['l'];
+		}
+		return ZPREP_Settings::max_page_length_in( $roll_w );
 	}
 
 	/* ================================================================

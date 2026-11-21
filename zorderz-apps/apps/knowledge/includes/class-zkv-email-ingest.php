@@ -3,10 +3,10 @@
  * ZKV_Email_Ingest — turns a forwarded email into Knowledge Vault documents.
  *
  * Fed by ZKV_Mailbox::poll() (v1.4.0). For each unread message in the
- * App@ mailbox:
+ * configured mailbox:
  *
  *   1. TRUST GATE — the From address must match an active WP staff user
- *      (CT decision: any staff user may file knowledge). The shared kiosk
+ *      (any staff user may file knowledge). The shared kiosk
  *      account (`zdz_general`) is refused — the kiosk never authors company
  *      knowledge (INV-Kiosk). Non-staff mail is rejected silently (no reply
  *      — never generate backscatter to strangers).
@@ -14,7 +14,7 @@
  *      pipeline as the dashboard's "Paste Text" flow: a .txt file in the
  *      protected vault dir, a wp_zkv_documents row (source_type 'email',
  *      owner = the forwarder), and a scheduled ZKV_Indexer run — so it gets
- *      the same AI title, synopsis, key facts, chunks, and (per CT) an
+ *      the same AI title, synopsis, key facts, chunks, and an
  *      AI-chosen category from the EXISTING category list.
  *   3. Real file attachments on the allowlist become their own vault
  *      documents (same owner, same provenance), each AI-indexed.
@@ -85,9 +85,9 @@ class ZKV_Email_Ingest {
 		$mid = (string) ( $msg['id'] ?? '' );
 
 		// ── 0. Internal Messaging DM-reply handoff (v1.4.1) ────────
-		// The App@ mailbox is shared. Before we treat a message as a document,
+		// The configured mailbox is shared. Before we treat a message as a document,
 		// ask the messaging plugin whether it is a reply to a DM alert email
-		// (plus-addressed app+dm-<token>@… or carrying an in-body token). If so,
+		// (plus-addressed <mailbox>+dm-<token>@… or carrying an in-body token). If so,
 		// hand the raw Graph message to it — it verifies the token, confirms the
 		// sender is the intended recipient, strips the quote, and posts the reply
 		// back into the DM. The message becomes a DM, never a vault document. The
@@ -171,7 +171,7 @@ class ZKV_Email_Ingest {
 
 		$received_local = self::format_received( (string) ( $msg['receivedDateTime'] ?? '' ) );
 		if ( '' === $title ) {
-			$title = 'Email from ' . $forwarder_name . ' — ' . $received_local;
+			$title = 'Email from ' . $forwarder_name . ' · ' . $received_local;
 		}
 
 		// ── 3. Body → plain text ───────────────────────────────────
@@ -193,7 +193,7 @@ class ZKV_Email_Ingest {
 			$atts = array_slice( $atts, 0, self::MAX_ATTACHMENTS );
 			foreach ( $atts as $att ) {
 				$stored = self::store_attachment( $mid, $att, $user, $forwarder_name, $from_email, $title, $received_local, $visibility, $is_private_mail );
-				$attachment_notes[] = $att['name'] . ' — ' . $stored['note'];
+				$attachment_notes[] = $att['name'] . ': ' . $stored['note'];
 				if ( ! empty( $stored['doc_id'] ) ) {
 					$attachment_rows[] = array(
 						'doc_id'   => $stored['doc_id'],
@@ -207,12 +207,12 @@ class ZKV_Email_Ingest {
 			return self::result( 'rejected', 'empty email (no body text, no storable attachments)' );
 		}
 		if ( '' === trim( $body_text ) ) {
-			$body_text = '(No body text — this email carried only the attached file' . ( count( $attachment_rows ) > 1 ? 's' : '' ) . '.)';
+			$body_text = '(No body text: this email carried only the attached file' . ( count( $attachment_rows ) > 1 ? 's' : '' ) . '.)';
 		}
 
 		// ── 5. Compose the stored document text ───────────────────
 		$header_lines   = array();
-		$header_lines[] = 'FORWARDED EMAIL — filed to the Knowledge Vault';
+		$header_lines[] = 'FORWARDED EMAIL: filed to the Knowledge Vault';
 		$header_lines[] = 'Forwarded by: ' . $forwarder_name . ' <' . $from_email . '>';
 		$header_lines[] = 'Received: ' . $received_local;
 		if ( '' !== $raw_subject ) {
@@ -230,9 +230,9 @@ class ZKV_Email_Ingest {
 			$file_hash
 		), ARRAY_A );
 		if ( $existing ) {
-			self::send_mail( $from_email, 'Knowledge Vault — already filed', array(
+			self::send_mail( $from_email, 'Knowledge Vault: already filed', array(
 				'This email is already in the Knowledge Vault as "' . $existing['title'] . '", so nothing new was created.',
-				'Nothing to do — it is already remembered.',
+				'Nothing to do: it is already remembered.',
 			) );
 			return self::result( 'duplicate', 'content hash matches doc #' . $existing['id'], (int) $existing['id'], $existing['title'] );
 		}
@@ -264,7 +264,7 @@ class ZKV_Email_Ingest {
 			'file_url'      => $file_path,
 			'file_hash'     => $file_hash,
 			'source_type'   => 'email',
-			'description'   => 'Email correspondence — forwarded by ' . $forwarder_name,
+			'description'   => 'Email correspondence, forwarded by ' . $forwarder_name,
 			'user_context'  => $provenance,
 			'category_id'   => null, // AI picks from the existing categories during indexing.
 			'status'        => 'pending',
@@ -404,7 +404,7 @@ class ZKV_Email_Ingest {
 			'file_url'      => $file_path,
 			'file_hash'     => $file_hash,
 			'source_type'   => 'email',
-			'description'   => 'Email attachment — forwarded by ' . $forwarder_name,
+			'description'   => 'Email attachment, forwarded by ' . $forwarder_name,
 			'user_context'  => 'Attachment from the email "' . $email_title . '" forwarded to the Knowledge Vault by '
 				. $forwarder_name . ' (' . $from_email . ') on ' . $received_local . '.',
 			'category_id'   => null, // AI picks during indexing.
@@ -526,7 +526,7 @@ class ZKV_Email_Ingest {
 		// (No content beyond the title the forwarder already possessed — they
 		// forwarded the text — and no vault link they may not be able to open.)
 		if ( 'transcript_private' === ( $final['visibility'] ?? '' ) ) {
-			$lines[] = 'Visibility: PRIVATE TRANSCRIPT — only the people named as speakers can open it (matched to staff accounts; unmatched speakers wait for an admin to confirm).';
+			$lines[] = 'Visibility: PRIVATE TRANSCRIPT. Only the people named as speakers can open it (matched to staff accounts; unmatched speakers wait for an admin to confirm).';
 			$lines[] = 'It does NOT appear in general search or the assistant except for its named parties.';
 		} else {
 			if ( ! empty( $final['slug'] ) ) {
@@ -536,7 +536,7 @@ class ZKV_Email_Ingest {
 			$lines[] = 'It is now searchable in the Knowledge app and available to the assistant.';
 		}
 
-		self::send_mail( $notify['to'], 'Knowledge Vault — filed: ' . $final['title'], $lines );
+		self::send_mail( $notify['to'], 'Knowledge Vault · filed: ' . $final['title'], $lines );
 	}
 
 	/**
@@ -552,11 +552,11 @@ class ZKV_Email_Ingest {
 		if ( empty( $notify['to'] ) ) {
 			return;
 		}
-		self::send_mail( $notify['to'], 'Knowledge Vault — filing needs a retry', array(
+		self::send_mail( $notify['to'], 'Knowledge Vault: filing needs a retry', array(
 			'Your forwarded email "' . ( $doc['title'] ?? '' ) . '" was received and saved, but the AI indexing step failed:',
 			$error,
 			'',
-			'An admin can re-run indexing from the Knowledge Vault screen — nothing was lost.',
+			'An admin can re-run indexing from the Knowledge Vault screen. Nothing was lost.',
 		) );
 	}
 

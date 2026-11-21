@@ -1,6 +1,9 @@
 (function () {
     'use strict';
 
+    // Dates and numbers are written the business's way (Business Profile → Locale, through the kit).
+    function loc() { return (window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.locale === 'function') ? window.ZDZ.ui.locale() : loc(); }
+
     /* ---------------------------------------------------------------
        Zorderz Admin Dashboard
        WordPress Admin  -  User Management & Audit Log
@@ -1109,8 +1112,8 @@
             if (ts) {
                 var d = new Date(ts);
                 if (!isNaN(d.getTime())) {
-                    displayTime = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) +
-                        ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    displayTime = d.toLocaleDateString(loc(), { year: 'numeric', month: 'short', day: 'numeric' }) +
+                        ' ' + d.toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' });
                 }
             }
             var userName = '';
@@ -1233,17 +1236,21 @@
         if (isNaN(d.getTime())) return '-';
         var tz = (state.usage && state.usage.tz) || undefined;
         try {
-            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+            return d.toLocaleDateString(loc(), { month: 'short', day: 'numeric', timeZone: tz }) + ' ' + d.toLocaleTimeString(loc(), { hour: 'numeric', minute: '2-digit', timeZone: tz });
         } catch (e) {
-            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            return d.toLocaleDateString(loc(), { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(loc(), { hour: 'numeric', minute: '2-digit' });
         }
     }
     function usageDay(ymd) {
         var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
         if (!m) return '-';
-        return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(m[2], 10) - 1] + ' ' + parseInt(m[3], 10) + ', ' + m[1];
+        try {
+            return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString(loc(), { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
+        } catch (e) {
+            return m[1] + '-' + m[2] + '-' + m[3];
+        }
     }
-    function usageNum(n) { return (parseInt(n, 10) || 0).toLocaleString('en-US'); }
+    function usageNum(n) { return (parseInt(n, 10) || 0).toLocaleString(loc()); }
     // esc() leaves quotes as they are, so nothing from the server goes into an attribute through it here. Attributes use usageAttr(), and the tab draws no inline handlers (listeners are bound after drawing).
     function usageAttr(v) {
         return String(v == null ? '' : v).replace(/[&<>"'`]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]; });

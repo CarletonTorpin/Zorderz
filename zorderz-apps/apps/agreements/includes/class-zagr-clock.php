@@ -62,6 +62,6 @@ class ZAGR_Clock {
 			return '';
 		}
 		$d = ( new DateTimeImmutable( '@' . $t ) )->setTimezone( ZAGR_Calendar::tz() );
-		return $d->format( 'l, F j, Y' ) . ' at ' . $d->format( 'g:i a' ) . ' ' . ZAGR_Calendar::tz_label();
+		return $d->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'l, F j, Y' ) : 'l, F j, Y' ) ) . ' at ' . $d->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i a' ) : 'g:i a' ) ) . ' ' . ZAGR_Calendar::tz_label();
 	}
 }

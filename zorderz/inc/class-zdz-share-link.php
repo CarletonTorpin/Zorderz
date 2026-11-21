@@ -26,9 +26,7 @@
  *     namespace key from the site's auth salt + the namespace, so a signed link
  *     minted for 'receipt' can never validate as 'user-media' even for the same id.
  *
- * So a break in one application's links never extends to another — matching CT's
- * standing instruction ("some slight difference, so if one got cracked in the
- * receipt app it wouldn't automatically extend to this other set of places").
+ * So a break in one application's links never extends to another.
  *
  * ── THREAT MODEL ─────────────────────────────────────────────────────────────
  * The link is matched to the ONLINE (rate-limitable HTTP) threat, not offline

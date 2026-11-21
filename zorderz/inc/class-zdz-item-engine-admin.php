@@ -190,7 +190,7 @@ class ZDZ_Item_Engine_Admin {
 		self::notice(
 			sprintf(
 				/* translators: 1: items, 2: schemes, 3: subtypes. */
-				__( 'Sample set loaded: %1$d items, %2$d pricing schemes, %3$d subtypes. This is fictional demo data — clear it before going live.', 'zorderz' ),
+				__( 'Sample set loaded: %1$d items, %2$d pricing schemes, %3$d subtypes. This is fictional demo data: clear it before going live.', 'zorderz' ),
 				$r['items'],
 				$r['schemes'],
 				$r['subtypes']
@@ -250,13 +250,13 @@ class ZDZ_Item_Engine_Admin {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Item Engine', 'zorderz' ); ?></h1>
 			<p style="max-width:52em">
-				<?php esc_html_e( 'Everything this business sells is an Item — a product (tangible) or a service (intangible). Underneath, you name your own subtypes. Prices are reusable Pricing Schemes. The count categories every app speaks come from this catalog, so there is no fixed product list baked into the code.', 'zorderz' ); ?>
+				<?php esc_html_e( 'Everything this business sells is an Item: a product (tangible) or a service (intangible). Underneath, you name your own subtypes. Prices are reusable Pricing Schemes. The count categories every app speaks come from this catalog, so there is no fixed product list baked into the code.', 'zorderz' ); ?>
 			</p>
 			<?php self::render_notices(); ?>
 
 			<?php if ( $empty ) : ?>
 				<div class="notice notice-info inline"><p>
-					<?php esc_html_e( 'The catalog is empty — the blank-slate default. Add Items below, load the sample set to explore the mechanics, or connect a system and let discovery propose a catalog you approve item by item.', 'zorderz' ); ?>
+					<?php esc_html_e( 'The catalog is empty: the blank-slate default. Add Items below, load the sample set to explore the mechanics, or connect a system and let discovery propose a catalog you approve item by item.', 'zorderz' ); ?>
 				</p></div>
 			<?php endif; ?>
 
@@ -301,9 +301,9 @@ class ZDZ_Item_Engine_Admin {
 					<tr>
 						<td><code><?php echo esc_html( $id ); ?></code><br><?php echo esc_html( $meta['display_name'] ); ?></td>
 						<td><?php echo esc_html( $meta['type'] ); ?></td>
-						<td><?php echo esc_html( $meta['subtype'] ?: '—' ); ?></td>
-						<td><?php echo esc_html( trim( $meta['unit_noun_singular'] . ' / ' . $meta['unit_noun_plural'], ' /' ) ?: '—' ); ?></td>
-						<td><?php echo esc_html( $meta['parent_item_id'] ?: '—' ); ?></td>
+						<td><?php echo esc_html( $meta['subtype'] ?: '–' ); ?></td>
+						<td><?php echo esc_html( trim( $meta['unit_noun_singular'] . ' / ' . $meta['unit_noun_plural'], ' /' ) ?: '–' ); ?></td>
+						<td><?php echo esc_html( $meta['parent_item_id'] ?: '–' ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 			<?php endif; ?>
@@ -333,7 +333,7 @@ class ZDZ_Item_Engine_Admin {
 			<?php else : ?>
 				<?php foreach ( $subs as $s ) : ?>
 					<tr>
-						<td><code><?php echo esc_html( $s['slug'] ); ?></code> — <?php echo esc_html( $s['label'] ); ?></td>
+						<td><code><?php echo esc_html( $s['slug'] ); ?></code>: <?php echo esc_html( $s['label'] ); ?></td>
 						<td><?php echo esc_html( $s['type'] ); ?></td>
 						<td><?php echo esc_html( $s['scope'] ); ?></td>
 						<td><?php echo esc_html( (string) $s['match_priority'] ); ?></td>
@@ -374,7 +374,7 @@ class ZDZ_Item_Engine_Admin {
 		?>
 		<hr>
 		<h2><?php esc_html_e( 'Pricing schemes', 'zorderz' ); ?></h2>
-		<p class="description" style="max-width:52em"><?php esc_html_e( 'How you price things — reusable and cloneable. Build one rate, clone it, adjust. Methods: flat, per unit, per hour, per area, per visit, tiered, formula (e.g. cost x markup), and quote-only.', 'zorderz' ); ?></p>
+		<p class="description" style="max-width:52em"><?php esc_html_e( 'How you price things: reusable and cloneable. Build one rate, clone it, adjust. Methods: flat, per unit, per hour, per area, per visit, tiered, formula (e.g. cost x markup), and quote-only.', 'zorderz' ); ?></p>
 		<table class="widefat striped" style="max-width:70em">
 			<thead><tr>
 				<th><?php esc_html_e( 'Scheme', 'zorderz' ); ?></th>
@@ -470,10 +470,10 @@ class ZDZ_Item_Engine_Admin {
 					<tr<?php echo $it['active'] ? '' : ' style="opacity:.55"'; ?>>
 						<td><code><?php echo esc_html( $it['id'] ); ?></code><br><?php echo esc_html( $it['display_name'] ); ?><?php echo $it['active'] ? '' : ' <em>(' . esc_html__( 'inactive', 'zorderz' ) . ')</em>'; ?></td>
 						<td><?php echo esc_html( $it['type'] ); ?></td>
-						<td><?php echo esc_html( $it['subtype'] ?: '—' ); ?></td>
+						<td><?php echo esc_html( $it['subtype'] ?: '–' ); ?></td>
 						<td><span class="description"><?php echo esc_html( implode( ', ', array_map( fn( $a ) => is_array( $a ) ? ( $a['value'] ?? '' ) : $a, array_slice( $it['aliases'], 0, 6 ) ) ) ); ?></span></td>
-						<td><?php echo $it['countable'] ? '✓' : '—'; ?></td>
-						<td><?php echo esc_html( $it['pricing_scheme_id'] ?: '—' ); ?></td>
+						<td><?php echo $it['countable'] ? '✓' : '–'; ?></td>
+						<td><?php echo esc_html( $it['pricing_scheme_id'] ?: '–' ); ?></td>
 						<td>
 							<a class="button-link" href="<?php echo esc_url( add_query_arg( [ 'page' => self::SLUG, 'edit_item' => $it['id'] ] ) ); ?>#item-form"><?php esc_html_e( 'Edit', 'zorderz' ); ?></a>
 							<form method="post" onsubmit="return confirm('<?php echo esc_js( __( 'Delete this item?', 'zorderz' ) ); ?>');" style="display:inline">
@@ -498,15 +498,15 @@ class ZDZ_Item_Engine_Admin {
 				<tr><th><?php esc_html_e( 'Display name', 'zorderz' ); ?></th><td><input type="text" name="item[display_name]" class="regular-text" value="<?php echo esc_attr( $cur['display_name'] ?? '' ); ?>" required></td></tr>
 				<tr><th><?php esc_html_e( 'Type', 'zorderz' ); ?></th><td><?php self::type_select( 'item[type]', $cur['type'] ?? 'product' ); ?></td></tr>
 				<tr><th><?php esc_html_e( 'Subtype', 'zorderz' ); ?></th><td>
-					<input list="zdz-subtype-list" type="text" name="item[subtype]" class="regular-text" value="<?php echo esc_attr( $cur['subtype'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'your own label — new ones are created', 'zorderz' ); ?>">
+					<input list="zdz-subtype-list" type="text" name="item[subtype]" class="regular-text" value="<?php echo esc_attr( $cur['subtype'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'your own label; new ones are created', 'zorderz' ); ?>">
 					<datalist id="zdz-subtype-list"><?php foreach ( ZDZ_Item_Engine::subtypes() as $s ) : ?><option value="<?php echo esc_attr( $s['slug'] ); ?>"><?php echo esc_html( $s['label'] ); ?></option><?php endforeach; ?></datalist>
 					<span class="description"><?php esc_html_e( 'scope for a new subtype:', 'zorderz' ); ?></span> <?php self::scope_select( 'item[subtype_scope]', $cur ? $cur['subtype_scope'] : 'global' ); ?>
 				</td></tr>
 				<tr><th><?php esc_html_e( 'Aliases', 'zorderz' ); ?></th><td>
-					<textarea name="item[aliases]" rows="3" class="large-text code" placeholder="<?php esc_attr_e( 'one per line — every way it shows up in speech, invoices, notes', 'zorderz' ); ?>"><?php echo esc_textarea( self::aliases_to_text( $cur['aliases'] ?? [] ) ); ?></textarea>
+					<textarea name="item[aliases]" rows="3" class="large-text code" placeholder="<?php esc_attr_e( 'one per line: every way it shows up in speech, invoices, notes', 'zorderz' ); ?>"><?php echo esc_textarea( self::aliases_to_text( $cur['aliases'] ?? [] ) ); ?></textarea>
 				</td></tr>
 				<tr><th><?php esc_html_e( 'Negative aliases', 'zorderz' ); ?></th><td>
-					<textarea name="item[negative_aliases]" rows="2" class="large-text code" placeholder="<?php esc_attr_e( 'one per line — tokens whose presence PREVENTS a match', 'zorderz' ); ?>"><?php echo esc_textarea( self::aliases_to_text( $cur['negative_aliases'] ?? [] ) ); ?></textarea>
+					<textarea name="item[negative_aliases]" rows="2" class="large-text code" placeholder="<?php esc_attr_e( 'one per line: tokens whose presence PREVENTS a match', 'zorderz' ); ?>"><?php echo esc_textarea( self::aliases_to_text( $cur['negative_aliases'] ?? [] ) ); ?></textarea>
 				</td></tr>
 				<tr><th><?php esc_html_e( 'Sellable', 'zorderz' ); ?></th><td>
 					<select name="item[sellable]">
@@ -518,13 +518,13 @@ class ZDZ_Item_Engine_Admin {
 				<tr><th><?php esc_html_e( 'Unit nouns', 'zorderz' ); ?></th><td>
 					<input type="text" name="item[unit_noun_singular]" value="<?php echo esc_attr( $cur['unit_noun_singular'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'singular', 'zorderz' ); ?>" class="small-text">
 					<input type="text" name="item[unit_noun_plural]" value="<?php echo esc_attr( $cur['unit_noun_plural'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'plural', 'zorderz' ); ?>" class="small-text">
-					<span class="description"><?php esc_html_e( 'used when phrasing counts — never hardcoded', 'zorderz' ); ?></span>
+					<span class="description"><?php esc_html_e( 'used when phrasing counts, never hardcoded', 'zorderz' ); ?></span>
 				</td></tr>
 				<tr><th><?php esc_html_e( 'Counted', 'zorderz' ); ?></th><td><label><input type="checkbox" name="item[countable]" value="1" <?php checked( $cur['countable'] ?? false ); ?>> <?php esc_html_e( 'Include this item as a cross-app count category', 'zorderz' ); ?></label></td></tr>
 				<tr><th><?php esc_html_e( 'Parent item', 'zorderz' ); ?></th><td><input type="text" name="item[parent_item_id]" class="regular-text" value="<?php echo esc_attr( $cur['parent_item_id'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'for a job line whose count comes from child lines', 'zorderz' ); ?>"></td></tr>
 				<tr><th><?php esc_html_e( 'Pricing scheme', 'zorderz' ); ?></th><td>
 					<select name="item[pricing_scheme_id]">
-						<option value=""><?php esc_html_e( '— none —', 'zorderz' ); ?></option>
+						<option value=""><?php esc_html_e( '(none)', 'zorderz' ); ?></option>
 						<?php foreach ( ZDZ_Item_Engine::pricing_schemes() as $s ) : ?>
 							<option value="<?php echo esc_attr( $s['id'] ); ?>" <?php selected( $cur['pricing_scheme_id'] ?? '', $s['id'] ); ?>><?php echo esc_html( $s['name'] . ' (' . $s['method'] . ')' ); ?></option>
 						<?php endforeach; ?>
@@ -547,7 +547,7 @@ class ZDZ_Item_Engine_Admin {
 		?>
 		<hr>
 		<h2><?php esc_html_e( 'Discovery', 'zorderz' ); ?></h2>
-		<p class="description" style="max-width:52em"><?php esc_html_e( 'When a system is connected, Zorderz can read how your catalog is already set up and propose Items and prices — named from your own data, with the reasoning shown. Nothing is applied without your yes, item by item, and it never editorialises about your prices.', 'zorderz' ); ?></p>
+		<p class="description" style="max-width:52em"><?php esc_html_e( 'When a system is connected, Zorderz can read how your catalog is already set up and propose Items and prices, named from your own data, with the reasoning shown. Nothing is applied without your yes, item by item, and it never editorialises about your prices.', 'zorderz' ); ?></p>
 		<?php if ( empty( $disc['sources'] ) && empty( $disc['items'] ) ) : ?>
 			<div class="notice notice-info inline"><p><?php esc_html_e( 'No connected sources are proposing a catalog right now. Connect a CRM, invoicing, or a price list to enable discovery.', 'zorderz' ); ?></p></div>
 		<?php else : ?>

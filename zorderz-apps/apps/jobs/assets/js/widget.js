@@ -315,7 +315,7 @@
 		var listEl = root.querySelector('#zjob-list');
 		if (!listEl) { return; }
 		if (!rows.length) {
-			listEl.innerHTML = '<div class="zjob-empty">Nothing here &mdash; you&rsquo;re all caught up.</div>';
+			listEl.innerHTML = '<div class="zjob-empty">Nothing here; you&rsquo;re all caught up</div>';
 			return;
 		}
 		var isLead = root.getAttribute('data-is-lead') === '1';
@@ -817,6 +817,7 @@
 		el.disabled = true;
 		post('zjob_set_schedule', { id: id, start_local: val }).then(function (res) {
 			if (res && res.success) {
+				scheduleChanged(id);
 				loadList(root, currentFilter(root));
 			} else {
 				el.disabled = false;
@@ -828,11 +829,17 @@
 		});
 	}
 
+	/* A job's appointment was made, moved or removed: an open Schedule reads its events again (zdz:schedule-changed). */
+	function scheduleChanged(id) {
+		try { document.dispatchEvent(new CustomEvent('zdz:schedule-changed', { detail: { app: 'jobs', id: parseInt(id, 10) } })); } catch (e) { /* an old engine: Schedule catches up on its own */ }
+	}
+
 	/* Clear a job's schedule (delete the linked appointment). */
 	function schedClear(root, el, id) {
 		el.disabled = true;
 		post('zjob_clear_schedule', { id: id }).then(function (res) {
 			if (res && res.success) {
+				scheduleChanged(id);
 				loadList(root, currentFilter(root));
 			} else {
 				el.disabled = false;

@@ -5,7 +5,6 @@
  * Creates/patches the shared user media table.
  * Cached via option so it only runs ONCE, not on every request.
  *
- * @since   2.17.1
  * @package Zorderz
  */
 
@@ -24,6 +23,13 @@ function zdz_theme_migrate_2_17_1() {
 	$charset = $wpdb->get_charset_collate();
 
 	$exists = $wpdb->get_var( "SHOW TABLES LIKE '{$table}'" ) === $table;
+
+	// A new site: make the table at today's schema (it stamps its own version), never this
+	// first-release shape, which the EXIF step has already passed over on a site with no table.
+	if ( ! $exists && class_exists( 'ZDZ_User_Media' ) && method_exists( 'ZDZ_User_Media', 'install' ) ) {
+		ZDZ_User_Media::install();
+		return;
+	}
 
 	if ( ! $exists ) {
 		$wpdb->query(

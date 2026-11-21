@@ -335,7 +335,7 @@ class ZTER_Pack {
 		if ( null !== $plan['zones'] ) {
 			$r = ZTER_Zones::save( $plan['zones'], $by );
 			if ( is_wp_error( $r ) ) {
-				$msgs[] = __( 'Territories: zones not applied — ', 'zorderz' ) . $r->get_error_message();
+				$msgs[] = __( 'Territories: zones not applied. ', 'zorderz' ) . $r->get_error_message();
 			} else {
 				$did['zones'] = (int) $r['version'];
 				/* translators: %d: zones */
@@ -344,7 +344,7 @@ class ZTER_Pack {
 		}
 		foreach ( $plan['rules'] as $stage => $rows ) {
 			if ( ! ZTER_DB::lock( 'zter_rules' ) ) {
-				$msgs[] = sprintf( __( 'Territories: %s rules not applied — someone is saving the rules right now.', 'zorderz' ), $stage );
+				$msgs[] = sprintf( __( 'Territories: %s rules not applied; someone is saving the rules right now.', 'zorderz' ), $stage );
 				continue;
 			}
 			try {
@@ -353,7 +353,7 @@ class ZTER_Pack {
 				ZTER_DB::unlock( 'zter_rules' );
 			}
 			if ( is_wp_error( $r ) ) {
-				$msgs[] = sprintf( __( 'Territories: %s rules not applied — ', 'zorderz' ), $stage ) . $r->get_error_message();
+				$msgs[] = sprintf( __( 'Territories: %s rules not applied. ', 'zorderz' ), $stage ) . $r->get_error_message();
 			} else {
 				$did['rules'][ $stage ] = (int) $r['version'];
 				/* translators: 1: rules, 2: stage */
@@ -369,7 +369,7 @@ class ZTER_Pack {
 			$msgs[] = sprintf( __( 'Territories: ZIP codes applied for %d people.', 'zorderz' ), count( $plan['zips'] ) );
 		}
 		foreach ( $plan['refused'] as $r ) {
-			$msgs[] = sprintf( __( 'Territories: %1$s refused — %2$s', 'zorderz' ), $r['path'], $r['why'] );
+			$msgs[] = sprintf( __( 'Territories: %1$s refused. %2$s', 'zorderz' ), $r['path'], $r['why'] );
 		}
 		update_option( self::APPLIED_OPTION, $did, false );
 		return $msgs;

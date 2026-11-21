@@ -5,6 +5,8 @@
  * Two tables: the estimate mirror (a local index of what the app has drafted/sent, the
  * source of truth for ownership + history) and the background parse-job queue. SCHEMA
  * ONLY on activation — no estimate, customer, price or catalog row is ever seeded.
+ * Follow-ups (an estimate re-sent to its salesperson, and their answer) have a table of
+ * their own, whose columns ZEST_Followup::schema() holds.
  *
  * @package Zorderz\Estimate
  */
@@ -15,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZEST_DB {
 
-	const DB_VERSION = '1.27.0';
+	const DB_VERSION = '1.28.0';
 
 	/** doc_type discriminator values — this row models an estimate or an invoice document. */
 	const DOC_TYPE_ESTIMATE = 'estimate';
@@ -38,7 +40,7 @@ class ZEST_DB {
 	const ESTIMATE_LIFECYCLE = array(
 		'draft'    => 'Drafted, not yet sent to the customer.',
 		'sent'     => 'Delivered to the customer, awaiting a decision.',
-		'accepted' => 'Customer accepted — distinct from being billed.',
+		'accepted' => 'Customer accepted, which is not the same as being billed.',
 		'invoiced' => 'A billing document exists for it (converted_invoice_id resolves live).',
 		'paid'     => 'The linked invoice has been paid in full.',
 	);
@@ -290,9 +292,20 @@ class ZEST_DB {
 			KEY idx_state (state)
 		) {$charset};" );
 
-		// Failsafe: only stamp the version once the table really exists.
+		// Follow-ups: one row per ask, or per answer nobody asked for.
+		$followups = '';
+		if ( class_exists( 'ZEST_Followup' ) ) {
+			$followups = ZEST_Followup::table();
+			dbDelta( ZEST_Followup::schema( $wpdb->prefix, $charset ) );
+		}
+
+		// Failsafe: only stamp the version once the tables really exist.
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $estimates ) ) !== $estimates ) {
 			error_log( 'Zorderz Estimates: schema install did not create the estimates table — not stamping version.' );
+			return;
+		}
+		if ( '' !== $followups && $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $followups ) ) !== $followups ) {
+			error_log( 'Zorderz Estimates: schema install did not create the follow-ups table — not stamping version.' );
 			return;
 		}
 		update_option( 'zest_db_version', self::DB_VERSION );

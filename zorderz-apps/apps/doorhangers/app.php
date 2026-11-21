@@ -643,8 +643,8 @@ function zdh_settings_page() {
 					<td>
 						<label for="zdh_walk_size"><?php esc_html_e( 'Houses per walk', 'zorderz' ); ?></label> <input type="number" id="zdh_walk_size" name="zdh_settings[walk_size]" value="<?php echo esc_attr( (int) $s['walk_size'] ); ?>" min="5" max="500" style="width:90px">
 						&nbsp; <label for="zdh_walk_rate"><?php esc_html_e( 'Houses per hour', 'zorderz' ); ?></label> <input type="number" id="zdh_walk_rate" name="zdh_settings[walk_rate]" value="<?php echo esc_attr( (int) $s['walk_rate'] ); ?>" min="5" max="300" style="width:90px">
-						<label style="display:block;margin-top:8px"><input type="radio" name="zdh_settings[route_style]" value="loop" <?php checked( 'loop', $s['route_style'] ); ?>> <strong><?php esc_html_e( 'Loop the block', 'zorderz' ); ?></strong> — <?php esc_html_e( 'one side of the street at a time, round the block and back.', 'zorderz' ); ?></label>
-						<label style="display:block;margin-top:4px"><input type="radio" name="zdh_settings[route_style]" value="street" <?php checked( 'street', $s['route_style'] ); ?>> <strong><?php esc_html_e( 'Street by street', 'zorderz' ); ?></strong> — <?php esc_html_e( 'both sides of a street, then the nearest unfinished street.', 'zorderz' ); ?></label>
+						<label style="display:block;margin-top:8px"><input type="radio" name="zdh_settings[route_style]" value="loop" <?php checked( 'loop', $s['route_style'] ); ?>> <strong><?php esc_html_e( 'Loop the block', 'zorderz' ); ?></strong>: <?php esc_html_e( 'one side of the street at a time, round the block and back.', 'zorderz' ); ?></label>
+						<label style="display:block;margin-top:4px"><input type="radio" name="zdh_settings[route_style]" value="street" <?php checked( 'street', $s['route_style'] ); ?>> <strong><?php esc_html_e( 'Street by street', 'zorderz' ); ?></strong>: <?php esc_html_e( 'both sides of a street, then the nearest unfinished street.', 'zorderz' ); ?></label>
 						<p class="description"><?php esc_html_e( 'Starting values: set your own team\'s pace.', 'zorderz' ); ?></p>
 					</td>
 				</tr>
@@ -687,7 +687,7 @@ function zdh_settings_page() {
 					<td>
 						<p class="description" style="margin:0 0 8px"><?php esc_html_e( 'Each person\'s cross-check reads their own CRM records (the CRM user their profile is matched to). This default is used for a person with no match. The app only ever reads, and stores no names.', 'zorderz' ); ?></p>
 						<select id="zdh_ns_user" name="zdh_settings[nutshell_user]" data-saved="<?php echo esc_attr( $s['nutshell_user'] ); ?>" style="min-width:260px">
-							<option value="">— <?php esc_html_e( 'none', 'zorderz' ); ?> —</option>
+							<option value="">(<?php esc_html_e( 'none', 'zorderz' ); ?>)</option>
 							<?php if ( $s['nutshell_user'] !== '' ) : ?><option value="<?php echo esc_attr( $s['nutshell_user'] ); ?>" selected><?php echo esc_html( $s['nutshell_user_name'] ?: $s['nutshell_user'] ); ?></option><?php endif; ?>
 						</select>
 						<input type="hidden" id="zdh_ns_user_name" name="zdh_settings[nutshell_user_name]" value="<?php echo esc_attr( $s['nutshell_user_name'] ); ?>">
@@ -718,7 +718,7 @@ function zdh_settings_page() {
 			foreach ( $reports as $i => $r ) :
 				?>
 				<details style="margin:0 0 8px;max-width:900px"<?php echo 0 === $i ? ' open' : ''; ?>>
-					<summary style="cursor:pointer"><strong><?php echo esc_html( $r['at'] ); ?></strong> — <?php echo esc_html( trim( ( $r['by'] ?? '' ) . ' ' . ( $r['label'] ?? '' ) ) ); ?> <span style="color:#666"><?php echo esc_html( substr( (string) ( $r['ua'] ?? '' ), 0, 80 ) ); ?></span></summary>
+					<summary style="cursor:pointer"><strong><?php echo esc_html( $r['at'] ); ?></strong> · <?php echo esc_html( trim( ( $r['by'] ?? '' ) . ' ' . ( $r['label'] ?? '' ) ) ); ?> <span style="color:#666"><?php echo esc_html( substr( (string) ( $r['ua'] ?? '' ), 0, 80 ) ); ?></span></summary>
 					<textarea readonly rows="18" style="width:100%;font:12px/1.4 Menlo,Consolas,monospace;white-space:pre"><?php echo esc_textarea( $r['text'] ); ?></textarea>
 				</details>
 				<?php
@@ -783,12 +783,12 @@ function zdh_settings_page() {
 			if (dc) { dc.addEventListener('click', function(){ var n = document.getElementById('zdh-diag-clear-note'); if (dc.dataset.armed !== '1') { dc.dataset.armed = '1'; dc.textContent = T.armDelete; n.textContent = ''; return; } call('diag-report', {method:'DELETE'}).then(function(j){ if (j && j.code && j.message) { dc.dataset.armed = ''; dc.textContent = T.deleteAll; n.textContent = String(j.message); return; } location.reload(); }).catch(function(e){ dc.dataset.armed = ''; dc.textContent = T.deleteAll; n.textContent = said(e); }); }); }
 			var sel = document.getElementById('zdh_ns_user'), nm = document.getElementById('zdh_ns_user_name'), note = document.getElementById('zdh_ns_user_note');
 			if (!sel) { return; }
-			sel.addEventListener('change', function(){ nm.value = sel.value ? sel.options[sel.selectedIndex].textContent.replace(/\s*—\s*\S+$/, '').replace(/\s*\([^)]*\)\s*$/, '') : ''; });
+			sel.addEventListener('change', function(){ nm.value = sel.value ? sel.options[sel.selectedIndex].textContent.replace(/\s*·\s*\S+$/, '').replace(/\s*\([^)]*\)\s*$/, '') : ''; });
 			<?php if ( ZDH_Nutshell::has_key() ) : ?>
 			call('crm/users').then(function(j){
 				if (!j || !j.users) { note.textContent = (j && j.message) ? j.message : T.noUsers; return; }
 				var saved = sel.getAttribute('data-saved') || '';
-				sel.innerHTML = '<option value="">— ' + T.none + ' —</option>' + j.users.map(function(u){ var label = u.name + (u.initials ? ' (' + u.initials + ')' : '') + (u.enabled ? '' : ' — ' + T.disabled); return '<option value="' + String(u.id).replace(/[^0-9a-z-]/gi, '') + '"' + (u.id === saved ? ' selected' : '') + '>' + label.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</option>'; }).join('');
+				sel.innerHTML = '<option value="">(' + T.none + ')</option>' + j.users.map(function(u){ var label = u.name + (u.initials ? ' (' + u.initials + ')' : '') + (u.enabled ? '' : ' · ' + T.disabled); return '<option value="' + String(u.id).replace(/[^0-9a-z-]/gi, '') + '"' + (u.id === saved ? ' selected' : '') + '>' + label.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</option>'; }).join('');
 				note.textContent = j.users.length + ' ' + T.usersIn;
 			}).catch(function(e){ note.textContent = e && e.noKit ? said(e) : T.noUsersKey; });
 			<?php endif; ?>

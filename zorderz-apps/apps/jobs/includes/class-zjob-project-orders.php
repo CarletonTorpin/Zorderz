@@ -41,6 +41,11 @@
  * THE GO SIGN. Placing an order (Mark ordered, the supplier's form) also waits for the customer's agreement
  * (ZJOB_Order_Gate). Starting, saving, confirming and discarding stay open, so an order can be ready the moment it may go.
  *
+ * WHAT SHOWS FIRST. An opened Project shows its order forms straight away only where what was sold calls for a
+ * supplier's order (sold_needs_order(): the kinds of work the business orders materials for, the list My next's
+ * "order" step reads too). On any other job the panel is one line that opens the same forms. This is what the screen
+ * shows first and nothing else: no handler asks it, and an order can be started on any Project.
+ *
  * @package Zorderz\Jobs
  */
 
@@ -76,6 +81,9 @@ class ZJOB_Project_Orders {
 
 	/** The Core PO prefix until the business sets its own. */
 	const PO_PREFIX_DEFAULT = 'PO';
+
+	/** Core's catch-all job kind (zjob_components()): a job filed under it names no kind of work. */
+	const KIND_CATCH_ALL = 'other';
 
 	private static $memo = array();
 
@@ -898,6 +906,50 @@ class ZJOB_Project_Orders {
 	}
 
 	/* =====================================================================================================================
+	 * DOES WHAT WAS SOLD CALL FOR A SUPPLIER'S ORDER?
+	 *
+	 * This only decides what the order panel SHOWS FIRST: the forms, or one line ("Order something for this job") that
+	 * opens them. It is not a permission. act() and every other handler check exactly what they check without it, and an
+	 * order can still be started on any Project: hiding is not securing.
+	 * ===================================================================================================================== */
+
+	/**
+	 * True when the forms should show without being asked for:
+	 *   - shop stock (the desk is for ordering);
+	 *   - the business has named no kind of work as ordered (My next's step rules, order.kinds; Core names none), so
+	 *     nothing is hidden;
+	 *   - one of the Project's kinds is ordered: the same list and the same test as My next's "order" step
+	 *     (ZJOB_My_Next::kinds_need_order()), so the Jobs tab and the opened Project cannot disagree;
+	 *   - the Project's kinds are not known: it has no job yet, or its jobs name no kind (an empty kind, or the
+	 *     catch-all). A Project exists before its work is handed on, and a job filed under the catch-all says nothing
+	 *     about what was sold. Not knowing is never a reason to hide.
+	 * False only when the kinds ARE known and none of them is ordered.
+	 *
+	 * @param array         $project     a Project (Zjob_Project::get()) or stock_project()
+	 * @param array         $jobs        the Project's job rows
+	 * @param string[]|null $order_kinds the kinds that are ordered; null reads My next's step rules
+	 */
+	public static function sold_needs_order( array $project, array $jobs = array(), ?array $order_kinds = null ): bool {
+		if ( ! empty( $project['is_stock'] ) || self::STOCK_PROJECT === (string) ( $project['id'] ?? '' ) ) {
+			return true;
+		}
+		if ( ! class_exists( 'ZJOB_My_Next' ) ) {
+			return true; // nobody to ask which kinds are ordered
+		}
+		if ( null === $order_kinds ) {
+			$order_kinds = (array) ( ZJOB_My_Next::step_rules()['order'] ?? array() );
+		}
+		if ( ! $order_kinds ) {
+			return true;
+		}
+		$kinds = ZJOB_My_Next::kinds_of( $jobs );
+		if ( ZJOB_My_Next::kinds_need_order( $kinds, $order_kinds ) ) {
+			return true;
+		}
+		return array() === array_diff( $kinds, array( self::KIND_CATCH_ALL ) );
+	}
+
+	/* =====================================================================================================================
 	 * VIEW and ACTIONS
 	 * ===================================================================================================================== */
 
@@ -962,13 +1014,15 @@ class ZJOB_Project_Orders {
 			$forms[] = array( 'key' => $k, 'label' => $f['label'] );
 		}
 		return array(
-			'orders'    => $out,
-			'forms'     => $forms,
-			'kinds'     => self::kind_labels(),
-			'can_start' => ! empty( $sides ) && count( $out ) < self::MAX_ORDERS_PER_PROJECT,
-			'gate'      => '' !== $agree ? $agree : '',
-			'po'        => $stock ? '' : self::po_for( $project ),
-			'stock'     => $stock,
+			'orders'     => $out,
+			'forms'      => $forms,
+			'kinds'      => self::kind_labels(),
+			'can_start'  => ! empty( $sides ) && count( $out ) < self::MAX_ORDERS_PER_PROJECT,
+			'gate'       => '' !== $agree ? $agree : '',
+			'po'         => $stock ? '' : self::po_for( $project ),
+			'stock'      => $stock,
+			// Whether the forms show first, or the one line that opens them. For the screen only: nothing checks it.
+			'sold_needs' => self::sold_needs_order( $project, $jobs ),
 		);
 	}
 

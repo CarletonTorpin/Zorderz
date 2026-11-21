@@ -39,7 +39,7 @@ class ZMI_Import {
 		return <<<TXT
 # Display Name | primary mailbox (Exchange role) | first-name / WP-login alias(es)
 # One person per line, pipe-delimited. Matching is by email first, then an exact,
-# unique display-name match — never a guess. Shared/service boxes (a support inbox,
+# unique display-name match, never a guess. Shared/service boxes (a support inbox,
 # a sales inbox…) go in the service-mailbox registry above, not here. This roster
 # ships empty; paste your own team below.
 TXT;

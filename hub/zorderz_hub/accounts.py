@@ -76,11 +76,11 @@ NOT_ACRONYMS = {
 }
 
 
-# words a nickname may never stand for, whatever the list says. "vs" was
-# read as a customer's initials ("Google Ads leads vs existing customers" became
-# a question about that customer), so ordinary words and chart vocabulary are
-# never treated as an account, and short nicknames match only as typed ("VS",
-# not "vs"). Four letters and up (ABCD) still match in any case.
+# words a nickname may never stand for, whatever the list says: ordinary words and
+# chart vocabulary are never treated as an account ("Google Ads leads vs existing
+# customers" is not a question about a customer known as "VS"), and short nicknames
+# match only as typed ("VS", not "vs"). Four letters and up (ABCD) still match in
+# any case.
 NEVER_NICKNAMES = NOT_ACRONYMS | {
     "vs", "v", "ga", "ad", "ads", "or", "us", "we", "me", "my", "it", "in", "on", "at", "to", "by",
     "of", "is", "as", "an", "am", "pm", "up", "no", "so", "do", "go", "ok", "tv", "ac",

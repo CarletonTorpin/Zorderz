@@ -144,6 +144,11 @@ class ZDZ_View_As {
 		return self::$emulated_user_id;
 	}
 
+	/** The roles an administrator can preview, as ?zdz_view_as=ROLE takes them. */
+	public static function roles(): array {
+		return self::$valid_roles;
+	}
+
 	/**
 	 * Get the default allowed apps for a given role.
 	 * Delegates to the centralised ZDZ_User_Roles class.

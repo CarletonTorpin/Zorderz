@@ -153,8 +153,9 @@ class ZANA_Ledger_Reports {
 			. ' These are COMPANY-WIDE figures. If a year asked about is outside this coverage, say so; never present a partial year as complete.';
 	}
 
+	/** A sum in the business's money (Business Profile → Locale). */
 	protected static function money( $v ): string {
-		return '$' . number_format( (float) $v, 2 );
+		return ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) $v, 2 ) : number_format( (float) $v, 2 ) );
 	}
 
 	protected static function pct( $a, $b ): string {

@@ -7,7 +7,7 @@
  *   (ZDZ_Core_LLM, customer details coded before anything leaves), and passes every reply through the single outbound
  *   gate (ZDZ_Answer_Authority) so it states facts only. What it may ask an app to do goes through the verb registry
  *   (ZDZ_Capabilities): a lookup is answered by the app, a change waits for a person's Confirm press.
- * Version:     1.3.0
+ * Version:     1.4.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -42,7 +42,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZANA_VERSION', '1.3.0' );
+define( 'ZANA_VERSION', '1.4.0' );
 define( 'ZANA_FILE', __FILE__ );
 define( 'ZANA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZANA_URL', plugin_dir_url( __FILE__ ) );
@@ -107,6 +107,20 @@ add_action(
 );
 // ── The stored-data ledger (END) ────────────────────────────────────
 require_once ZANA_DIR . 'includes/class-zana-surface.php';
+
+// ── Records from Charts (BEGIN) ─────────────────────────────────────
+// The chat reads the business's own invoice lines and job lists through the Charts app's charts.records verb, for the
+// people Charts lets see line items and only while the business shares records with the assistant (ZANA_Records); and
+// it notes a name the question writes two ways (ZANA_Name_Variants). No table and no option of its own.
+require_once ZANA_DIR . 'includes/class-zana-name-variants.php';
+require_once ZANA_DIR . 'includes/class-zana-records.php';
+// ── Records from Charts (END) ───────────────────────────────────────
+
+// ── An answer that fits one call's cost (BEGIN) ─────────────────────
+// A call the Ai router refuses as over its per-call cap is asked once more with its biggest data block cut to fit, and
+// the answer says part of the data was left out (ZANA_Data_Fit, used by ZANA_LLM_Client and the chat).
+require_once ZANA_DIR . 'includes/class-zana-data-fit.php';
+// ── An answer that fits one call's cost (END) ───────────────────────
 
 /**
  * Activation (called by the zorderz-apps bundle activator via the manifest).
@@ -275,7 +289,7 @@ add_action(
 					'kioskNote'    => __( 'The assistant is not available on the shared device.', 'zorderz' ),
 					'pvNote'       => __( 'Privacy View: names and numbers are shown as codes, and nothing can be changed from here.', 'zorderz' ),
 					'empty'        => __( 'Ask a question to get started.', 'zorderz' ),
-					'timeout'      => __( 'This is taking longer than usual — your answer will appear in this conversation when it\'s ready.', 'zorderz' ),
+					'timeout'      => __( 'This is taking longer than usual. Your answer will appear in this conversation when it\'s ready.', 'zorderz' ),
 					'error'        => __( 'Something went wrong. Please try again.', 'zorderz' ),
 					'confirm'      => __( 'Confirm', 'zorderz' ),
 					'cancel'       => __( 'Cancel', 'zorderz' ),
@@ -347,6 +361,73 @@ add_action(
 	},
 	21
 );
+
+/* ── Answering one email from the chat (BEGIN) ──────────────────────────────────────────────────────────
+ * "reply to #1" under a list of the person's own mail, or "write a response to the latest email from Alex": the
+ * inbox app hands over the one email the person picked and the chat drafts the answer (ZANA_Mail_Reply decides and
+ * cleans, ZANA_Mail_Reply_Route runs the turn). The draft opens in the person's own mail; the chat never sends.
+ */
+require_once ZANA_DIR . 'includes/class-zana-mail-reply.php';
+require_once ZANA_DIR . 'includes/class-zana-mail-reply-route.php';
+add_action( 'plugins_loaded', array( 'ZANA_Mail_Reply_Route', 'boot' ), 23 );
+/* ── Answering one email from the chat (END) ──────────────────────────────────────────────────────────── */
+
+/* ── Answer rules, how an administrator writes, and replies in a Messages thread (BEGIN) ────────────────────────────
+ * Three rules every answer is written under (documents that state facts; infer, quantify, qualify, cite; audience and
+ * tone) and the blank fact entries that go with them; style rules learned from an administrator's edits to the chat's
+ * drafts ("About you" → "How you write", Edit on a draft card); and the assistant answering in a Privacy View
+ * account's Messages thread when the administrator chosen for it writes there (off until a daily line is set).
+ */
+require_once ZANA_DIR . 'includes/class-zana-answer-rules.php';
+require_once ZANA_DIR . 'includes/class-zana-fact-starters.php';
+require_once ZANA_DIR . 'includes/class-zana-style-memory.php';
+require_once ZANA_DIR . 'includes/class-zana-pv-dm-agent.php';
+require_once ZANA_DIR . 'includes/class-zana-drafts-page.php';
+
+ZANA_Answer_Rules::boot();   // on the rule registry before anything reads it
+
+add_action(
+	'plugins_loaded',
+	function () {
+		ZANA_Style_Memory::boot();
+		ZANA_PV_DM_Agent::boot();
+		ZANA_Drafts_Page::boot();
+	},
+	23
+);
+/* ── Answer rules, how an administrator writes, and replies in a Messages thread (END) ───────────────────────────── */
+
+/* ── Deep research (BEGIN) ──────────────────────────────────────────────────────────────────────────────────────────
+ * A long answer the chat works out in steps (ZANA_Research): a plan the person starts, questions to the business's own
+ * data and to the web, a check of outside facts against independent sites, then a write-up. Off until an administrator
+ * switches it on (Zorderz → Deep research). Its table is made when the first run starts; nothing is ever seeded.
+ */
+foreach ( array( 'web-vetting', 'research-settings', 'research-store', 'research-activity', 'research-gate', 'research-tools', 'research', 'research-rest' ) as $zana_research_part ) {
+	require_once ZANA_DIR . 'includes/class-zana-' . $zana_research_part . '.php';
+}
+unset( $zana_research_part );
+add_action(
+	'plugins_loaded',
+	function () {
+		ZANA_Research::boot();            // its kind of job on the platform's step runner
+		ZANA_Research_REST::init();       // how a run stands, Start and Stop
+		ZANA_Research_Settings::boot();   // Zorderz → Deep research; its limits from an Identity Pack
+	},
+	22
+);
+add_action(
+	'wp_enqueue_scripts',
+	function () {
+		if ( ! wp_script_is( 'zana-chat', 'enqueued' ) ) {
+			return;   // the chat is not on this page
+		}
+		wp_enqueue_style( 'zana-research', ZANA_URL . 'assets/css/research.css', array( 'zana-chat' ), zana_asset_ver( 'assets/css/research.css' ) );
+		wp_enqueue_script( 'zana-research', ZANA_URL . 'assets/js/research.js', array( 'zana-chat' ), zana_asset_ver( 'assets/js/research.js' ), true );
+		wp_localize_script( 'zana-research', 'zanaResearch', ZANA_Research_Settings::page_config( (int) get_current_user_id() ) );
+	},
+	21
+);
+/* ── Deep research (END) ─────────────────────────────────────────────────────────────────────────────────────────── */
 
 /* ── The chat's routes and channels (BEGIN) ─────────────────────────────────────────────────────────────────────────
  * Mailbox questions answered by the inbox app, "About you", answer times, the "Chat answers" notification channel,

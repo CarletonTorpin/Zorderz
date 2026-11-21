@@ -28,8 +28,12 @@ if ( ! class_exists( 'Zjob_Project_Signal' ) ) {
 
 	class Zjob_Project_Signal {
 
-		/** Bump when the facet schema changes. */
-		const DB_VERSION        = '1.0.0';
+		/**
+		 * Bump when the facet schema changes. 1.0.1 quotes the `signal` column: SIGNAL is a
+		 * reserved word in MySQL and MariaDB, so the 1.0.0 definition never created the table
+		 * there. The new number makes those sites try again.
+		 */
+		const DB_VERSION        = '1.0.1';
 		const DB_VERSION_OPTION = 'zjob_project_signal_db_version';
 
 		/** @return string the fully-prefixed facet table name. */
@@ -50,28 +54,49 @@ if ( ! class_exists( 'Zjob_Project_Signal' ) ) {
 			if ( ! isset( $wpdb ) ) {
 				return;
 			}
-			$table   = self::table();
 			$charset = method_exists( $wpdb, 'get_charset_collate' ) ? $wpdb->get_charset_collate() : '';
-
-			// project_id is a ULID (26 chars). `signal` is indexed so the Queue's ORDER BY
-			// signal DESC is a range scan, not a filesort over the whole table.
-			$sql = "CREATE TABLE {$table} (
-				project_id VARCHAR(26) NOT NULL,
-				signal INT NOT NULL DEFAULT 0,
-				signal_at DATETIME NULL DEFAULT NULL,
-				reasons_json LONGTEXT NULL DEFAULT NULL,
-				PRIMARY KEY  (project_id),
-				KEY signal (signal),
-				KEY signal_at (signal_at)
-			) {$charset};";
+			$sql     = self::schema_sql( self::table(), $charset );
 
 			if ( ! function_exists( 'dbDelta' ) ) {
 				require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 			}
 			if ( function_exists( 'dbDelta' ) ) {
 				dbDelta( $sql );
-				update_option( self::DB_VERSION_OPTION, self::DB_VERSION, false );
+				self::keep_version_if_made();
 			}
+		}
+
+		/**
+		 * The table's definition. project_id is a ULID (26 chars). `signal` is indexed so the
+		 * Queue's ORDER BY signal DESC is a range scan, not a filesort over the whole table.
+		 * SIGNAL is a reserved word in MySQL and MariaDB, so every query here writes it in
+		 * backticks.
+		 */
+		public static function schema_sql( string $table, string $charset ): string {
+			return "CREATE TABLE {$table} (
+				project_id VARCHAR(26) NOT NULL,
+				`signal` INT NOT NULL DEFAULT 0,
+				signal_at DATETIME NULL DEFAULT NULL,
+				reasons_json LONGTEXT NULL DEFAULT NULL,
+				PRIMARY KEY  (project_id),
+				KEY `signal` (`signal`),
+				KEY signal_at (signal_at)
+			) {$charset};";
+		}
+
+		/**
+		 * dbDelta does not report a failed CREATE, so the schema version is kept only once the
+		 * table is really there; otherwise the next request tries again.
+		 */
+		public static function keep_version_if_made(): bool {
+			global $wpdb;
+			$table = self::table();
+			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+			if ( $found !== $table ) {
+				return false;
+			}
+			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, false );
+			return true;
 		}
 
 		/**
@@ -87,7 +112,7 @@ if ( ! class_exists( 'Zjob_Project_Signal' ) ) {
 				return null;
 			}
 			$row = $wpdb->get_row(
-				$wpdb->prepare( 'SELECT signal, signal_at, reasons_json FROM ' . self::table() . ' WHERE project_id = %s', $project_id ),
+				$wpdb->prepare( 'SELECT `signal`, signal_at, reasons_json FROM ' . self::table() . ' WHERE project_id = %s', $project_id ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix and a fixed name (table()); every value is a placeholder
 				ARRAY_A
 			);
 			if ( ! is_array( $row ) ) {
@@ -127,8 +152,8 @@ if ( ! class_exists( 'Zjob_Project_Signal' ) ) {
 			// INSERT ... ON DUPLICATE KEY UPDATE keeps this one indexed write atomic.
 			$ok = $wpdb->query(
 				$wpdb->prepare(
-					'INSERT INTO ' . self::table() . ' (project_id, signal, signal_at, reasons_json) VALUES (%s, %d, %s, %s) '
-					. 'ON DUPLICATE KEY UPDATE signal = VALUES(signal), signal_at = VALUES(signal_at), reasons_json = VALUES(reasons_json)',
+					'INSERT INTO ' . self::table() . ' (project_id, `signal`, signal_at, reasons_json) VALUES (%s, %d, %s, %s) ' // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix and a fixed name (table()); every value is a placeholder
+					. 'ON DUPLICATE KEY UPDATE `signal` = VALUES(`signal`), signal_at = VALUES(signal_at), reasons_json = VALUES(reasons_json)',
 					$project_id,
 					$signal,
 					$now,

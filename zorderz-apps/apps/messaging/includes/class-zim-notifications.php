@@ -385,9 +385,9 @@ class ZIM_Notifications {
 		$subject = '[' . $brand . '] New message from ' . $author_name;
 
 		$body  = 'You have a new message from ' . $author_name . ' on ' . $brand . ":\n\n";
-		$body .= "————————————————————\n";
+		$body .= "--------------------\n";
 		$body .= $message_lines . "\n";
-		$body .= "————————————————————\n\n";
+		$body .= "--------------------\n\n";
 		if ( $can_reply ) {
 			$body .= "Reply to this email and your response will be sent back to " . $author_name . " as a direct message.\n\n";
 		}

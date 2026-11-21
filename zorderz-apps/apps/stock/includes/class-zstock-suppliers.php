@@ -46,7 +46,7 @@ class ZSTOCK_Suppliers {
 	const DAY_CAP   = 20;
 	const LINE_QTY  = 999;
 	/** Filler and unit words that never decide which item a line is. The catalog's own unit nouns are added. */
-	const UNIT_WORD = array( 'roll', 'box', 'case', 'sheet', 'bag', 'pack', 'pair', 'set', 'kit', 'unit', 'piece', 'pc', 'ea', 'each', 'item', 'of', 'the', 'and', 'for', 'with', 'in', 'yard', 'yd', 'ft', 'foot', 'feet' );
+	const UNIT_WORD = array( 'roll', 'box', 'case', 'sheet', 'bag', 'pack', 'pair', 'set', 'kit', 'unit', 'piece', 'pc', 'ea', 'each', 'item', 'of', 'the', 'and', 'for', 'with', 'in', 'yard', 'yd', 'ft', 'foot', 'feet', 'm', 'metre', 'metres', 'meter', 'meters', 'cm', 'mm' );
 	/** Colour words: an item of a colour the line does not say is not that line. Filter: `zstock_colour_words`. */
 	const COLOURS   = array( 'black', 'white', 'gray', 'grey', 'tan', 'beige', 'brown', 'bronze', 'charcoal', 'clear', 'silver' );
 	/** Free-mail families on any country domain, as the registrable name only ("yahoo.co.uk", not "mail.supplier.com"). */

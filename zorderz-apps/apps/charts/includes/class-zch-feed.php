@@ -543,7 +543,7 @@ class ZCH_Feed {
 	public static function status_html() {
 		$s     = self::state();
 		$when  = function ( $t ) {
-			return $t ? esc_html( wp_date( 'M j, g:i a', (int) $t ) ) : esc_html__( 'never', 'zorderz' );
+			return $t ? esc_html( wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:i a' ) : 'M j, g:i a' ), (int) $t ) ) : esc_html__( 'never', 'zorderz' );
 		};
 		$links = 0;
 		$held  = 0;

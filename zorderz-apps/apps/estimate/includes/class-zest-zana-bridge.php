@@ -49,7 +49,7 @@ class ZEST_ZANA_Bridge {
 			'estimate.create'       => array( 'create_from_chat', 'staff', true, 'Create an estimate. Args: {"customer":{"name","email","phone","street","city","state","zip"},"line_items":[{"description","sub_description","quantity","unit_price"}],"reference"}.' ),
 			'estimate.modify'       => array( 'update_from_chat', 'staff', true, 'Change one of your estimates. Args: {"estimate_number":"1042","instruction":"what to change"}.' ),
 			'estimate.send'         => array( 'send_from_chat', 'staff', true, 'E-mail one of your approved estimates to its customer. Args: {"estimate_number":"1042"}.' ),
-			'estimate.stub'         => array( 'stub_from_lead', 'admin', true, 'A $0 estimate stub for a CRM lead, assigned to a person. Args: {"lead":"name or number","assignee":"name or code"}.' ),
+			'estimate.stub'         => array( 'stub_from_lead', 'admin', true, 'A zero-amount estimate stub for a CRM lead, assigned to a person. Args: {"lead":"name or number","assignee":"name or code"}.' ),
 			'estimate.attach_email' => array( 'attach_email_from_chat', 'staff', true, 'Put an email on one of your estimates. Args: {"estimate_number":"1042","email":"…"}.' ),
 		);
 		$out = array();

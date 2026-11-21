@@ -49,12 +49,12 @@ class ZDZ_User_Roles {
 		'zdz_sales' => [
 			'label' => 'Salesperson',
 			'caps'  => [ 'read' => true ],
-			'apps'  => [ 'estimate-creator', 'sales-analytics', 'lead-generator', 'commission-calculator' ],
+			'apps'  => [ 'estimate-creator', 'sales-analytics', 'leads', 'commission-calculator' ],
 		],
 		'zdz_operator' => [
 			'label' => 'Operator',
 			'caps'  => [ 'read' => true ],
-			'apps'  => [ 'estimate-creator', 'satisfaction-surveys' ],
+			'apps'  => [ 'estimate-creator', 'surveys' ],
 		],
 		'zdz_mfg' => [
 			'label' => 'Shop Foreman',
@@ -71,8 +71,8 @@ class ZDZ_User_Roles {
 		// tablet. It is the MOST-shared identity on the platform, so by
 		// design it carries the FEWEST privileges. Minimal read-only surface:
 		// Analytics chat + Camera + Receipts + (read-only) Internal
-		// Messaging. Deliberately NO estimate-creator / lead-generator /
-		// commission-calculator / satisfaction-surveys — nothing that creates
+		// Messaging. Deliberately NO estimate-creator / leads /
+		// commission-calculator / surveys — nothing that creates
 		// records or exposes financials. App IDs below are the real registered
 		// slugs (verified against each plugin's get_config()):
 		//   'sales-analytics'    — analytics chat (optional app)

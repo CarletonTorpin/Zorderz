@@ -75,20 +75,20 @@ class ZJOB_Admin {
 		$self_sched_effective = class_exists( 'ZJOB_Jobs' ) && ZJOB_Jobs::workers_may_self_schedule();
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Zorderz Jobs — Settings', 'zorderz' ); ?></h1>
+			<h1><?php esc_html_e( 'Zorderz Jobs: Settings', 'zorderz' ); ?></h1>
 			<?php settings_errors( 'zjob' ); ?>
 
 			<p style="max-width:740px">
-				<?php esc_html_e( 'Jobs ships with rules written for a team: a dispatcher schedules the work, and a second person signs off when it is done. If ONE person runs everything, turn on single-operator mode so those two-person rules do not block you. Teams should leave this off — every multi-user guard then stays exactly as it is.', 'zorderz' ); ?>
+				<?php esc_html_e( 'Jobs ships with rules written for a team: a dispatcher schedules the work, and a second person signs off when it is done. If ONE person runs everything, turn on single-operator mode so those two-person rules do not block you. Teams should leave this off: every multi-user guard then stays exactly as it is.', 'zorderz' ); ?>
 			</p>
 
 			<div style="margin:12px 0;padding:10px 14px;border-radius:8px;background:<?php echo $solo ? '#ecfdf5' : '#f8fafc'; ?>;border:1px solid <?php echo $solo ? '#a7f3d0' : '#e2e8f0'; ?>;max-width:740px">
 				<strong><?php esc_html_e( 'Status:', 'zorderz' ); ?></strong>
 				<?php
 				if ( $solo ) {
-					esc_html_e( 'Single-operator mode is ON — you can schedule and close your own jobs (with a recorded single-party attestation).', 'zorderz' );
+					esc_html_e( 'Single-operator mode is ON: you can schedule and close your own jobs (with a recorded single-party attestation).', 'zorderz' );
 				} else {
-					esc_html_e( 'Single-operator mode is OFF (default) — a dispatcher schedules, and a distinct second party closes out.', 'zorderz' );
+					esc_html_e( 'Single-operator mode is OFF (default): a dispatcher schedules, and a distinct second party closes out.', 'zorderz' );
 				}
 				?>
 			</div>
@@ -104,7 +104,7 @@ class ZJOB_Admin {
 								<?php esc_html_e( 'Single-operator mode (one person runs everything: allow self-scheduling and self-attested completion)', 'zorderz' ); ?>
 							</label>
 							<p class="description">
-								<?php esc_html_e( 'Off by default. When on, the person assigned a job may set its own time, and may close their own job with a written single-party attestation when no second person is available to sign off. Completion still requires the finish photos, and a solo close is recorded as single_party_attested — never as a two-party sign-off.', 'zorderz' ); ?>
+								<?php esc_html_e( 'Off by default. When on, the person assigned a job may set its own time, and may close their own job with a written single-party attestation when no second person is available to sign off. Completion still requires the finish photos, and a solo close is recorded as single_party_attested, never as a two-party sign-off.', 'zorderz' ); ?>
 							</p>
 						</td>
 					</tr>
@@ -116,7 +116,7 @@ class ZJOB_Admin {
 								<?php esc_html_e( 'Allow an assignee to schedule their own job (the workers_may_self_schedule capability)', 'zorderz' ); ?>
 							</label>
 							<p class="description">
-								<?php esc_html_e( 'Optional and independent of single-operator mode, for a shop that wants self-scheduling without full solo mode. Single-operator mode already includes this, so you only need this box for the self-schedule relaxation on its own. It does NOT relax completion — the two-party / photo-gated close still applies.', 'zorderz' ); ?>
+								<?php esc_html_e( 'Optional and independent of single-operator mode, for a shop that wants self-scheduling without full solo mode. Single-operator mode already includes this, so you only need this box for the self-schedule relaxation on its own. It does NOT relax completion: the two-party / photo-gated close still applies.', 'zorderz' ); ?>
 								<?php if ( $self_sched_effective ) : ?>
 									<br><strong><?php esc_html_e( 'Currently effective:', 'zorderz' ); ?></strong> <?php esc_html_e( 'assignees may schedule their own jobs.', 'zorderz' ); ?>
 								<?php endif; ?>

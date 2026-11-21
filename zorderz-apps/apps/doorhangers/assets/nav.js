@@ -60,9 +60,17 @@
 	/* the side of a road a signed side is, as a compass word (normal nx east / ny north, side +1 = left of the line) */
 	function sideCompass(nx, ny, side) { return compass(Math.atan2(nx * side, ny * side) * 180 / Math.PI); }
 	/* Imperial and rounded: feet under 0.1 mile (to 10 ft under 100 ft, then to 50 ft), then tenths of a mile.
-	   miles from 525 ft — 525–528 ft would round to "550 ft", past the switch (it printed "500 ft" here). */
+	   miles from 525 ft — 525–528 ft would round to "550 ft", past the switch (it printed "500 ft" here).
+	   A metric business (Business Profile → Locale → Units) reads metres (to 10 m, then to 50 m) and tenths of a km. */
+	function metricUnits() { var k = window.ZDZ && window.ZDZ.ui; return !!(k && k.units && k.units() === 'metric'); }
 	function fmtDist(m) {
 		if (!(m >= 0) || !isFinite(m)) { return ''; }
+		if (metricUnits()) {
+			if (m < 160) { return Math.max(10, Math.round(m / 10) * 10) + ' m'; }
+			if (m < 950) { return Math.round(m / 50) * 50 + ' m'; }
+			var km = m / 1000;
+			return (km >= 10 ? String(Math.round(km)) : km.toFixed(1)) + ' km';
+		}
 		if (m * FT < 525) {
 			var ft = m * FT;
 			if (ft < 100) { return Math.max(10, Math.round(ft / 10) * 10) + ' ft'; }
@@ -71,12 +79,14 @@
 		var mi = m / MI;
 		return (mi >= 10 ? String(Math.round(mi)) : mi.toFixed(1)) + ' mi';
 	}
-	/* the spoken form: "200 feet", "0.3 miles", and "Rd" read as "Road" */
+	/* the spoken form: "200 feet", "0.3 miles", "200 metres", "1.2 kilometres", and "Rd" read as "Road" */
 	var SAY = { st: 'Street', rd: 'Road', ave: 'Avenue', av: 'Avenue', dr: 'Drive', ct: 'Court', ln: 'Lane', pl: 'Place', blvd: 'Boulevard', cir: 'Circle', ter: 'Terrace', trl: 'Trail', pkwy: 'Parkway', hwy: 'Highway', cv: 'Cove', wy: 'Way', sq: 'Square', pt: 'Point', gln: 'Glen', vw: 'View', vis: 'Vista', xing: 'Crossing', mt: 'Mount', n: 'North', s: 'South', e: 'East', w: 'West' };
 	function sayable(text) {
 		return String(text || '')
 			.replace(/(\d+(?:\.\d+)?) ft\b/g, function (m, n) { return n + ' feet'; })
 			.replace(/(\d+(?:\.\d+)?) mi\b/g, function (m, n) { return n + (n === '1.0' || n === '1' ? ' mile' : ' miles'); })
+			.replace(/(\d+(?:\.\d+)?) km\b/g, function (m, n) { return n + (n === '1.0' || n === '1' ? ' kilometre' : ' kilometres'); })
+			.replace(/(\d+) m\b/g, function (m, n) { return n + ' metres'; })
 			// a street type is read out only at the end of a name ("St Louis Ave" is not Street Louis); N/S/E/W only before a name
 			.replace(/\b([A-Z][a-z]{1,3})\b\.?(?=(?:\s+[NSEW])?(?:\s+in\b|\s*$|\s*[·,;]))/g, function (m, w) { var k = w.toLowerCase(); return SAY[k] && k.length > 1 ? SAY[k] : m; })
 			.replace(/\b([NSEW])\b(?=\s+[A-Z][a-z])/g, function (m, w) { return SAY[w.toLowerCase()]; })

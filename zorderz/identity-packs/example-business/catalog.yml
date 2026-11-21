@@ -16,3 +16,7 @@ vocabulary:
   # Product or model words: a number right after one is a model number, never
   # an access code.
   model_words: [ex-100, ex-pump]
+  # The words a visit goes by after a customer's name ("the Example opening"),
+  # so the name before them is coded before anything reaches the Ai. One word
+  # each, three letters or more.
+  visit_words: [opening, checkup]

@@ -20,7 +20,7 @@ class ZIC_Mailer {
 			return;
 		}
 		$amt     = number_format( ( (int) $invoice['amount_cents'] ) / 100, 2 );
-		$subject = 'Payment Received — Thank You';
+		$subject = 'Payment Received, Thank You';
 		$body    = 'Hi ' . $invoice['client_name'] . ",\n\n";
 		$body   .= "Thank you for your payment. We appreciate your business.\n\n";
 		$body   .= 'Amount: $' . $amt . ' ' . strtoupper( $invoice['currency'] ) . "\n";
@@ -34,7 +34,7 @@ class ZIC_Mailer {
 			return;
 		}
 		$amt     = number_format( ( (int) $invoice['amount_cents'] ) / 100, 2 );
-		$subject = 'Payment: $' . $amt . ' — Invoice #' . $invoice['id'];
+		$subject = 'Payment: $' . $amt . ' · Invoice #' . $invoice['id'];
 		$body    = "A payment was received.\n\n";
 		$body   .= 'Invoice: #' . $invoice['id'] . "\n";
 		$body   .= 'Client: ' . $invoice['client_name'] . ' <' . $invoice['client_email'] . ">\n";

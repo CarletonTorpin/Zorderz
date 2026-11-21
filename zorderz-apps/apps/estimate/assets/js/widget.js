@@ -6,12 +6,22 @@
  * shows the server's preview, and confirms. Photos enqueue a background job and poll.
  * No product, price, customer or place literal lives here — everything is data from the
  * server, which reads it from the Item Engine, Party and Doc Conventions.
+ *
+ * Each estimate on a list is one box: its row and, under it, its follow-up (followup.js draws
+ * that part: ZESTFollowup.decorate). Estimates a customer declined fold into "Declined estimates"
+ * at the foot of Open.
+ *
+ * For an account in Privacy View (zestWidget.privacyView) the widget is look-only: it sends
+ * nothing but the two list reads, and a row opens the look-only sheet (privacy-view.js).
  */
 ( function () {
 	'use strict';
 
 	var cfg = window.zestWidget || {};
 	var root = document.getElementById( 'zest-widget' );
+	// A setting arrives as the server's page sends it: true, 1 or "1".
+	var pv = cfg.privacyView === true || cfg.privacyView === 1 || cfg.privacyView === '1';
+	var LOOK = [ 'zest_list_open', 'zest_history' ];
 
 	// Idempotency guard: a fallback boot may inject a second copy of this file.
 	// If the widget is already mounted, do nothing (no double listeners/renders).
@@ -49,6 +59,10 @@
 		root.setAttribute( 'data-zest-mounted', '1' );
 
 	function post( action, data ) {
+		// Look only: nothing but the two list reads ever leaves this file for an account in Privacy View.
+		if ( pv && LOOK.indexOf( action ) === -1 ) {
+			return Promise.resolve( { success: false, data: { message: 'Not available in Privacy View.' } } );
+		}
 		var body = new FormData();
 		body.append( 'action', action );
 		body.append( 'nonce', cfg.nonce );
@@ -86,27 +100,70 @@
 	} );
 
 	/* ---- lists ---- */
-	function loadList( action, elId ) {
+	var declinedOpen = false;   // "Declined estimates" stays as the person left it when the list is drawn again
+
+	function rowHtml( r ) {
+		return '<div class="zest-row" data-id="' + esc( r.id ) + '" data-number="' + esc( r.number ) + '" role="button" tabindex="0">'
+			+ '<div><div class="zest-row-name">' + esc( r.customer || 'Estimate' ) + ( r.test && pv ? ' <span class="zest-w-pv-test">test</span>' : '' ) + '</div>'
+			+ '<div class="zest-row-sub">' + esc( r.number ? '#' + r.number : 'stub' ) + ' &middot; ' + esc( r.items ) + ' items</div></div>'
+			+ '<span class="zest-badge">' + esc( r.status ) + '</span></div>';
+	}
+
+	/** One estimate, one box: the row, and under it the strip its follow-up is drawn in. */
+	function cardHtml( r ) {
+		return '<div class="zest-fu-card">' + rowHtml( r ) + '<div class="zest-fu-strip" data-fu-id="' + esc( r.id ) + '"></div></div>';
+	}
+
+	/** The list's markup. With follow-ups: a box per estimate, and on Open the declined ones folded at the foot. */
+	function listHtml( rows, withFollowups, isOpenList ) {
+		if ( ! withFollowups ) { return rows.map( rowHtml ).join( '' ); }
+		var live = [], declined = [];
+		rows.forEach( function ( r ) { ( isOpenList && r.declined ? declined : live ).push( r ); } );
+		var h = live.map( cardHtml ).join( '' );
+		if ( declined.length ) {
+			h += '<details class="zest-fu-declined"' + ( declinedOpen ? ' open' : '' ) + '><summary>Declined estimates (' + declined.length + ')</summary>'
+				+ declined.map( cardHtml ).join( '' ) + '</details>';
+		}
+		return h;
+	}
+
+	function loadList( action, elId, again ) {
 		var el = document.getElementById( elId );
 		if ( ! el ) { return; }
-		el.innerHTML = '<div class="zest-empty zest-loading">Loading&hellip;</div>';
+		// Drawn again after a follow-up was recorded: what is there stays until the new list arrives.
+		if ( ! again ) { el.innerHTML = '<div class="zest-empty zest-loading">Loading&hellip;</div>'; }
 		post( action, {} ).then( function ( res ) {
 			if ( ! res || ! res.success ) {
 				el.innerHTML = '<div class="zest-empty">Could not load.</div>';
 				return;
 			}
-			var rows = ( res.data && res.data.rows ) || [];
+			var data = res.data || {};
+			var rows = data.rows || [];
 			if ( ! rows.length ) {
 				el.innerHTML = '<div class="zest-empty">Nothing here yet.</div>';
 				return;
 			}
-			el.innerHTML = rows.map( function ( r ) {
-				return '<div class="zest-row" data-id="' + esc( r.id ) + '" data-number="' + esc( r.number ) + '" role="button" tabindex="0">'
-					+ '<div><div class="zest-row-name">' + esc( r.customer || 'Estimate' ) + '</div>'
-					+ '<div class="zest-row-sub">' + esc( r.number ? '#' + r.number : 'stub' ) + ' &middot; ' + esc( r.items ) + ' items</div></div>'
-					+ '<span class="zest-badge">' + esc( r.status ) + '</span></div>';
-			} ).join( '' );
+			var fu = !! data.followups && !! window.ZESTFollowup;
+			el.innerHTML = listHtml( rows, fu, action === 'zest_list_open' );
+			var fold = el.querySelector( '.zest-fu-declined' );
+			if ( fold ) { fold.addEventListener( 'toggle', function () { declinedOpen = fold.open; } ); }
+			if ( fu ) { window.ZESTFollowup.decorate( el, data, function () { loadList( action, elId, true ); } ); }
 		} );
+	}
+
+	// Look only: a row opens the look-only sheet. (The editor's script, which opens a row otherwise, is not loaded.)
+	if ( pv ) {
+		var look = function ( e ) {
+			var row = e.target.closest ? e.target.closest( '#zest-open-list .zest-row, #zest-history-list .zest-row' ) : null;
+			if ( ! row || ! row.getAttribute( 'data-id' ) || ! window.ZESTPrivacyView ) { return; }
+			if ( e.type === 'keydown' ) {
+				if ( e.key !== 'Enter' && e.key !== ' ' ) { return; }
+				e.preventDefault();
+			}
+			window.ZESTPrivacyView.open( row.getAttribute( 'data-id' ) );
+		};
+		root.addEventListener( 'click', look );
+		root.addEventListener( 'keydown', look );
 	}
 
 	/* ---- parse → preview → confirm ---- */
@@ -132,7 +189,7 @@
 			return '<div class="zest-line"><div>' + esc( li.description || '' )
 				+ ( li.sub_description ? '<div class="zest-line-meta">' + esc( li.sub_description ) + '</div>' : '' )
 				+ ( li.door && li.door.text ? '<div class="zest-team-only">Team only: ' + esc( li.door.text ) + '</div>' : '' )
-				+ '</div><div class="zest-line-price">' + ( price > 0 ? money( price ) : '&mdash;' ) + '</div></div>';
+				+ '</div><div class="zest-line-price">' + ( price > 0 ? money( price ) : '&ndash;' ) + '</div></div>';
 		} ).join( '' );
 		var warn = ( warnings || [] ).map( function ( w ) { return '<div class="zest-hint">' + esc( w ) + '</div>'; } ).join( '' );
 		preview.hidden = false;

@@ -68,7 +68,7 @@
 	function freshNonce() {
 		var fd = new FormData();
 		fd.append('action', 'zdz_fresh_nonce');
-		return fetch(D.restUrl.replace(/wp-json.*$/, 'wp-admin/admin-ajax.php'), {
+		return fetch(D.ajaxUrl || D.restUrl.replace(/wp-json.*$/, 'wp-admin/admin-ajax.php'), {
 			method: 'POST', body: fd, credentials: 'same-origin'
 		})
 		.then(function (r) { return r.json().catch(function () { return null; }); })
@@ -86,10 +86,17 @@
 		}
 	});
 
+	// A site on plain links serves the API at ?rest_route=/…, so a path's own query joins with & (one ? only).
+	function restUrl(path) {
+		var base = String(D.restUrl || '');
+		if (base.indexOf('?') >= 0) { path = String(path).replace('?', '&'); }
+		return base + path;
+	}
+
 	function api(path, opts, _retried) {
 		opts = opts || {};
 		var headers = { 'Content-Type': 'application/json', 'X-WP-Nonce': D.nonce };
-		return fetch(D.restUrl + path, {
+		return fetch(restUrl(path), {
 			method: opts.method || 'GET',
 			credentials: 'same-origin',
 			headers: headers,
@@ -530,7 +537,7 @@
 			var d = parseYmd(key);
 			var cur = dayHourState(d, state.me);
 			// v1.4.0: keep the PRE-gesture model too — it powers the
-			// overwrite-confirm chip and the 5s Undo toast (SC 2.5.2 abort/undo).
+			// overwrite-confirm chip and the 5s Undo toast (WCAG 2.5.2 abort/undo).
 			availDrag.dirty[key] = { d: d, slots: cur, orig: cur.slice() };
 		}
 		var model = availDrag.dirty[key].slots;
@@ -663,7 +670,7 @@
 
 	// ── overwrite guard: if this gesture REPLACES previously-set hours, ask
 	//    with an inline chip before saving; otherwise commit immediately.
-	//    (SC 2.5.2 — completion on explicit up-event, plus abort/undo.) ──
+	//    (WCAG 2.5.2 — completion on explicit up-event, plus abort/undo.) ──
 	function maybeConfirmThenCommit(cell) {
 		var key = cell && cell.dataset ? cell.dataset.date : '';
 		var entry = key ? availDrag.dirty[key] : null;
@@ -1002,7 +1009,7 @@
 			.then(renderAvailability)
 			.then(function () {
 				// v1.4.0: saved-toast gains UNDO (restores the pre-gesture
-				// hours — SC 2.5.2 abort/undo, and the owner's overwrite worry)
+				// hours — WCAG 2.5.2 abort/undo, so an overwrite can be taken back)
 				// and ✎ EDIT HOURS (the always-visible route to the Day Editor,
 				// so long-press is never the only path).
 				var label = keys.length === 1 ? prettyDate(keys[0]) + ' saved' : 'Availability saved';
@@ -1105,7 +1112,7 @@
 					});
 
 					cell.setAttribute('aria-label', member.name + ' ' + stateWord + ' ' + when + (titles.length ? ': ' + titles.join(', ') : ''));
-					cell.title = member.name + ' — ' + stateCap + ' · ' + when
+					cell.title = member.name + ': ' + stateCap + ' · ' + when
 						+ (titles.length ? '\n• ' + titles.join('\n• ') : '');
 				}
 				tr.appendChild(cell);
@@ -1464,7 +1471,7 @@
 					if (!isNaN(sd) && !isNaN(ed)) {
 						var dayStr = sd.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 						var tOpt = { hour: 'numeric', minute: '2-digit' };
-						when = ' \u2014 ' + dayStr + ', ' + sd.toLocaleTimeString(undefined, tOpt)
+						when = ': ' + dayStr + ', ' + sd.toLocaleTimeString(undefined, tOpt)
 							+ '\u2013' + ed.toLocaleTimeString(undefined, tOpt);
 					}
 				} catch (e) {}
@@ -2272,6 +2279,14 @@
 	}
 	document.addEventListener('visibilitychange', function () {
 		if (!document.hidden) { autoRefresh(); }
+	});
+	// Another app made, moved or removed an appointment (Jobs sets a job's time): the events are stale now. A calendar
+	// on screen reads them again at once; one out of view does so when it comes into view.
+	document.addEventListener('zdz:schedule-changed', function () {
+		lastDataLoad = 0;
+		if (!root) { return; }
+		var r = root.getBoundingClientRect();
+		if (r.height > 0 && r.bottom > 0 && r.top < (window.innerHeight || 9999)) { autoRefresh(); }
 	});
 	setInterval(function () {
 		if (!root) { return; }

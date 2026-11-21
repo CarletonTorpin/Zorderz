@@ -107,7 +107,7 @@ class ZMI_Store {
 			return true;
 		}
 		if ( ZDZ_Mailbox_Identity::is_service_address( $addr ) ) {
-			return new WP_Error( 'zmi_collide_service', sprintf( '%s is registered as a shared/service mailbox — it cannot also be a personal alias.', $addr ) );
+			return new WP_Error( 'zmi_collide_service', sprintf( '%s is registered as a shared/service mailbox; it cannot also be a personal alias.', $addr ) );
 		}
 		// Exact WP account email belonging to someone else.
 		$owner = get_user_by( 'email', $addr );

@@ -39,6 +39,8 @@ class ZPREP_Dashboard {
 		add_action( 'wp_ajax_zprep_remake_parse', array( __CLASS__, 'ajax_remake_parse' ) );
 		add_action( 'wp_ajax_zprep_remakes_list', array( __CLASS__, 'ajax_remakes_list' ) );
 		add_action( 'wp_ajax_zprep_remake_set_status', array( __CLASS__, 'ajax_remake_set_status' ) );
+		add_action( 'wp_ajax_zprep_remake_mark_cut', array( __CLASS__, 'ajax_remake_mark_cut' ) );
+		add_action( 'wp_ajax_zprep_internal_set_labor', array( __CLASS__, 'ajax_internal_set_labor' ) );
 		add_action( 'wp_ajax_zprep_assign', array( __CLASS__, 'ajax_assign' ) );
 		add_action( 'wp_ajax_zprep_unassign', array( __CLASS__, 'ajax_unassign' ) );
 		add_action( 'wp_ajax_zprep_users_list', array( __CLASS__, 'ajax_users_list' ) );
@@ -58,28 +60,173 @@ class ZPREP_Dashboard {
 	}
 
 	/**
-	 * A person who only holds job assignments may work only those jobs: refuse any other.
-	 * Managers and team members pass.
+	 * May $uid work this job (open its plan, read or tick its cut ledger, measure its sections, send it)?
+	 *
+	 * A SHOP JOB HAS ONE RULE, ASKED EVERYWHERE: for a remake or an internal order ('remake:<id>') anyone but a
+	 * manager must pass can_work_remake(), whichever handler is asked. Otherwise a person who could not mark another
+	 * person's shop job cut could still open its plan and tick its ledger (which the year-end page reads "cut by"
+	 * from) by posting its key.
+	 *
+	 * For a customer job: a person who only holds job assignments may work only those; managers and team members
+	 * pass. A job may be assigned under its estimate number or its CRM lead: either key counts.
 	 */
-	private static function enforce_job_scope( int $lead_id, string $source_job ): void {
-		$uid = (int) get_current_user_id();
+	public static function job_scope_allows( int $uid, int $lead_id, string $source_job ): bool {
+		if ( $uid <= 0 ) {
+			return false;
+		}
+		$key = class_exists( 'ZPREP_Assignments' ) ? ZPREP_Assignments::job_key_for( $lead_id, $source_job ) : '';
+		if ( 0 === strpos( $key, 'remake:' ) ) {
+			if ( self::is_manager( $uid ) ) {
+				return true;
+			}
+			$rid = class_exists( 'ZPREP_Remakes' ) ? ZPREP_Remakes::id_from_job_key( $key ) : 0;
+			return $rid > 0 && self::can_work_remake( $uid, $rid );
+		}
 		if ( 'assignee' !== self::queue_mode( $uid ) ) {
-			return;
+			return true;
 		}
-		// A job may be assigned under its estimate number or its CRM lead: either key counts.
-		$keys = array();
-		if ( class_exists( 'ZPREP_Assignments' ) ) {
-			$keys[] = ZPREP_Assignments::job_key_for( $lead_id, $source_job );
-			if ( $lead_id > 0 ) {
-				$keys[] = 'lead:' . $lead_id;
+		$keys = array( $key );
+		if ( $lead_id > 0 ) {
+			$keys[] = 'lead:' . $lead_id;
+		}
+		foreach ( array_unique( array_filter( $keys ) ) as $k ) {
+			if ( ZPREP_Assignments::viewer_assigned_to_job( $uid, $k ) ) {
+				return true;
 			}
 		}
-		foreach ( array_unique( array_filter( $keys ) ) as $key ) {
-			if ( ZPREP_Assignments::viewer_assigned_to_job( $uid, $key ) ) {
-				return;
+		return false;
+	}
+
+	/** Refuse the request when job_scope_allows() says no. */
+	private static function enforce_job_scope( int $lead_id, string $source_job ): void {
+		if ( ! self::job_scope_allows( (int) get_current_user_id(), $lead_id, $source_job ) ) {
+			wp_send_json_error( array( 'message' => __( 'You can only work the jobs assigned to you.', 'zorderz' ) ), 403 );
+		}
+	}
+
+	/**
+	 * May this person act on this remake or internal order (plan it, mark it cut or not cut, type its hours)?
+	 *
+	 *   a manager                        yes
+	 *   the person it is assigned to     yes
+	 *   anyone else with Prep            only an internal order that is nobody's, because that is in their cut list
+	 *                                    (shop_jobs_for()): while it is open, any of them; once it is cut, only the
+	 *                                    person the cut ledger says cut it (the year-end page is built from those
+	 *                                    records); done or removed, nobody but a manager. Never a remake that is
+	 *                                    nobody's: a remake is not listed for everyone.
+	 *   a person who only holds assignments, a person without Prep, the shared device     no
+	 *
+	 * shop_jobs_for() and this must agree: a card is shown exactly to those whose press it will take.
+	 */
+	public static function can_work_remake( int $uid, int $remake_id ): bool {
+		if ( $uid <= 0 || $remake_id <= 0 || ! class_exists( 'ZPREP_Remakes' ) || ! class_exists( 'ZPREP_Assignments' ) ) {
+			return false;
+		}
+		if ( ZPREP_Assignments::is_shared_device( $uid ) ) {
+			return false; // the shared device is never a person who is given work, or named as having done it
+		}
+		if ( self::is_manager( $uid ) ) {
+			return true;
+		}
+		$key = ZPREP_Remakes::job_key( $remake_id );
+		if ( ZPREP_Assignments::viewer_assigned_to_job( $uid, $key ) ) {
+			return true;
+		}
+		$row = ZPREP_Remakes::get( $remake_id );
+		if ( ! $row || ! ZPREP_Remakes::is_internal( $row ) ) {
+			return false;
+		}
+		if ( 0 !== ZPREP_Assignments::assignee_of( $key ) || ! self::base_access( $uid ) ) {
+			return false;
+		}
+		$status = (string) $row['status'];
+		if ( 'open' === $status ) {
+			return true;
+		}
+		if ( 'cut' !== $status || ! class_exists( 'ZPREP_Cut_State' ) ) {
+			return false;
+		}
+		$cut = ZPREP_Cut_State::pick( ZPREP_Cut_State::rows_for_job( $key ) );
+		return $uid === (int) ( $cut['cut_by'] ?? 0 );
+	}
+
+	/**
+	 * The shop's own jobs in $uid's cut list, as cards (no money on a card). An internal order is listed the
+	 * moment a manager saves it: there is no approval step, so "open" is the whole test.
+	 *
+	 *   a manager                 top: every open internal order. tail: every open or cut remake.
+	 *   anyone else with Prep     top: every open internal order that is theirs or nobody's (one assigned to
+	 *                             somebody else is that person's: the rule the list has for a customer job), and
+	 *                             any open remake assigned to them.
+	 *   a person who only holds   top: the jobs assigned to them, open or cut, until they are unassigned.
+	 *   assignments
+	 *   no Prep, the shared       nothing.
+	 *   device
+	 *
+	 * `top` cards go above the customer jobs, newest first; `tail` cards after them. A job marked cut leaves the
+	 * list of everyone but the person who only holds it by assignment.
+	 *
+	 * @return array{top:array,tail:array}
+	 */
+	public static function shop_jobs_for( int $uid, ?string $mode = null ): array {
+		$out = array( 'top' => array(), 'tail' => array() );
+		if ( $uid <= 0 || ! class_exists( 'ZPREP_Remakes' ) || ! class_exists( 'ZPREP_Assignments' ) || ZPREP_Assignments::is_shared_device( $uid ) ) {
+			return $out;
+		}
+		$mode = null === $mode ? self::queue_mode( $uid ) : $mode;
+		if ( 'assignee' === $mode ) {
+			$out['top'] = ZPREP_Remakes::cards_for( $uid, false );
+			return $out;
+		}
+		if ( 'manager' !== $mode && 'team' !== $mode ) {
+			return $out;
+		}
+		$manager = 'manager' === $mode;
+		foreach ( ZPREP_Remakes::list_open_internal() as $row ) {
+			$card = ZPREP_Remakes::card( $row );
+			$to   = (int) $card['assignee_id'];
+			if ( $manager || 0 === $to || $to === $uid ) {
+				$out['top'][] = $card;
 			}
 		}
-		wp_send_json_error( array( 'message' => __( 'You can only work the jobs assigned to you.', 'zorderz' ) ), 403 );
+		if ( $manager ) {
+			$out['tail'] = ZPREP_Remakes::cards_for( $uid, true );
+			return $out;
+		}
+		foreach ( ZPREP_Remakes::for_job_keys( ZPREP_Assignments::job_keys_for( $uid ) ) as $row ) {
+			if ( ZPREP_Remakes::is_internal( $row ) || 'open' !== (string) $row['status'] ) {
+				continue; // the internal ones are above; a remake that is cut has left the list
+			}
+			$out['top'][] = ZPREP_Remakes::card( $row );
+		}
+		return $out;
+	}
+
+	/** The internal order a job key names, or null (a remake, a customer job, a removed order, nonsense). */
+	public static function internal_row_for_job( string $source_job ): ?array {
+		if ( ! class_exists( 'ZPREP_Remakes' ) ) {
+			return null;
+		}
+		$id = ZPREP_Remakes::id_from_job_key( trim( $source_job ) );
+		if ( $id <= 0 ) {
+			return null;
+		}
+		$row = ZPREP_Remakes::get( $id );
+		if ( ! $row || ! ZPREP_Remakes::is_internal( $row ) || 'void' === (string) ( $row['status'] ?? '' ) ) {
+			return null;
+		}
+		return $row;
+	}
+
+	/**
+	 * The stock sheet a job is cut from: only an internal order that names one has one. Everything else, and
+	 * anything unreadable, is null (a roll). Read from the order's own row, never from a request.
+	 *
+	 * @return array{w:int,l:float}|null
+	 */
+	public static function stock_sheet_for_job( string $source_job ): ?array {
+		$row = self::internal_row_for_job( $source_job );
+		return $row ? ZPREP_Remakes::stock_sheet( $row ) : null;
 	}
 
 	/** Manager-only endpoints (owner/admin level), on top of the normal guard. */
@@ -323,12 +470,26 @@ class ZPREP_Dashboard {
 		$lead_id = isset( $_POST['lead_id'] ) ? (int) $_POST['lead_id'] : 0;
 		self::enforce_job_scope( $lead_id, $source_job );
 
+		// An internal order is planned from its own saved rows and stock, whatever the request carries: the plan on
+		// the screen is then always the order that was saved (and that the year-end page counts).
+		$io_row      = self::internal_row_for_job( $source_job );
+		$stock_sheet = null;
+		if ( $io_row ) {
+			$io_opt        = ZPREP_Remakes::plan_options( $io_row );
+			$measurements  = ZPREP_Remakes::measurements( $io_row, ZPREP_Settings::default_color() );
+			$stock_sheet   = $io_opt['stock_sheet'];
+			$workspace     = (string) $io_opt['workspace'];
+			$force_roll    = (int) $io_opt['force_roll'];
+			$use_leftovers = false;
+		}
+
 		// The job's field-measured sections join the plan from the server's own record (never from the browser), so a
-		// run measured on one phone is cut from on another.
+		// run measured on one phone is cut from on another. (A section is pulled from a roll: an internal order,
+		// which holds cut pieces only, has none.)
 		$measurements = array_values( array_filter( $measurements, static function ( $m ) {
 			return ! is_array( $m ) || 'section' !== strtolower( (string) ( $m['measure'] ?? '' ) );
 		} ) );
-		if ( class_exists( 'ZPREP_Sections' ) && ( $lead_id > 0 || '' !== $source_job ) ) {
+		if ( class_exists( 'ZPREP_Sections' ) && ! $io_row && ( $lead_id > 0 || '' !== $source_job ) ) {
 			foreach ( ZPREP_Sections::for_job( $lead_id, $source_job ) as $sec ) {
 				foreach ( ZPREP_Sections::to_measurements( $sec ) as $m ) {
 					$measurements[] = $m;
@@ -345,10 +506,12 @@ class ZPREP_Dashboard {
 				'workspace'     => in_array( $workspace, array( 'flat', 'roller' ), true ) ? $workspace : 'flat',
 				'force_roll'    => $force_roll,
 				'debug'         => $debug,
+				'stock_sheet'   => $stock_sheet,
 			)
 		);
 
-		if ( '' !== $source_job ) {
+		// A sheet's offcut is not a roll strip: it stays out of the leftover library.
+		if ( '' !== $source_job && null === $stock_sheet ) {
 			ZPREP_Leftovers::auto_log_from_plan( $plan, $source_job, get_current_user_id() );
 		}
 		// The job's cut-state rows follow its latest plan (totals; cut counts are kept).
@@ -358,7 +521,8 @@ class ZPREP_Dashboard {
 		zprep_usage( 'cut_plan_computed', $lead_id, array( 'once' => 'day' ) );
 		// Remember this job's plan for its queue card (keyed per job, never by name alone).
 		$customer = isset( $_POST['customer_name'] ) ? sanitize_text_field( wp_unslash( $_POST['customer_name'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce and app access checked in self::guard() above.
-		if ( class_exists( 'ZPREP_Plan_Preview' ) && '' !== $customer ) {
+		// (Not for an internal order: it is not a customer, and its name must never stand in for one here.)
+		if ( class_exists( 'ZPREP_Plan_Preview' ) && '' !== $customer && ! $io_row ) {
 			ZPREP_Plan_Preview::remember(
 				$customer,
 				isset( $_POST['customer_id'] ) ? sanitize_text_field( wp_unslash( $_POST['customer_id'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce and app access checked in self::guard() above.
@@ -511,7 +675,7 @@ class ZPREP_Dashboard {
 				'lead_id'            => 0,
 				'customer'           => $name,
 				'customer_id'        => $cid,
-				'description'        => 'Invoice #' . $inum . ' — ' . $name,
+				'description'        => 'Invoice #' . $inum . ' · ' . $name,
 				'estimate_number'    => $inum, // tap/lookup key — an invoice # resolves too
 				'city'               => '',
 				'date'               => '',
@@ -522,7 +686,7 @@ class ZPREP_Dashboard {
 				'install_fallback'   => null,
 				'billing_source'     => 'invoice',
 				'billing_estimateid' => $eid,
-				'fb_note'            => $possible ? __( 'Possible — not yet approved', 'zorderz' ) : __( 'Invoiced · not yet cut', 'zorderz' ),
+				'fb_note'            => $possible ? __( 'Possible, not yet approved', 'zorderz' ) : __( 'Invoiced · not yet cut', 'zorderz' ),
 			);
 		}
 
@@ -554,20 +718,24 @@ class ZPREP_Dashboard {
 	/**
 	 * Narrow the queue to what this person may see. A person who only holds job assignments
 	 * sees only the jobs assigned to them; a job assigned to someone else is hidden from other
-	 * non-managers. Remake cards are added for the person's own remakes (managers see every
-	 * open remake). Cards are never reordered.
+	 * non-managers. The shop's own jobs are added (shop_jobs_for()): open internal orders and a
+	 * person's assigned remakes above the customer jobs, marked `pinned` so the screen always
+	 * shows them; a manager's remake cards after. Customer cards are never reordered.
 	 */
 	private static function finish_queue( array $out, int $me, string $mode ): array {
 		$jobs = $out['jobs'];
 		if ( class_exists( 'ZPREP_Assignments' ) ) {
 			$jobs = ZPREP_Assignments::filter_cards( $jobs, $me, $mode );
 		}
-		if ( class_exists( 'ZPREP_Remakes' ) ) {
-			$jobs = array_merge( $jobs, ZPREP_Remakes::cards_for( $me, 'manager' === $mode ) );
+		$shop = self::shop_jobs_for( $me, $mode );
+		$top  = array();
+		foreach ( $shop['top'] as $card ) {
+			$card['pinned'] = true;
+			$top[]          = $card;
 		}
-		$out['jobs'] = array_values( $jobs );
+		$out['jobs'] = array_values( array_merge( $top, $jobs, $shop['tail'] ) );
 		if ( ! $out['configured'] && ! empty( $out['jobs'] ) ) {
-			$out['configured'] = true; // remake cards still show without a CRM
+			$out['configured'] = true; // the shop's own jobs do not come from the CRM: they show without one
 		}
 		return $out;
 	}
@@ -752,6 +920,13 @@ class ZPREP_Dashboard {
 			'force_roll'     => isset( $_POST['force_roll'] ) ? (int) $_POST['force_roll'] : 0, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- private helper, called only after self::manager_guard() checked the nonce.
 			'install_date'   => $t( 'install_date' ),
 			'pieces'         => is_array( $rows ) ? $rows : array(),
+			// An internal order's own fields; ZPREP_Remakes::create() checks every one.
+			'kind'           => 'internal' === $t( 'kind' ) ? 'internal' : 'remake',
+			'purpose_code'   => sanitize_key( $t( 'purpose_code' ) ),
+			'for_whom'       => $t( 'for_whom' ),
+			'sheet_w'        => $t( 'sheet_w' ),
+			'sheet_l'        => $t( 'sheet_l' ),
+			'stock'          => 'sheet' === $t( 'stock' ) ? 'sheet' : '',
 		);
 	}
 
@@ -763,7 +938,7 @@ class ZPREP_Dashboard {
 		}
 		$assignee = isset( $_POST['assignee_id'] ) ? (int) $_POST['assignee_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce, app access and manager role checked in self::manager_guard() above.
 		if ( $assignee > 0 ) {
-			$a = ZPREP_Assignments::create( (int) get_current_user_id(), $assignee, ZPREP_Remakes::job_key( (int) $row['id'] ), (string) $row['customer_label'], 'remake' );
+			$a = ZPREP_Assignments::create( (int) get_current_user_id(), $assignee, ZPREP_Remakes::job_key( (int) $row['id'] ), (string) $row['customer_label'], ZPREP_Remakes::is_internal( $row ) ? 'internal' : 'remake' );
 			if ( is_wp_error( $a ) ) {
 				wp_send_json_success( array( 'remake' => ZPREP_Remakes::card( $row ), 'warning' => $a->get_error_message() ) );
 			}
@@ -848,8 +1023,150 @@ class ZPREP_Dashboard {
 		if ( ! ZPREP_Remakes::set_status( $id, $status ) ) {
 			wp_send_json_error( array( 'message' => __( 'Could not update the status.', 'zorderz' ) ) );
 		}
+		// A removed job is nobody's to cut: its assignment goes with it, so the person it was given to is not left
+		// holding a job that no longer shows.
+		if ( 'void' === $status ) {
+			ZPREP_Assignments::revoke_job( (int) get_current_user_id(), ZPREP_Remakes::job_key( $id ) );
+		}
 		$row = ZPREP_Remakes::get( $id );
 		wp_send_json_success( array( 'remake' => $row ? ZPREP_Remakes::card( $row ) : null ) );
+	}
+
+	/**
+	 * "Mark as cut" for a remake or an internal order, and "Not cut yet" to take it back. A shop job has no CRM
+	 * lead to send to, so this is how its cut is recorded: every bench piece of the job is marked cut in the cut
+	 * ledger under the person who pressed, and the job's own status follows. Nothing is written to the CRM or to
+	 * billing.
+	 */
+	public static function ajax_remake_mark_cut(): void {
+		self::guard();
+		$id   = isset( $_POST['remake_id'] ) ? (int) $_POST['remake_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce and app access checked in self::guard() above.
+		$undo = ! empty( $_POST['undo'] ) && '0' !== $_POST['undo']; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce and app access checked in self::guard() above; the value is only compared to a literal.
+		$uid  = (int) get_current_user_id();
+		$row  = $id > 0 ? ZPREP_Remakes::get( $id ) : null;
+		// One answer for "not there" and "not yours".
+		if ( ! $row || 'void' === (string) $row['status'] || ! self::can_work_remake( $uid, $id ) ) {
+			wp_send_json_error( array( 'message' => __( 'That job was not found.', 'zorderz' ) ), 404 );
+		}
+		$out = self::mark_remake_cut( $row, $uid, $undo );
+		if ( $out['changed'] > 0 ) {
+			if ( ! $undo ) {
+				zprep_usage( 'cut_marked', 0 );
+			}
+			// The home tile counts open internal orders: have this person's count read again.
+			if ( class_exists( 'ZPREP_Queue_Counts' ) ) {
+				ZPREP_Queue_Counts::request_refresh( $uid );
+			}
+		}
+		wp_send_json_success( $out );
+	}
+
+	/**
+	 * The work of ajax_remake_mark_cut(), apart from the request. The job is planned here from its own row when its
+	 * ledger is empty (nobody opened the plan first), and an internal order cut from sheets is planned so the count
+	 * of sheets it takes can be kept. A plan that leaves a piece off its sheets is not a cut to record: nothing is
+	 * written and `refused` says why. Only bench pieces are marked; a job with field pieces still to cut is not
+	 * called cut.
+	 *
+	 * @return array{remake:array,cut_state:array,changed:int,complete:bool,nothing:bool,refused:string}
+	 */
+	public static function mark_remake_cut( array $row, int $actor, bool $undo = false ): array {
+		$id       = (int) $row['id'];
+		$job_key  = ZPREP_Remakes::job_key( $id );
+		$internal = ZPREP_Remakes::is_internal( $row );
+
+		$plan = null;
+		if ( empty( ZPREP_Cut_State::rows_for_job( $job_key ) ) || ( ! $undo && $internal && ZPREP_Remakes::stock_sheet( $row ) ) ) {
+			$plan = ( new ZPREP_Engine() )->compute_plan( ZPREP_Remakes::measurements( $row, ZPREP_Settings::default_color() ), ZPREP_Remakes::plan_options( $row ) );
+			if ( empty( ZPREP_Cut_State::rows_for_job( $job_key ) ) ) {
+				ZPREP_Cut_State::sync_from_plan( 0, $job_key, $plan );
+			}
+		}
+
+		if ( ! $undo && $plan && ! empty( $plan['dropped'] ) ) {
+			$n = count( $plan['dropped'] );
+			return array(
+				'remake'    => ZPREP_Remakes::card( ZPREP_Remakes::get( $id ) ?? $row ),
+				'cut_state' => ZPREP_Cut_State::pick( ZPREP_Cut_State::rows_for_job( $job_key ) ),
+				'changed'   => 0,
+				'complete'  => false,
+				'nothing'   => false,
+				/* translators: %d: pieces. */
+				'refused'   => sprintf( _n( 'The cut plan leaves %d piece off its sheets, so this was not marked. Report it to an administrator.', 'The cut plan leaves %d pieces off its sheets, so this was not marked. Report it to an administrator.', $n, 'zorderz' ), $n ),
+			);
+		}
+
+		$rows    = ZPREP_Cut_State::rows_for_job( $job_key );
+		$nothing = false;
+		if ( $undo ) {
+			$keys = array();
+			foreach ( $rows as $r ) {
+				if ( (int) $r['qty_cut'] > 0 ) {
+					$keys[] = (string) $r['item_key'];
+				}
+			}
+			$res = ZPREP_Cut_State::reopen( 0, $job_key, $keys, $actor );
+			ZPREP_Remakes::set_status( $id, 'open' );
+			if ( $internal ) {
+				ZPREP_Remakes::set_sheets_used( $id, 0 );
+			}
+		} else {
+			$bench = array();
+			foreach ( $rows as $r ) {
+				if ( ZPREP_Cut_State::CLASS_BENCH !== (string) $r['work_class'] ) {
+					continue;
+				}
+				$bench[] = array(
+					'work_class' => ZPREP_Cut_State::CLASS_BENCH,
+					'item_key'   => (string) $r['item_key'],
+					'item_label' => (string) $r['item_label'],
+					'qty_total'  => (int) $r['qty_total'],
+					'qty_cut'    => (int) $r['qty_total'],
+				);
+			}
+			$nothing = empty( $bench ); // no bench piece on the job's plan at all
+			$res     = $nothing
+				? array( 'changed' => 0, 'state' => ZPREP_Cut_State::pick( $rows ) )
+				: ZPREP_Cut_State::mark_cut( 0, $job_key, $bench, $actor, ZPREP_Cut_State::WHERE_SHOP );
+			if ( ZPREP_Cut_State::STATE_COMPLETE === (string) ( $res['state']['state'] ?? '' ) ) {
+				ZPREP_Remakes::set_status( $id, 'cut' );
+				if ( $plan && $internal ) {
+					$sheets = 0;
+					foreach ( (array) ( $plan['pages'] ?? array() ) as $pg ) {
+						if ( ! empty( $pg['stock_sheet'] ) ) {
+							++$sheets;
+						}
+					}
+					ZPREP_Remakes::set_sheets_used( $id, $sheets );
+				}
+			}
+		}
+		$state = $res['state'] ?? ZPREP_Cut_State::pick( ZPREP_Cut_State::rows_for_job( $job_key ) );
+		return array(
+			'remake'    => ZPREP_Remakes::card( ZPREP_Remakes::get( $id ) ?? $row ),
+			'cut_state' => $state,
+			'changed'   => (int) ( $res['changed'] ?? 0 ),
+			'complete'  => ZPREP_Cut_State::STATE_COMPLETE === (string) ( $state['state'] ?? '' ),
+			'nothing'   => $nothing,
+			'refused'   => '',
+		);
+	}
+
+	/** Hours spent on an internal order, typed by anyone who may work it (can_work_remake()). */
+	public static function ajax_internal_set_labor(): void {
+		self::guard();
+		$id  = isset( $_POST['remake_id'] ) ? (int) $_POST['remake_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce and app access checked in self::guard() above.
+		$uid = (int) get_current_user_id();
+		if ( $id <= 0 || ! self::can_work_remake( $uid, $id ) ) {
+			wp_send_json_error( array( 'message' => __( 'That order was not found.', 'zorderz' ) ), 404 );
+		}
+		$hours = isset( $_POST['hours'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['hours'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce and app access checked in self::guard() above.
+		$row   = ZPREP_Remakes::set_labor( $id, $hours, $uid );
+		if ( is_wp_error( $row ) ) {
+			// A remake, or an order that was removed, is "not found" here as well: one answer for all three.
+			wp_send_json_error( array( 'message' => $row->get_error_message() ), 'zprep_internal_missing' === $row->get_error_code() ? 404 : null );
+		}
+		wp_send_json_success( array( 'remake' => ZPREP_Remakes::card( $row ) ) );
 	}
 
 	public static function ajax_assign(): void {
@@ -924,9 +1241,9 @@ class ZPREP_Dashboard {
 		$admin_email = get_option( 'admin_email', '' );
 		if ( $admin_email ) {
 			$body    = "A Prep user reported a problem.\n\nWhen: {$when}\nUser: " . ( $user->display_name ?: 'unknown' ) . "\nContext: {$context}\n" . ( $lead ? "Lead: #{$lead}\n" : '' ) . "\nNote:\n{$detail}\n";
-			$emailed = (bool) wp_mail( $admin_email, __( 'Zorderz Prep — problem report', 'zorderz' ), $body );
+			$emailed = (bool) wp_mail( $admin_email, __( 'Zorderz Prep: problem report', 'zorderz' ), $body );
 		}
-		wp_send_json_success( array( 'reported' => true, 'emailed' => $emailed, 'message' => __( 'Thanks — your report was sent to the admin.', 'zorderz' ) ) );
+		wp_send_json_success( array( 'reported' => true, 'emailed' => $emailed, 'message' => __( 'Thanks, your report was sent to the admin.', 'zorderz' ) ) );
 	}
 
 	/* ================================================================

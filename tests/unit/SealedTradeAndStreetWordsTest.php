@@ -101,4 +101,20 @@ final class SealedTradeAndStreetWordsTest extends TestCase {
 		$this->assertSame( array( 'rue', 'strada vecchia' ), $p['writes'][0]['value'] );
 		$this->assertArrayHasKey( 'street-words', ZDZ_Identity_Pack::settings_consumers() );
 	}
+
+	public function test_a_region_adds_street_endings_by_option_and_filter(): void {
+		$this->assertSame( array(), ZDZ_Sealed::street_end_words(), 'Core adds none: each reader knows the common ones' );
+		$GLOBALS['zdz_test_options'][ ZDZ_Sealed::STREET_END_OPT ] = array( 'Close', 'close', 'Crescent', 'two words', '12', 'a' );
+		$GLOBALS['zdz_test_filters']['zdz_street_end_words']       = function ( $w ) { $w[] = 'Mews'; return $w; };
+		$this->assertSame( array( 'Close', 'Crescent', 'Mews' ), ZDZ_Sealed::street_end_words(), 'one word of letters each, once whatever its case' );
+		unset( $GLOBALS['zdz_test_filters']['zdz_street_end_words'] );
+	}
+
+	public function test_the_knowledge_pack_writes_the_street_endings(): void {
+		$p = ZDZ_Identity_Pack::plan_street_end_words( array( 'addresses.street_end_words' => array( 'Mews', 'Close', 'close', 'Rue de', '12' ) ) );
+		$this->assertSame( array( 'addresses.street_end_words', 'addresses.street_end_words' ), array_column( $p['refused'], 'path' ), 'two words, or digits, are refused' );
+		$this->assertSame( ZDZ_Sealed::STREET_END_OPT, $p['writes'][0]['option'] );
+		$this->assertSame( array( 'Close', 'Mews' ), $p['writes'][0]['value'] );
+		$this->assertArrayHasKey( 'street-end-words', ZDZ_Identity_Pack::settings_consumers() );
+	}
 }

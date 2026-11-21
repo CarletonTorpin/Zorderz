@@ -1110,8 +1110,8 @@ class PlaceIndex:
                 mine += [m for m in self._zip_street_names(z, form.split()) if m not in mine]
             twin = self._twin(z, nums, streets) if self.refine else (None, False)
             if twin[0]:                                     # their number, exactly, on the street of
-                self.how["near spelling"] += 1              # their name ("410 Larkspur": larkspur dr, not 402
-                return _best(twin[0])                       # on the layer's one-point "larkspur")
+                self.how["near spelling"] += 1              # their name ("410 Sample": sample dr, not 402
+                return _best(twin[0])                       # on the layer's one-point "sample")
             if mine:
                 for n in nums:
                     hit = self._nearby(z, n, mine)
@@ -1121,7 +1121,7 @@ class PlaceIndex:
                 return None
         rows = self._rows(z, num) if len(z) == 5 else []
         if len(z) == 5 and twin[1] and REFUSE_TWINS:      # two streets of their name have their
-            return None                                     # number ("525 Hawthorn Ave": dr and knl): no guess
+            return None                                     # number ("525 Example Ave": dr and knl): no guess
         if len(z) == 5:
             fit = _spelled(st, self._zip_streets(z), {r[0] for r in rows})
             hit = _pick(fit, rows) if rows else None
@@ -1153,11 +1153,11 @@ class PlaceIndex:
     def _twin(self, z, nums, forms):
         """(rows, ambiguous) for the street of the customer's name at their exact number.
         rows: the rows on the one street of their ZIP that differs from what they wrote only by what they left out
-        (a suffix or a direction) or by the layer's padding ("larkspur" -> larkspur dr, not a nearby number on the
-        layer's one-point "larkspur"; "3rd ave" -> 03rd ave). ambiguous: two or more streets of their name have
-        the number, each at most one written suffix or direction away, and nothing picks one ("525 Hawthorn
-        Ave": hawthorn dr and hawthorn knl), or another street at the number has all their distinctive words
-        ("120 Pine": pine st and pine hills rd)."""
+        (a suffix or a direction) or by the layer's padding ("sample" -> sample dr, not a nearby number on the
+        layer's one-point "sample"; "3rd ave" -> 03rd ave). ambiguous: two or more streets of their name have
+        the number, each at most one written suffix or direction away, and nothing picks one ("525 Example
+        Ave": example dr and example knl), or another street at the number has all their distinctive words
+        ("120 Elm": elm st and elm hills rd)."""
         keys = []
         for f in forms:
             k = _twin_parts(f)
@@ -1177,8 +1177,8 @@ class PlaceIndex:
                     best[r] = min(diffs)
             if not best:
                 continue
-            for r in rows:            # another street at the number with their distinctive words ("120 Pine":
-                if r in best:         # pine hills rd; "707 Old Mill": mill park trl): the twin decides nothing
+            for r in rows:            # another street at the number with their distinctive words ("120 Elm":
+                if r in best:         # elm hills rd; "707 Old Sample": sample park trl): the twin decides nothing
                     continue          # and the earlier rules go on as before
                 cd, cn, _cs = _twin_parts(r[0])
                 if any(_same_or_missing(kd, cd) and set(w for w in kn if w not in _generic()) <= set(cn)
@@ -1199,16 +1199,16 @@ class PlaceIndex:
         above (and the known places) found nothing, all at the customer's own house number:
           1. other forms of their street, exactly (_more_forms): the layer's "06th st" for "6th St" and "Sixth
              St", its "rdg", "trls", "pky", "pte" for Ridge, Trails, Parkway, Pointe, "centre" for Center, "olde
-             hwy 4", "rock mountain rd" for Rock Mt. Rd., "maple dr" for "Maple Ddrive", "hwy 9" for
-             "Hyw 9"; in their ZIP, else (no ZIP, or not found in one of the region's ZIPs) anywhere in the region
+             hwy 1", "sample mountain rd" for Sample Mt. Rd., "example dr" for "Example Ddrive", "hwy 2" for
+             "Hyw 2"; in their ZIP, else (no ZIP, or not found in one of the region's ZIPs) anywhere in the region
              when it is one place;
-          2. the same letters spaced otherwise: "Seaview Ave" -> sea view ave, "LindenAve." -> linden ave,
-             "Parkwest Ave" -> park w ave;
+          2. the same letters spaced otherwise: "Sunview Ave" -> sun view ave, "SampleAve." -> sample ave,
+             "Hillwest Ave" -> hill w ave;
           3. a suffix left out, when the streets of that name differ only in their suffix and one has the number
-             ("1500 Old Mill" -> old mill dr, not old mill spur or old mill trl; "2400 Maplewood" -> maplewood rd),
+             ("1500 Old Sample" -> old sample dr, not old sample spur or old sample trl; "2400 Elmwood" -> elmwood rd),
              and no other street at that number shares their words;
           4. the wrong suffix, when the ZIP has one street of that name and it has the number;
-          5. the name two letters off ("School Days Ln" -> school daze ln, "Larkspur Hollow Rd" -> larkspur
+          5. the name two letters off ("Sample Days Ln" -> sample daze ln, "Example Hollow Rd" -> example
              holow rd), eight letters or more, the suffix and direction the same or left out, when it is the one
              street of the ZIP that close.
         Rules 4 and 5 are not tried when the street they wrote is a street of their ZIP (then it is theirs, and
@@ -1452,7 +1452,7 @@ _UNIT = re.compile(r"(?:#|\b(?:unit|apt|spc|space|ste|suite|no)\b\.?)\s*[\w-]+",
 WHOLE_STREET_MIN = 3         # address points a street with no house number needs to be placed as one place
 SAME_SPOT = 0.0005           # degrees (about 50 m): two street names at one house number this close are one place
 # words that don't tell one street from another (suffixes, directions, and the Spanish and descriptive words that
-# start whole families of streets: Camino Uno / Camino Dos, Old Mill Rd / Old Ridge Rd). Core keeps the ones common
+# start whole families of streets: Camino Uno / Camino Dos, Old Sample Rd / Old Ridge Rd). Core keeps the ones common
 # across the United States; a region adds its own (region pack: generic_street_words)
 _GENERIC = set(SA._SUFFIX.values()) | set(SA._SUFFIX) | set(SA._DIRS) | {
     "de", "la", "el", "los", "las", "del", "the", "via", "calle", "camino", "paseo", "avenida", "plaza",
@@ -1510,7 +1510,7 @@ def _near_spelling(st, rows, zip_streets):
 def _spelled(st, zip_streets, with_number=()):
     """Among the streets of the customer's ZIP (only asked when the customer's own street isn't in it), the one
     street their spelling can only mean, as [street], else []:
-      1. theirs is the start of it ("12 Pine Hills" -> "pine hills rd"), with a word of its own (not "100 Via");
+      1. theirs is the start of it ("12 Elm Hills" -> "elm hills rd"), with a word of its own (not "100 Via");
       2. the same name with another or no suffix ("12 Oak St" when only "oak ct" has 12);
       3. the name one letter off, or only spaced differently, five
          letters or more and no digits ("12 Sycamorre Rd"; never 5th -> 4th, E -> F, Elm -> Ely), the suffix and
@@ -1549,11 +1549,11 @@ def _spelled(st, zip_streets, with_number=()):
             return fit
         if len(fit) > 1 and dirs and with_number:  # a direction they wrote picks among those with
             same = [c for c in fit if sorted(_parts(c)[0]) == sorted(dirs) and c in with_number]   # the number
-            if len(same) == 1:                         # ("500 West Lake Blvd": w lake dr, not lake dr)
+            if len(same) == 1:                         # ("500 West Elm Blvd": w elm dr, not elm dr)
                 return same
-        if len(fit) > 1 and sfx and with_number:   # so does a suffix they wrote ("812 Mill Trail":
-            same = [c for c in fit if _parts(c)[2] == sfx and c in with_number   # mill park trl has 812, old
-                    and _same_or_missing(dirs, _parts(c)[0])]                 # mill trl doesn't)
+        if len(fit) > 1 and sfx and with_number:   # so does a suffix they wrote ("812 Sample Trail":
+            same = [c for c in fit if _parts(c)[2] == sfx and c in with_number   # sample park trl has 812, old
+                    and _same_or_missing(dirs, _parts(c)[0])]                 # sample trl doesn't)
             if len(same) == 1:
                 return same
         if len(fit) > 1:
@@ -1703,7 +1703,7 @@ def _more_forms(st, suffixes=True):
                 if _edit1(x, full) or _swap1(x, full):
                     out.append(" ".join(w[:-1] + [ab]))
                     break
-            for ab in _JOINED:                                  # "lindenave" -> linden ave
+            for ab in _JOINED:                                  # "sampleave" -> sample ave
                 if x.endswith(ab) and len(x) - len(ab) >= 4:
                     out.append(" ".join(w[:-1] + [x[:-len(ab)], ab]))
                     break
@@ -1741,8 +1741,8 @@ def _more_forms(st, suffixes=True):
 
 
 def _letters(street, expand=False):
-    """The street's letters without spaces; expand: a direction after the first word spelled out ("park w ave"
-    -> "parkwestave")."""
+    """The street's letters without spaces; expand: a direction after the first word spelled out ("hill w ave"
+    -> "hillwestave")."""
     w = street.split()
     if expand:
         w = w[:1] + [_DIR_WORD.get(x, x) for x in w[1:]]
@@ -1769,8 +1769,8 @@ def _parts2(street):
 
 def _left_out(forms, streets, rows):
     """Rule 3: the streets that are the customer's street plus a suffix they left out; [] unless just one of them
-    has the number and no other street at that number has their distinctive words ("707 Old Mill", with 707 on
-    old mill spur and on mill park trl, is no guess)."""
+    has the number and no other street at that number has their distinctive words ("707 Old Sample", with 707 on
+    old sample spur and on sample park trl, is no guess)."""
     with_number = {r[0] for r in rows}
     fit = set()
     for f in forms:
@@ -1831,15 +1831,15 @@ TWO_OFF_MIN = 8              # letters a name needs before two of them may be of
 
 
 def _split_generic(name):
-    """(the name's generic words in order, its other letters joined): ("old",), "mill" for old mill."""
+    """(the name's generic words in order, its other letters joined): ("old",), "sample" for old sample."""
     return tuple(w for w in name if w in _generic()), "".join(w for w in name if w not in _generic())
 
 
 def _two_off(forms, zip_parts):
     """Rule 5: the one street of the ZIP whose name is one or two letters off theirs (two only at TWO_OFF_MIN
     letters or more; never a digit), the suffix and direction the same or left out. Only the distinctive words
-    may be off; the generic ones must be the same ("Lakeview North" is never lakeview forth, nor "Old Mile"
-    old mill)."""
+    may be off; the generic ones must be the same ("Lakeview North" is never lakeview forth, nor "Old Sampel"
+    old sample)."""
     fit = set()
     for f in forms:
         d, n, s = _parts2(f)

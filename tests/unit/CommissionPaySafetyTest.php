@@ -90,6 +90,7 @@ foreach ( array( 'split', 'places', 'line-map', 'cost-book', 'classifier', 'fres
 	'attribution', 'review', 'material-cost', 'cost-recheck', 'calc-engine', 'month-lock', 'installer-pay', 'invoice-view', 'ai' ) as $zcc_part ) {
 	require_once dirname( __DIR__, 2 ) . '/zorderz-apps/apps/commission/includes/class-zcc-' . $zcc_part . '.php';
 }
+require_once dirname( __DIR__, 2 ) . '/zorderz-apps/apps/commission/includes/class-zcc-self-test.php';
 
 final class ZCC_Test_Fb_Client {
 	public $pages = array();
@@ -289,6 +290,24 @@ final class CommissionPaySafetyTest extends TestCase {
 	}
 
 	/* ── piece-rate pay from recorded installers ─────────────────────────── */
+
+	public function test_the_self_test_keeps_its_deliberate_miss_out_of_the_log(): void {
+		// The settings screen runs the self-test on every visit; its synthetic ledger misses a rate on
+		// purpose. That miss stays in the result and out of the log; a real one is still logged.
+		$log  = tempnam( sys_get_temp_dir(), 'zcc' );
+		$prev = ini_set( 'error_log', $log );
+		try {
+			$r = ZCC_Self_Test::run();
+			ZCC_Audit::log( 'piece_rate_missing', array( 'item_id' => 'counted-kind', 'qty' => 1 ) );
+		} finally {
+			ini_set( 'error_log', false === $prev ? '' : (string) $prev );
+		}
+		$text = (string) file_get_contents( $log );
+		unlink( $log );
+		$this->assertTrue( $r['passed'], 'the four parity checks pass' );
+		$this->assertStringNotContainsString( 'kind-b', $text, "the self-test's synthetic miss is not logged" );
+		$this->assertStringContainsString( 'counted-kind', $text, 'a real disposition still is' );
+	}
 
 	public function test_piece_rate_pay_counts_only_jobs_attributed_to_the_installer(): void {
 		$GLOBALS['zdz_test_options']['zdz_compensation_piece_rates'] = array( 'widget-a' => array( 'rate' => 15, 'unit' => 'per_item' ), 'widget-b' => array( 'rate' => 5, 'unit' => 'per_item' ) );

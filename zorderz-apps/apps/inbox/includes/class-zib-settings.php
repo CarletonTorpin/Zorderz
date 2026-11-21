@@ -145,9 +145,9 @@ class ZIB_Settings {
 	}
 
 	/**
-	 * The DARK ingestion switch (P1). Default OFF. Even with the feature live and
-	 * mailboxes connected, NO mail is read/indexed until this is turned on. Lets
-	 * the owner deploy + verify P1 before any real inbox is touched.
+	 * The ingestion switch. Default OFF. Even with the feature live and mailboxes
+	 * connected, NO mail is read/indexed until this is turned on, so a site can be
+	 * set up and checked before any real inbox is touched.
 	 */
 	/**
 	 * May users send (compose / reply / forward) and triage (mark read, move) from the

@@ -209,7 +209,7 @@ class ZCC_Installer_Pay {
 				$disp = [
 					'item_id' => $item_id,
 					'qty'     => $qty,
-					'reason'  => sprintf( 'Counted %d unit(s) of "%s" but NO piece rate is configured — pay is UNRESOLVED, not $0. Configure a rate or exclude the item.', $qty, $item_id ),
+					'reason'  => sprintf( 'Counted %d unit(s) of "%s" but NO piece rate is configured. Pay is UNRESOLVED, not $0. Configure a rate or exclude the item.', $qty, $item_id ),
 				];
 				$dispositions[] = $disp;
 				if ( class_exists( 'ZCC_Audit' ) ) {

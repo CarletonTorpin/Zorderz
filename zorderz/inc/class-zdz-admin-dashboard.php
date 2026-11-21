@@ -1015,8 +1015,6 @@ class ZDZ_Admin_Dashboard {
 	 * Track a front-end page view (SPA shell load).
 	 * Fires on template_redirect — only for logged-in users on the front page.
 	 * Throttled: max 1 page_view per user per 10 minutes to avoid flooding.
-	 *
-	 * @since 2.17.1
 	 */
 	public static function track_page_view() {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {

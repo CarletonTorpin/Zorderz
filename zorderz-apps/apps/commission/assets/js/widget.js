@@ -17,8 +17,10 @@
 
 	var cfg = window.zccCfg || {};
 
+	// The business's money (Business Profile → Locale), through the theme's kit.
 	function money( n ) {
 		var v = Number( n || 0 );
+		if ( window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.money === 'function' ) { return window.ZDZ.ui.money( v ); }
 		return '$' + v.toLocaleString( undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 } );
 	}
 
@@ -76,7 +78,7 @@
 			var table = el( 'table', 'zcc-sheet-lines' );
 			( doc.lines || [] ).forEach( function ( ln ) {
 				var tr = el( 'tr' );
-				tr.appendChild( el( 'td', '', ln.name + ( ln.description ? ' — ' + ln.description : '' ) ) );
+				tr.appendChild( el( 'td', '', ln.name + ( ln.description ? ': ' + ln.description : '' ) ) );
 				tr.appendChild( el( 'td', 'zcc-num', ln.qty === null ? '' : ln.qty ) );
 				tr.appendChild( el( 'td', 'zcc-num', ln.amount === null ? '' : money( ln.amount ) ) );
 				table.appendChild( tr );
@@ -199,7 +201,7 @@
 		box.appendChild( el( 'div', 'zcc-basis', ( pc.units_total || 0 ) + ' unit(s)' ) );
 		// LOUD: never hide an unresolved (counted-but-unrated) line behind a $0.
 		if ( pc.resolved === false && Array.isArray( pc.missing_rates ) && pc.missing_rates.length ) {
-			box.appendChild( el( 'div', 'zcc-warn', 'Unresolved — no rate configured for: ' + pc.missing_rates.join( ', ' ) + '. This paycheck is not final.' ) );
+			box.appendChild( el( 'div', 'zcc-warn', 'Unresolved, no rate configured for: ' + pc.missing_rates.join( ', ' ) + '. This paycheck is not final.' ) );
 		}
 		var held = ( data.review || [] ).length || data.review_count || 0;
 		if ( held ) {

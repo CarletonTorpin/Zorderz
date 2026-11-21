@@ -1,0 +1,53 @@
+/* Zorderz Analytics — deep research in the chat: the plan card, the progress card and the trail under an answer.
+   Colours are the theme's tokens only; sizes are the theme's type roles; every press target is a kit button. */
+
+.zana-research { display: block; }
+.zana-research.is-ended { padding: 0; border: 0; background: none; margin-top: 10px; }
+.zana-research[hidden] { display: none; }
+
+.zana-research-objective { margin: 6px 0 8px; }
+.zana-research-plan { margin: 0 0 8px; padding: 0 0 0 1.4em; }
+.zana-research-plan li { margin: 0 0 6px; }
+.zana-research-tool {
+	display: inline-block;
+	margin-right: 8px;
+	padding: 1px 8px;
+	border-radius: var(--ref-radius-sm, 8px);
+	border: 1px solid var(--sys-border, rgba(127, 127, 127, 0.3));
+	font-size: var(--zdz-type-meta, 13px);
+	color: var(--sys-text-sec, #555);
+	white-space: nowrap;
+}
+.zana-research-tool.is-web { border-color: var(--sys-border-strong, rgba(127, 127, 127, 0.5)); }
+
+.zana-research-now { margin: 0 0 6px; font-weight: var(--sys-font-wt-sb, 600); }
+.zana-research-now.is-quiet { color: var(--sys-tint-warning-fg, inherit); }
+.zana-research-note.is-bad { color: var(--sys-tint-error-fg, inherit); }
+.zana-research .zana-card-actions { margin-top: 10px; }
+
+.zana-research-toggle { margin-top: 8px; }
+.zana-research-toggle-btn[aria-expanded="true"] { font-weight: var(--sys-font-wt-sb, 600); }
+.zana-research-toggle-body:empty { display: none; }
+
+.zana-research-events {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: var(--zdz-type-secondary, 15px);
+	line-height: var(--zdz-type-lh-tight, 1.3);
+}
+.zana-research-ev { display: flex; gap: 8px; padding: 6px 0; border-top: 1px solid var(--sys-border, rgba(127, 127, 127, 0.2)); }
+.zana-research-ev-time { flex: 0 0 3.2em; color: var(--sys-text-sec, #555); font-variant-numeric: tabular-nums; }
+.zana-research-ev-mark { flex: 0 0 1.2em; text-align: center; }
+.zana-research-ev.is-fail .zana-research-ev-mark,
+.zana-research-ev.is-lost .zana-research-ev-mark { color: var(--sys-tint-error-fg, inherit); }
+.zana-research-ev.is-ok .zana-research-ev-mark { color: var(--sys-tint-success-fg, inherit); }
+.zana-research-ev-main { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.zana-research-ev-label { display: block; }
+.zana-research-ev-detail,
+.zana-research-ev-extra,
+.zana-research-ev-excerpt { display: block; margin-top: 2px; color: var(--sys-text-sec, #555); font-size: var(--zdz-type-meta, 13px); }
+.zana-research-ev-excerpt { padding-left: 8px; border-left: 2px solid var(--sys-border, rgba(127, 127, 127, 0.3)); }
+.zana-research-ev-items { margin: 4px 0 0; padding-left: 1.2em; color: var(--sys-text-sec, #555); font-size: var(--zdz-type-meta, 13px); }
+
+.zana-research-offer { margin-top: 10px; }

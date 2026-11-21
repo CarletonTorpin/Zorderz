@@ -467,7 +467,7 @@ class ZDZ_Rule_Governance {
 		$errors = array();
 		foreach ( self::all() as $id => $r ) {
 			if ( preg_match( '/^[A-Za-z]{1,2}$/', $id ) ) {
-				$errors[] = "rule id '$id' is a short code — descriptive slugs only (they collide with staff initials)";
+				$errors[] = "rule id '$id' is a short code: descriptive slugs only (they collide with staff initials)";
 			}
 			if ( '' === trim( $r['directive'] ) && self::TIER_ADVISORY !== $r['tier'] ) {
 				$errors[] = "rule '$id' has no directive";

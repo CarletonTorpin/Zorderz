@@ -364,7 +364,7 @@ add_action(
 					'name'        => 'Invoices',
 					'icon'        => 'file-text',
 					'cat'         => 'Finance',
-					'cc'          => '#059669',
+					'cc'          => '#0072B2',
 					'desc'        => 'Create invoices and accept card payments.',
 					'description' => 'Create invoices and accept card payments.',
 					// Declarative intent only — live access is granted per user via
@@ -387,7 +387,8 @@ add_action(
 
 			/** A small panel that opens the admin Invoices screen. */
 			private function tile_html(): string {
-				wp_enqueue_style( 'zic-widget-css', ZIC_PLUGIN_URL . 'assets/css/widget.css', array(), ZIC_VERSION );
+				$css = ZIC_PLUGIN_DIR . 'assets/css/widget.css';
+				wp_enqueue_style( 'zic-widget-css', ZIC_PLUGIN_URL . 'assets/css/widget.css', array(), ZIC_VERSION . ( file_exists( $css ) ? '.' . filemtime( $css ) : '' ) );
 				$url = esc_url( admin_url( 'admin.php?page=zic_dashboard' ) );
 				return '<div class="zic-widget">'
 					. '<h3>' . esc_html__( 'Invoices', 'zorderz' ) . '</h3>'

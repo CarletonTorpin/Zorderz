@@ -210,7 +210,7 @@
 			function avatarColor(seed) {
 				var h = 0; seed = String(seed || '?');
 				for (var i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) >>> 0; }
-				var PAL = ['#4796F7', '#2CA6BD', '#2FA36B', '#D98A2B', '#E0655F', '#3E92E0', '#5FB39A', '#C9803A'];
+				var PAL = ['#7D87FB', '#2CA6BD', '#2FA36B', '#D98A2B', '#E0655F', '#3E92E0', '#5FB39A', '#C9803A'];
 				return PAL[h % PAL.length];
 			}
 			function fmtDateTime(s) {
@@ -779,8 +779,8 @@
 							api('/message/' + (id | 0) + '/attachment?att=' + encodeURIComponent(String(im.att_id || '')), 'GET').then(function (d) {
 								if (d && d.ok && d.data_b64 && typeof d.content_type === 'string' && d.content_type.indexOf('image/') === 0) {
 									image.src = 'data:' + d.content_type + ';base64,' + d.data_b64;
-								} else { image.remove(); cap.textContent = String(im.name || 'image') + ' — couldn’t load'; cap.className = 'zib-att-cap zib-att-err'; }
-							}).catch(function () { image.remove(); cap.textContent = String(im.name || 'image') + ' — couldn’t load'; cap.className = 'zib-att-cap zib-att-err'; });
+								} else { image.remove(); cap.textContent = String(im.name || 'image') + ' couldn’t load'; cap.className = 'zib-att-cap zib-att-err'; }
+							}).catch(function () { image.remove(); cap.textContent = String(im.name || 'image') + ' couldn’t load'; cap.className = 'zib-att-cap zib-att-err'; });
 						});
 						others.forEach(function (o) {
 							var c = document.createElement('div'); c.className = 'zib-att-name';
@@ -1226,10 +1226,10 @@
 				// gone. Never "try again" here: that is how a customer gets the email twice.
 				if (reason === 'unsure' || (err && err.kind === 'timeout')) { return 'It may have gone. Check Sent before sending again.'; }
 				if (reason === 'too-slow') { return 'That took too long to prepare, so nothing was sent. Send fewer documents, or send big ones as links.'; }
-				if (reason === 'reconnect' || reason === 'auth') { return 'Sending isn’t enabled yet — open ⚙ and reconnect to grant send permission.'; }
+				if (reason === 'reconnect' || reason === 'auth') { return 'Sending isn’t enabled yet. Open ⚙ and reconnect to grant send permission.'; }
 				if (reason === 'no-recipients') { return 'No valid recipients.'; }
 				if (reason === 'empty') { return 'Nothing to send.'; }
-				if (reason === 'busy') { return 'Mail server is busy — try again in a moment.'; }
+				if (reason === 'busy') { return 'Mail server is busy. Try again in a moment.'; }
 				if (reason === 'vault-missing') { return 'The Knowledge Vault isn’t available right now, so the documents couldn’t go.'; }
 				if (reason === 'doc-not-found') { return 'A Vault document couldn’t be read. Remove it, add it again and send.'; }
 				if (reason === 'doc-no-share') { return 'You can’t share one of those documents outside the business.'; }
@@ -1241,7 +1241,7 @@
 			/* the chat's "Open in Email" hands over a new email to finish here (Bridge.loadApp('inbox',
 			   {zibHandoff}) → zdz_app_launch). The server gives it once, to this person only; nothing is sent until Send. */
 			card.__zibHandoff = function (token) {
-				if (!connCanSend) { ZDZ.ui.toast('Sending isn’t enabled yet — open ⚙ and reconnect to grant send permission.'); return; }
+				if (!connCanSend) { ZDZ.ui.toast('Sending isn’t enabled yet. Open ⚙ and reconnect to grant send permission.'); return; }
 				api('/compose/handoff/' + token, 'POST').then(function (r) {
 					openCompose({ mode: 'new', prefill: { to: r.to || '', cc: r.cc || '', subj: r.subject || '', body: r.body || '', docs: r.docs || [] },
 						error: r.docs_missing ? 'A document from the chat couldn’t be added here. Add it again with Vault document.' : '' });

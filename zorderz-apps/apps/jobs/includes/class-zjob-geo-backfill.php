@@ -84,8 +84,10 @@ class Zjob_Geo_Backfill {
 
 	/** Cron entry: run one budgeted pass, then unschedule once nothing remains. */
 	public static function sweep(): void {
+		global $wpdb;
 		self::run();
-		if ( 0 === self::pending() ) {
+		// A count that failed (a table not yet at its schema) reads as 0: that is not "done".
+		if ( 0 === self::pending() && '' === (string) $wpdb->last_error ) {
 			self::mark_done();
 		}
 	}
@@ -346,14 +348,14 @@ class Zjob_Geo_Backfill {
 					max( 1, $attempts )
 				);
 			case 'retry':
-				$s = sprintf( 'Not matched yet — will retry (attempt %d of %d).', max( 1, $attempts ), max( 1, $ceiling ) );
+				$s = sprintf( 'Not matched yet; will retry (attempt %d of %d).', max( 1, $attempts ), max( 1, $ceiling ) );
 				return $parked ? $s . ' Parked ~6h after a recent miss.' : $s;
 			case 'ok':
-				return 'Resolved — will stamp on the next run.';
+				return 'Resolved; will stamp on the next run.';
 			case 'no-row':
 				return 'No estimate row to read an address from (deleted, or a numberless stub).';
 			default:
-				return 'Not attempted yet — resolves on the next run.';
+				return 'Not attempted yet; resolves on the next run.';
 		}
 	}
 

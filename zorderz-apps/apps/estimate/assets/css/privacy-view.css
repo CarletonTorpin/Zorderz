@@ -1,0 +1,45 @@
+/*
+ * Zorderz Estimates - the look-only widget and sheet for an account in Privacy View. Loaded only for that account.
+ * Colors come from the theme's tokens.
+ */
+.zest-w--pv .zest-w-pv-note {
+	margin: 0 0 12px;
+	padding: 8px 12px;
+	border: 1px solid var(--sys-border, GrayText);
+	border-radius: 8px;
+	color: var(--sys-text-muted, GrayText);
+	font-size: .875rem;
+	line-height: 1.4;
+}
+.zest-w-pv-test {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 0 6px;
+	border: 1px solid var(--sys-border, GrayText);
+	border-radius: 8px;
+	color: var(--sys-text-muted, GrayText);
+	font-size: .75rem;
+	font-weight: 600;
+	line-height: 18px;
+	vertical-align: middle;
+}
+.zest-pv-muted { color: var(--sys-text-muted, GrayText); }
+.zest-pv { font-size: .95rem; line-height: 1.45; color: var(--sys-text, CanvasText); }
+.zest-pv-head { margin: 0 0 12px; font-size: 1.05rem; font-weight: 700; overflow-wrap: anywhere; }
+.zest-pv-head span { font-weight: 500; }
+.zest-pv-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 16px; margin: 0 0 16px; }
+.zest-pv-fact { min-width: 0; }
+.zest-pv-fact dt { margin: 0; color: var(--sys-text-muted, GrayText); font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.zest-pv-fact dd { margin: 0; overflow-wrap: anywhere; }
+.zest-pv-scroll { overflow-x: auto; margin: 0 0 8px; }
+.zest-pv-lines { width: 100%; border-collapse: collapse; }
+.zest-pv-lines th,
+.zest-pv-lines td { padding: 8px 8px; border-bottom: 1px solid var(--sys-border, GrayText); text-align: left; vertical-align: top; }
+.zest-pv-lines thead th { color: var(--sys-text-muted, GrayText); font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.zest-pv-lines .zest-pv-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.zest-pv-sub { margin: 16px 0 6px; font-size: .95rem; font-weight: 700; }
+.zest-pv p { margin: 0 0 6px; }
+.zest-pv-ours { margin: 0 0 6px; padding-left: 20px; }
+/* Whatever another script adds to a row here, only the look-only row and its follow-up strip show. */
+.zest-w--pv .zest-row button,
+.zest-w--pv .zest-row a { display: none !important; }

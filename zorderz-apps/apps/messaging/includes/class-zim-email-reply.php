@@ -6,7 +6,7 @@
  *
  *   OUTBOUND (see ZIM_Notifications::send_dm_email):
  *     When a DM is delivered as an email alert, the email carries the ACTUAL
- *     message text and a Reply-To of  app+dm-<token>@<mail-domain> . The same
+ *     message text and a Reply-To of  <mailbox>+dm-<token>@<mail-domain> . The same
  *     opaque token is also embedded invisibly at the bottom of the body, so a
  *     reply survives even a mail client that drops Reply-To.
  *
@@ -24,7 +24,7 @@
  *     Two independent pollers marking the same inbox read would race. So the
  *     vault's poll is authoritative and hands DM replies off to us. If the vault
  *     plugin is INACTIVE, self_poll() takes over on the same 5-minute cadence but
- *     claims ONLY app+dm-* messages, leaving everything else untouched. The two
+ *     claims ONLY <mailbox>+dm-* messages, leaving everything else untouched. The two
  *     never run at once (self_poll no-ops whenever ZKV_Mailbox is active).
  *
  * TOKEN (INV-Token — opaque, signed, constant-time, single-purpose):
@@ -54,7 +54,7 @@ class ZIM_Email_Reply {
 	/** wp_options key holding the bridge config (enabled, mailbox_base, mail_domain). */
 	const OPT_CONFIG = 'zim_email_reply_config';
 
-	/** Plus-tag prefix on the reply address local-part: app+dm-<token>@domain. */
+	/** Plus-tag prefix on the reply address local-part: <mailbox>+dm-<token>@domain. */
 	const PLUS_TAG = 'dm-';
 
 	/** Invisible in-body token marker (belt-and-suspenders if Reply-To is dropped). */
@@ -362,7 +362,7 @@ class ZIM_Email_Reply {
 
 	/**
 	 * Cron tick. Runs ONLY when the Knowledge Vault mailbox is inactive, so the
-	 * two never read the same inbox at once. Claims ONLY app+dm-* messages,
+	 * two never read the same inbox at once. Claims ONLY <mailbox>+dm-* messages,
 	 * leaving all other unread mail untouched (never marks it read, never files).
 	 */
 	public static function self_poll() {
@@ -553,7 +553,7 @@ class ZIM_Email_Reply {
 			'/^\s*Get Outlook for /i',
 		);
 		// A line that is the Zorderz alert header we generated (defensive).
-		$our_header = '/^\s*(You have a new message|New message in|—{3,}|Open in app:|Reply to this email)/i';
+		$our_header = '/^\s*(You have a new message|New message in|-{12,}|—{3,}|Open in app:|Reply to this email)/i';
 
 		foreach ( $lines as $line ) {
 			$stop = false;

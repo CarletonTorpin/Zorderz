@@ -28,7 +28,6 @@
  * AJAX endpoint, the lock, the persistence, the CRM-client build) lives below it.
  *
  * @package Zorderz\Leads
- * @since   2.8.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -127,7 +126,7 @@ class ZL_Lead_Recovery {
 		$auth_markers = array( '401', 'authentication failed', 'unauthorized', 'invalid api key', 'api key', 'forbidden', '403' );
 		foreach ( $auth_markers as $marker ) {
 			if ( $marker !== '' && strpos( $m, $marker ) !== false ) {
-				return array( 'retryable' => false, 'label' => 'CRM authentication problem — check the CRM credentials in Settings.' );
+				return array( 'retryable' => false, 'label' => 'CRM authentication problem: check the CRM credentials in Settings.' );
 			}
 		}
 
@@ -135,13 +134,13 @@ class ZL_Lead_Recovery {
 		$transient_markers = array( 'timeout', 'timed out', 'temporarily', 'rate limit', '429', '500', '502', '503', '504', 'gateway', 'connection', 'could not resolve host', 'http error', 'network' );
 		foreach ( $transient_markers as $marker ) {
 			if ( $marker !== '' && strpos( $m, $marker ) !== false ) {
-				return array( 'retryable' => true, 'label' => 'Temporary CRM problem — you can try again.' );
+				return array( 'retryable' => true, 'label' => 'Temporary CRM problem. You can try again.' );
 			}
 		}
 
 		// Unknown → treat as retryable but say so plainly (an unclassified error is more
 		// often a blip than a permanent reject, and a retry is cheap and duplicate-safe).
-		return array( 'retryable' => true, 'label' => 'Could not reach the CRM — you can try again.' );
+		return array( 'retryable' => true, 'label' => 'Could not reach the CRM. You can try again.' );
 	}
 
 	/**
@@ -218,7 +217,7 @@ class ZL_Lead_Recovery {
 			if ( $contact_id === null ) {
 				$result['error']     = 'Could not resolve or create the CRM contact.';
 				$result['retryable'] = true;
-				$result['label']     = 'Could not reach the CRM — you can try again.';
+				$result['label']     = 'Could not reach the CRM. You can try again.';
 				return $result;
 			}
 
@@ -240,7 +239,7 @@ class ZL_Lead_Recovery {
 			if ( $lead_id === null ) {
 				$result['error']     = 'The CRM did not return a lead id.';
 				$result['retryable'] = true;
-				$result['label']     = 'Could not reach the CRM — you can try again.';
+				$result['label']     = 'Could not reach the CRM. You can try again.';
 				return $result;
 			}
 
@@ -343,7 +342,7 @@ class ZL_Lead_Recovery {
 			$port = self::build_crm_port();
 			if ( ! $port instanceof ZL_Crm_Port ) {
 				delete_transient( $lock_key );
-				wp_send_json_error( array( 'label' => 'The CRM is not configured — add credentials in Settings.' ) );
+				wp_send_json_error( array( 'label' => 'The CRM is not configured: add credentials in Settings.' ) );
 			}
 
 			$res = self::recover( $lead, $batch, $port );

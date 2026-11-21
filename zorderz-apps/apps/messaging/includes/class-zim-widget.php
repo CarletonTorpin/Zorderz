@@ -99,12 +99,16 @@ class ZIM_Widget {
 			return null;
 		}
 
-		// ── Enqueue assets ──
+		// ── Enqueue assets ── (the file's time joins the version, so an updated file is never served from a cache)
+		$zim_ver = function ( $rel ) {
+			$path = ZIM_PLUGIN_DIR . $rel;
+			return ZIM_VERSION . ( file_exists( $path ) ? '.' . filemtime( $path ) : '' );
+		};
 		wp_enqueue_style(
 			'zim-widget-css',
 			ZIM_PLUGIN_URL . 'assets/css/widget.css',
 			array(),
-			ZIM_VERSION
+			$zim_ver( 'assets/css/widget.css' )
 		);
 
 		// marked.js + DOMPurify — pin same versions Analytics v1.11.3 uses so the
@@ -123,7 +127,7 @@ class ZIM_Widget {
 			'zim-widget-js',
 			ZIM_PLUGIN_URL . 'assets/js/widget.js',
 			array( 'marked-js', 'dompurify' ),
-			ZIM_VERSION,
+			$zim_ver( 'assets/js/widget.js' ),
 			true
 		);
 

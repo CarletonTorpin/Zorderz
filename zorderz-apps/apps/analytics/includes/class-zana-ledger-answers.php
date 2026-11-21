@@ -841,13 +841,14 @@ class ZANA_Ledger_Answers {
 
 	/* ═══════════════════════════ the answer ═══════════════════════════ */
 
+	/** A sum in the business's money (Business Profile → Locale). */
 	protected static function money( $v ): string {
-		return '$' . number_format( (float) $v, 2 );
+		return ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) $v, 2 ) : number_format( (float) $v, 2 ) );
 	}
 
 	protected static function round_money( $v ): string {
 		$v = (float) $v;
-		return ( $v < 0 ? '−' : '' ) . '$' . number_format( abs( round( $v ) ) );
+		return ( $v < 0 ? '−' : '' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( abs( round( $v ) ) ) : number_format( abs( round( $v ) ) ) );
 	}
 
 	protected static function n( $v ): string {
@@ -889,7 +890,7 @@ class ZANA_Ledger_Answers {
 				foreach ( $out as $i => $p ) {
 					$y         = (int) substr( $p[0], 0, 4 );
 					$to        = ZANA_Ledger_Periods::shift_year( $today, $y - $cy );
-					$out[ $i ] = array( $p[0], $to, $y . ' to ' . gmdate( 'M j', strtotime( $to . ' 12:00:00 UTC' ) ) );
+					$out[ $i ] = array( $p[0], $to, $y . ' to ' . gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j' ) : 'M j' ), strtotime( $to . ' 12:00:00 UTC' ) ) );
 				}
 			}
 			return $out;
@@ -1194,7 +1195,7 @@ class ZANA_Ledger_Answers {
 				$out[] = '- ' . self::plural( $o['undated_due'], 'invoice has', 'invoices have' ) . ' no due date in the ledger: counted as due on the invoice date.';
 			}
 			if ( '' !== $o['oldest'] ) {
-				$out[] = '- The oldest open invoice is from ' . gmdate( 'M j, Y', strtotime( $o['oldest'] . ' 12:00:00 UTC' ) ) . '.';
+				$out[] = '- The oldest open invoice is from ' . gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), strtotime( $o['oldest'] . ' 12:00:00 UTC' ) ) . '.';
 			}
 		}
 		return array_merge( $out, self::table( $f, $o['groups'], array(
@@ -1256,7 +1257,7 @@ class ZANA_Ledger_Answers {
 		foreach ( array_slice( $rows, 0, $limit ) as $r ) {
 			$days  = null === $r['days'] ? '-' : ( $r['days'] > 0 ? self::n( $r['days'] ) : 'not yet due' );
 			$num   = preg_match( '/^[A-Za-z0-9-]{1,20}$/D', $r['number'] ) ? '#' . $r['number'] : '-';
-			$out[] = '| ' . $num . ' | ' . ( '' !== self::cell( $r['customer'] ) ? self::cell( $r['customer'] ) : '-' ) . ' | ' . self::money( $r['owed'] ) . ' | ' . ( '' !== $r['when'] ? gmdate( 'M j, Y', strtotime( $r['when'] . ' 12:00:00 UTC' ) ) : '-' ) . ' | ' . $days . ' |';
+			$out[] = '| ' . $num . ' | ' . ( '' !== self::cell( $r['customer'] ) ? self::cell( $r['customer'] ) : '-' ) . ' | ' . self::money( $r['owed'] ) . ' | ' . ( '' !== $r['when'] ? gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), strtotime( $r['when'] . ' 12:00:00 UTC' ) ) : '-' ) . ' | ' . $days . ' |';
 		}
 		$more = array_slice( $rows, $limit );
 		if ( $more ) {

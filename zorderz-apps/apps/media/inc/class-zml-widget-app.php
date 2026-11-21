@@ -27,9 +27,9 @@ class ZML_Widget_App implements \Zorderz\Widget_App_Interface {
 			'name'        => 'Media',
 			'icon'        => 'images',
 			'cat'         => 'Tools',
-			'cc'          => '#2C5F8A',  // theme brand (matches --sys-brand light)
-			'desc'        => 'Recent photos & sketches — yours and the organization\'s',
-			'description' => 'Recent photos & sketches — yours and the organization\'s',
+			'cc'          => '#CC79A7',  // the Tools group's colour; the group decides what is drawn
+			'desc'        => 'Recent photos & sketches: yours and the organization\'s',
+			'description' => 'Recent photos & sketches: yours and the organization\'s',
 			'roles'       => [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'zdz_general' ],
 			'bridge_type' => 'inline_widget',
 			'admin_url'   => '',

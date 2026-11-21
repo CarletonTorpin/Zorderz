@@ -121,14 +121,34 @@ class ZCH_Store {
 
 	/* ── Settings ───────────────────────────────────────────────────────── */
 
+	/**
+	 * The hours Charts e-mails an alert in when none are saved: the business's usual hours (Core's, which an org pack
+	 * writes as work_hours.default), in whole hours, else Monday to Friday 9 to 17. [ [ start, end ], [ ISO days ] ].
+	 */
+	public static function usual_window(): array {
+		$h = class_exists( 'ZDZ_For_You' ) && method_exists( 'ZDZ_For_You', 'default_hours' ) ? ZDZ_For_You::default_hours() : null;
+		if ( is_array( $h ) && ! empty( $h['days'] ) && preg_match( '/^(\d\d):(\d\d)$/', (string) ( $h['start'] ?? '' ), $a )
+			&& preg_match( '/^(\d\d):(\d\d)$/', (string) ( $h['end'] ?? '' ), $b ) ) {
+			$start = (int) $a[1];
+			$end   = (int) $b[1] + ( '00' === $b[2] ? 0 : 1 ); // an hour that has begun counts
+			if ( $end > $start && $end <= 24 ) {               // hours that run past midnight keep the plain window
+				return array( array( $start, $end ), array_values( array_map( 'intval', (array) $h['days'] ) ) );
+			}
+		}
+		return array( array( 9, 17 ), array( 1, 2, 3, 4, 5 ) );
+	}
+
 	public static function settings() {
-		$d = array(
+		$window = self::usual_window();
+		$d      = array(
 			'snapshots'         => false,               // keep dated aggregates for an offline hub: the business decides.
 			'alert_email'       => '',                  // empty = the site admin email.
-			'business_hours'    => array( 7, 18 ),      // alert only between these hours.
-			'business_days'     => array( 1, 2, 3, 4, 5, 6 ),
+			'business_hours'    => $window[0],          // alert only between these hours (the business's usual hours).
+			'business_days'     => $window[1],
 			'charts_per_minute' => 30,                  // per person: asks, drills, job lists, cards and pivots.
 			'bot_totals'        => false,               // let the assistant receive Charts totals.
+			'bot_records'       => false,               // let the assistant read invoice lines and job lists (charts.records).
+			'records_common'    => array(),             // words on most invoice lines, never searched alone by the assistant.
 			'counts_product'    => '',                  // the hub product measured counts are for ('' = off).
 			'counts_match'      => '',                  // a word an estimate's items carry for that product.
 			'map_shapes'        => '',                  // an https URL to the ZIP-area outlines (GeoJSON).

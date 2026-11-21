@@ -19,12 +19,15 @@
  * Flow B (cold start — user taps email link without PWA open):
  *   1. User taps magic link in email → Safari opens and authenticates
  *   2. Interstitial shows a 6-digit login code
- *   3. User opens PWA, taps "Have a login code?", enters the 6 digits
+ *   3. User opens PWA, taps "Already have a code?", enters their email and the 6 digits
  *   4. PWA calls /zorderz/v1/magic-link-code-claim → gets auth cookie
  *
+ * Every login code (emailed, shown on the interstitial, or given by a person) is kept and claimed through
+ * ZDZ_Signin_Routes: per account, as a salted hash, and claimed with the email it is for. This class knows the
+ * three paths a code is made on and the per-connection limits; ZDZ_Signin_Routes knows the per-code budgets, who
+ * may give a code and where codes are stored.
+ *
  * @package Zorderz
- * @since   2.18.0
- * @updated 2.19.0 — Added short-code fallback for cold-start logins
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -50,8 +53,6 @@ class ZDZ_Magic_Link_Bridge {
 
 	/**
 	 * How long a short login code remains valid (seconds).
-	 *
-	 * @since 2.19.0
 	 */
 	const CODE_TTL = 300; // 5 minutes
 
@@ -61,6 +62,14 @@ class ZDZ_Magic_Link_Bridge {
 	 * @var self|null
 	 */
 	private static $instance = null;
+
+	/**
+	 * The backup address typed in this request's login form, when premap_login_alias() rewrote it to the
+	 * account's own address (so the code made for that form can be kept under what was typed).
+	 *
+	 * @var string
+	 */
+	private static $typed_alias = '';
 
 	/**
 	 * Get singleton instance.
@@ -170,8 +179,20 @@ class ZDZ_Magic_Link_Bridge {
 					'type'              => 'string',
 					'sanitize_callback' => 'sanitize_text_field',
 					'validate_callback' => function ( $value ) {
-						return (bool) preg_match( '/^[0-9]{6}$/', $value );
+						// Six digits: an emailed code, or the one shown on the interstitial. Eight: a code a person gave.
+						return is_string( $value ) && (bool) preg_match( '/^[0-9]{6}([0-9]{2})?$/', $value );
 					},
+				],
+				// The email the code is for. Not "required" here, so a login page loaded before this field existed
+				// gets handle_code_claim's own plain sentence rather than "Missing parameter(s)". A string or
+				// nothing: a list never reaches sanitize_email().
+				'email' => [
+					'required'          => false,
+					'type'              => 'string',
+					'validate_callback' => function ( $value ) {
+						return is_string( $value );
+					},
+					'sanitize_callback' => 'sanitize_email',
 				],
 			],
 		] );
@@ -203,6 +224,11 @@ class ZDZ_Magic_Link_Bridge {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function handle_init( WP_REST_Request $request ) {
+		$refused = self::refused_in_privacy_view();
+		if ( $refused ) {
+			return $refused;
+		}
+
 		$request_id = $request->get_param( 'request_id' );
 		$email      = $request->get_param( 'email' );
 
@@ -253,6 +279,11 @@ class ZDZ_Magic_Link_Bridge {
 	 * @return WP_REST_Response
 	 */
 	public function handle_status( WP_REST_Request $request ) {
+		$refused = self::refused_in_privacy_view();
+		if ( $refused ) {
+			return $refused;
+		}
+
 		$request_id = $request->get_param( 'request_id' );
 		$data       = get_transient( self::TRANSIENT_PREFIX . 'req_' . $request_id );
 
@@ -280,6 +311,11 @@ class ZDZ_Magic_Link_Bridge {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function handle_claim( WP_REST_Request $request ) {
+		$refused = self::refused_in_privacy_view();
+		if ( $refused ) {
+			return $refused;
+		}
+
 		$bridge_token = $request->get_param( 'bridge_token' );
 
 		// Look up the token
@@ -335,25 +371,40 @@ class ZDZ_Magic_Link_Bridge {
 	/**
 	 * POST /zorderz/v1/magic-link-code-claim
 	 *
-	 * Claims a 6-digit short code and sets the auth cookie in the PWA.
-	 * This is the cold-start fallback: user taps email link without
-	 * the PWA open, sees the code on Safari's interstitial, then types
-	 * it into the PWA login screen.
+	 * Claims a login code and sets the auth cookie in the PWA. A claim is the email AND the code. Six digits is
+	 * an emailed code, or the one on Safari's interstitial (the cold-start fallback: user taps the email link
+	 * without the PWA open, sees the code on the interstitial, then types it into the PWA login screen). Eight
+	 * digits is a one-time code a person gave (ZDZ_Signin_Routes).
 	 *
-	 * @since 2.19.0
+	 * A code is kept per account, never under a name made of its digits, and is weighed only against the codes
+	 * of the account the typed email belongs to. So two people who are given the same digits each sign in as
+	 * themselves, and the answer is the same for an unknown address and a wrong code. A wrong try costs the code
+	 * one of its tries (ZDZ_Signin_Routes::claim()); there is no lock on the account.
+	 *
 	 * @param WP_REST_Request $request
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function handle_code_claim( WP_REST_Request $request ) {
-		$code = $request->get_param( 'code' );
+		$refused = self::refused_in_privacy_view();
+		if ( $refused ) {
+			return $refused;
+		}
 
-		// Site-wide backstop against distributed or spoofed brute force: a global cap on
-		// WRONG-code attempts. Legit users paste a real code and almost never miss, so this
-		// trips on scanning, not on normal use. Per-IP key is handled just below.
+		// Shape-check before lookup: a code is six digits or eight, so anything else is a cheap miss that never
+		// reaches storage.
+		$code  = $request->get_param( 'code' );
+		$code  = is_string( $code ) ? (string) preg_replace( '/\D/', '', $code ) : '';
+		$given = 8 === strlen( $code ); // a code a person gave: counted apart from the six-digit ones throughout
+
+		// Site-wide backstop against distributed brute force: a global cap on WRONG six-digit attempts. Legit
+		// users paste a real code and almost never miss, so this trips on scanning, not on normal use. Thirty
+		// connecting addresses at their own ceiling reach it. An eight-digit code is neither counted nor stopped
+		// here: it has its own budget of tries, so a flood of six-digit guesses cannot keep out someone holding
+		// a code a person has just read to them. Per-IP key is handled just below.
 		$miss_key     = self::TRANSIENT_PREFIX . 'code_miss_global';
 		$miss_count   = (int) get_transient( $miss_key );
-		$miss_ceiling = (int) apply_filters( 'zdz_magic_link_global_miss_ceiling', 300 );
-		if ( $miss_count >= $miss_ceiling ) {
+		$miss_ceiling = (int) apply_filters( 'zdz_magic_link_global_miss_ceiling', 1800 );
+		if ( ! $given && $miss_count >= $miss_ceiling ) {
 			return new WP_Error(
 				'rate_limited',
 				'Too many attempts right now. Please request a new login link and try again shortly.',
@@ -363,10 +414,12 @@ class ZDZ_Magic_Link_Bridge {
 
 		// Per-IP attempt cap, keyed on the UN-SPOOFABLE connecting address (REMOTE_ADDR), never a
 		// client-settable forwarded header. Trusting a forwarded header let an attacker land in a
-		// fresh bucket every request and defeat this limit entirely (security audit, Aug 2026).
+		// fresh bucket every request and defeat this limit entirely.
+		// Sixty in five minutes: when the mailboxes are down a whole office claims from one connecting
+		// address. What stops a guesser is counted against the code itself, not here.
 		$ip_key     = self::TRANSIENT_PREFIX . 'code_rate_' . md5( self::rate_limit_ip() );
 		$count      = (int) get_transient( $ip_key );
-		$ip_ceiling = (int) apply_filters( 'zdz_magic_link_ip_attempt_ceiling', 10 );
+		$ip_ceiling = (int) apply_filters( 'zdz_magic_link_ip_attempt_ceiling', 60 );
 		if ( $count >= $ip_ceiling ) {
 			return new WP_Error(
 				'rate_limited',
@@ -376,41 +429,41 @@ class ZDZ_Magic_Link_Bridge {
 		}
 		set_transient( $ip_key, $count + 1, self::CODE_TTL );
 
-		// Shape-check before lookup: codes are exactly six digits, so anything else is a cheap
-		// miss and never reaches transient storage with an attacker-shaped key.
-		$code = preg_replace( '/\D/', '', (string) $code );
+		// The email the code is for. A login page loaded before the email went with the code sends none: it gets
+		// a plain sentence, and nothing is weighed.
+		$email = $request->get_param( 'email' ); // sentinel:allow the typed address only chooses whose kept codes the code is weighed against; the signed-in identity is the account whose own server-side record matches the code (ZDZ_Signin_Routes::claim), never the address alone
+		$email = is_string( $email ) ? sanitize_email( $email ) : '';
+		if ( '' === $email || ! is_email( $email ) ) {
+			return new WP_Error(
+				'email_needed',
+				__( 'Enter your email with the code. If this screen has no place for it, reload the page.', 'zorderz' ),
+				[ 'status' => 400 ]
+			);
+		}
 
-		// Look up the code (single-use; deleted below on success).
-		$code_data = ( 6 === strlen( (string) $code ) ) ? get_transient( self::TRANSIENT_PREFIX . 'code_' . $code ) : false;
+		// Weigh the code against that account's own codes (single use: a code that matches is removed there).
+		$shaped = $given || 6 === strlen( $code );
+		$claim  = ( $shaped && class_exists( 'ZDZ_Signin_Routes' ) ) ? ZDZ_Signin_Routes::claim( $email, $code ) : null;
 
-		if ( ! $code_data || ! is_array( $code_data ) ) {
-			// Count the miss toward the global backstop, then refuse.
-			set_transient( $miss_key, $miss_count + 1, self::CODE_TTL );
+		if ( ! is_array( $claim ) || ! ( ( $claim['user'] ?? null ) instanceof WP_User ) ) {
+			// Count the miss toward the global backstop, then refuse. The same answer whatever was wrong.
+			if ( ! $given ) {
+				set_transient( $miss_key, $miss_count + 1, self::CODE_TTL );
+			}
 			return new WP_Error(
 				'invalid_code',
-				'Code is invalid or expired. Please request a new login link.',
+				__( 'Code is invalid or expired. Use the same email you asked for the code with, or ask for a new code.', 'zorderz' ),
 				[ 'status' => 401 ]
 			);
 		}
 
-		$user_id = (int) $code_data['user_id'];
+		$user    = $claim['user'];
+		$user_id = (int) $user->ID;
+		$record  = is_array( $claim['rec'] ?? null ) ? $claim['rec'] : [];
 
-		// Delete the code immediately (one-time use)
-		delete_transient( self::TRANSIENT_PREFIX . 'code_' . $code );
-
-		// Also clean up the bridge token if one was associated
-		if ( ! empty( $code_data['bridge_token'] ) ) {
-			delete_transient( self::TRANSIENT_PREFIX . 'token_' . $code_data['bridge_token'] );
-		}
-
-		// Verify the user still exists
-		$user = get_user_by( 'id', $user_id );
-		if ( ! $user ) {
-			return new WP_Error(
-				'user_not_found',
-				'User account not found.',
-				[ 'status' => 401 ]
-			);
+		// Also clean up the bridge token if one was made with the code
+		if ( ! empty( $record['tok'] ) && is_string( $record['tok'] ) ) {
+			delete_transient( self::TRANSIENT_PREFIX . 'token_' . $record['tok'] );
 		}
 
 		// Set the auth cookie in the PWA context
@@ -425,7 +478,10 @@ class ZDZ_Magic_Link_Bridge {
 
 		do_action( 'wp_login', $user->user_login, $user );
 
-		error_log( 'ZDZ_Magic_Link_Bridge: Code claim successful for user ' . $user->user_login . ' (cold-start flow)' );
+		// How they got in (an emailed code, a backup address, a code a person gave), for Zorderz → Sign-in routes.
+		ZDZ_Signin_Routes::after_sign_in( $user, $record );
+
+		error_log( 'ZDZ_Magic_Link_Bridge: Code claim successful for user ' . $user->user_login );
 
 		return new WP_REST_Response( [
 			'success'  => true,
@@ -518,13 +574,14 @@ class ZDZ_Magic_Link_Bridge {
 		];
 		set_transient( self::TRANSIENT_PREFIX . 'token_' . $bridge_token, $token_data, self::TOKEN_TTL );
 
-		// Store the short code (longer TTL — user needs time to type it)
-		$code_data = [
-			'user_id'      => $user->ID,
-			'bridge_token' => $bridge_token,
-			'created'      => time(),
-		];
-		set_transient( self::TRANSIENT_PREFIX . 'code_' . $short_code, $code_data, self::CODE_TTL );
+		// Keep the short code for this account (longer TTL — user needs time to type it): per account, never
+		// under a name made of its digits. A code that could not be kept is not shown: the interstitial then
+		// offers "open the app" only (the bridge token above still works for a PWA that is polling).
+		$code_kept = class_exists( 'ZDZ_Signin_Routes' )
+			&& ZDZ_Signin_Routes::put_code( $user->ID, $short_code, 'bridge', self::CODE_TTL, [ 'tok' => $bridge_token ] );
+		if ( ! $code_kept ) {
+			$short_code = '';
+		}
 
 		// ── Warm start: request_id present (PWA is open and polling) ──
 		if ( $request_id ) {
@@ -579,7 +636,6 @@ class ZDZ_Magic_Link_Bridge {
 	 * Uses cryptographically secure randomness. Codes always start with
 	 * 1-9 so the user doesn't wonder if it's 5 or 6 digits.
 	 *
-	 * @since 2.19.0
 	 * @return string
 	 */
 	private static function generate_short_code() {
@@ -589,7 +645,6 @@ class ZDZ_Magic_Link_Bridge {
 	/**
 	 * Check if the current request is from an iOS device.
 	 *
-	 * @since 2.19.0
 	 * @return bool
 	 */
 	public static function is_ios_device() {
@@ -643,13 +698,21 @@ class ZDZ_Magic_Link_Bridge {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function handle_send_code( WP_REST_Request $request ) {
+		$refused = self::refused_in_privacy_view();
+		if ( $refused ) {
+			return $refused;
+		}
+
 		$email = $request->get_param( 'email' );
 
-		// Rate limit: max 5 code sends per IP per 10 minutes
+		// Rate limit per connecting address: 30 code sends in 10 minutes. When the mailboxes are down a whole
+		// office asks from one address, so this is a brake on one connection, not the cap that protects an
+		// inbox: that one is per account and typed address, below.
 		// Keyed on REMOTE_ADDR (rate_limit_ip()), never a client-supplied forwarded header.
-		$ip_key = self::TRANSIENT_PREFIX . 'otp_rate_' . md5( self::rate_limit_ip() );
-		$count  = (int) get_transient( $ip_key );
-		if ( $count >= 5 ) {
+		$ip_key     = self::TRANSIENT_PREFIX . 'otp_rate_' . md5( self::rate_limit_ip() );
+		$count      = (int) get_transient( $ip_key );
+		$ip_ceiling = (int) apply_filters( 'zdz_magic_link_ip_send_ceiling', 30 );
+		if ( $count >= $ip_ceiling ) {
 			return new WP_Error(
 				'rate_limited',
 				'Too many requests. Please try again later.',
@@ -668,51 +731,44 @@ class ZDZ_Magic_Link_Bridge {
 			return new WP_REST_Response( [ 'success' => true ], 200 );
 		}
 
-		// Per-account caps, so the pool of live codes for one person stays bounded and their inbox
-		// cannot be flooded: at most 3 codes per window from any one address, and 10 in total.
-		// The per-address part means a stranger filling the cap from their own address does not
-		// stop the account's owner from getting a code from theirs. Answer as if sent either way,
-		// so the caps reveal nothing.
-		$pair_key   = self::TRANSIENT_PREFIX . 'otp_user_ip_' . md5( (int) $user->ID . '|' . self::rate_limit_ip() );
-		$user_key   = self::TRANSIENT_PREFIX . 'otp_user_' . (int) $user->ID;
+		// Per-account caps, so the pool of live codes for one person stays bounded and their inbox cannot be
+		// flooded. Both are counted per TYPED address, so nothing a stranger does with one address of an account
+		// uses up another: asks made with the work address never stop a code going to the backup address.
+		//   - at most 3 codes per window from any one connecting address, so a stranger filling the cap from
+		//     their own address does not stop the account's owner from getting a code from theirs;
+		//   - at most ZDZ_Signin_Routes::MAX_SENDS in 15 minutes in all (may_send(), counted under the
+		//     account's lock).
+		// Answer as if sent either way, so the caps reveal nothing.
+		$typed      = strtolower( trim( (string) $email ) );
+		$pair_key   = self::TRANSIENT_PREFIX . 'otp_user_ip_' . md5( (int) $user->ID . '|' . $typed . '|' . self::rate_limit_ip() );
 		$pair_count = (int) get_transient( $pair_key );
-		$user_count = (int) get_transient( $user_key );
-		if ( $pair_count >= 3 || $user_count >= (int) apply_filters( 'zdz_magic_link_account_send_cap', 10 ) ) {
+		if ( $pair_count >= 3 ) {
 			return new WP_REST_Response( [ 'success' => true ], 200 );
 		}
 		set_transient( $pair_key, $pair_count + 1, self::REQUEST_TTL );
-		set_transient( $user_key, $user_count + 1, self::REQUEST_TTL );
+		if ( ! class_exists( 'ZDZ_Signin_Routes' ) || ! ZDZ_Signin_Routes::may_send( (int) $user->ID, $typed ) ) {
+			return new WP_REST_Response( [ 'success' => true ], 200 );
+		}
 
-		// Generate the code
-		$short_code   = self::generate_short_code();
-		$bridge_token = bin2hex( random_bytes( 32 ) );
-
-		// Store the bridge token
-		set_transient( self::TRANSIENT_PREFIX . 'token_' . $bridge_token, [
-			'user_id'    => $user->ID,
-			'request_id' => '',
-			'created'    => time(),
-		], self::TOKEN_TTL * 3 ); // 6 minutes for OTP (user needs time to check email)
-
-		// Store the short code (longer TTL for OTP flow)
-		set_transient( self::TRANSIENT_PREFIX . 'code_' . $short_code, [
-			'user_id'      => $user->ID,
-			'bridge_token' => $bridge_token,
-			'created'      => time(),
-		], self::CODE_TTL );
+		// Generate the code, and keep it for this account under the address that was typed (the claim must carry
+		// the same one). A code that could not be kept is not sent.
+		$short_code = self::generate_short_code();
+		if ( ! ZDZ_Signin_Routes::put_code( $user->ID, $short_code, 'mail', self::CODE_TTL, [ 'to' => $typed ] ) ) {
+			return new WP_REST_Response( [ 'success' => true ], 200 );
+		}
 
 		// Send the email with the code
 		$site_name   = get_bloginfo( 'name' ) ?: 'Zorderz';
 		$code_display = substr( $short_code, 0, 3 ) . ' ' . substr( $short_code, 3 );
 
-		$subject = sprintf( '%s — Your login code: %s', $site_name, $code_display );
+		$subject = sprintf( '%s · Your login code: %s', $site_name, $code_display );
 		$message = sprintf(
 			"Hi %s,\n\n" .
 			"Your login code for %s is:\n\n" .
 			"    %s\n\n" .
 			"Enter this code in the app to log in. The code expires in 5 minutes and can only be used once.\n\n" .
 			"If you didn't request this code, you can safely ignore this email.\n\n" .
-			"— %s",
+			"Thanks,\n%s",
 			$user->display_name ?: $user->user_login,
 			$site_name,
 			$code_display,
@@ -721,12 +777,17 @@ class ZDZ_Magic_Link_Bridge {
 
 		$headers = [ 'Content-Type: text/plain; charset=UTF-8' ];
 
-		wp_mail( $email, $subject, $message, $headers );
+		// A send the mailer refused is recorded for Zorderz → Sign-in routes. The screen is told "sent" either way.
+		if ( ! wp_mail( $email, $subject, $message, $headers ) ) {
+			ZDZ_Signin_Routes::mail_failed( (int) $user->ID );
+		}
 
+		// Who and which kind of address, never the address: a backup address is a person's own mailbox.
+		$own = 0 === strcasecmp( trim( (string) $email ), trim( (string) $user->user_email ) );
 		error_log( sprintf(
-			'ZDZ_Magic_Link_Bridge: OTP code emailed to %s for user %s',
-			$email,
-			$user->user_login
+			'ZDZ_Magic_Link_Bridge: sign-in code emailed for user #%d to %s',
+			(int) $user->ID,
+			$own ? 'the account address' : 'a backup address'
 		) );
 
 		return new WP_REST_Response( [ 'success' => true ], 200 );
@@ -774,23 +835,34 @@ class ZDZ_Magic_Link_Bridge {
 			return $args;
 		}
 
-		// Generate an OTP code
-		$short_code   = self::generate_short_code();
-		$bridge_token = bin2hex( random_bytes( 32 ) );
+		// The address the person TYPED in the login form. premap_login_alias() rewrote a backup address to the
+		// account's own before the login plugin saw it, so $to is the account address; the claim will carry what
+		// was typed, and the code is kept under that. What was typed in this request is used only for the
+		// account it belongs to. (This form always mails the ACCOUNT address: a backup address gets a code in
+		// its own mailbox only from "Send me a code".)
+		$typed = (string) $to;
+		if ( '' !== self::$typed_alias ) {
+			$alias_user = self::resolve_login_user( self::$typed_alias );
+			if ( $alias_user instanceof WP_User && (int) $alias_user->ID === (int) $user->ID ) {
+				$typed = self::$typed_alias;
+			}
+		}
 
-		// Store the bridge token (TTL gives the user time to check email)
-		set_transient( self::TRANSIENT_PREFIX . 'token_' . $bridge_token, [
-			'user_id'    => $user->ID,
-			'request_id' => '',
-			'created'    => time(),
-		], self::TOKEN_TTL * 3 );
-
-		// Store the short code
-		set_transient( self::TRANSIENT_PREFIX . 'code_' . $short_code, [
-			'user_id'      => $user->ID,
-			'bridge_token' => $bridge_token,
-			'created'      => time(),
-		], self::CODE_TTL );
+		// Generate an OTP code and keep it for this account, under the same cap as "Send me a code"
+		// (ZDZ_Signin_Routes::MAX_SENDS for one typed address in 15 minutes). The login plugin's email can't be
+		// stopped from here, so past the cap, or when the code can't be kept, it goes out with no code and no
+		// link in it.
+		$short_code = self::generate_short_code();
+		if ( ! class_exists( 'ZDZ_Signin_Routes' )
+			|| ! ZDZ_Signin_Routes::may_send( (int) $user->ID, $typed )
+			|| ! ZDZ_Signin_Routes::put_code( $user->ID, $short_code, 'mail', self::CODE_TTL, [ 'to' => $typed, 'sent' => (string) $to ] ) ) {
+			/* translators: %s: the site's name */
+			$args['subject']     = sprintf( __( '%s · no login code this time', 'zorderz' ), get_bloginfo( 'name' ) ?: 'Zorderz' );
+			$args['message']     = __( "Too many login codes were asked for this address, so none was made this time. Wait 15 minutes, then ask again.\n\nIf you didn't ask for one, you can ignore this email.", 'zorderz' );
+			$args['headers']     = self::force_plain_text_headers( $args['headers'] ?? [] );
+			$args['attachments'] = [];
+			return $args;
+		}
 
 		$site_name    = get_bloginfo( 'name' ) ?: 'Zorderz';
 		$code_display = substr( $short_code, 0, 3 ) . ' ' . substr( $short_code, 3 );
@@ -804,7 +876,7 @@ class ZDZ_Magic_Link_Bridge {
 			"    %s\n\n" .
 			"Enter this code in the app to log in. The code expires in 5 minutes and can only be used once.\n\n" .
 			"If you didn't request this code, you can safely ignore this email.\n\n" .
-			"— %s",
+			"Thanks,\n%s",
 			$user->display_name ?: $user->user_login,
 			$site_name,
 			$code_display,
@@ -812,7 +884,7 @@ class ZDZ_Magic_Link_Bridge {
 		);
 
 		// Code-only subject (easy to find in the inbox).
-		$args['subject'] = sprintf( '%s — Your login code: %s', $site_name, $code_display );
+		$args['subject'] = sprintf( '%s · Your login code: %s', $site_name, $code_display );
 
 		// Force plain text so no HTML link markup from the original survives,
 		// regardless of any Content-Type header Magic Login set.
@@ -938,6 +1010,24 @@ class ZDZ_Magic_Link_Bridge {
 	}
 
 	/**
+	 * A Privacy View account is refused every sign-in route here. It is already signed in, and everything it may
+	 * reach is on its own short lists (ZDZ_Privacy_View), whose gate refuses these routes before WordPress routes
+	 * the request. This is the same answer from the handler itself, so it holds wherever the request is judged.
+	 *
+	 * @return WP_Error|null The refusal, or null for everyone else.
+	 */
+	private static function refused_in_privacy_view() {
+		if ( class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on() ) {
+			return new WP_Error(
+				'zdz_privacy_view',
+				__( 'Not available in Privacy View.', 'zorderz' ),
+				[ 'status' => 403 ]
+			);
+		}
+		return null;
+	}
+
+	/**
 	 * Resolve a login identifier to a WP_User: the account's own user_email first,
 	 * then an admin-configured login alias. Returns null on a genuine miss so every
 	 * caller keeps its existing anti-enumeration behaviour (each already no-ops
@@ -955,7 +1045,7 @@ class ZDZ_Magic_Link_Bridge {
 		if ( '' === $email ) {
 			return null;
 		}
-		$user = get_user_by( 'email', $email ); // sentinel:allow alias-resolution lookup only — resolves an address to an account; the authenticated identity still comes solely from the server-side OTP transient, never from this request-supplied address
+		$user = get_user_by( 'email', $email ); // sentinel:allow alias-resolution lookup only — resolves an address to an account; nobody is signed in by it: a sign-in also needs a code that matches that account's own kept record (ZDZ_Signin_Routes::claim), never this request-supplied address alone
 		if ( $user instanceof WP_User ) {
 			return $user;
 		}
@@ -965,7 +1055,9 @@ class ZDZ_Magic_Link_Bridge {
 	/**
 	 * Find the user whose zdz_login_aliases meta contains this address. Bounded scan
 	 * (only users that actually carry the alias meta), lower-cased comparison, first
-	 * match wins. Returns null when nothing matches.
+	 * match wins. Returns null when nothing matches. An account that gets no sign-in
+	 * routes (the shared device, an account in Privacy View) is never found by a backup
+	 * address, even one it was given before it became one.
 	 *
 	 * @param string $email
 	 * @return WP_User|null
@@ -988,6 +1080,9 @@ class ZDZ_Magic_Link_Bridge {
 			}
 			foreach ( $aliases as $alias ) {
 				if ( strtolower( trim( (string) $alias ) ) === $needle ) {
+					if ( class_exists( 'ZDZ_Signin_Routes' ) && ! ZDZ_Signin_Routes::gets_routes( (int) $user->ID ) ) {
+						continue 2;
+					}
 					return $user;
 				}
 			}
@@ -1032,6 +1127,9 @@ class ZDZ_Magic_Link_Bridge {
 			}
 			$user = self::user_by_alias( $candidate );
 			if ( $user instanceof WP_User ) {
+				// Kept for this request: the code made for this form is kept under what was typed
+				// (inject_otp_into_magic_login_email()).
+				self::$typed_alias = strtolower( $candidate );
 				$_POST[ $field ] = $user->user_email;
 			}
 		}

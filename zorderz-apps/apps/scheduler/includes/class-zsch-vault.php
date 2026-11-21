@@ -287,7 +287,7 @@ class ZSCH_Vault {
 					}
 				}
 			}
-			return new WP_Error( 'zsch_vault_busy', 'Calendar account is busy refreshing — try again.' );
+			return new WP_Error( 'zsch_vault_busy', 'Calendar account is busy refreshing. Try again.' );
 		}
 
 		try {

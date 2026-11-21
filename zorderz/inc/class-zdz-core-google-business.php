@@ -855,7 +855,7 @@ class ZDZ_Core_Google_Business {
 				null === $r['total'] || 0 === $r['total']
 					? __( 'Google answered: no reviews yet.', 'zorderz' )
 					/* translators: 1: number of reviews, 2: average star rating */
-					: sprintf( __( 'Google answered: %1$d reviews, average %2$s.', 'zorderz' ), (int) $r['total'], null === $r['average'] ? '—' : number_format( (float) $r['average'], 1 ) ),
+					: sprintf( __( 'Google answered: %1$d reviews, average %2$s.', 'zorderz' ), (int) $r['total'], null === $r['average'] ? '–' : number_format( (float) $r['average'], 1 ) ),
 				true
 			);
 		}
@@ -929,7 +929,7 @@ class ZDZ_Core_Google_Business {
 					}
 					$addr = (string) ( $f['address'] ?? '' );
 					echo '<label style="display:block;margin:4px 0"><input type="radio" name="i" value="' . (int) $i . '"' . ( 0 === $i ? ' checked' : '' ) . '> '
-						. esc_html( (string) ( $f['title'] ?? '' ) ) . ( '' !== $addr ? ' — ' . esc_html( $addr ) : '' ) . '</label>';
+						. esc_html( (string) ( $f['title'] ?? '' ) ) . ( '' !== $addr ? ' · ' . esc_html( $addr ) : '' ) . '</label>';
 				}
 				echo '<button class="button button-primary">' . esc_html__( 'Use this location', 'zorderz' ) . '</button></form>';
 			}
@@ -937,7 +937,7 @@ class ZDZ_Core_Google_Business {
 			$sum = self::summary( false );
 			echo '<p>' . esc_html__( 'Location:', 'zorderz' ) . ' <strong>' . esc_html( $loc['title'] ) . '</strong>'
 				/* translators: 1: number of reviews, 2: average star rating */
-				. ( is_array( $sum ) ? ' · ' . esc_html( sprintf( __( '%1$d reviews, average %2$s', 'zorderz' ), (int) $sum['total'], null === $sum['average'] ? '—' : number_format( (float) $sum['average'], 1 ) ) ) : '' ) . '</p>';
+				. ( is_array( $sum ) ? ' · ' . esc_html( sprintf( __( '%1$d reviews, average %2$s', 'zorderz' ), (int) $sum['total'], null === $sum['average'] ? '–' : number_format( (float) $sum['average'], 1 ) ) ) : '' ) . '</p>';
 			if ( ! $copy ) {
 				echo $btn( 'zdz_gbp_test', __( 'Test: ask Google now', 'zorderz' ) ) . $btn( 'zdz_gbp_find', __( 'Choose another location', 'zorderz' ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- built from escaped parts
 			}

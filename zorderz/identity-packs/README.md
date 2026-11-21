@@ -23,29 +23,29 @@ in `wp-content/zorderz-identity/`.
 
 ## The fifteen files
 
-A full pack is fifteen files. **This version reads ten of them**, whole or in
-part; the table says which keys. What a read file carries that nothing reads is
+A full pack is fifteen files. **This version reads all fifteen**, each in part;
+the table says which keys. What a read file carries that nothing reads is
 listed on the preview, and the other files are recognised, reported, and left
 completely alone, so a pack written today for a later version loses nothing by
 being loaded now.
 
 | File | What it carries | Read by this version |
 |---|---|---|
-| `profile.yml` | Names, brand, contact, domains, senders, locale | **yes**, plus `email.work_domains` |
+| `profile.yml` | Names, brand, contact, domains, senders, locale | **yes**, plus `email.work_domains` and `email.shared_outage_domains` |
 | `org.yml` | Role labels, per-role app grants, departments, channels | labels, tiers, app grants, `app_groups`, `alerts.role_category_grants` |
 | `parties.yml` | The roster: people, partners, shared devices, system actors | `people[].team_roles` (Team Roles marks) |
-| `catalog.yml` | Products and services, subtypes, aliases, attributes | `price_book`; `vocabulary.plain_words`, `vocabulary.model_words`, `vocabulary.things` |
+| `catalog.yml` | Products and services, subtypes, aliases, attributes | `price_book`; `vocabulary.plain_words`, `vocabulary.model_words`, `vocabulary.visit_words`, `vocabulary.things`; `estimate` (Estimates) |
 | `pricing.yml` | Pricing schemes and the price book | `price_book`: version, price rules, rules, prices |
-| `costs.yml` | Supplier costs and cost formulas | `price_book`: supplier costs (admin-only, never in the catalog) |
-| `compensation.yml` | Commission structures, piece rates, floors | no |
-| `territories.yml` | Service areas and who owns them | `zones`, `rules`, `territories` (Territories app); `place_names`, `jurisdiction` |
+| `costs.yml` | Supplier costs and cost formulas | `price_book`: supplier costs (admin-only, never in the catalog); `prep.material_cost_per_sq_in` (Prep) |
+| `compensation.yml` | Commission structures, piece rates, floors | `hourly` (Hours) |
+| `territories.yml` | Service areas and who owns them | `zones`, `rules`, `territories` (Territories app); `place_names`, `jurisdiction`; `postal_cities` (Estimates) |
 | `connections.yml` | External systems: **references to secrets, never secrets** | `ai.*`, `vulnerability_feed.key` |
-| `mappings.yml` | How this business's words map to external systems' words | no |
-| `document-conventions.yml` | How paperwork is written and numbered | no |
-| `flows.yml` | Workflow stages, timings, and what closes a stage | no |
-| `rules.yml` | The business's own operating rules, as data | `notifications`, `contacts`, `usage_records`, `media`, `ai_spend`, `security_monitor.public_registration` |
-| `knowledge.yml` | Company facts the assistant may state | `privacy_view`: safe words and phrases; `names.soundalikes`; `addresses.street_first_words` |
-| `voice.yml` | How the business writes | no |
+| `mappings.yml` | How this business's words map to external systems' words | `order_forms` (Jobs); `messaging.video_embed_classes` (Messaging) |
+| `document-conventions.yml` | How paperwork is written and numbered | `estimate`, including `estimate.followup` (Estimates' follow-up phrases) and `estimate.import_rules` (how imported paperwork reads) |
+| `flows.yml` | Workflow stages, timings, and what closes a stage | `steps` (Jobs: `steps.order.kinds`, the kinds of work ordered from a supplier; `steps.cut.kinds`) |
+| `rules.yml` | The business's own operating rules, as data | `notifications`, `contacts`, `usage_records`, `media`, `ai_spend`, `security_monitor.public_registration`; `estimates` (incl. `estimates.followup.billing_line`), `hours`, `prep.internal_orders`, `prep.side_convention`, `surveys.google_reviews`, `research` (deep research limits) |
+| `knowledge.yml` | Company facts the assistant may state | `privacy_view`: safe words and phrases; `names.soundalikes`; `addresses.street_first_words`, `addresses.street_end_words` |
+| `voice.yml` | How the business writes | `surveys.status_vocabulary`, `surveys.note_reading` (Surveys' call-note words) |
 
 Every value goes through the same check the setting's own screen uses. A value
 that fails is **refused**: the preview lists it with the reason, and it is not
@@ -160,12 +160,49 @@ sent to the Ai, and becomes a map link in chat answers.
 ```yaml
 # catalog.yml
 vocabulary:
-  things: [ awning, skylight ]              # also the ask bar's words for things
+  things: [ gutter guard, chimney cap ]     # also the ask bar's words for things
 
 # knowledge.yml
 addresses:
   street_first_words: [ rue, strada ]       # a word or two of letters each
+  street_end_words: [ Close, Crescent, Mews ] # one word each: endings beyond the common ones
 ```
+
+## Your words for visits, sides, paperwork and video pages
+
+Four things every business words its own way. Each has a built-in default that a
+pack replaces; leave a key out and the default stays.
+
+```yaml
+# catalog.yml — the words your visits go by after a customer's name, so that
+# "the Example opening" codes the name before anything reaches the Ai.
+# One word each, three letters or more; job, install, estimate and repair are built in.
+vocabulary:
+  visit_words: [ opening, checkup, walkthrough ]
+
+# rules.yml — how your paperwork numbers a building's sides, as one line Prep's
+# cut-list reader is told (also on Prep → Settings → "How sides are numbered").
+prep:
+  side_convention: "Side 1 faces the street; the others go clockwise, seen from above."
+
+# document-conventions.yml — how your own paperwork reads, for the estimate import
+# reader. Your list REPLACES the built-in rules (salesperson initials, "per Name"
+# credits, header discounts, "Total for Lot" lines); at most 20, one line each.
+estimate:
+  import_rules:
+    - 'A line that starts with "Opt." is an optional extra the customer has not chosen: kind "note".'
+    - 'A salesperson code is the two letters after "Rep:" at the foot of the page.'
+
+# mappings.yml — the class names on your own training-video pages, so a page pasted
+# into Messages keeps its chapter list. Give any of the four; the rest stay Zorderz' own
+# (zdz-video-embed, zdz-video-chapter, zdz-video-heading, zdz-video-title).
+messaging:
+  video_embed_classes: { embed: video-embed, chapter: chapter-link, heading: chapters-heading, title: chapter-title }
+```
+
+For code, each also has a filter that runs after the pack's value:
+`zdz_private_job_words`, `zprep_side_convention`, `zest_import_paperwork_rules` and
+`zim_video_embed_classes`.
 
 ## Settings in rules.yml
 

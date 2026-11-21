@@ -6,7 +6,7 @@
  * fallback for hosts where FULLTEXT isn't available (engines or builds that
  * reject the migration's ALTER TABLE).
  *
- * first release SCOPE:
+ * SCOPE:
  *   - Per-conversation only. Cross-conversation search is explicitly in the
  *     "Not in this release" list — do not add it here without a plan of its own.
  *   - Soft-deleted messages are NEVER returned (a design rule).

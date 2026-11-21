@@ -11,7 +11,7 @@
 .zsp-w-tabs { display:flex; border-bottom:1px solid var(--sys-border,#E2E8F0); }
 .zsp-w-tab { flex:1; padding:12px 12px; font-size:15px; font-weight:600; color:var(--sys-text-sec,#94A3B8); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; text-align:center; transition:color 150ms,border-color 150ms; -webkit-tap-highlight-color:transparent; }
 .zsp-w-tab:hover { color:var(--sys-text,#0F172A); }
-.zsp-w-tab-active,.zsp-w-tab-active:hover { color:var(--sys-brand,#2C5F8A); border-bottom-color:var(--sys-brand,#2C5F8A); }
+.zsp-w-tab-active,.zsp-w-tab-active:hover { color:var(--sys-brand,#5150D6); border-bottom-color:var(--sys-brand,#5150D6); }
 .zsp-w-panel { display:flex; flex-direction:column; gap:10px; }
 
 /* Canvas */
@@ -23,35 +23,35 @@
 .zsp-w-placeholder { position:absolute; top:14px; left:16px; right:16px; font-size:15px; line-height:1.6; color:var(--sys-text-ter,#64748B); pointer-events:none; transition:opacity 150ms; }
 .zsp-hidden { opacity:0; }
 /* v1.0.4: persistent corner hint so the widget canvas reads as "tap to draw". */
-.zsp-w-canvas-hint { position:absolute; right:8px; bottom:8px; display:inline-flex; align-items:center; gap:5px; padding:5px 10px; font-size:11px; font-weight:600; color:#fff; background:rgba(44,95,138,0.82); border-radius:8px; pointer-events:none; }
+.zsp-w-canvas-hint { position:absolute; right:8px; bottom:8px; display:inline-flex; align-items:center; gap:5px; padding:5px 10px; font-size:11px; font-weight:600; color:#fff; background:rgba(81,80,214,0.82); border-radius:8px; pointer-events:none; }
 .zsp-w-canvas-hint svg { width:14px; height:14px; }
 
 /* Toolbar */
 .zsp-w-toolbar { display:flex; align-items:center; gap:6px; }
 .zsp-w-tool { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; padding:0; border:1px solid var(--sys-border,#E2E8F0); border-radius:10px; background:transparent; color:var(--sys-text-sec,#94A3B8); cursor:pointer; transition:all 150ms; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
-.zsp-w-tool:hover { background:rgba(44,95,138,0.08); color:var(--sys-text,#0F172A); }
+.zsp-w-tool:hover { background:rgba(81,80,214,0.08); color:var(--sys-text,#0F172A); }
 .zsp-w-tool:active { transform:scale(0.92); }
 .zsp-w-tool svg { width:20px; height:20px; }
 .zsp-w-tool:disabled { opacity:0.3; cursor:not-allowed; transform:none; }
 .zsp-w-sep { width:1px; height:24px; background:var(--sys-border,rgba(226,232,240,0.5)); flex-shrink:0; }
 .zsp-w-status { flex:1; font-size:11px; color:var(--sys-text-ter,#64748B); text-align:right; }
 /* v1.0.4: highlight the full-screen expand control as the primary draw entry. */
-.zsp-w-tool-cta { border-color:var(--sys-brand,#2C5F8A); color:var(--sys-brand,#2C5F8A); }
-.zsp-w-tool-cta:hover { background:rgba(44,95,138,0.1); color:var(--sys-brand,#2C5F8A); }
+.zsp-w-tool-cta { border-color:var(--sys-brand,#5150D6); color:var(--sys-brand,#5150D6); }
+.zsp-w-tool-cta:hover { background:rgba(81,80,214,0.1); color:var(--sys-brand,#5150D6); }
 
 /* Buttons */
 .zsp-w-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:52px; padding:12px 20px; font-size:16px; font-weight:600; border:none; border-radius:12px; cursor:pointer; transition:all 150ms; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
 .zsp-w-btn svg { flex-shrink:0; }
 .zsp-w-btn:disabled { opacity:0.5; cursor:not-allowed; }
 .zsp-w-btn-full { width:100%; }
-.zsp-w-btn-primary { background:var(--sys-brand,#2C5F8A); color:#FFF; }
-.zsp-w-btn-primary:hover:not(:disabled) { filter:brightness(1.1); box-shadow:0 2px 8px rgba(44,95,138,0.3); }
+.zsp-w-btn-primary { background:var(--sys-brand,#5150D6); color:var(--sys-text-brand, #FFFFFF); }
+.zsp-w-btn-primary:hover:not(:disabled) { filter:brightness(1.1); box-shadow:0 2px 8px rgba(81,80,214,0.3); }
 .zsp-w-btn-secondary { background:var(--sys-bg-alt,#F1F5F9); color:var(--sys-text,#0F172A); border:1px solid var(--sys-border,#E2E8F0); }
 .zsp-w-btn-sm { min-height:32px; padding:4px 12px; font-size:11px; }
 
 /* Save status */
 .zsp-w-save-status { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:13px; background:var(--sys-bg-alt,#F1F5F9); border:1px solid var(--sys-border,#E2E8F0); border-radius:8px; color:var(--sys-text-sec,#94A3B8); }
-.zsp-w-spinner { width:16px; height:16px; border:2px solid var(--sys-border,#E2E8F0); border-top-color:var(--sys-brand,#2C5F8A); border-radius:50%; animation:zsp-spin 0.6s linear infinite; }
+.zsp-w-spinner { width:16px; height:16px; border:2px solid var(--sys-border,#E2E8F0); border-top-color:var(--sys-brand,#5150D6); border-radius:50%; animation:zsp-spin 0.6s linear infinite; }
 @keyframes zsp-spin { to { transform:rotate(360deg); } }
 .zsp-w-success-msg { display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px; color:#16a34a; font-size:13px; font-weight:500; }
 
@@ -100,7 +100,7 @@
 .zsp-w-fs-close:active { transform:scale(0.92); }
 
 /* v1.0.4: Save — the big, obvious primary finish action (top-right). */
-.zsp-w-fs-save { display:inline-flex; align-items:center; gap:7px; min-height:44px; padding:8px 20px; font-size:16px; font-weight:700; color:#FFF; background:var(--sys-brand,#2C5F8A); border:none; border-radius:11px; cursor:pointer; flex-shrink:0; box-shadow:0 1px 3px rgba(44,95,138,0.35); -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:filter 150ms,transform 100ms,opacity 150ms; }
+.zsp-w-fs-save { display:inline-flex; align-items:center; gap:7px; min-height:44px; padding:8px 20px; font-size:16px; font-weight:700; color:var(--sys-text-brand, #FFFFFF); background:var(--sys-brand,#5150D6); border:none; border-radius:11px; cursor:pointer; flex-shrink:0; box-shadow:0 1px 3px rgba(81,80,214,0.35); -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:filter 150ms,transform 100ms,opacity 150ms; }
 .zsp-w-fs-save:hover:not(:disabled) { filter:brightness(1.08); }
 .zsp-w-fs-save:active:not(:disabled) { transform:scale(0.97); }
 .zsp-w-fs-save:disabled { opacity:0.6; cursor:default; }
@@ -112,7 +112,7 @@
 .zsp-w-fs-viewbadge { display:inline-flex; align-items:center; min-height:44px; padding:6px 14px; font-size:13px; font-weight:600; color:var(--sys-text-sec,#64748B); background:rgba(100,116,139,0.1); border-radius:11px; flex-shrink:0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 
 /* Legacy done button (kept so any stale markup still styles correctly). */
-.zsp-w-fs-done { display:inline-flex; align-items:center; gap:6px; min-height:38px; padding:6px 16px; font-size:14px; font-weight:600; color:#FFF; background:var(--sys-brand,#2C5F8A); border:none; border-radius:8px; cursor:pointer; }
+.zsp-w-fs-done { display:inline-flex; align-items:center; gap:6px; min-height:38px; padding:6px 16px; font-size:14px; font-weight:600; color:var(--sys-text-brand, #FFFFFF); background:var(--sys-brand,#5150D6); border:none; border-radius:8px; cursor:pointer; }
 .zsp-w-fs-body { flex:1; position:relative; overflow:hidden;
   padding-left:env(safe-area-inset-left,0px); padding-right:env(safe-area-inset-right,0px);
   background:#FFFDE7 repeating-linear-gradient(to bottom,transparent,transparent 29px,rgba(100,140,200,0.15) 29px,rgba(100,140,200,0.15) 30px); }
@@ -160,7 +160,7 @@
    the canvas. The stored file is untouched. The image viewer (full) is left
    as-is — there we show the true exported image. */
 [data-theme="dark"] .zsp-w-gallery-thumb { filter:invert(1) hue-rotate(180deg) brightness(0.92); }
-[data-theme="dark"] .zsp-w-gallery-item { background:var(--sys-surface,#16243A); }
+[data-theme="dark"] .zsp-w-gallery-item { background:var(--sys-surface,#1E293B); }
 @media(prefers-color-scheme:dark){
   :root:not([data-theme]) .zsp-w-canvas-wrap,
   :root:not([data-theme]) .zsp-w-fs-overlay,
@@ -193,7 +193,7 @@
   :root:not([data-theme]) .zsp-w-gallery-thumb,
   [data-theme="system"] .zsp-w-gallery-thumb { filter:invert(1) hue-rotate(180deg) brightness(0.92); }
   :root:not([data-theme]) .zsp-w-gallery-item,
-  [data-theme="system"] .zsp-w-gallery-item { background:var(--sys-surface,#16243A); }
+  [data-theme="system"] .zsp-w-gallery-item { background:var(--sys-surface,#1E293B); }
 }
 
 /* ── SUNLIGHT MODE ── */

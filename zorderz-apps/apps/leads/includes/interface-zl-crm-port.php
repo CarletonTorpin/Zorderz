@@ -14,7 +14,6 @@
  * duplicate-safety and read-only guarantees are provable without WordPress or a network.
  *
  * @package Zorderz\Leads
- * @since   2.8.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

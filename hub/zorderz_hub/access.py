@@ -7,12 +7,12 @@ here, so a bug in one plugin route can't widen what leaves the hub:
     access = {
       "caller":     "ui" | "bot" | "app:<slug>" | "cron",
       "ops":        ["health", "vocab", "run_spec", ...],   # granted ops
-      "scope":      ["GT"] | null,      # null = all salespeople; a list = only these
+      "scope":      ["JB"] | null,      # null = all salespeople; a list = only these
       "money":      true | false,       # revenue / average-job figures
       "by_person":  true | false,       # split or filter by salesperson (others)
       "line_items": "all" | "own" | "none",
       "invoices":   "all" | "own" | "none",  # open an invoice card
-      "me":         "AS" | null,        # the person's own initials ("own" cards)
+      "me":         "AM" | null,        # the person's own initials ("own" cards)
       "compare":    true | false,       # comparisons across salespeople, as job counts
       "kiosk":      false
     }

@@ -20,7 +20,8 @@ from .text import prepare
 from .when import read_dates
 
 NOT_A_PARTNER = "(no listed partner named)"
-# initials that are also everyday words: only ever read when typed in capitals ("AS", not "as")
+# initials that are also everyday words or abbreviations ("ct" court, "sw" southwest, "tw" this week):
+# only ever read when typed in capitals ("AM", not "am")
 INITIAL_WORDS = {"as", "do", "am", "in", "or", "it", "me", "us", "so", "no", "on", "to", "at", "be", "by", "go",
                  "he", "if", "is", "my", "of", "up", "we", "an", "id", "ok", "tv", "pm", "ad", "ct", "tw", "sw"}
 FILTER_KEYS = ("products", "work_types", "salespeople", "areas", "lead_sources", "tags", "accounts",
@@ -92,9 +93,9 @@ def _add(lst, values):
             lst.append(v)
 
 
-# "What's our best seller in Oakdale?" was answered by salesperson. A best
+# "What's our best seller in Midvale?" asks about a product, not a salesperson. A best
 # seller is a product, unless the question is about people: "who is / who are …", a salesperson word
-# ("by salesperson", "rep"), or a salesperson's initials or name ("Is GT our top seller?").
+# ("by salesperson", "rep"), or a salesperson's initials or name ("Is JB our top seller?").
 _BEST_SELLER = re.compile(r"\b(?:(?:best|top|biggest|#1|number one)[ -]?(?:sell[ae]?rs?|selers?)|best-?sellers?)\b", re.I)
 _ABOUT_PEOPLE = re.compile(r"\bwho(?:'s|’s|'re|\s+(?:is|are|was|were|has|have|had))\b|\b(?:sales ?(?:person|persons|people|man|men|"
                            r"rep|reps)|reps?|staff|employees?|team members?)\b", re.I)
@@ -502,7 +503,7 @@ def _read(question, ctx, previous=None, said_tokens=None):
                 mark(h); entity_hits.append((h, "salespeople", [h.value]))
                 trace.append(f"{tok.original} → salesperson {h.value}")
             elif h.phrase not in INITIAL_WORDS:
-                pending_initials.append(h)          # "alex vs gt": decided once the rest is read
+                pending_initials.append(h)          # "alex vs jb": decided once the rest is read
         elif k == "area":
             mark(h); entity_hits.append((h, "areas", [h.value])); trace.append(f"{h.phrase} → town {h.value}")
         elif k == "region":
@@ -565,7 +566,7 @@ def _read(question, ctx, previous=None, said_tokens=None):
     for h in weather_hits:
         mark(h); trace.append(f"{h.phrase} → weather {h.value}")
 
-    # lower-case initials count when another salesperson is named, or they're compared ("alex vs gt")
+    # lower-case initials count when another salesperson is named, or they're compared ("alex vs jb")
     if pending_initials and (any(key == "salespeople" for _, key, _ in entity_hits) or vs_hits):
         for h in pending_initials:
             mark(h); entity_hits.append((h, "salespeople", [h.value]))
@@ -794,7 +795,7 @@ def _read(question, ctx, previous=None, said_tokens=None):
             continue                      # "each category" after "types": the same split
         if d == "area" and h.phrase in ("area", "areas") and any(
                 key == "areas" and eh.end in (h.start, h.start - 1) for eh, key, _ in entity_hits):
-            continue                      # "the Oakdale area" is a place, not a split
+            continue                      # "the Midvale area" is a place, not a split
         explicit_dims.append((h.start, d))
         if d == "lead_source" and "jobs" in h.phrase:
             flags["jobs_word"] = True

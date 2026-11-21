@@ -59,6 +59,14 @@ final class PrivacyCoderTest extends TestCase {
 		ZDZ_Sealed::reset_state();
 	}
 
+	/**
+	 * The coded text with its codes left out. A code's random letters and digits can hold "88" or "1450" by chance;
+	 * what matters is that the detail is gone from the words around them.
+	 */
+	private function outside_codes( string $coded ): string {
+		return (string) preg_replace( '/\x{27E6}[^\x{27E7}]*\x{27E7}/u', '[code]', $coded );
+	}
+
 	/* ── the coder ────────────────────────────────────────────────────────── */
 
 	public function test_coded_text_carries_no_detail_and_decodes_back_for_the_writer(): void {
@@ -66,7 +74,7 @@ final class PrivacyCoderTest extends TestCase {
 		$text = 'Called Jordan Sample at 555-555-0142, wrote to jordan@example.com, met at 1450 Oak St. Alex Example paid. Robin Casey took it.';
 		$out  = $c->encode( $text, $this->idx() );
 		foreach ( array( 'Jordan', 'Sample', '555-0142', 'example.com', '1450 Oak St', 'Alex Example' ) as $gone ) {
-			$this->assertStringNotContainsString( $gone, $out, "coded text still holds '$gone'" );
+			$this->assertStringNotContainsString( $gone, $this->outside_codes( $out ), "coded text still holds '$gone'" );
 		}
 		$this->assertStringContainsString( '⟦c:42⟧', $out, 'a ledger customer becomes its client code' );
 		$this->assertStringContainsString( 'Robin Casey', $out, 'a team member is never coded' );
@@ -76,6 +84,49 @@ final class PrivacyCoderTest extends TestCase {
 		$this->assertStringContainsString( '[private]', $hidden );
 		foreach ( array( 'Jordan', '555-0142', 'Alex' ) as $gone ) {
 			$this->assertStringNotContainsString( $gone, $hidden );
+		}
+	}
+
+	public function test_streets_are_coded_in_either_word_order_and_by_the_regions_own_endings(): void {
+		$c   = $this->coder();
+		$out = $c->encode( 'Met at 1450 Via Example, then 88 Calle de la Sample and 12 Example Close.', $this->idx() );
+		foreach ( array( '1450', 'Via Example', '88', 'Calle', '12 Example' ) as $gone ) {
+			$this->assertStringNotContainsString( $gone, $this->outside_codes( $out ), "coded text still holds '$gone'" );
+		}
+		$this->assertStringContainsString( 'Close', $out, 'an ending Core does not know stays until the region names it' );
+		$GLOBALS['zdz_test_options'][ ZDZ_Sealed::STREET_END_OPT ] = array( 'Close' );
+		ZDZ_Private::flush_lists();
+		$c   = $this->coder();
+		$out = $c->encode( 'Then 12 Example Close.', $this->idx() );
+		$this->assertStringNotContainsString( 'Close', $out, 'the region\'s own ending, from its Identity Pack' );
+		$this->assertSame( 'Then 12 Example Close.', $c->decode( $out, true ) );
+		$this->assertSame( 'Sent it via email to 2 people.', $this->coder()->encode( 'Sent it via email to 2 people.', $this->idx() ), 'a lower-case "via" is no street' );
+	}
+
+	public function test_a_business_adds_the_words_its_visits_go_by(): void {
+		$this->assertStringContainsString( 'example', $this->coder()->encode( 'booked: example survey Tuesday', $this->idx() ) );
+		$GLOBALS['zdz_test_filters']['zdz_private_job_words'] = function () {
+			return array( 'Survey' );
+		};
+		ZDZ_Private::flush_lists();
+		$this->assertStringNotContainsString( 'example', $this->coder()->encode( 'booked: example survey Tuesday', $this->idx() ) );
+	}
+
+	public function test_the_visit_words_an_identity_pack_set_are_read(): void {
+		$GLOBALS['zdz_test_options'][ ZDZ_Private::VISIT_WORDS_OPT ] = array( 'walkthrough' );
+		ZDZ_Private::flush_lists();
+		try {
+			$this->assertStringNotContainsString( 'example', $this->coder()->encode( 'booked: example walkthrough Tuesday', $this->idx() ) );
+			$GLOBALS['zdz_test_filters']['zdz_private_job_words'] = function ( $w ) {
+				return array_merge( (array) $w, array( 'survey' ) );
+			};
+			ZDZ_Private::flush_lists();
+			$out = $this->coder()->encode( 'example walkthrough, then the sample survey', $this->idx() );
+			$this->assertStringNotContainsString( 'example', $out, 'the stored words reach the filter' );
+			$this->assertStringNotContainsString( 'sample', $out, 'and code adds its own after them' );
+		} finally {
+			unset( $GLOBALS['zdz_test_options'][ ZDZ_Private::VISIT_WORDS_OPT ], $GLOBALS['zdz_test_filters']['zdz_private_job_words'] );
+			ZDZ_Private::flush_lists();
 		}
 	}
 

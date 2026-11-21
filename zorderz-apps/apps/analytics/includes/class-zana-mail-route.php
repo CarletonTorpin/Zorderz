@@ -172,6 +172,9 @@ class ZANA_Mail_Route {
 
 	/** A colleague's shared mailbox: the inbox's own route when it has one, else its gatekeeper and a summary list. */
 	private static function colleague( int $uid, string $person, string $query, string $message ): ?array {
+		if ( class_exists( 'ZIB_ZANA_Bridge' ) && method_exists( 'ZIB_ZANA_Bridge', 'forget_shown' ) ) {
+			ZIB_ZANA_Bridge::forget_shown( $uid );   // a colleague's list numbers nothing for "reply to #1"
+		}
 		if ( is_callable( self::$inbox ) ) {
 			return self::call( 'search_subject', array( $person, $uid, $query ) );
 		}
