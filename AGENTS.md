@@ -10,7 +10,7 @@ The full, ordered procedure is **[`docs/INSTALL-FOR-AI.md`](docs/INSTALL-FOR-AI.
 |---|---|---|
 | A shell on the host with WP-CLI | Yes, unattended | WP-CLI path. Install the theme **and** the apps plugin as two zips (the theme's self-install needs an admin page load, which WP-CLI does not do). |
 | Browser automation that can attach a file (Playwright, Puppeteer, Selenium and the like) | Yes | Browser path. Set the zip on the `<input type=file>` with your file-upload primitive; never click the input. |
-| Browser control that cannot attach files (for example a browser extension) | Yes, with one click from the person | Browser path, but open the upload form and ask the person to choose the zip. Then you continue: Install, Activate, verify. |
+| Browser control that cannot attach files, or only small ones (for example a browser extension; one stops at 3.8 MB, and the theme zip is about 9 MB) | Yes, with one click from the person | Browser path, but open the upload form and ask the person to choose the zip. Then you continue: Install, Activate, verify. Do not spend retries on fetching the zip inside the page: GitHub's downloads send no cross-origin header. |
 | HTTP only (REST with an Application Password, no shell, no browser) | **No.** WordPress has no REST call that uploads a theme or plugin | Ask the person to upload and activate the theme, then verify and configure over HTTP. |
 
 If you cannot tell which row you are in, ask the person before you start.
@@ -29,25 +29,25 @@ Plan for these hand-offs and ask for them at the moment you need them:
 
 ## 3. First install, in short
 
-1. **Get the latest release.** Read the version and the asset names from https://github.com/CarletonTorpin/Zorderz/releases/latest; never hardcode a version. You need `zorderz-theme-<version>.zip` (plus `zorderz-apps-<version>.zip` on the WP-CLI path). Skip `zorderz-hub-<version>.zip`: the optional Charts hub runs on a separate computer (see [`hub/README.md`](hub/README.md)), and the Charts app works without it. Check the downloads with the release's checksums file: `shasum -a 256 -c --ignore-missing zorderz-<version>-checksums.txt` (the flag skips the hub zip you did not download).
+1. **Get the latest release; never hardcode a version.** Find it from the release tags, `git ls-remote --tags --refs https://github.com/CarletonTorpin/Zorderz.git` (the highest `vX.Y.Z`), or from GitHub's API, not from a page a fetch tool read: such tools can return a cached copy that shows an older release as Latest. Confirm it: `https://github.com/CarletonTorpin/Zorderz/releases/latest/download/zorderz-<version>-checksums.txt` downloads only when `<version>` is the Latest release. The zips are at `https://github.com/CarletonTorpin/Zorderz/releases/download/v<version>/zorderz-theme-<version>.zip` (plus `zorderz-apps-<version>.zip` on the WP-CLI path and for updates). Skip `zorderz-hub-<version>.zip`: the optional Charts hub runs on a separate computer (see [`hub/README.md`](hub/README.md)), and the Charts app works without it. Check the downloads with the checksums file: `shasum -a 256 -c --ignore-missing zorderz-<version>-checksums.txt` (the flag skips the hub zip you did not download). The install guide's step 2 has the commands.
 2. **Set permalinks to Post name** (Settings -> Permalinks).
 3. **Upload and activate the theme.** On most hosts that is the only upload: the active theme installs and activates the apps itself on the next admin page load.
-4. **On a test site** that is not a copy of a live one, add `define( 'ZDZ_STAGING_GUARD', 'on' );` to `wp-config.php` now, before any key is entered. The guard then holds outgoing e-mail and every outgoing write to another service (billing, customer relationship manager, Ai and hub calls) and pauses scheduled jobs, and the admin bar shows "STAGING GUARD ON". (A copy of a live site, or a site WordPress reports as `staging` or `development`, turns it on by itself.)
+4. **On a test site** that is not a copy of a live one, add `define( 'ZDZ_STAGING_GUARD', 'on' );` to `wp-config.php` now, before any key is entered. The guard then holds outgoing e-mail and every outgoing write to another service (billing, customer relationship manager, Ai and hub calls) and pauses scheduled jobs, and the admin bar shows "STAGING GUARD ON". (A copy of a live site, or a site WordPress reports as `staging` or `development`, turns it on by itself.) wp-admin cannot edit `wp-config.php`: ask the person to add the line over SFTP or SSH, or to make the test site a Staging or Development environment on a host that offers them. If neither can be done, enter no keys on that site.
 5. **Give the install its data**: import a Company Data bundle, apply an Identity Pack or fill the Business Profile, or load the fictional sample company from Tools -> Zorderz Data to explore. Loading the sample makes the Home Screen offer a guided tour; tell the person about it rather than taking it for them. Never invent business data.
 6. **Connect providers** through the hand-offs in section 2.
 
 ## 4. Done looks like this
 
 - Appearance -> Themes shows **Zorderz Core** active, and Plugins shows **Zorderz Apps** active, both at the release version.
-- `SITE/zdz-manifest.json` returns JSON, and `SITE/wp-json/` lists `zorderz/v1`.
-- **Tools -> Zorderz Integration Health -> Run All Checks** passes every check. A fresh install passes them all; the billing check passes while billing is not connected.
+- `SITE/zdz-manifest.json` returns JSON (signed out too), and `SITE/wp-json/` lists `zorderz/v1`. Signed-in checks need no Application Password in a browser: send the nonce from `SITE/wp-admin/admin-ajax.php?action=rest-nonce` as `X-WP-Nonce` with the session's cookies.
+- **Tools -> Zorderz Integration Health -> Run All Checks** passes every check. A fresh install passes them all; the billing check passes while billing is not connected. Its "Plugin Discovery" line counts app screens, not apps, so it need not match the 30 apps: some apps work in the background with no screen, and an app can have two.
 - No admin notice about a missing theme or a failed app.
 - The home screen (the site's front page, signed in) shows the app tiles, and an app opens with a Back button.
 - **Zorderz -> Ai usage** says what is still missing, until the person has finished setup.
 
 ## 5. Updating a site that already runs Zorderz
 
-Upload **both** zips from the latest release, every time: the theme first (Replace active with uploaded), then the apps (Plugins -> Add Plugin -> Upload, Replace current with uploaded). The theme installs the apps only on a site's first install, so a theme update alone leaves the old apps in place. Each app's own update work runs on the next page load; there is no migration step. Then run the checks in section 4 again; the theme and apps versions must match.
+Upload **both** zips from the latest release (find its version as in section 3, step 1), every time: the theme first (Replace active with uploaded), then the apps (Plugins -> Add Plugin -> Upload, Replace current with uploaded). Both zips are larger than some browser tools can attach (about 9 MB and 6.5 MB); if yours refuses one, ask the person to choose it. The theme installs the apps only on a site's first install, so a theme update alone leaves the old apps in place. Each app's own update work runs on the next page load; there is no migration step. Then run the checks in section 4 again; the theme and apps versions must match.
 
 ## 6. When something goes wrong
 

@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Apps
  * Plugin URI:  https://zorderz.org
  * Description: The Zorderz app bundle - 30 apps (Camera, Media, Sketch Pad, Messaging, Quick-ID, Game, Invoices, Knowledge, Scheduler, Jobs, Surveys, Stock, Leads, Prep, Receipts, Estimates, Agreements, Commission, Chat, Dot Plot, Email, Mailbox Identity, Charts, Ai Workspace, Doorhangers, Route Planner, Hours, Security Monitor, Team Roles, Territories). Requires the Zorderz theme, which provides the dashboard, roles, permissions, shared media store, Item Engine and Core services these apps register into.
- * Version:     2.1.1
+ * Version:     2.1.2
  * Author:      Zorderz
  * Author URI:  https://zorderz.com
  * License:     GPL-2.0-or-later
@@ -44,14 +44,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 /*
  * Bundle release version — the single number the theme and this bundle share in
  * lockstep. Derived from this file's own "Version:" header so it can never drift
- * from it. The in-place-upgrade gate on `plugins_loaded` (below) re-runs every
+ * from it. The in-place-upgrade gate on `init` (below) re-runs every
  * app's activation only when this differs from the stored `zdz_apps_version`
  * option, so a release that bumped the header but forgot a hardcoded constant
  * here would silently skip that re-activation. The literal is only a fallback
  * for the rare boot where get_file_data() is not yet available.
  */
 if ( ! defined( 'ZDZ_APPS_VERSION' ) ) {
-	$zdz_apps_ver = '2.1.1';
+	$zdz_apps_ver = '2.1.2';
 	if ( function_exists( 'get_file_data' ) ) {
 		$zdz_apps_hdr = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
 		if ( ! empty( $zdz_apps_hdr['Version'] ) ) {
@@ -388,9 +388,16 @@ add_action(
 /**
  * Version bump — re-run activation work when the bundle is updated in place
  * (uploading a new zip over an existing install does not fire activation).
+ *
+ * It runs late on init, like the activation hook above runs after WordPress has
+ * loaded: the apps' activation work registers post types, adds rewrite rules and
+ * flushes them, and before init WordPress has no rewrite object yet (an app's
+ * add_rewrite_rule() failed and every flush did nothing) and may not load
+ * translations. Late on init, every app's own registrations are in place, so the
+ * one flush at the end writes complete rules.
  */
 add_action(
-	'plugins_loaded',
+	'init',
 	function () {
 		if ( get_option( 'zdz_apps_version' ) === ZDZ_APPS_VERSION ) {
 			return;
@@ -405,6 +412,7 @@ add_action(
 			}
 		}
 		update_option( 'zdz_apps_version', ZDZ_APPS_VERSION, false );
+		flush_rewrite_rules();
 		// 1.10.2: debug capture used to write a world-readable wp-content/zorderz-debug.log.
 		// Remove that legacy file on upgrade; capture now writes to zdz_apps_debug_log_path().
 		$legacy_log = ( defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : ABSPATH . 'wp-content' ) . '/zorderz-debug.log';
@@ -412,7 +420,7 @@ add_action(
 			@unlink( $legacy_log );
 		}
 	},
-	4
+	99
 );
 
 /**

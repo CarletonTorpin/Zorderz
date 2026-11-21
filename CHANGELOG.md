@@ -13,6 +13,45 @@ there is a third, optional download: the reference Charts hub
 
 ---
 
+## [2.1.2] - 2026-11-21
+
+A small release from a test install by an Ai agent that had never seen Zorderz: adding the app to a phone's home
+screen shows the business's name and icon, and the install guide finds the newest version even where an agent's
+tools cannot reach GitHub's API. Install the theme first, then the apps.
+
+### Upgrade notes
+- Nothing to migrate. Upload both zips, the theme first, then the apps.
+
+### Fixed
+- **Adding the app to a home screen:** `/zdz-manifest.json` is served to everyone, signed in or not. Browsers fetch it
+  without cookies, so behind the sign-in page a phone got that page instead of the business's name, colours and
+  icons. The manifest holds only what a home screen shows.
+- **Integration Health** says "app screens registered". The line counts screens, not apps, so it rarely equals the 30
+  apps: some apps work in the background with no screen, and Jobs and Media have two.
+- **Updating in place:** the apps' update work runs late on WordPress's `init`, as their first activation does. It ran
+  before WordPress had set up its rewrite rules, so on every update Agreements' update work stopped with an error in
+  the PHP log, no app's rewrite rules were refreshed, and (since 2.1.1) a "translation loading was triggered too early"
+  notice was logged once. The manifest is also sent with a 200 status, which browsers require.
+
+### Install guide and AGENTS.md
+- **The version comes from the release tags** (`git ls-remote`), or GitHub's API where it answers, and is confirmed
+  against the release marked Latest (`releases/latest/download/` answers only with that release's own files). The
+  guide now says not to take the version from a page read with a fetch tool: a cached copy of the release page showed
+  the test agent an older release as Latest, and it installed that one.
+- **Download addresses** follow from the version, so the release page's asset list is not needed.
+- **Uploading in a browser:** the theme zip is about 9 MB, and some tools that attach files stop at a few MB. Ask the
+  person to choose the file; fetching it from GitHub inside the page cannot work.
+- **Checks in a signed-in browser** send WordPress's REST nonce (`admin-ajax.php?action=rest-nonce`) instead of
+  creating an Application Password. The roster check expects an object with a `people` list. The first REST check uses
+  `?rest_route=/`, which answers before permalinks are set, and Site Health shows the versions.
+- **The staging guard on a managed host:** wp-admin cannot edit `wp-config.php`, so the person adds the line, or makes
+  the test site a Staging or Development environment, and no keys are entered until one of them is done.
+
+### Versions
+Theme and apps bundle 2.1.2. No app changed.
+
+---
+
 ## [2.1.1] - 2026-11-21
 
 A repair release. Three features that never switched on now work: the Home Screen answers "estimates for" a customer

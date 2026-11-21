@@ -30,7 +30,7 @@ Either way, connection **secrets are never carried** and must be reconnected on 
 - **Three execution paths are given where they differ: WP-CLI, REST/HTTP, and browser (wp-admin).** Use WP-CLI if you have shell access to the host; it is the most reliable. Use REST/HTTP if you only have network access plus an administrator account: it can verify and configure a site, but **it cannot install Zorderz**, because WordPress has no REST call that uploads a theme or plugin; ask the operator to upload and activate the theme (step 4), then continue over HTTP. Use the browser path if you are a browser-driving agent; the wp-admin UI locations are named. **The Company Data export/import (step 8A) are wp-admin features and have no WP-CLI command; drive them in the browser or through a logged-in session that carries their nonces.**
 - **Authenticated REST calls** use an [Application Password](https://developer.wordpress.org/rest-api/using-the-rest-api/authentication/): `curl -u "ADMIN_USER:APP_PASSWORD" ...`. Create one under **Users -> Profile -> Application Passwords**, or with `wp user application-password create ADMIN_USER zorderz-setup --porcelain`.
 - **Browser-driving agents, four things that will bite you if you do not know them:**
-  1. **Do not click a file input.** It opens a native OS file picker you cannot see or drive. Set the file on the `<input type=file>` element directly (your framework's file-upload primitive), then submit. **If your tool cannot attach a file** (many browser extensions cannot), open the upload form and ask the operator to choose the zip, then continue with Install and Activate yourself.
+  1. **Do not click a file input.** It opens a native OS file picker you cannot see or drive. Set the file on the `<input type=file>` element directly (your framework's file-upload primitive), then submit. **If your tool cannot attach a file** (many browser extensions cannot), open the upload form and ask the operator to choose the zip, then continue with Install and Activate yourself. **Mind the size too:** the theme zip is about 9 MB, and some tools that do attach files stop at a few MB (one browser extension's limit is 3.8 MB). If yours refuses the file, ask the operator to choose it rather than looking for a way round: fetching the zip from GitHub inside the wp-admin page fails (GitHub's downloads send no cross-origin header), and the operating system's file picker belongs to the browser.
   2. **If a submit button click seems to miss, submit the form programmatically** (`inputElement.form.submit()`). WordPress upload forms (theme, plugin, and the import form) are ordinary forms; this is reliable.
   3. **After an upload installs, follow the result screen's "Activate" / "Activate Plugin" link** rather than hunting for a button.
   4. **Managed hosts (for example WP Engine) log in to wp-admin by SSO** (no password to type), and may return **transient 502s that clear on retry**. A 502 on one request while others succeed, and that recovers on its own, is host infrastructure, not a Zorderz fault. Wrap requests in a bounded retry; do not treat a self-clearing 502 as a code failure.
@@ -61,8 +61,10 @@ wp db check              # -> database reachable
 REST-only equivalent (WordPress does not expose its version unauthenticated by default, so confirm reachability and that the site is a REST-enabled WordPress):
 
 ```bash
-curl -fsS "SITE/wp-json/" | head -c 200      # -> JSON, not HTML
+curl -fsS "SITE/?rest_route=/" | head -c 200      # -> JSON, not HTML
 ```
+
+(This form works on any permalink setting. `SITE/wp-json/` returns the homepage on a fresh site, whose permalinks are still Plain, until step 3.) Browser path: **Tools -> Site Health -> Info** lists the WordPress, PHP and database versions.
 
 If any check fails, stop: this environment cannot run Zorderz yet.
 
@@ -77,12 +79,35 @@ If any check fails, stop: this environment cannot run Zorderz yet.
 ```bash
 # The approved manifest is the latest release. The theme and apps zips upgrade
 # together in lockstep, so they always share one version.
-VER="$(curl -fsSL https://api.github.com/repos/CarletonTorpin/Zorderz/releases/latest \
-  | grep -oE '"tag_name": *"v?[0-9]+\.[0-9]+\.[0-9]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+REPO=https://github.com/CarletonTorpin/Zorderz
+
+# From the release tags: works wherever git can reach GitHub, including sandboxes
+# whose network proxy refuses GitHub's API and web pages.
+VER="$(git ls-remote --tags --refs "$REPO.git" 'v*' | sed 's#.*refs/tags/v##' \
+  | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+
+# Or from GitHub's API, where it answers:
+# VER="$(curl -fsSL https://api.github.com/repos/CarletonTorpin/Zorderz/releases/latest \
+#   | grep -oE '"tag_name": *"v?[0-9]+\.[0-9]+\.[0-9]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+
 echo "$VER"     # three numbers: the latest release's version
+
+# Confirm it is the release GitHub marks Latest. This address answers only with the
+# Latest release's own files, so it fails (404) for any other version.
+curl -fsSLO "$REPO/releases/latest/download/zorderz-${VER}-checksums.txt"
 ```
 
-**Action:** Download the theme and apps zips from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed below. The release also carries `zorderz-hub-${VER}.zip`, the optional Charts hub, which runs on a separate computer the business controls (see `hub/README.md`); skip it on a normal install, the Charts app works in local mode without it. A checksums file is attached too, `zorderz-${VER}-checksums.txt`: `shasum -a 256 -c --ignore-missing zorderz-${VER}-checksums.txt` checks the zips you downloaded (`--ignore-missing` skips the hub zip when you left it out; `sha256sum -c --ignore-missing` works the same way).
+**Do not take the version from a page you read with a fetch or page-reading tool.** Such tools can hand back a cached copy, and a cached release page can show an older release as Latest well after a newer one is out. Use the tags or the API above, and the check after them. A browser you drive shows the live page, so `https://github.com/CarletonTorpin/Zorderz/releases/latest` opened in it is fine.
+
+**Action:** Download the theme and apps zips from that release. Their addresses follow from `VER`, so you never need the release page's asset list (it loads late, and some page readers never show it):
+
+```bash
+curl -fsSLO "$REPO/releases/download/v${VER}/zorderz-theme-${VER}.zip"
+curl -fsSLO "$REPO/releases/download/v${VER}/zorderz-apps-${VER}.zip"    # for the fallback and for updates
+shasum -a 256 -c --ignore-missing "zorderz-${VER}-checksums.txt"        # both: OK
+```
+
+Browser path: open those addresses (with the real version in place of `${VER}`), or the release page in the browser itself. The release also carries `zorderz-hub-${VER}.zip`, the optional Charts hub, which runs on a separate computer the business controls (see `hub/README.md`); skip it on a normal install, the Charts app works in local mode without it. The checksums file, `zorderz-${VER}-checksums.txt`, covers all three: `shasum -a 256 -c --ignore-missing zorderz-${VER}-checksums.txt` checks the zips you downloaded (`--ignore-missing` skips the hub zip when you left it out; `sha256sum -c --ignore-missing` works the same way).
 
 - `zorderz-theme-${VER}.zip`: the theme (platform kernel + Core services). **On the default one-upload path this is the only file you need**, because the theme carries the apps bundle inside it.
 - `zorderz-apps-${VER}.zip`: the apps bundle (30 apps) on its own. You need this for the two-artifact fallback (step 6) and for **every update of an existing site** (see "Idempotency and failure handling").
@@ -194,23 +219,34 @@ Run all of these; they are the core acceptance checks.
 ```bash
 # 1. The generated web app manifest resolves as JSON (proves permalinks + theme).
 curl -fsS -H 'Accept: application/manifest+json' "SITE/zdz-manifest.json" | head -c 200
-#    Expect a JSON object. If you get HTML, permalinks are wrong (step 3).
+#    Expect a JSON object, signed in or not (browsers fetch it without cookies).
+#    If you get HTML, permalinks are wrong (step 3).
 
 # 2. The REST index lists the Zorderz namespace.
 curl -fsS "SITE/wp-json/" | grep -o '"zorderz/v1"'   # -> "zorderz/v1"
 ```
 
-**Authenticated (admin Application Password):**
+**Authenticated (admin Application Password, or a signed-in browser):**
 
 ```bash
 # 3. The Party roster service answers.
 curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/party/people"
-#    Expect a JSON array (may be small on a fresh install). 200, not 404/401.
+#    Expect a JSON object whose "people" array lists the roster (on a fresh install,
+#    just the administrator). 200, not 404/401.
 
 # 4. The Item Engine publishes its (empty) catalog and the fixed two-type model.
 curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/item-engine/catalog"
 #    Expect {"version":...,"empty":true,"types":["product","service"],"subtypes":[...],"items":[]}
 ```
+
+**Browser agents need no Application Password for checks 3 and 4.** From any page of the signed-in site, get WordPress's REST nonce and send it with the session's cookies:
+
+```js
+const nonce = await (await fetch('/wp-admin/admin-ajax.php?action=rest-nonce', { credentials: 'same-origin' })).text();
+const people = await (await fetch('/wp-json/zorderz/v1/party/people', { credentials: 'same-origin', headers: { 'X-WP-Nonce': nonce } })).json();
+```
+
+That way no new credential is created on the person's site.
 
 If checks 1-4 pass, Zorderz is installed and running. Now populate it: step 8A if you have a bundle, otherwise step 8B.
 
@@ -323,6 +359,8 @@ curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/tour/state"
 
 **Installing on a test site?** The staging guard holds outgoing e-mail and every outgoing write to another service (billing, CRM, Ai and hub calls), and pauses scheduled jobs, on a copy of a live site, or where WordPress reports a `staging` or `development` environment type. A fresh site of its own records itself as the live site on the first admin visit, so on a test site that is not a copy, add `define( 'ZDZ_STAGING_GUARD', 'on' );` to `wp-config.php` **before** entering any credential. The admin bar shows "STAGING GUARD ON" when it is active.
 
+wp-admin cannot edit `wp-config.php`, so a browser-only agent cannot do this itself. Ask the operator to add the line over SFTP or SSH, or, on a managed host that offers environment types (WP Engine and others), to make the test site a Staging or Development environment: WordPress then reports that type and the guard turns on by itself. A test site created as a Production environment reports `production`, and the guard stays off. If neither can be done, enter no credentials on that site.
+
 **Who enters them:** the operator. Do not type a secret on their behalf: open **Zorderz -> Credentials**, tell them which rows are needed, and verify afterwards that each row reads as set (the page never prints a key back). The same goes for OAuth consent screens and the Ai budget below.
 
 **Where credentials are entered:** wp-admin -> **Zorderz -> Credentials** (`admin.php?page=zdz-core-credentials`). This is the one credential store: one key per service, sealed at rest, never printed back into the page; apps read their keys from it. **After a bundle import this step is mandatory**, because the bundle carried no secrets, so every integration starts blank exactly as on a fresh install.
@@ -356,7 +394,7 @@ The install is **done** when all of the following hold:
 - [ ] `GET zorderz/v1/item-engine/catalog` returns 200 with `types: ["product","service"]`.
 - [ ] Data supplied: either a bundle was imported (step 8A) with matching "Restored:" counts, or an identity was configured (step 8B), if the operator provided one.
 - [ ] Providers reconnected (step 9), if the operator supplied credentials, especially after an import.
-- [ ] Tools -> **Zorderz Integration Health** -> **Run All Checks** reports every check passed (a fresh install passes them all; a billing check passes while billing is not connected).
+- [ ] Tools -> **Zorderz Integration Health** -> **Run All Checks** reports every check passed (a fresh install passes them all; a billing check passes while billing is not connected). Its "Plugin Discovery" line counts **app screens**, not apps, so it need not match the bundle's app count: apps that work in the background have no screen, and an app can have two.
 
 When every box is checked, stop. The site is a working Zorderz install.
 
@@ -384,6 +422,8 @@ Uploading a newer bundle over an existing one does not fire WordPress's activati
 | Theme active but apps not installed, no notice | WP-CLI theme install, auto-installer has not run yet | Load any wp-admin page once (step 5), or do step 6 |
 | Admin notice: theme could not write to the plugins folder | Locked filesystem / restrictive host | Do the two-artifact fallback (step 6); everything else is identical |
 | `/zdz-manifest.json` returns your homepage as HTML | Permalinks not set to Post name | Step 3, then `wp rewrite flush --hard` |
+| A release page you read shows an older version than the tags or the API | The page came from a cache | Trust the tags or the API (step 2); confirm with the `releases/latest/download/` check |
+| Your tool refuses to attach the theme zip (too large) | Upload limit of the tool, not of WordPress | Ask the operator to choose the file (Conventions, note 1) |
 | Every `zorderz/v1` call returns 404, but `/wp-json/` lists the namespace | Rewrite rules stale | `wp rewrite flush --hard` |
 | `/wp-json/` does **not** list `zorderz/v1` | Theme not active | Step 4; the namespace is registered by the theme |
 | Apps loaded but no tiles; "needs the Zorderz theme" notice | Plugin active before/without the theme | Activate the theme (step 4) |

@@ -6,7 +6,7 @@
 
 - [Install guide for an Ai agent](https://raw.githubusercontent.com/CarletonTorpin/Zorderz/main/docs/INSTALL-FOR-AI.md): the canonical, ordered, start-to-finish install procedure, with an action and a verification for every step, and WP-CLI, REST, and browser paths.
 - [AGENTS.md](https://raw.githubusercontent.com/CarletonTorpin/Zorderz/main/AGENTS.md): the agent entry point, for installing Zorderz and for contributing to it.
-- [Latest release](https://github.com/CarletonTorpin/Zorderz/releases/latest): the source of truth for the current version and the zip assets (theme + apps, plus the optional Charts hub). Never hardcode a version; resolve it from the latest release.
+- [Latest release](https://github.com/CarletonTorpin/Zorderz/releases/latest): the source of truth for the current version and the zip assets (theme + apps, plus the optional Charts hub). Never hardcode a version; resolve it from the latest release, by the release tags (`git ls-remote --tags https://github.com/CarletonTorpin/Zorderz.git`) or GitHub's API, not from a cached copy of a page (step 2 of the install guide).
 
 ## Docs
 

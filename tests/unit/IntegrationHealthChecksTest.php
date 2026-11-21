@@ -81,7 +81,12 @@ final class IntegrationHealthChecksTest extends TestCase {
 		};
 		$r = $this->check( 'check_plugin_discovery' );
 		$this->assertTrue( $r['pass'] );
-		$this->assertSame( '3 apps registered', $r['detail'] );
+		$this->assertSame( '3 app screens registered', $r['detail'] );
+
+		$GLOBALS['zdz_test_filters']['zdz_register_apps'] = static function () {
+			return array( 'a' => 1 );
+		};
+		$this->assertSame( '1 app screen registered', $this->check( 'check_plugin_discovery' )['detail'] );
 
 		$GLOBALS['zdz_test_filters']['zdz_register_apps'] = static function () {
 			return array();
