@@ -195,7 +195,7 @@ class ZL_Dashboard {
 		);
 		?>
 		<div class="wrap zl-dashboard-wrap">
-			<h1>Leads — Dashboard</h1>
+			<h1>Leads: Dashboard</h1>
 			<p class="description">v<?php echo esc_html( ZL_VERSION ); ?></p>
 
 			<!-- ── Generation Panel ─────────────────────────────── -->
@@ -235,9 +235,9 @@ class ZL_Dashboard {
 
 					<div class="zl-gen-row">
 						<label>Spend Range:</label>
-						<span style="white-space:nowrap;">$<input type="number" id="zl-spend-min" min="0" step="50" value="" style="width:100px;" placeholder="Min" /></span>
+						<span style="white-space:nowrap;"><?php echo esc_html( class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '$' ) : '$' ); ?><input type="number" id="zl-spend-min" min="0" step="50" value="" style="width:100px;" placeholder="Min" /></span>
 						<span>to</span>
-						<span style="white-space:nowrap;">$<input type="number" id="zl-spend-max" min="0" step="50" value="" style="width:100px;" placeholder="Max" /></span>
+						<span style="white-space:nowrap;"><?php echo esc_html( class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '$' ) : '$' ); ?><input type="number" id="zl-spend-max" min="0" step="50" value="" style="width:100px;" placeholder="Max" /></span>
 						<span class="zl-filter-hint">Filter by total invoice amount (leave blank for no limit)</span>
 					</div>
 
@@ -299,7 +299,7 @@ class ZL_Dashboard {
 						</thead>
 						<tbody>
 						<?php foreach ( $batches as $b ) :
-							$sp_label = $b['assigned_to'] ?: '—';
+							$sp_label = $b['assigned_to'] ?: '–';
 							foreach ( $salespeople as $sp ) {
 								if ( $sp['code'] === $b['assigned_to'] ) {
 									$sp_label = $sp['name'] . ' (' . $sp['code'] . ')';
@@ -355,7 +355,7 @@ class ZL_Dashboard {
 								<td><?php echo (int) $b['lead_count']; ?></td>
 								<td><?php echo (int) $b['contacted_count']; ?> / <?php echo (int) $b['lead_count']; ?></td>
 								<td><span class="zl-status <?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( $b['status'] === 'no_matches' ? 'No matches' : ucfirst( $b['status'] ) ); ?></span></td>
-								<td><?php echo esc_html( date( 'M j, Y g:ia', strtotime( $b['created_at'] ) ) ); ?></td>
+								<td><?php echo esc_html( date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:ia' ) : 'M j, Y g:ia' ), strtotime( $b['created_at'] ) ) ); ?></td>
 								<td>
 									<?php if ( $is_test ) : ?>
 										<button type="button" class="button button-small button-primary zl-send-to-nutshell" data-batch-id="<?php echo (int) $b['id']; ?>">📤 Send to Nutshell</button>
@@ -494,7 +494,7 @@ class ZL_Dashboard {
 		// this response. If we don't start a record here the poller will
 		// briefly see "No record" and render the optimistic idle state.
 		if ( class_exists( 'ZL_Progress' ) ) {
-			ZL_Progress::start( $batch_id, 'Batch started — preparing…' );
+			ZL_Progress::start( $batch_id, 'Batch started: preparing…' );
 		}
 
 		wp_send_json_success( array(
@@ -630,7 +630,7 @@ class ZL_Dashboard {
 				$this->set_compressed_transient( "zl_batch_{$batch_id}_candidates", array(), ZL_TRANSIENT_TTL );
 
 				// ── v2.0.0: Split monolithic customer data into chunked transients ──
-				// The full $grouped array can be 15-30MB for large lookbacks (e.g. "all history"
+				// The full $grouped array can be 15-30MB for large lookbacks (e.g. all history
 				// with thousands of customers). Loading this on every 25-customer enrichment chunk
 				// causes PHP to hit WP Engine's 256MB memory_limit and crash.
 				// Fix: split into chunk transients of 200 customers each. The enrichment step
@@ -702,7 +702,7 @@ class ZL_Dashboard {
 	 *
 	 * Added in v1.2.1 — Split out of ajax_fetch_invoices to avoid web server
 	 * proxy timeouts (502 Bad Gateway). The FreshBooks fetch + AI expansion
-	 * combined often exceeded 60s (especially with "all history" lookback),
+	 * combined often exceeded 60s (especially with the all-history lookback),
 	 * causing the web server to kill the PHP process.
 	 *
 	 * Sends all unique line-item names from the already-fetched invoices to
@@ -1162,7 +1162,7 @@ class ZL_Dashboard {
 				function_exists( 'zl_territory_names' ) ? zl_territory_names() : array(),
 				array( 'filters' => $this->zl_applied_filter_labels( $batch['product_filter'] ?? '', $sp_code, get_transient( "zl_batch_{$batch_id}_options" ) ?: array() ) )
 			);
-			$nm['message'] .= ' No customers made it past enrichment — try a wider lookback or a looser product filter.';
+			$nm['message'] .= ' No customers made it past enrichment. Try a wider lookback or a looser product filter.';
 			$wpdb->update( $wpdb->prefix . 'zl_batches',
 				array( 'status' => 'no_matches', 'total_leads' => 0, 'error_message' => $nm['message'] ),
 				array( 'id' => $batch_id ), array( '%s', '%d', '%s' ), array( '%d' ) );
@@ -1305,7 +1305,7 @@ class ZL_Dashboard {
 		if ( empty( $product_filter ) ) {
 			wp_send_json_success( array(
 				'skipped'  => true,
-				'reason'   => 'No product filter — all leads pass',
+				'reason'   => 'No product filter: all leads pass',
 				'passed'   => 0,
 				'rejected' => 0,
 			) );
@@ -1330,7 +1330,7 @@ class ZL_Dashboard {
 			if ( ! $gen->has_ai() ) {
 				wp_send_json_success( array(
 					'skipped' => true,
-					'reason'  => 'No AI configured — keeping all leads',
+					'reason'  => 'No AI configured: keeping all leads',
 				) );
 				return;
 			}
@@ -1649,7 +1649,7 @@ class ZL_Dashboard {
 				$batch_tag = $wpdb->get_var( $wpdb->prepare(
 					"SELECT batch_tag FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id
 				) );
-				ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Batch finalized: {$batch_tag} — {$lead_count} leads" );
+				ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Batch finalized: {$batch_tag}, {$lead_count} leads" );
 			}
 
 			// v1.8.0 — Mark structured progress complete so the frontend
@@ -2536,7 +2536,7 @@ class ZL_Dashboard {
 		// Resolve salesperson labels and include filter metadata
 		$result = array();
 		foreach ( $batches as $b ) {
-			$sp_label = $b['assigned_to'] ?: '—';
+			$sp_label = $b['assigned_to'] ?: '–';
 			foreach ( $salespeople as $sp ) {
 				if ( $sp['code'] === $b['assigned_to'] ) {
 					$sp_label = $sp['name'] . ' (' . $sp['code'] . ')';
@@ -2850,7 +2850,7 @@ class ZL_Dashboard {
 		}
 		$date_str  = current_time( 'M j' );
 		$type_str  = $is_test ? 'TEST' : 'FULL';
-		$batch_tag = "{$type_str} — {$sp_name} — {$date_str}";
+		$batch_tag = "{$type_str} · {$sp_name} · {$date_str}";
 
 		global $wpdb;
 		$wpdb->insert(
@@ -3048,7 +3048,7 @@ class ZL_Dashboard {
 			// ══════════════════════════════════════════════════════════════════
 			// WP Engine's PHP-FPM kills background processes at ~120s wall-clock
 			// regardless of set_time_limit(). The previous inline enrichment loop
-			// (thousands of customers, 25 per chunk) ran as a single PHP
+			// (thousands of customers, 25 per chunk: well over 100 iterations) ran as a single PHP
 			// process that invariably died after chunk 1.
 			//
 			// Fix: each enrichment chunk is dispatched as a separate self-spawning
@@ -3407,7 +3407,7 @@ class ZL_Dashboard {
 				// NO-MATCH result at 100% — not a crash. Red text that isn't an error
 				// trains an operator to ignore red text.
 				if ( (int) $inv_count <= 0 ) {
-					$diag = 'No invoices found — check the billing-provider connection in Settings.';
+					$diag = 'No invoices found: check the billing-provider connection in Settings.';
 					$this->update_batch_progress( $batch_id, 'error', 0, $diag, 'error' );
 					error_log( 'ZL Relay: No invoices (real error) — ' . $diag );
 					$wpdb->update( $wpdb->prefix . 'zl_batches',
@@ -3423,7 +3423,7 @@ class ZL_Dashboard {
 						function_exists( 'zl_territory_names' ) ? zl_territory_names() : array(),
 						array( 'filters' => $filters )
 					);
-					$msg = $nm['message'] . ' No customers made it past enrichment — try a wider lookback or a looser product filter.';
+					$msg = $nm['message'] . ' No customers made it past enrichment. Try a wider lookback or a looser product filter.';
 					$this->update_batch_progress( $batch_id, 'no_matches', 100, $msg, 'no_matches' );
 					error_log( 'ZL Relay: No candidates (no_matches) — ' . $msg );
 					$wpdb->update( $wpdb->prefix . 'zl_batches',
@@ -3600,7 +3600,7 @@ class ZL_Dashboard {
 					error_log( 'ZL Relay: Nutshell create error: ' . $e->getMessage() );
 				}
 			} elseif ( $sp_code === '_ALL_' ) {
-				$this->update_batch_progress( $batch_id, 'nutshell', 85, 'Skipping Nutshell — no specific salesperson assigned.' );
+				$this->update_batch_progress( $batch_id, 'nutshell', 85, 'Skipping Nutshell: no specific salesperson assigned.' );
 			}
 
 			// ── Step 7: AI Summary ──
@@ -3661,7 +3661,7 @@ class ZL_Dashboard {
 				if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
 					$bt = $wpdb->get_var( $wpdb->prepare(
 						"SELECT batch_tag FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id ) );
-					ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Relay batch no-match: {$bt} — {$nm['message']}" );
+					ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Relay batch no-match: {$bt} · {$nm['message']}" );
 				}
 
 				delete_transient( $lock_key );
@@ -3676,7 +3676,7 @@ class ZL_Dashboard {
 				if ( class_exists( 'ZDZ_Admin_Dashboard' ) && method_exists( 'ZDZ_Admin_Dashboard', 'log_action' ) ) {
 					$bt = $wpdb->get_var( $wpdb->prepare(
 						"SELECT batch_tag FROM {$wpdb->prefix}zl_batches WHERE id = %d", $batch_id ) );
-					ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Relay batch finalized: {$bt} — {$final_leads} leads" );
+					ZDZ_Admin_Dashboard::log_action( 'lead_generator', "Relay batch finalized: {$bt}, {$final_leads} leads" );
 				}
 
 				delete_transient( $lock_key );
@@ -3768,7 +3768,7 @@ class ZL_Dashboard {
 			} elseif ( $batch && $batch['status'] === 'no_matches' ) {
 				// An empty result is a definite outcome at 100% — not an error.
 				$nm_msg = trim( (string) ( $batch['error_message'] ?? '' ) );
-				if ( $nm_msg === '' ) { $nm_msg = 'No matches — every candidate was accounted for; none met the filters.'; }
+				if ( $nm_msg === '' ) { $nm_msg = 'No matches: every candidate was accounted for; none met the filters.'; }
 				wp_send_json_success( array_merge( array(
 					'batch_id' => $batch_id, 'step' => 'no_matches', 'pct' => 100,
 					'message' => $nm_msg, 'status' => 'no_matches',
@@ -3806,11 +3806,11 @@ class ZL_Dashboard {
 
 				if ( $reaped ) {
 					if ( class_exists( 'ZL_Progress' ) ) {
-						ZL_Progress::fail( $batch_id, 'Timed out — no progress for 30+ minutes.' );
+						ZL_Progress::fail( $batch_id, 'Timed out: no progress for 30+ minutes.' );
 					}
 					wp_send_json_success( array_merge( array(
 						'batch_id' => $batch_id, 'step' => 'error', 'pct' => 0,
-						'message' => 'Generation timed out — no progress for 30+ minutes.', 'status' => 'error',
+						'message' => 'Generation timed out: no progress for 30+ minutes.', 'status' => 'error',
 					), $stall_info ) );
 				}
 
@@ -3818,7 +3818,7 @@ class ZL_Dashboard {
 				// frontend to keep polling for the next heartbeat.
 				wp_send_json_success( array_merge( array(
 					'batch_id' => $batch_id, 'step' => 'running', 'pct' => 0,
-					'message' => 'Batch is running — progress data expired, waiting for next update...', 'status' => 'running',
+					'message' => 'Batch is running: progress data expired, waiting for next update...', 'status' => 'running',
 				), $stall_info ) );
 			} else {
 				wp_send_json_success( array_merge( array(

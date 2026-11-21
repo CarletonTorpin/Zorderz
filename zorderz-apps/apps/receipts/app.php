@@ -82,16 +82,14 @@ function zrcpt_asset_ver( $rel ) {
 
 /* ══════════════════════════════════════════════════════════════════════
    ITEM ENGINE BINDING (counts contract + product-tag mode)
-   The receipt used to hardcode a single product and count units with a fixed
-   substring heuristic. Both now resolve through the
-   Item Engine. An empty catalog degrades to neutral: no tag filter, and units
-   counted as "priced lines" with a generic unit noun.
+   The receipt's product and its unit count both come from the Item Engine. An
+   empty catalog means no tag filter, and units are counted as "priced lines"
+   with a generic unit noun.
    ══════════════════════════════════════════════════════════════════════ */
 
 /**
- * The admin-chosen item id/subtype this tenant's receipts are about (the configurable replacement for
- * the old product-named mode's reference filter). Ships EMPTY — an empty value means "any completed job",
- * i.e. no product-tag restriction. NO product name is hardcoded.
+ * The admin-chosen item id/subtype this business's receipts are about. Ships EMPTY — an empty value means
+ * "any completed job", i.e. no product-tag restriction.
  */
 function zrcpt_receipt_item_tag(): string {
     $opts = get_option( 'zrcpt_options', array() );
@@ -258,7 +256,7 @@ add_action( 'after_setup_theme', function() {
                     'nm'          => 'Receipts',
                     'icon'        => 'receipt',
                     'cat'         => 'Admin',
-                    'cc'          => '#1E4D6E',
+                    'cc'          => '#009E73',
                     'desc'        => 'AI-assisted installation & service receipt generator.',
                     'roles'       => (array) apply_filters( 'zrcpt_app_roles', [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales' ] ),
                     'bridge_type' => 'inline_widget',
@@ -328,7 +326,7 @@ add_action( 'after_setup_theme', function() {
                             <!-- ── STEP 1 — FIND THE JOB (lead-first, like Prep) ── -->
                             <div class="zrcpt-w-section zrcpt-w-lookup" id="zrcpt-w-lookup">
                                 <label class="zrcpt-w-label">Find the job</label>
-                                <p class="zrcpt-w-hint">Customer name, invoice/estimate #, phone, or email — just like Prep.</p>
+                                <p class="zrcpt-w-hint">Customer name, invoice/estimate #, phone, or email. Just like Prep.</p>
                                 <div class="zrcpt-w-lookup-row">
                                     <input type="text" id="zrcpt-w-lookup-input" class="zrcpt-w-input" placeholder="e.g. Jordan Blake, 10234, or 555-555-0123" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
                                     <button type="button" id="zrcpt-w-lookup-btn" class="zrcpt-w-btn zrcpt-w-btn-sm">
@@ -360,7 +358,7 @@ add_action( 'after_setup_theme', function() {
                                     <div class="zrcpt-w-dropzone zrcpt-w-dropzone-primary" id="zrcpt-w-photos-drop">
                                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
                                         <span class="zrcpt-w-dropzone-text">Drag &amp; drop or tap to add the install photos</span>
-                                        <span class="zrcpt-w-dropzone-types">JPG, PNG, WEBP, HEIC — add as many as you need</span>
+                                        <span class="zrcpt-w-dropzone-types">JPG, PNG, WEBP, HEIC, add as many as you need</span>
                                         <input type="file" id="zrcpt-w-photos-file" accept="image/*,.heic,.heif" multiple style="display:none;" />
                                     </div>
                                     <div id="zrcpt-w-thumbs" class="zrcpt-w-thumbs"></div>
@@ -532,7 +530,7 @@ add_action( 'after_setup_theme', function() {
                         <div class="zrcpt-w-preview" id="zrcpt-w-preview" tabindex="0">
                             <div class="zrcpt-w-preview-loading" id="zrcpt-w-preview-loading">Loading receipt&hellip;</div>
                             <iframe id="zrcpt-w-preview-frame" class="zrcpt-w-preview-frame" title="Receipt preview" style="display:none;"></iframe>
-                            <div class="zrcpt-w-preview-end" id="zrcpt-w-preview-end">— End of receipt —</div>
+                            <div class="zrcpt-w-preview-end" id="zrcpt-w-preview-end">End of receipt</div>
                         </div>
                         <div class="zrcpt-w-scroll-hint" id="zrcpt-w-scroll-hint">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
@@ -637,7 +635,7 @@ add_action( 'after_setup_theme', function() {
                     'nm'          => 'Receipts',
                     'icon'        => 'receipt',
                     'cat'         => 'Admin',
-                    'cc'          => '#1E4D6E',
+                    'cc'          => '#009E73',
                     'desc'        => 'AI-assisted installation & service receipt generator.',
                     'roles'       => (array) apply_filters( 'zrcpt_app_roles', [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales' ] ),
                     'bridge_type' => 'iframe',
@@ -709,7 +707,7 @@ add_action( 'wp_ajax_zrcpt_widget_stats', function() {
         $recent_list[] = [
             'id'        => $r->ID,
             'title'     => $r->post_title,
-            'date'      => date( 'M j', strtotime( $r->post_date ) ),
+            'date'      => date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j' ) : 'M j' ), strtotime( $r->post_date ) ),
             'address'   => get_post_meta( $r->ID, '_address_short', true ),
             'permalink' => get_permalink( $r->ID ),
             'approved'  => ! empty( $state['approved'] ),
@@ -728,7 +726,7 @@ add_action( 'wp_ajax_zrcpt_widget_stats', function() {
                 if ( ! $req ) { return null; }
                 return [
                     'by_name' => (string) ( $req['name'] ?? '?' ),
-                    'at'      => ! empty( $req['at'] ) ? mysql2date( 'M j, Y g:i a', (string) $req['at'] ) : '',
+                    'at'      => ! empty( $req['at'] ) ? mysql2date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:i a' ) : 'M j, Y g:i a' ), (string) $req['at'] ) : '',
                     'reason'  => (string) ( $req['reason'] ?? '' ),
                     'mine'    => ( (int) ( $req['user_id'] ?? 0 ) === get_current_user_id() ),
                 ];
@@ -737,7 +735,7 @@ add_action( 'wp_ajax_zrcpt_widget_stats', function() {
     }
 
     // Latest receipt date
-    $latest_date = ! empty( $recent ) ? date( 'M j', strtotime( $recent[0]->post_date ) ) : '—';
+    $latest_date = ! empty( $recent ) ? date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j' ) : 'M j' ), strtotime( $recent[0]->post_date ) ) : '–';
 
     wp_send_json_success( [
         'total'       => $total,

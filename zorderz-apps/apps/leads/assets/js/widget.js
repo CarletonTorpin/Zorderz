@@ -421,7 +421,7 @@
                         if ((code === 502 || code === 503 || code === 504) &&
                             retryCount < AJAX_MAX_RETRIES) {
                             var delay = Math.pow(2, retryCount) * 1000;
-                            logMsg('HTTP ' + code + ' — retrying in ' + (delay / 1000) + 's ...');
+                            logMsg('HTTP ' + code + '; retrying in ' + (delay / 1000) + 's ...');
                             return wait(delay).then(function () {
                                 return attempt(retryCount + 1);
                             }).then(resolve, reject);
@@ -445,7 +445,7 @@
                         );
                         if (retryable && retryCount < AJAX_MAX_RETRIES) {
                             var delay = Math.pow(2, retryCount) * 1000;
-                            logMsg('Network error (' + err.message + ') — retrying in ' +
+                            logMsg('Network error (' + err.message + '); retrying in ' +
                                    (delay / 1000) + 's ...');
                             return wait(delay).then(function () {
                                 return attempt(retryCount + 1);
@@ -716,7 +716,7 @@
 
             // v2.0.0: Show running hint banner for in-progress batches
             if (isRunningBatch) {
-                html += '<div class="zl-batch-running-hint">Generation in progress — tracking automatically</div>';
+                html += '<div class="zl-batch-running-hint">Generation in progress, tracking automatically</div>';
             }
 
             /* -- header (accessible accordion control) ------------ */
@@ -1139,7 +1139,7 @@
 
         // Email button — pre-filled mailto with check-in message
         if (email && hasPerm('view_contact_info')) {
-            // Subject line comes from the neutral default Voice profile (or the tenant's
+            // Subject line comes from the default Voice profile (or the business's
             // override via zl_email_voice). {name} is filled with the first name; a variant
             // without {name} is used when the first name is unknown.
             var fn = (firstName || name.split(' ')[0] || '').trim();
@@ -1157,15 +1157,12 @@
                 emailOpts.lastProductFilter = pfInput.value;
             }
             var emailBody = buildCheckInEmail(fn, purchaseSummary, purchaseDate, emailOpts);
-            // mailto line-break fix (v2.3.1): the body is built with "\n\n" between
-            // sentences — the house voice's one-thought-per-line signature. But a
-            // mailto: body must use CRLF; many mail clients (notably the iOS/macOS
-            // Mail handoff the field reps use) silently DROP a lone %0A, collapsing
-            // every paragraph break into one run-on block ("Hi Robin,You crossed my
-            // mind...a user T.619-..."). Normalize any lone LF to CRLF before
-            // encoding so the airy layout survives. encodeURIComponent then yields
-            // %0D%0A, which clients honor. (The copy itself is already on-voice; this
-            // is purely a transport-encoding fix, not a content change.)
+            // mailto line breaks: the body is built with "\n\n" between
+            // sentences, but a mailto: body must use CRLF; many mail clients (notably
+            // the iOS/macOS Mail handoff) silently DROP a lone %0A, collapsing every
+            // paragraph break into one run-on block ("Hi Robin,It's been 3 months...").
+            // Normalize any lone LF to CRLF before encoding so the layout survives;
+            // encodeURIComponent then yields %0D%0A, which clients honor.
             var emailBodyCRLF = emailBody.replace(/\r\n|\r|\n/g, '\r\n');
             h += '<a href="mailto:' + encodeURIComponent(email) +
                  '?subject=' + encodeURIComponent(emailSubject) +
@@ -1255,10 +1252,9 @@
     /**
      * Build a pre-filled, human-sounding check-in email body.
      *
-     * VOICE BINDING: the copy comes from a NEUTRAL default Voice profile localized by the
-     * server (zlWidgetData.emailVoice), not from hardcoded house-voice text. A tenant
-     * overrides the openers/offers/subjects via the zl_email_voice PHP filter; the
-     * business's own house voice comes from its pack and is NOT shipped here.
+     * VOICE BINDING: the copy comes from a default Voice profile localized by the server
+     * (zlWidgetData.emailVoice). A business overrides the openers/offers/subjects via the
+     * zl_email_voice PHP filter or its Identity Pack.
      * Tokens: {name} {product} {time} {signName} {phone}. An empty sign-off name or phone
      * line is omitted rather than filled with a placeholder — nothing is invented.
      */
@@ -1290,8 +1286,8 @@
         var productPhrase = humanizeProduct(rawProduct);
         var timeRef       = humanizeTimeRef(purchaseDate);
 
-        // Neutral default voice when the tenant supplies none: plain and warm, no trade
-        // nouns, no company identity (that lives in the From field).
+        // Core's default voice, used when the business supplies none: plain and warm, no
+        // trade nouns, no company identity (that lives in the From field).
         var openers = (voice.openers && voice.openers.length) ? voice.openers
             : ['It’s been {time} since we completed your order.'];
         var offers  = (voice.offers && voice.offers.length) ? voice.offers
@@ -1829,7 +1825,7 @@
                     enableActions();
                     if (btnEl) {
                         clearBtnBusy(btnEl);
-                        showInlineStatus(btnEl, 'Could not send — try again.', 'err');
+                        showInlineStatus(btnEl, 'Could not send. Try again.', 'err');
                     }
                     return;
                 }
@@ -1872,7 +1868,7 @@
                 enableActions();
                 if (btnEl) {
                     clearBtnBusy(btnEl);
-                    showInlineStatus(btnEl, 'Could not send — try again.', 'err');
+                    showInlineStatus(btnEl, 'Could not send. Try again.', 'err');
                 }
             });
     }
@@ -1974,8 +1970,8 @@
             logMsg('Location filter: "' + filters.city_zip_filter + '"');
         }
         if (filters.spend_min > 0 || filters.spend_max > 0) {
-            logMsg('Spend range: $' + filters.spend_min + ' — ' +
-                   (filters.spend_max > 0 ? '$' + filters.spend_max : 'no limit'));
+            logMsg('Spend range: ' + ((window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.sign === 'function') ? window.ZDZ.ui.sign() : ((window.zdzData && window.zdzData.currencySign) || '$')) + filters.spend_min + ' – ' +
+                   (filters.spend_max > 0 ? ((window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.sign === 'function') ? window.ZDZ.ui.sign() : ((window.zdzData && window.zdzData.currencySign) || '$')) + filters.spend_max : 'no limit'));
         }
 
         /* ---- v1.7.0: Use background generation (flush-and-continue) */
@@ -2004,7 +2000,7 @@
                     throw new Error('No batch_id returned from server');
                 }
                 logMsg('Batch #' + currentBatchId + ' created. Pipeline running in background.');
-                logMsg('You can close this page — generation will continue on the server.');
+                logMsg('You can close this page; generation will continue on the server.');
 
                 // Start polling for progress
                 pollBatchProgress(currentBatchId);
@@ -2149,7 +2145,7 @@
 
     function step2_fetchInvoices(batchId, page, filters) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting invoice fetch.');
+            logMsg('Session mismatch; aborting invoice fetch.');
             return;
         }
 
@@ -2180,7 +2176,7 @@
             // Per-page progress logging (mirrors dashboard.js)
             if (d.total_pages > 1) {
                 logMsg('  Page ' + d.page + '/' + d.total_pages +
-                       ' — ' + d.invoice_count + ' invoices (' +
+                       ': ' + d.invoice_count + ' invoices (' +
                        (d.customer_count || 0) + ' customers)');
                 var pagePct = 10 + Math.round((d.page / d.total_pages) * 10);
                 showProgress('Step 2/8: Fetching invoices (page ' + d.page + '/' + d.total_pages + ')...', pagePct);
@@ -2208,7 +2204,7 @@
 
     function step2b_expandFilter(batchId) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting filter expansion.');
+            logMsg('Session mismatch; aborting filter expansion.');
             return;
         }
 
@@ -2243,7 +2239,7 @@
 
     function step3_enrich(batchId, offset, enrichedSoFar) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting enrichment.');
+            logMsg('Session mismatch; aborting enrichment.');
             return;
         }
 
@@ -2294,7 +2290,7 @@
                     if (_enrichSkips.spend     > 0) skipParts.push('spend: '             + _enrichSkips.spend);
                     logMsg('Enrichment complete. ' + candidates + ' candidates from ' + total + ' customers.');
                     if (skipParts.length > 0) {
-                        logMsg('  Skipped — ' + skipParts.join(', '));
+                        logMsg('  Skipped: ' + skipParts.join(', '));
                     }
                     if (d.early_stopped) {
                         logMsg('  (Early-stopped: enough candidates found)');
@@ -2316,7 +2312,7 @@
 
     function step4_selectLeads(batchId) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting selection.');
+            logMsg('Session mismatch; aborting selection.');
             return;
         }
 
@@ -2348,7 +2344,7 @@
 
     function step4_5_aiValidate(batchId) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting validation.');
+            logMsg('Session mismatch; aborting validation.');
             return;
         }
 
@@ -2387,7 +2383,7 @@
 
     function step5_aiRefine(batchId, offset) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting refinement.');
+            logMsg('Session mismatch; aborting refinement.');
             return;
         }
 
@@ -2432,7 +2428,7 @@
 
     function step6_createNutshell(batchId, offset) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting CRM creation.');
+            logMsg('Session mismatch; aborting CRM creation.');
             return;
         }
 
@@ -2474,7 +2470,7 @@
 
     function step7_finalize(batchId) {
         if (currentBatchId !== batchId) {
-            logMsg('Session mismatch — aborting finalization.');
+            logMsg('Session mismatch; aborting finalization.');
             return;
         }
 
@@ -2525,7 +2521,7 @@
             clearInterval(pollTimerId);
             pollTimerId = null;
         }
-        var msg = message || 'No matches — every candidate was accounted for; none met the filters.';
+        var msg = message || 'No matches: every candidate was accounted for; none met the filters.';
         showProgress(msg, 100);
         logMsg('No matches: ' + msg);
         isRunning      = false;
@@ -2542,7 +2538,7 @@
             pollTimerId = null;
         }
         logMsg('ERROR: ' + message);
-        showProgress('Error — see log', 0);
+        showProgress('Error: see log', 0);
         isRunning      = false;
         currentBatchId = null;
         enableActions();
@@ -3031,7 +3027,7 @@
 
     /* v2.6.0: visible failure + one-tap retry for the team loader */
     function teamLoadFailed(selectEl) {
-        selectEl.innerHTML = '<option value="">Couldn\u2019t load team — tap to retry</option>';
+        selectEl.innerHTML = '<option value="">Couldn\u2019t load team; tap to retry</option>';
         var retry = function () {
             selectEl.removeEventListener('mousedown', retry);
             selectEl.removeEventListener('focus', retry);
@@ -3269,7 +3265,7 @@
             notesHtml += '<div class="zl-fwd-form-header">Forward to Team Member</div>';
             notesHtml += '<select class="zl-fwd-recipient" data-lead-id="' + escHtml(leadId) + '"><option value="">Loading team…</option></select>';
             notesHtml += '<label class="zl-fwd-task-label"><input type="checkbox" class="zl-fwd-task-check" /> Mark as task (requires completion)</label>';
-            notesHtml += '<div class="zl-fwd-preview">' + escHtml((lead.name || 'Lead') + ' — ' + (lead.city || '') + ' — ' + (lead.purchase_summary || '')) + '</div>';
+            notesHtml += '<div class="zl-fwd-preview">' + escHtml((lead.name || 'Lead') + ', ' + (lead.city || '') + ': ' + (lead.purchase_summary || '')) + '</div>';
             notesHtml += '<div class="zl-fwd-actions">';
             notesHtml += '<button class="zl-fwd-send" data-lead-id="' + escHtml(leadId) + '" type="button" disabled>Send</button>';
             notesHtml += '<button class="zl-fwd-cancel" type="button">Cancel</button>';

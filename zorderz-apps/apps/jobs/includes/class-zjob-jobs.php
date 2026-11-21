@@ -1037,7 +1037,7 @@ class ZJOB_Jobs {
 		if ( $is_auto ) {
 			// A system terminal transition is always attributed and logged as a disposition.
 			self::audit( 0, 'job_auto_closed',
-				sprintf( 'Auto-closed job #%d — %d-day close window reached with no sign-off', $id, self::close_max_days() ),
+				sprintf( 'Auto-closed job #%d: %d-day close window reached with no sign-off', $id, self::close_max_days() ),
 				[ 'job_id' => $id, 'auto' => true, 'assurance' => $assurance ] );
 			self::disposition( 'job_auto_closed', 0,
 				sprintf( 'Job #%d auto-closed by the system (no human sign-off)', $id ),

@@ -93,7 +93,7 @@ class Zdz_Inference {
 	private static $diag_left = null;
 
 	// ─────────────────────────────────────────────────────────────────
-	// FILTERABLE BOUNDS (constants expressed as filters — a tenant tunes them,
+	// FILTERABLE BOUNDS (constants expressed as filters — a business tunes them,
 	// Core ships conservative defaults). All bound the CRON path only.
 	// ─────────────────────────────────────────────────────────────────
 
@@ -167,7 +167,7 @@ class Zdz_Inference {
 	/**
 	 * Resolve staff initials to a user id. NEVER a hardcoded roster; never a guess.
 	 *
-	 *   1. an explicit Identity map (`zdz_infer_initials_map`, 'CT' => user_id) → parties;
+	 *   1. an explicit Identity map (`zdz_infer_initials_map`, 'JB' => user_id) → parties;
 	 *   2. else a SINGLE unambiguous match in ZDZ_Party::selectable_people();
 	 *   3. else 0. Ambiguity (2+ people share the initials) → 0 + a logged disposition.
 	 *
@@ -282,7 +282,7 @@ class Zdz_Inference {
 	 *     'parser' => string  (a `zdz_inference_parser` slug) ]
 	 *
 	 * Ships the reference estimate/invoice shape (composing the already-present Core
-	 * FreshBooks adapter); a tenant/connections pack extends or replaces via the filter.
+	 * FreshBooks adapter); the business's connections pack extends or replaces it via the filter.
 	 *
 	 * @return array<int,array>
 	 */
@@ -724,7 +724,7 @@ class Zdz_Inference {
 	/**
 	 * Bundled estimate reader — through the Core FreshBooks adapter (Connections), never
 	 * a private client. Inert without credentials. Carries no status/product literal;
-	 * a tenant narrows the query via `zdz_inference_source_query`.
+	 * a business narrows the query via `zdz_inference_source_query`.
 	 *
 	 * @return array<int,array>
 	 */

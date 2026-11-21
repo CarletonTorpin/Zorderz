@@ -21,7 +21,7 @@ $biz = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::name() : g
 <h1><?php echo esc_html__( 'Thank you for your payment', 'zorderz' ); ?></h1>
 <p><?php echo esc_html( sprintf(
 	/* translators: %s: business name. */
-	__( 'We appreciate your business. — %s', 'zorderz' ),
+	__( 'Everyone at %s appreciates your business.', 'zorderz' ),
 	$biz
 ) ); ?></p>
 </div>

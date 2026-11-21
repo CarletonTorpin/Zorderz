@@ -95,7 +95,7 @@ class ZIM_Admin {
 
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Messaging — Channels', 'zdz-internal-messaging' ); ?></h1>
+			<h1><?php esc_html_e( 'Messaging: Channels', 'zdz-internal-messaging' ); ?></h1>
 
 			<?php if ( $notice ) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php echo esc_html( $notice ); ?></p></div>
@@ -242,7 +242,7 @@ class ZIM_Admin {
 				) );
 				?>
 				<select name="user_id" required style="min-width:22em;">
-					<option value=""><?php esc_html_e( '— select a user —', 'zdz-internal-messaging' ); ?></option>
+					<option value=""><?php esc_html_e( 'Select a user', 'zdz-internal-messaging' ); ?></option>
 					<?php foreach ( $candidates as $u ) : ?>
 						<option value="<?php echo (int) $u->ID; ?>"><?php echo esc_html( $u->display_name ); ?> (<?php echo esc_html( $u->user_login ); ?>)</option>
 					<?php endforeach; ?>
@@ -267,8 +267,8 @@ class ZIM_Admin {
 		}
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Messaging — Audit log export', 'zdz-internal-messaging' ); ?></h1>
-			<p><?php esc_html_e( 'Exports admin actions (channel creation, member changes, force-deletes) as CSV. Regular message traffic is not logged (intentional — too voluminous to be useful).', 'zdz-internal-messaging' ); ?></p>
+			<h1><?php esc_html_e( 'Messaging: Audit log export', 'zdz-internal-messaging' ); ?></h1>
+			<p><?php esc_html_e( 'Exports admin actions (channel creation, member changes, force-deletes) as CSV. Regular message traffic is not logged (intentional: too voluminous to be useful).', 'zdz-internal-messaging' ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="zim_admin_export_audit">
 				<?php wp_nonce_field( 'zim_admin_export_audit', '_zim_nonce' ); ?>
@@ -429,7 +429,7 @@ class ZIM_Admin {
 		wp_safe_redirect( $this->back_url(
 			sprintf(
 				/* translators: %d = number of cooldown stamps cleared */
-				__( 'DM email cooldown reset — cleared %d stamp(s). The next DM will email the recipient immediately.', 'zdz-internal-messaging' ),
+				__( 'DM email cooldown reset: cleared %d stamp(s). The next DM will email the recipient immediately.', 'zdz-internal-messaging' ),
 				$deleted
 			)
 		) );

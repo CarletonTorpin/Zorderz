@@ -39,7 +39,7 @@ class ZAGR_PDF_Paper {
 	/** One shade of the ramp as [ r, g, b ]. */
 	public static function shade( string $k ): array {
 		if ( null === self::$ramp ) {
-			$def  = array( '50' => '#ebf5ff', '200' => '#adcfff', '300' => '#7ab3ff', '400' => '#4796f7', '500' => '#2c5f8a', '600' => '#1e3a5f', '700' => '#162d4a', '800' => '#0f1f35' );
+			$def  = array( '50' => '#f5f6fe', '200' => '#d3daff', '300' => '#b1bcff', '400' => '#7d87fb', '500' => '#5150d6', '600' => '#433fbd', '700' => '#36339c', '800' => '#282876' );
 			$have = class_exists( 'ZDZ_Business_Profile' ) ? (array) ZDZ_Business_Profile::get( 'brand.ramp', array() ) : array();
 			self::$ramp = array();
 			foreach ( $def as $key => $hex ) {

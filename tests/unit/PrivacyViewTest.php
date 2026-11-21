@@ -249,7 +249,7 @@ final class PrivacyViewTest extends TestCase {
 			'id'             => 42,
 			'status'         => 'open',
 			'url'            => 'https://example.com/projects',
-			'color'          => '#1E3A5F',
+			'color'          => '#433FBD',
 			'timezone'       => 'America/Los_Angeles',
 			'amount'         => 1250,
 		) ) ), true );
@@ -262,7 +262,7 @@ final class PrivacyViewTest extends TestCase {
 		$this->assertSame( 42, $out['id'] );
 		$this->assertSame( 'open', $out['status'] );
 		$this->assertSame( 'https://example.com/projects', $out['url'] );
-		$this->assertSame( '#1E3A5F', $out['color'] );
+		$this->assertSame( '#433FBD', $out['color'] );
 		$this->assertSame( 'America/Los_Angeles', $out['timezone'] );
 		$this->assertSame( 1250, $out['amount'], 'an amount stays a number' );
 	}

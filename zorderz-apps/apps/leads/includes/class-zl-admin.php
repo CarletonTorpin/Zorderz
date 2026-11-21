@@ -225,7 +225,7 @@ class ZL_Admin {
     /** The one line shown in place of a managed key's inputs. No part of any key is printed. */
     private static function managed_note_html(): string {
         return '<p class="zl-managed-credentials">Managed in <a href="' . esc_url( is_callable( array( 'ZDZ_Core_Credentials', 'page_url' ) ) ? ZDZ_Core_Credentials::page_url() : admin_url( 'admin.php?page=zdz-core-credentials' ) )
-            . '">Zorderz → Credentials</a> — one key for every app.</p>';
+            . '">Zorderz → Credentials</a>, one key for every app.</p>';
     }
 
     // ── Core-first credentials ─────────────────────────────────────
@@ -603,7 +603,7 @@ class ZL_Admin {
                     'businesses' => $biz_names,
                     'account_ids'=> $biz_ids,
                     'using_id'   => $account_id,
-                    'match'      => in_array( $account_id, $biz_ids, true ) ? 'YES' : 'NO — MISMATCH!',
+                    'match'      => in_array( $account_id, $biz_ids, true ) ? 'YES' : 'NO: MISMATCH!',
                 );
             } else {
                 $results['test_identity'] = array(
@@ -776,7 +776,7 @@ class ZL_Admin {
 
         ?>
         <div class="wrap">
-            <h1>Leads — Settings</h1>
+            <h1>Leads: Settings</h1>
             <p class="description">v<?php echo esc_html( ZL_VERSION ); ?></p>
 
             <?php if ( $has_survey ) : ?>
@@ -874,7 +874,7 @@ class ZL_Admin {
                                 <?php
                                 $current_lookback = (int) get_option( 'zl_lookback_days', 730 );
                                 $options = array(
-                                // Options updated in v1.2.0 to include extended lookback (all history)
+                                // Includes the extended lookback (all history)
                                     180  => '6 Months',
                                     365  => '1 Year',
                                     730  => '2 Years',
@@ -1013,7 +1013,7 @@ class ZL_Admin {
 
                                 // Summary
                                 out += '\n═══════════════════════════════════\n';
-                                if (id.match === 'NO — MISMATCH!') {
+                                if (id.match === 'NO: MISMATCH!') {
                                     out += '⚠️ PROBLEM: Account ID mismatch! Click "Connect FreshBooks" to fix.\n';
                                 } else if (any.total === 0 || any.total === '0') {
                                     out += '⚠️ PROBLEM: 0 invoices in this account. The Account ID may be wrong.\n';
@@ -1027,7 +1027,7 @@ class ZL_Admin {
                                 } else if (paid.total && parseInt(paid.total) > 0) {
                                     out += '✅ Everything looks good! ' + paid.total + ' paid invoices found.\n';
                                     if (pipe.status === 'OK') {
-                                        out += '✅ Pipeline mirror test passed — include[]=lines is working.\n';
+                                        out += '✅ Pipeline mirror test passed: include[]=lines is working.\n';
                                     }
                                 }
 
@@ -1119,7 +1119,7 @@ class ZL_Admin {
             <h2>🔐 Widget Permissions</h2>
             <p class="description">
                 Control which features each role or specific username can access in the frontend dashboard widget.
-                <br>These settings apply to the app inline widget — the backend WP Admin dashboard is always fully accessible to administrators.
+                <br>These settings apply to the app inline widget; the backend WP Admin dashboard is always fully accessible to administrators.
             </p>
 
             <?php

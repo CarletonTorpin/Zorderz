@@ -490,7 +490,7 @@ class ZCC_FreshBooks {
 		}
 		if ( empty( $roster_u ) ) {
 			// No roster configured ⇒ the shadow is a total no-op.
-			return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => false, 'rejected' => [], 'reason' => 'no roster configured — shadow inert' ];
+			return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => false, 'rejected' => [], 'reason' => 'no roster configured: shadow inert' ];
 		}
 
 		$reserved_u = [];
@@ -526,12 +526,12 @@ class ZCC_FreshBooks {
 		}
 
 		if ( count( $hits ) === 1 ) {
-			return [ 'scanned' => true, 'candidate' => $hits[0], 'matched' => true, 'ambiguous' => false, 'rejected' => $rejected, 'reason' => 'single roster match — shadow only, not paid' ];
+			return [ 'scanned' => true, 'candidate' => $hits[0], 'matched' => true, 'ambiguous' => false, 'rejected' => $rejected, 'reason' => 'single roster match: shadow only, not paid' ];
 		}
 		if ( count( $hits ) >= 2 ) {
-			return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => true, 'rejected' => $rejected, 'reason' => 'ambiguous: ' . count( $hits ) . ' roster matches — no guess' ];
+			return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => true, 'rejected' => $rejected, 'reason' => 'ambiguous: ' . count( $hits ) . ' roster matches, no guess' ];
 		}
-		return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => false, 'rejected' => $rejected, 'reason' => $rejected ? 'only reserved/stopword tokens — rejected' : 'no roster match' ];
+		return [ 'scanned' => true, 'candidate' => '', 'matched' => false, 'ambiguous' => false, 'rejected' => $rejected, 'reason' => $rejected ? 'only reserved/stopword tokens, rejected' : 'no roster match' ];
 	}
 
 	/**

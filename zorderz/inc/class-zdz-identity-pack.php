@@ -244,12 +244,13 @@ class ZDZ_Identity_Pack {
 	 *                    security_monitor.public_registration → the monitor's registration posture
 	 *   connections.yml  ai.models / prices / anthropic / roles / external_callers → the Ai router
 	 *                    vulnerability_feed.key              → checked reference to the feed key
-	 *   catalog.yml      vocabulary.plain_words / model_words → the privacy coder
+	 *   catalog.yml      vocabulary.plain_words / model_words / visit_words → the privacy coder
 	 *   territories.yml  place_names.*, jurisdiction.*       → the privacy coder
 	 *   catalog.yml      vocabulary.things                   → the ask bar's trade words
 	 *   org.yml          work_hours.default                  → the business's usual hours (For You)
 	 *   knowledge.yml    names.soundalikes                   → the name matcher's soundalike groups (added, never removed)
 	 *                    addresses.street_first_words        → street words written before the name, for the address readers
+	 *                    addresses.street_end_words          → street words a name ends with, beyond the common ones
 	 *
 	 * @return array<string,array>
 	 */
@@ -268,13 +269,14 @@ class ZDZ_Identity_Pack {
 			'security-registration' => $c( 'Security monitor', 'rules', [ 'security_monitor.public_registration' ], 'plan_registration' ),
 			'ai-connection'         => $c( 'Ai router', 'connections', [ 'ai.models', 'ai.prices', 'ai.anthropic', 'ai.roles', 'ai.external_callers' ], 'plan_ai_connection' ),
 			'vulnerability-feed'    => $c( 'Security monitor', 'connections', [ 'vulnerability_feed.key' ], 'plan_feed_key' ),
-			'privacy-vocabulary'    => $c( 'Privacy coder', 'catalog', [ 'vocabulary.plain_words', 'vocabulary.model_words' ], 'plan_vocabulary' ),
+			'privacy-vocabulary'    => $c( 'Privacy coder', 'catalog', [ 'vocabulary.plain_words', 'vocabulary.model_words', 'vocabulary.visit_words' ], 'plan_vocabulary' ),
 			'privacy-places'        => $c( 'Privacy coder', 'territories', [ 'place_names.multi_word', 'place_names.ask_visible' ], 'plan_places' ),
 			'privacy-region'        => $c( 'Privacy coder', 'territories', [ 'jurisdiction.code_words', 'jurisdiction.postcode' ], 'plan_jurisdiction' ),
 			'trade-words'           => $c( 'Ask bar', 'catalog', [ 'vocabulary.things' ], 'plan_trade_words' ),
 			'work-hours'            => $c( 'Usual hours', 'org', [ 'work_hours.default' ], 'plan_work_hours' ),
 			'soundalikes'           => $c( 'Name matching', 'knowledge', [ 'names.soundalikes' ], 'plan_soundalikes' ),
 			'street-words'          => $c( 'Address reading', 'knowledge', [ 'addresses.street_first_words' ], 'plan_street_words' ),
+			'street-end-words'      => $c( 'Address reading', 'knowledge', [ 'addresses.street_end_words' ], 'plan_street_end_words' ),
 		];
 	}
 
@@ -314,7 +316,7 @@ class ZDZ_Identity_Pack {
 					$msgs[] = sprintf( '%s: %d setting%s applied.', $label, $n, 1 === $n ? '' : 's' );
 				}
 				foreach ( $plan['refused'] as $r ) {
-					$msgs[] = sprintf( '%s: %s refused — %s', $label, $r['path'], $r['why'] );
+					$msgs[] = sprintf( '%s: %s refused. %s', $label, $r['path'], $r['why'] );
 				}
 				return $msgs;
 			},
@@ -501,7 +503,7 @@ class ZDZ_Identity_Pack {
 
 		foreach ( self::read_org_roles( $pack['dir'] ) as $role_slug => $def ) {
 			if ( ! get_role( $role_slug ) ) {
-				$changes[] = [ 'file' => 'org', 'path' => "roles.$role_slug", 'from' => '(role not registered)', 'to' => 'SKIPPED — Zorderz owns role slugs' ];
+				$changes[] = [ 'file' => 'org', 'path' => "roles.$role_slug", 'from' => '(role not registered)', 'to' => 'SKIPPED: Zorderz owns role slugs' ];
 				continue;
 			}
 			$names = wp_roles()->role_names;
@@ -830,7 +832,7 @@ class ZDZ_Identity_Pack {
 		}
 
 		foreach ( $pack['unsupported'] as $stem ) {
-			$msgs[] = "'$stem' is in the pack but this version cannot apply it yet — left untouched.";
+			$msgs[] = "'$stem' is in the pack but this version cannot apply it yet; left untouched.";
 		}
 
 		update_option( self::APPLIED_OPTION, [
@@ -1171,7 +1173,7 @@ class ZDZ_Identity_Pack {
 		$filled = '' !== (string) get_option( $row, '' );
 		return [ null, $filled
 			? sprintf( '%s: the credentials row %s is filled.', $path, $row )
-			: sprintf( '%s: the credentials row %s is empty — enter it on Zorderz → Credentials.', $path, $row ) ];
+			: sprintf( '%s: the credentials row %s is empty; enter it on Zorderz → Credentials.', $path, $row ) ];
 	}
 
 	// ─────────────────────────────────────────────── people
@@ -1852,6 +1854,38 @@ class ZDZ_Identity_Pack {
 	}
 
 	/**
+	 * knowledge.yml addresses.street_end_words → the words a region's street names END with ("Close", "Crescent",
+	 * "Mews"), beyond the common ones each address reader knows (option zdz_street_end_words, read by
+	 * ZDZ_Sealed::street_end_words(); the chat's records reader takes these out of invoice lines with the address).
+	 * Each is one word of 2 to 20 letters.
+	 */
+	public static function plan_street_end_words( array $data ) {
+		$plan = self::plan();
+		$path = 'addresses.street_end_words';
+		if ( ! class_exists( 'ZDZ_Sealed' ) || ! defined( 'ZDZ_Sealed::STREET_END_OPT' ) ) {
+			$plan['refused'][] = [ 'path' => $path, 'why' => 'The address readers are not loaded here.' ];
+			return $plan;
+		}
+		$ok = [];
+		foreach ( self::as_list( $data[ $path ] ) as $w ) {
+			$c = is_string( $w ) ? trim( $w ) : '';
+			if ( preg_match( '/^\p{L}{2,20}$/u', $c ) ) {
+				$k = mb_strtolower( $c, 'UTF-8' );
+				if ( ! isset( $ok[ $k ] ) ) {
+					$ok[ $k ] = $c; // the first spelling given
+				}
+			} else {
+				$plan['refused'][] = [ 'path' => $path, 'why' => sprintf( '"%s" is not a street ending (one word of 2 to 20 letters).', is_scalar( $w ) ? (string) $w : gettype( $w ) ) ];
+			}
+		}
+		if ( $ok ) {
+			ksort( $ok );
+			self::plan_option( $plan, $path, ZDZ_Sealed::STREET_END_OPT, array_values( $ok ) );
+		}
+		return $plan;
+	}
+
+	/**
 	 * org.yml work_hours.default { days, start, end } → the business's usual hours (option zdz_work_hours_default,
 	 * read by ZDZ_For_You::default_hours()). Days are weekday names or ISO numbers 1 (Monday) to 7; times 24-hour
 	 * HH:MM; an end at or before the start runs past midnight. Checked by ZDZ_For_You::sanitize_hours().
@@ -1941,6 +1975,9 @@ class ZDZ_Identity_Pack {
 	 *                (zdz_private_plain_words)
 	 *   model_words  product or model words a number after which is a model, not an access code
 	 *                (zdz_sealed_model_words)
+	 *   visit_words  the words the business's visits go by after a customer's name ("the Example survey",
+	 *                "the Example walkthrough"), so the name before them is coded; one word each
+	 *                (zdz_private_job_words)
 	 */
 	public static function plan_vocabulary( array $data ) {
 		$plan = self::plan();
@@ -1961,6 +1998,27 @@ class ZDZ_Identity_Pack {
 				if ( $ok ) {
 					self::plan_option( $plan, $p, ZDZ_Private::PLAIN_WORDS_OPT, array_values( $ok ) );
 					$plan['notes'][] = 'words in vocabulary.plain_words are never read as a person\'s name, so they are never hidden from the Ai.';
+				}
+			}
+		}
+		if ( isset( $data['vocabulary.visit_words'] ) ) {
+			$p = 'vocabulary.visit_words';
+			if ( ! class_exists( 'ZDZ_Private' ) || ! defined( 'ZDZ_Private::VISIT_WORDS_OPT' ) ) {
+				$plan['refused'][] = [ 'path' => $p, 'why' => 'The privacy coder is not loaded here.' ];
+			} else {
+				$ok = [];
+				foreach ( self::as_list( $data[ $p ] ) as $w ) {
+					$n = ZDZ_Private::clean_list( [ $w ] );
+					if ( ! $n || false !== strpos( (string) $n[0], ' ' ) || mb_strlen( (string) $n[0], 'UTF-8' ) < 3 ) {
+						$plan['refused'][] = [ 'path' => $p, 'why' => sprintf( '"%s": one word of three or more letters each.', is_scalar( $w ) ? (string) $w : gettype( $w ) ) ];
+					} else {
+						$ok[ (string) $n[0] ] = true;
+					}
+				}
+				if ( $ok ) {
+					ksort( $ok );
+					self::plan_option( $plan, $p, ZDZ_Private::VISIT_WORDS_OPT, array_map( 'strval', array_keys( $ok ) ) );
+					$plan['notes'][] = 'a name written just before a word in vocabulary.visit_words is read as a customer\'s, and coded before anything reaches the Ai.';
 				}
 			}
 		}
@@ -2018,7 +2076,14 @@ class ZDZ_Identity_Pack {
 		'brand.pwa.background_color'       => 'brand.pwa.background_color',
 		'locale.timezone'                  => 'locale.timezone',
 		'locale.currency'                  => 'locale.currency',
+		'locale.currency_sign'             => 'locale.currency_sign',
+		'locale.date_format'               => 'locale.date_format',
 		'locale.locale'                    => 'locale.locale',
+		'locale.units'                     => 'locale.units',
+		'locale.postcode_label'            => 'locale.postcode_label',
+		'locale.region_label'              => 'locale.region_label',
+		'locale.time_format'               => 'locale.time_format',
+		'locale.number_format'             => 'locale.number_format',
 		'notices.usage_records'            => 'notices.usage_records',
 	];
 

@@ -10,6 +10,18 @@
 	root.setAttribute('data-zdh-init', '1');
 	/* The theme's kit of parts: toasts, sheets, people chips. Guarded, so an older theme still runs the app. */
 	function kit() { return (window.ZDZ && window.ZDZ.ui) ? window.ZDZ.ui : null; }
+	/* What a person reads follows the business's Locale (Business Profile → Locale): its language for dates, °C and
+	   metres for a metric business. Readings are kept as they come (°F, metres, miles); only the words change. */
+	function metric() { var k = kit(); return !!(k && k.units && k.units() === 'metric'); }
+	function lang() { var k = kit(); return k && k.locale ? k.locale() : 'en-US'; }
+	function tempText(f) { var k = kit(); return k && k.temp ? k.temp(f) : Math.round(Number(f)) + '°F'; }
+	function tempNum(f) { return metric() ? Math.round((Number(f) - 32) * 5 / 9) : Number(f); }
+	/* metres → "0.3 mi" / "500 ft", or "0.5 km" / "480 m"; places for the long unit (1 unless given) */
+	function distText(m, places) {
+		m = Number(m) || 0; var p = places == null ? 1 : places;
+		if (metric()) { return m >= 100 ? (m / 1000).toFixed(p) + ' km' : Math.round(m) + ' m'; }
+		var mi = m / 1609.34; return mi >= 0.1 ? mi.toFixed(p) + ' mi' : Math.round(m * 3.28084) + ' ft';
+	}
 	var PEOPLE = Array.isArray(C.people) ? C.people : [];
 	function peopleNames() { return PEOPLE.map(function (p) { return p.name; }); }
 	function personChip(name) {
@@ -50,10 +62,10 @@
 		return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 	}
 	function fmtDate(iso, short) {
-		if (!iso) { return '—'; }
+		if (!iso) { return '–'; }
 		var p = iso.split('-');
 		var d = new Date(+p[0], +p[1] - 1, +p[2]);
-		return d.toLocaleDateString('en-US', short ? { month: 'short', day: 'numeric', year: 'numeric' } : { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+		return d.toLocaleDateString(lang(), short ? { month: 'short', day: 'numeric', year: 'numeric' } : { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 	}
 	function fmtTime(hm) {
 		if (!hm) { return ''; }
@@ -152,7 +164,7 @@
 	// is the palette's reddish purple so the two never read alike.
 	function isTodo(d) { return d && d.status === 'planned' && +d.assigned_uid > 0; }
 	function hoursText(h) { if (!h) { return ''; } return String(h).split(',').map(function (w) { var m = /^(\d{1,2})-(\d{1,2})$/.exec(w); if (!m) { return ''; } var f = function (x) { x = +x; var p = x >= 12 ? 'pm' : 'am'; x = x % 12; if (!x) { x = 12; } return [x, p]; }; var a = f(m[1]), b = f(m[2]); return a[1] === b[1] ? a[0] + '\u2013' + b[0] + ' ' + b[1] : a[0] + ' ' + a[1] + '\u2013' + b[0] + ' ' + b[1]; }).filter(Boolean).join(' \u00b7 '); }
-	function todoLine(d) { if (!isTodo(d) && !(d.status === 'in_progress' && +d.assigned_uid > 0)) { return ''; } var who = PEOPLE.filter(function (p) { return +p.id === +d.assigned_uid; })[0]; var bits = []; if (d.due_by) { var n = daysUntil(d.due_by); bits.push('by ' + fmtDate(d.due_by, true) + (n < 0 ? ' (' + Math.abs(n) + ' days late)' : (n === 0 ? ' (today)' : ' (in ' + n + ' days)'))); } if (d.hours) { bits.push(hoursText(d.hours)); } return '<strong>To be done by:</strong> ' + personChip(who ? who.name : d.delivered_by) + esc(who ? who.name : (d.delivered_by || '\u2014')) + (bits.length ? ' \u00b7 ' + esc(bits.join(' \u00b7 ')) : '') + '<br>'; }
+	function todoLine(d) { if (!isTodo(d) && !(d.status === 'in_progress' && +d.assigned_uid > 0)) { return ''; } var who = PEOPLE.filter(function (p) { return +p.id === +d.assigned_uid; })[0]; var bits = []; if (d.due_by) { var n = daysUntil(d.due_by); bits.push('by ' + fmtDate(d.due_by, true) + (n < 0 ? ' (' + Math.abs(n) + ' days late)' : (n === 0 ? ' (today)' : ' (in ' + n + ' days)'))); } if (d.hours) { bits.push(hoursText(d.hours)); } return '<strong>To be done by:</strong> ' + personChip(who ? who.name : d.delivered_by) + esc(who ? who.name : (d.delivered_by || '\u2013')) + (bits.length ? ' \u00b7 ' + esc(bits.join(' \u00b7 ')) : '') + '<br>'; }
 
 	/* -------------------------------------------------------------- api */
 	/* Works with pretty permalinks (…/wp-json/zorderz/v1/doorhangers/) and plain ones (…?rest_route=/zorderz/v1/doorhangers/). */
@@ -189,7 +201,7 @@
 		var short = path.split('?')[0];
 		return fetch(url(path), init).catch(function (e) {
 			logEv('net', (init.method === 'GET' ? '' : init.method + ' ') + short + ': ' + (e && e.message ? e.message : 'failed'));
-			var err = new Error('No connection — ' + (e && e.message ? e.message : 'the request did not go through')); err.network = true; throw err;
+			var err = new Error('No connection: ' + (e && e.message ? e.message : 'the request did not go through')); err.network = true; throw err;
 		}).then(function (r) {
 			return r.text().then(function (t) {
 				var j = null;
@@ -197,7 +209,7 @@
 				if (!r.ok) {
 					logEv('api', (init.method === 'GET' ? '' : init.method + ' ') + short + ' → ' + r.status + (j && j.code ? ' ' + j.code : ''));
 					if (j && (j.code === 'rest_cookie_invalid_nonce' || r.status === 401)) {
-						throw new Error('You are signed out. Reload the app and sign in again — your route and progress are kept on this phone.');
+						throw new Error('You are signed out. Reload the app and sign in again; your route and progress are kept on this phone.');
 					}
 					if (r.status === 403) {
 						throw new Error((j && j.message) ? j.message : 'You are not allowed to do that.');
@@ -421,7 +433,7 @@
 			if (opts.byId) { opts.byId[d.id] = mine; }
 			(g.segments || []).forEach(function (s) {
 				var line = L.polyline(s.path, style).addTo(map);
-				line.bindTooltip(s.name + ' — ' + (planned ? 'planned' : (active ? 'in progress' : fmtDate(d.drop_date, true))) + ' (#' + d.id + ')', { direction: 'top' });
+				line.bindTooltip(s.name + ': ' + (planned ? 'planned' : (active ? 'in progress' : fmtDate(d.drop_date, true))) + ' (#' + d.id + ')', { direction: 'top' });
 				if (opts.markers) { line.bindPopup(function () { return dropPopupHTML(d); }, POPUP_OPTS); }
 				mine.lines.push(line);
 				s.path.forEach(function (p) { pts.push(p); mine.pts.push(p); });
@@ -486,10 +498,10 @@
 		var ses = session(), q = quick();
 		if (S.tab !== 'deliver' && S.tab !== 'quick' && !(S.nd && S.nd.quick && S.tab === 'new')) {
 			if (q && q.ended) { html += '<div class="zdh-quick zdh-quick-on zdh-quick-ended" id="zdh-quick"><span class="zdh-quick-text">✓ Walk ' + esc(fmtClock(q.started)) + '–' + esc(fmtClock(q.ended)) + ' recorded &bull; <span id="qs-stats">' + esc(quickStatsText(q)) + '</span> &bull; not counted yet</span><span class="zdh-banner-btns"><button type="button" class="zdh-mini" id="qs-open">Details</button><button type="button" class="zdh-primary zdh-stop-mini" id="qs-done">Count the houses</button></span></div>'; }
-			else if (q) { html += '<div class="zdh-quick zdh-quick-on" id="zdh-quick"><span class="zdh-quick-text">' + (q.pace === 'drive' ? '🚗 Driving — not counting' : '🚶 Recording your walk') + ' since ' + esc(fmtClock(q.started)) + ' &bull; <span id="qs-stats">' + esc(quickStatsText(q)) + '</span></span><span class="zdh-banner-btns"><button type="button" class="zdh-mini" id="qs-open">Map</button><button type="button" class="zdh-stop zdh-stop-mini" id="qs-done">■ Done delivering</button></span></div>'; }
-			else if (!ses) { html += '<div class="zdh-quick" id="zdh-quick"><button type="button" class="zdh-go" id="qs-start">▶ Quick Start</button><span class="zdh-quick-help">' + tx('No plan needed — walk, then tap Done.', 'No plan needed: walk, and the app logs the houses you pass and which side of the street.') + '</span></div>'; }
+			else if (q) { html += '<div class="zdh-quick zdh-quick-on" id="zdh-quick"><span class="zdh-quick-text">' + (q.pace === 'drive' ? '🚗 Driving, not counting' : '🚶 Recording your walk') + ' since ' + esc(fmtClock(q.started)) + ' &bull; <span id="qs-stats">' + esc(quickStatsText(q)) + '</span></span><span class="zdh-banner-btns"><button type="button" class="zdh-mini" id="qs-open">Map</button><button type="button" class="zdh-stop zdh-stop-mini" id="qs-done">■ Done delivering</button></span></div>'; }
+			else if (!ses) { html += '<div class="zdh-quick" id="zdh-quick"><button type="button" class="zdh-go" id="qs-start">▶ Quick Start</button><span class="zdh-quick-help">' + tx('No plan needed: walk, then tap Done.', 'No plan needed: walk, and the app logs the houses you pass and which side of the street.') + '</span></div>'; }
 		}
-		if (ses && S.tab !== 'deliver') { html += '<div class="zdh-banner" id="zdh-banner"><span>Delivering <strong>' + esc(ses.name || ('cluster #' + ses.id)) + '</strong> — ' + Object.keys(ses.delivered).length + ' of ' + ses.total + ' done</span><span class="zdh-banner-btns"><button type="button" class="zdh-mini zdh-mini-primary" id="zdh-banner-resume">Resume</button><button type="button" class="zdh-mini" id="zdh-banner-leave" title="Stop for now — you can resume it from Clusters">Stop</button></span></div>'; }
+		if (ses && S.tab !== 'deliver') { html += '<div class="zdh-banner" id="zdh-banner"><span>Delivering <strong>' + esc(ses.name || ('cluster #' + ses.id)) + '</strong>: ' + Object.keys(ses.delivered).length + ' of ' + ses.total + ' done</span><span class="zdh-banner-btns"><button type="button" class="zdh-mini zdh-mini-primary" id="zdh-banner-resume">Resume</button><button type="button" class="zdh-mini" id="zdh-banner-leave" title="Stop for now; you can resume it from Clusters">Stop</button></span></div>'; }
 		html += '<main class="zdh-main" id="zdh-main"></main>';
 		html += '<footer class="zdh-footer">' + (C.llmReady ? '' : '<span class="zdh-warn">Map reading is off: no AI key or vision model on Zorderz → Settings.</span> &bull; ') + '<button type="button" class="zdh-linkbtn" id="zdh-refresh">↻ Reload data</button> &bull; <button type="button" class="zdh-linkbtn" id="zdh-help-link">How it works</button> &bull; <button type="button" class="zdh-linkbtn" id="zdh-diag-link">Diagnostics</button></footer>';
 		teardownMaps();
@@ -499,14 +511,14 @@
 		root.querySelectorAll('.zdh-tab').forEach(function (b) { b.addEventListener('click', function () {
 			var from = S.tab;
 			S.tab = b.dataset.tab; store('tab', S.tab); if (S.tab === 'new' && S.nd.step === 'done') { resetNewDrop(); } render();
-			if (from === 'deliver' && session()) { toast('Still delivering — GPS keeps running. Tap Resume in the yellow bar to come back.', 5000); }
-			if (from === 'quick' && quick()) { toast('Still recording — the red Done button is at the top.', 5000); }
+			if (from === 'deliver' && session()) { toast('Still delivering: GPS keeps running. Tap Resume in the yellow bar to come back.', 5000); }
+			if (from === 'quick' && quick()) { toast('Still recording: the red Done button is at the top.', 5000); }
 		}); });
 		document.getElementById('zdh-refresh').addEventListener('click', refreshApp);
 		var br = document.getElementById('zdh-banner-resume');
 		if (br) { br.addEventListener('click', function () { openDelivery(ses.id); }); }
 		var bl = document.getElementById('zdh-banner-leave');
-		if (bl) { bl.addEventListener('click', function () { leaveDelivery('Stopped for now — tap Resume on the cluster when you\'re back.'); }); }
+		if (bl) { bl.addEventListener('click', function () { leaveDelivery('Stopped for now. Tap Resume on the cluster when you\'re back.'); }); }
 		document.getElementById('zdh-help-link').addEventListener('click', function () { store('help_seen', ''); if (S.nd && S.nd.step === 'done') { resetNewDrop(); } S.tab = 'new'; store('tab', 'new'); render(); scrollTop(); });
 		document.getElementById('zdh-diag-link').addEventListener('click', function () { S.tab = 'export'; store('tab', 'export'); render(); scrollTo(document.getElementById('zdh-diag')); });
 		var qsS = document.getElementById('qs-start'), qsO = document.getElementById('qs-open'), qsD = document.getElementById('qs-done');
@@ -653,10 +665,10 @@
 		var p = platform();
 		if (p.iOS && !isStandalone() && p.safari) { d.top = true; }
 		closeSheet();
-		var sheet = buildSheet(d, '<div class="zdh-actions" style="margin-top:.8rem"><button type="button" class="zdh-primary" id="loc-retry">I turned it on — try again</button></div>');
+		var sheet = buildSheet(d, '<div class="zdh-actions" style="margin-top:.8rem"><button type="button" class="zdh-primary" id="loc-retry">I turned it on, try again</button></div>');
 		var close = sheet._close;
 		sheet.querySelector('#loc-retry').addEventListener('click', function () {
-			primeLocation(function (r) { if (r === 'ok') { close(); toast('Location is on.'); if (session() && S.tab === 'deliver') { startGps(); } } else if (r === 'denied') { toast('Still blocked — the setting has not changed yet.'); } else { close(); toast('Location allowed, waiting for a GPS fix…'); if (session() && S.tab === 'deliver') { startGps(); } } });
+			primeLocation(function (r) { if (r === 'ok') { close(); toast('Location is on.'); if (session() && S.tab === 'deliver') { startGps(); } } else if (r === 'denied') { toast('Still blocked: the setting has not changed yet.'); } else { close(); toast('Location allowed, waiting for a GPS fix…'); if (session() && S.tab === 'deliver') { startGps(); } } });
 		});
 		install.sheet = sheet;
 		installRoot().appendChild(sheet);
@@ -672,7 +684,7 @@
 		if (nd.step === 'streets') { return renderStreets(main); }
 		if (nd.step === 'review') { return renderReview(main); }
 		if (nd.step === 'done') { return renderDone(main); }
-		main.innerHTML = '<div class="zdh-card zdh-busy"><div class="zdh-spinner"></div><div class="zdh-busy-text">' + esc(nd.busy) + '</div><div class="zdh-busy-sub">' + (nd.mode === 'shot' ? 'The map reading usually takes 30–90 seconds. It keeps running on the server even if your screen locks — just come back to this page.' : tx('', 'Pulling the address points for that area…')) + '</div></div>';
+		main.innerHTML = '<div class="zdh-card zdh-busy"><div class="zdh-spinner"></div><div class="zdh-busy-text">' + esc(nd.busy) + '</div><div class="zdh-busy-sub">' + (nd.mode === 'shot' ? 'The map reading usually takes 30–90 seconds. It keeps running on the server even if your screen locks; just come back to this page.' : tx('', 'Pulling the address points for that area…')) + '</div></div>';
 	}
 
 	function renderChoose(main) {
@@ -706,7 +718,7 @@
 			'</div>';
 		}
 		return '<div class="zdh-grid">' +
-			(opts.status ? '<label class="zdh-span2">This route is<div class="zdh-seg"><button type="button" class="zdh-segbtn' + (f.status !== 'planned' ? ' on' : '') + '" data-status="done">Done — I walked it</button><button type="button" class="zdh-segbtn' + (f.status === 'planned' ? ' on' : '') + '" data-status="planned">Planned for later</button></div></label>' : '') +
+			(opts.status ? '<label class="zdh-span2">This route is<div class="zdh-seg"><button type="button" class="zdh-segbtn' + (f.status !== 'planned' ? ' on' : '') + '" data-status="done">Done, I walked it</button><button type="button" class="zdh-segbtn' + (f.status === 'planned' ? ' on' : '') + '" data-status="planned">Planned for later</button></div></label>' : '') +
 			'<label>' + (f.status === 'planned' ? 'Planned date' : 'Date') + '<input type="date" id="f-date" value="' + esc(f.date) + '"></label>' +
 			'<label>Time<input type="time" id="f-time" value="' + esc(f.time) + '"></label>' +
 			'<label>Delivered by<input type="text" id="f-by" list="zdh-team" value="' + esc(f.delivered_by) + '" placeholder="Name"><datalist id="zdh-team">' + peopleNames().map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist></label>' +
@@ -716,7 +728,7 @@
 			'<label>ZIP code<input type="text" id="f-zip" inputmode="numeric" pattern="[0-9]*" maxlength="5" value="' + esc(f.zip) + '" placeholder="' + esc(C.zipHint || '') + '"></label>' +
 			'<label>City<input type="text" id="f-city" value="' + esc(f.city) + '"></label>' +
 			'<label>Revisit in (days)<input type="number" id="f-revisit" inputmode="numeric" min="0" value="' + esc(f.revisit_days) + '"></label>' +
-			'<label class="zdh-span2">Notes<textarea id="f-notes" rows="2" placeholder="Anything useful — e.g. skipped the cul-de-sac (a gate code is kept sealed)">' + esc(f.notes) + '</textarea></label>' +
+			'<label class="zdh-span2">Notes<textarea id="f-notes" rows="2" placeholder="Anything useful, e.g. skipped the cul-de-sac (a gate code is kept sealed)">' + esc(f.notes) + '</textarea></label>' +
 		'</div>';
 	}
 	function readDetails(f) {
@@ -768,7 +780,7 @@
 				L.DomEvent.preventDefault(e);
 				a.classList.add('busy');
 				locate(function (lat, lng) { a.classList.remove('busy'); onFix(lat, lng); },
-					function (why) { a.classList.remove('busy'); if (why === 'denied') { openLocationHelp(); } else { toast('No GPS fix yet — try again outside, or type the ZIP.'); } });
+					function (why) { a.classList.remove('busy'); if (why === 'denied') { openLocationHelp(); } else { toast('No GPS fix yet: try again outside, or type the ZIP.'); } });
 			});
 			return div;
 		} });
@@ -778,10 +790,10 @@
 	function helpCardHTML() {
 		if (recall('help_seen') === '1') { return ''; }
 		return '<div class="zdh-card zdh-help-card" id="zdh-help-card"><h2>How it works</h2><ol class="zdh-help-steps">' +
-			'<li><strong>Set off with Quick Start</strong> (green button) — or plan a route first and start it from Clusters.</li>' +
+			'<li><strong>Set off with Quick Start</strong> (green button), or plan a route first and start it from Clusters.</li>' +
 			'<li><strong>Keep the app open and the screen on.</strong> A locked iPhone stops the GPS: what you walk then is not recorded. The app keeps the screen awake by itself; just don\'t press the side button.</li>' +
 			'<li><strong>Tap Done when you finish.</strong> The houses you passed appear on a map for you to confirm; tap a grey dot to add one, a green dot to remove one, then Save.</li></ol>' +
-			'<p class="zdh-help">Walk on one side of the street and the app works out which side. Driving is detected and skipped — if it says "driving" while you are on foot, tap <em>I\'m on foot</em>. No signal? Everything is kept on the phone and on the site and finishes by itself later.</p>' +
+			'<p class="zdh-help">Walk on one side of the street and the app works out which side. Driving is detected and skipped: if it says "driving" while you are on foot, tap <em>I\'m on foot</em>. No signal? Everything is kept on the phone and on the site and finishes by itself later.</p>' +
 			'<div class="zdh-actions"><button type="button" class="zdh-secondary" id="zdh-help-ok">Got it</button></div></div>';
 	}
 	function renderDraw(main) {
@@ -808,7 +820,7 @@
 			'<details class="zdh-card zdh-details" id="d-details"' + (recall('details') === 'closed' ? '' : ' open') + '><summary>' + tx('Details', 'Details (type, side, deliverer, date, revisit)') + '</summary>' + detailsHTML(f, { status: false, compact: true }) + '</details>' +
 			(nd.error ? '<div class="zdh-error">' + esc(nd.error) + '</div>' : '') +
 			'<div class="zdh-actions">' + (nd.editId ? '<button class="zdh-secondary" id="d-cancel">Cancel</button>' : '') + '<button class="zdh-primary" id="d-go">Find the houses →</button></div>' +
-			(nd.editId ? '' : (paperLib() ? '<button type="button" class="zdh-choice zdh-paper-choice" id="d-paper"><span class="zdh-choice-title">' + ICON_CAMERA + ' Add routes you already walked</span><span class="zdh-choice-sub">' + (S.batch && S.batch.sheets.length ? esc(batchSummaryText()) + ' — tap to go back to them.' : tx('Photos or a PDF of the printed route sheets. Each sheet becomes a route.', 'Photos (or a PDF) of the printed route sheets with the walked streets highlighted. Pick them all at once: each sheet is read and lined up with the street map, you check them in one list and save.')) + '</span></button>' : '') +
+			(nd.editId ? '' : (paperLib() ? '<button type="button" class="zdh-choice zdh-paper-choice" id="d-paper"><span class="zdh-choice-title">' + ICON_CAMERA + ' Add routes you already walked</span><span class="zdh-choice-sub">' + (S.batch && S.batch.sheets.length ? esc(batchSummaryText()) + '. Tap to go back to them.' : tx('Photos or a PDF of the printed route sheets. Each sheet becomes a route.', 'Photos (or a PDF) of the printed route sheets with the walked streets highlighted. Pick them all at once: each sheet is read and lined up with the street map, you check them in one list and save.')) + '</span></button>' : '') +
 				'<p class="zdh-help zdh-desk" style="text-align:center">Walked it already and marked a map screenshot? <button type="button" class="zdh-linkbtn" id="d-shot">Upload the screenshot instead</button></p>');
 
 		buildDrawMap();
@@ -962,7 +974,7 @@
 		var n = S.nd.strokes.length, c = document.getElementById('d-count');
 		if (!c) { return; }
 		var loops = S.nd.strokes.filter(function (s) { return s.type === 'loop'; }).length;
-		c.innerHTML = n ? (n + ' stroke' + (n > 1 ? 's' : '') + (loops ? ' (' + loops + ' circled)' : '') + tx('', ' — tap "Find the houses" when done.')) : tx('Nothing drawn yet.', 'No strokes yet.');
+		c.innerHTML = n ? (n + ' stroke' + (n > 1 ? 's' : '') + (loops ? ' (' + loops + ' circled)' : '') + tx('', '. Tap "Find the houses" when done.')) : tx('Nothing drawn yet.', 'No strokes yet.');
 	}
 
 	/* ------------------------------------------- mode B: screenshot + AI */
@@ -971,7 +983,7 @@
 		main.innerHTML =
 			'<div class="zdh-card">' +
 				'<h2>1. ' + tx('Screenshot or scan', 'Screenshot, photo or scan of the map') + '</h2>' +
-				'<p class="zdh-help">Mark the area on a map screenshot (circle it or trace the streets you walked), then add it here. One map per drop reads best — the app lines it up with the street map and picks the houses inside your marking.' + tx('', ' <strong>Old paper route maps</strong> work too: a color scan (JPG, PNG or a PDF — pick the page) of the highlighted sheet.') + '</p>' +
+				'<p class="zdh-help">Mark the area on a map screenshot (circle it or trace the streets you walked), then add it here. One map per drop reads best: the app lines it up with the street map and picks the houses inside your marking.' + tx('', ' <strong>Old paper route maps</strong> work too: a color scan (JPG, PNG or a PDF; pick the page) of the highlighted sheet.') + '</p>' +
 				'<label class="zdh-filebtn"><input type="file" id="zdh-files" accept="image/*,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" multiple> Choose screenshot, photo or PDF</label>' +
 				'<div class="zdh-thumbs" id="zdh-thumbs"></div>' +
 				'<div id="zdh-pdf"></div>' +
@@ -1036,7 +1048,7 @@
 	function loadHeic() {
 		if (heicLib) { return Promise.resolve(heicLib); }
 		if (window.heic2any) { heicLib = window.heic2any; return Promise.resolve(heicLib); }
-		if (!C.heicUrl) { return Promise.reject(new Error('this browser cannot open iPhone (HEIC) photos — export it as JPEG')); }
+		if (!C.heicUrl) { return Promise.reject(new Error('this browser cannot open iPhone (HEIC) photos; export it as JPEG')); }
 		return new Promise(function (resolve, reject) {
 			var sc = document.createElement('script'); sc.src = C.heicUrl; sc.async = true;
 			sc.onload = function () { if (window.heic2any) { heicLib = window.heic2any; resolve(heicLib); } else { reject(new Error('the HEIC converter did not load')); } };
@@ -1063,7 +1075,7 @@
 		if (pdfLib) { return Promise.resolve(pdfLib); }
 		if (!C.pdfjs) { return Promise.reject(new Error('the PDF reader is not available')); }
 		return new Promise(function (resolve, reject) {
-			var done = false, to = setTimeout(function () { if (!done) { reject(new Error('the PDF reader did not load (old browser?) — save the page as an image instead')); } }, 20000);
+			var done = false, to = setTimeout(function () { if (!done) { reject(new Error('the PDF reader did not load (old browser?); save the page as an image instead')); } }, 20000);
 			window.addEventListener('zdh-pdfjs', function () { done = true; clearTimeout(to); pdfLib = window.dhPdfjs; try { pdfLib.GlobalWorkerOptions.workerSrc = C.pdfjs.worker; } catch (e) {} resolve(pdfLib); }, { once: true });
 			var sc = document.createElement('script'); sc.type = 'module';
 			sc.textContent = 'import * as p from ' + JSON.stringify(C.pdfjs.lib) + '; window.dhPdfjs = p; window.dispatchEvent(new Event("zdh-pdfjs"));';
@@ -1089,7 +1101,7 @@
 			return file.arrayBuffer().then(function (buf) { return lib.getDocument({ data: buf }).promise; });
 		}).then(function (pdf) {
 			var n = Math.min(pdf.numPages, 40);
-			box.innerHTML = '<div class="zdh-pdf-head"><strong>' + esc(file.name) + '</strong> — ' + pdf.numPages + ' page' + (pdf.numPages > 1 ? 's' : '') + '. Tap the page with this drop\'s route' + (pdf.numPages > 40 ? ' (first 40 shown)' : '') + '. <button type="button" class="zdh-linkbtn" id="pdf-close">Close</button></div><div class="zdh-pdf-pages" id="pdf-pages"></div>';
+			box.innerHTML = '<div class="zdh-pdf-head"><strong>' + esc(file.name) + '</strong>: ' + pdf.numPages + ' page' + (pdf.numPages > 1 ? 's' : '') + '. Tap the page with this drop\'s route' + (pdf.numPages > 40 ? ' (first 40 shown)' : '') + '. <button type="button" class="zdh-linkbtn" id="pdf-close">Close</button></div><div class="zdh-pdf-pages" id="pdf-pages"></div>';
 			box.querySelector('#pdf-close').addEventListener('click', function () { box.innerHTML = ''; });
 			var grid = box.querySelector('#pdf-pages');
 			(function thumb(i) {
@@ -1164,7 +1176,7 @@
 		var started = Date.now(), label = 'Reading the map with ' + (C.model || 'the vision model') + '…';
 		function direct(why, cancel) {
 			logEv('read', 'direct: ' + why);
-			say(label + ' (direct — ' + why + ')', 'Reading the map…');
+			say(label + ' (direct: ' + why + ')', 'Reading the map…');
 			var t0 = Date.now();
 			return api('analyze-image', { method: 'POST', body: { attachment_ids: ids, hints: hints(nd), sync: 1, keepalive: 1, cancel: cancel || '' } }).then(function (r2) {
 				if (r2 && r2.error) { var er = new Error((r2.message || 'The map reading failed.') + (r2.secs != null ? ' (after ' + Math.round(r2.secs) + ' s)' : '')); er.code = r2.code; throw er; }
@@ -1192,7 +1204,7 @@
 					api('analyze-status?job=' + encodeURIComponent(r.job)).then(function (st) {
 						if (st.stage && st.stage !== lastStage) { lastStage = st.stage; logEv('read', secs + ' s: ' + st.stage + (st.kb ? ' · ' + st.kb + ' KB' : '') + (st.server ? ' · ' + st.server : '')); }
 						else if (secs - lastLog >= 30) { lastLog = secs; logEv('read', secs + ' s: still ' + st.status); }
-						say(label + ' (' + secs + ' s' + (st.stage ? ' — ' + st.stage : '') + ')', 'Reading the map' + (st.stage ? ' — ' + st.stage : '') + '…');
+						say(label + ' (' + secs + ' s' + (st.stage ? ', ' + st.stage : '') + ')', 'Reading the map' + (st.stage ? ': ' + st.stage : '') + '…');
 						if (st.status === 'done') { logEv('read', 'done in ' + secs + ' s' + (st.reader_s != null ? ' (reader ' + st.reader_s + ' s)' : '')); return resolve(st.analysis); }
 						if (st.status === 'error') {
 							logEv('read', 'error: ' + st.error);
@@ -1213,7 +1225,7 @@
 							else { return goDirect(noBackground('the background reading did not start')); }
 						}
 						if (st.status === 'running' && (st.quiet_s > 30 || st.running_s > 170)) { return goDirect(noBackground('the background reading went quiet')); }
-						if (secs > 330) { return reject(new Error('The map reader did not answer in time — try again. (Diagnostics has the details.)')); }
+						if (secs > 330) { return reject(new Error('The map reader did not answer in time. Try again. (Diagnostics has the details.)')); }
 						setTimeout(tick, 3000);
 					}).catch(function (e) {
 						logEv('read', secs + ' s: status check failed: ' + e.message);
@@ -1247,7 +1259,7 @@
 			nd.step = 'streets'; render();
 		}).catch(function (e) {
 			logEv('read', 'failed: ' + e.message);
-			nd.error = 'Analysis failed: ' + e.message + (nd.uploaded.length ? ' (the pictures were saved to the media library — you can retry without re-uploading)' : '');
+			nd.error = 'Analysis failed: ' + e.message + (nd.uploaded.length ? ' (the pictures were saved to the media library; you can retry without re-uploading)' : '');
 			nd.step = 'form'; render();
 		});
 	}
@@ -1279,12 +1291,12 @@
 		var nd = S.nd, a = nd.analysis || {}, f = nd.form;
 		var sr = a.screen_readings || {}, hn = a.handwritten_notes || {};
 		var readings = [];
-		if (sr.temperature_f != null) { readings.push('🌡 ' + sr.temperature_f + '°F on screen'); }
+		if (sr.temperature_f != null) { readings.push('🌡 ' + tempText(sr.temperature_f) + ' on screen'); }
 		if (sr.aqi != null) { readings.push('AQI ' + sr.aqi); }
 		if (sr.clock) { readings.push('🕘 ' + sr.clock); }
 		if (hn.quantity) { readings.push('✍️ quantity ' + hn.quantity); }
 		if (hn.hanger_type) { readings.push('✍️ ' + hn.hanger_type); }
-		if (nd.dateFromSheet && f.date) { readings.push('✍️ walked ' + f.date + ' (read off the sheet — check it on the next screen)'); }
+		if (nd.dateFromSheet && f.date) { readings.push('✍️ walked ' + f.date + ' (read off the sheet; check it on the next screen)'); }
 		var nAnch = (a.anchors || []).length + (a.pin && a.pin.label ? 1 : 0);
 		var canGeoref = canGeorefOf(nd), isPaper = /paper/.test(a.source_type || '');
 		main.innerHTML =
@@ -1293,11 +1305,11 @@
 				'<div class="zdh-ai-summary">' +
 					'<div><strong>' + esc(isPaper ? 'Paper map' + (a.sheet_label ? ' “' + a.sheet_label + '”' : '') : (a.map_app || 'Map')) + '</strong> &bull; marking: <strong>' + esc(a.marking_style || '?') + '</strong> &bull; confidence: <strong>' + esc(a.confidence || '?') + '</strong></div>' +
 					(a.pin_label ? '<div>📌 ' + esc(a.pin_label) + '</div>' : '') +
-					'<div>📍 ' + esc(a.city_guess || '?') + (a.neighborhood_guess ? ' (' + esc(a.neighborhood_guess) + ')' : '') + ' &bull; ZIP guess ' + esc(a.zip_guess || '—') + ' (' + esc(a.zip_confidence || 'low') + ')</div>' +
+					'<div>📍 ' + esc(a.city_guess || '?') + (a.neighborhood_guess ? ' (' + esc(a.neighborhood_guess) + ')' : '') + ' &bull; ZIP guess ' + esc(a.zip_guess || '–') + ' (' + esc(a.zip_confidence || 'low') + ')</div>' +
 					(readings.length ? '<div>' + readings.map(esc).join(' &bull; ') + '</div>' : '') +
-					(isPaper ? '<div>🗺 Read as a <strong>' + (a.source_type === 'photo of paper map' ? 'photo of a printed map' : 'scanned paper map') + '</strong>' + (C.paperKey ? ' with the team\'s key' : ' (no key set — every highlighted street is counted)') + '.</div>' : '') +
+					(isPaper ? '<div>🗺 Read as a <strong>' + (a.source_type === 'photo of paper map' ? 'photo of a printed map' : 'scanned paper map') + '</strong>' + (C.paperKey ? ' with the team\'s key' : ' (no key set: every highlighted street is counted)') + '.</div>' : '') +
 					((a.marks || []).length ? '<div class="zdh-marks">' + a.marks.map(function (m) { return '<div><span class="zdh-mark-sw" style="background:' + esc(markColor(m.color)) + '"></span><strong>' + esc(m.color || 'mark') + '</strong> = ' + esc(m.meaning || 'unknown') + (m.streets && m.streets.length ? ': ' + esc(m.streets.join(', ')) : '') + '</div>'; }).join('') + '</div>' : '') +
-					'<div class="zdh-muted">' + (canGeoref ? 'Map alignment: ' + nAnch + ' intersections found on the picture — the houses along your marking will be picked automatically.' : 'Map alignment not available (' + ((nd.files || []).length > 1 ? 'more than one picture' : 'fewer than 2 readable intersections') + ') — the street list below will be used instead.') + '</div>' +
+					'<div class="zdh-muted">' + (canGeoref ? 'Map alignment: ' + nAnch + ' intersections found on the picture: the houses along your marking will be picked automatically.' : 'Map alignment not available (' + ((nd.files || []).length > 1 ? 'more than one picture' : 'fewer than 2 readable intersections') + '): the street list below will be used instead.') + '</div>' +
 					(a.reasoning ? '<div class="zdh-muted">' + esc(a.reasoning) + '</div>' : '') +
 				'</div>' +
 				'<div class="zdh-grid">' +
@@ -1306,7 +1318,7 @@
 					(canGeoref ? '<label>Marking color on the screenshot<select id="s-color">' + ['orange', 'red', 'yellow', 'pink', 'green', 'blue'].map(function (c) { return '<option' + (c === nd.maskColor ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label>' : '') +
 				'</div>' +
 				'<h3>Streets covered</h3>' +
-				'<p class="zdh-help">Fix any misread names. "Partial" means only the stretch between the two cross streets was covered — you can still fine-tune on the map next.</p>' +
+				'<p class="zdh-help">Fix any misread names. "Partial" means only the stretch between the two cross streets was covered; you can still fine-tune on the map next.</p>' +
 				'<div id="s-list"></div>' +
 				'<button type="button" class="zdh-secondary" id="s-add">+ Add a street</button>' +
 			'</div>' +
@@ -1316,12 +1328,12 @@
 		var list = document.getElementById('s-list');
 		function drawList() {
 			list.innerHTML = '';
-			if (!nd.streets.length) { list.innerHTML = '<p class="zdh-muted">No streets yet — add one.</p>'; }
+			if (!nd.streets.length) { list.innerHTML = '<p class="zdh-muted">No streets yet. Add one.</p>'; }
 			nd.streets.forEach(function (s, i) {
 				var row = el('<div class="zdh-street-row">' +
 					'<input type="text" class="sr-name" value="' + esc(s.name) + '" placeholder="Street name">' +
 					'<button type="button" class="sr-del" title="Remove">✕</button>' +
-					'<select class="sr-cov"><option value="full"' + (s.coverage !== 'partial' ? ' selected' : '') + '>Whole street covered</option><option value="partial"' + (s.coverage === 'partial' ? ' selected' : '') + '>Partial — between two cross streets</option></select>' +
+					'<select class="sr-cov"><option value="full"' + (s.coverage !== 'partial' ? ' selected' : '') + '>Whole street covered</option><option value="partial"' + (s.coverage === 'partial' ? ' selected' : '') + '>Partial: between two cross streets</option></select>' +
 					'<div class="sr-bounds"' + (s.coverage === 'partial' ? '' : ' hidden') + '><input type="text" class="sr-from" value="' + esc(s.from) + '" placeholder="from cross street"><span>to</span><input type="text" class="sr-to" value="' + esc(s.to) + '" placeholder="to cross street"></div>' +
 					(s.notes ? '<div class="zdh-muted sr-note">' + esc(s.notes) + '</div>' : '') +
 				'</div>');
@@ -1360,7 +1372,7 @@
 		if (nd.georef && nd.georef.info) { try { URL.revokeObjectURL(nd.georef.info.url); } catch (e) {} nd.georef.info.img = null; } // a re-run lets the last picture go
 		nd.georefNote = ''; nd.georefFailed = ''; nd.georef = null; nd.mask = null;
 		return (canGeorefOf(nd) ? findByGeoreference(nd, say) : Promise.reject(new Error('skip'))).catch(function (e) {
-			if (e && e.message !== 'skip') { nd.georefNote = 'Lining the picture up failed (' + e.message + ') — used the street list instead.'; nd.georefFailed = e.message; logEv('georef', 'failed: ' + e.message); }
+			if (e && e.message !== 'skip') { nd.georefNote = 'Lining the picture up failed (' + e.message + '): used the street list instead.'; nd.georefFailed = e.message; logEv('georef', 'failed: ' + e.message); }
 			if (!streets.length) { throw (e && e.message !== 'skip') ? e : new Error('no streets were read off the picture'); }
 			return findByStreets(streets, nd, say);
 		});
@@ -1370,7 +1382,7 @@
 		say('Looking up house addresses on ' + streets.length + ' street' + (streets.length > 1 ? 's' : '') + ' (address map)…');
 		return api('find-addresses', { method: 'POST', body: { streets: streets, cross: nd.cross, hints: hints(nd) } }).then(function (r) {
 			if (!r.addresses.length && !r.segments.length) {
-				throw new Error('no addresses or streets were found for that ZIP and street list — check the street names and ZIP' + (r.notes && r.notes.length ? ' (' + r.notes.join('; ') + ')' : ''));
+				throw new Error('no addresses or streets were found for that ZIP and street list; check the street names and ZIP' + (r.notes && r.notes.length ? ' (' + r.notes.join('; ') + ')' : ''));
 			}
 			nd.geo = r; nd.geo.spatial = false;
 			proposeSelection(nd);
@@ -1502,7 +1514,7 @@
 					logEv('georef', 'retry region-wide (' + (r.anchors || []).length + ' found in ' + nd.form.zip + ')');
 					var h2 = hints(nd); h2.zip = '';
 					return api('georeference', { method: 'POST', body: { anchors: anchors, hints: h2 } }).then(function (r2) {
-						if ((r2.anchors || []).length >= 2) { nd.zipNote = 'The intersections were found outside ZIP ' + nd.form.zip + ' — check the ZIP'; return r2; }
+						if ((r2.anchors || []).length >= 2) { nd.zipNote = 'The intersections were found outside ZIP ' + nd.form.zip + '; check the ZIP'; return r2; }
 						return r;
 					});
 				}
@@ -1589,7 +1601,7 @@
 	var WALK_COLORS = ['#1F77B4', '#2CA02C', '#9467BD', '#E0641C', '#17BECF', '#8C564B', '#D62728', '#BCBD22', '#E377C2', '#7F7F7F'];
 	function walkColor(n) { return WALK_COLORS[(n - 1) % WALK_COLORS.length]; }
 	function fmtMin(m) { m = Math.round(m); if (m < 60) { return m + ' min'; } var h = Math.floor(m / 60), r = m % 60; return h + ' h' + (r ? ' ' + r + ' min' : ''); }
-	function fmtMiles(m) { var mi = m / 1609.34; return mi >= 0.1 ? mi.toFixed(1) + ' mi' : Math.round(m * 3.28084) + ' ft'; }
+	function fmtMiles(m) { return distText(m); }
 	/* houses (hangers) per hour of a finished walk — the real pace, next to the 40 an hour the walk planner assumes */
 	function paceOf(d) {
 		var n = d.quantity != null ? +d.quantity : (d.delivered_count != null ? +d.delivered_count : 0);
@@ -1602,9 +1614,9 @@
 		var lines = [(d.name || d.streets_summary || 'Door hanger walk')];
 		lines.push(fmtDate(d.drop_date) + (d.started_at ? ', ' + fmtTime(String(d.started_at).slice(11, 16)) + (d.finished_at ? '–' + fmtTime(String(d.finished_at).slice(11, 16)) : '') : (d.drop_time ? ' at ' + fmtTime(d.drop_time) : '')));
 		lines.push(n + ' hangers' + (d.address_count && d.delivered_count != null && d.delivered_count !== d.address_count ? ' (' + d.delivered_count + ' of ' + d.address_count + ' houses)' : '') + (d.duration_min ? ' · ' + fmtMin(d.duration_min) : '') + (d.walked_m ? ' · ' + fmtMiles(d.walked_m) : '') + (pc ? ' · ' + pc + '/hour' : ''));
-		if (d.streets_summary) { lines.push(d.streets_summary + (d.city ? ' — ' + d.city : '') + (d.zip ? ' ' + d.zip : '')); }
+		if (d.streets_summary) { lines.push(d.streets_summary + (d.city ? ', ' + d.city : '') + (d.zip ? ' ' + d.zip : '')); }
 		var w = (d.enrichment || {}).weather || {};
-		if (w.temp_f != null) { lines.push(w.temp_f + '°F' + (w.heat_index_f != null && w.heat_index_f > w.temp_f ? ', felt like ' + w.heat_index_f + '°F' : '') + (w.aqi_us != null ? ' · AQI ' + w.aqi_us : '')); }
+		if (w.temp_f != null) { lines.push(tempText(w.temp_f) + (w.heat_index_f != null && w.heat_index_f > w.temp_f ? ', felt like ' + tempText(w.heat_index_f) : '') + (w.aqi_us != null ? ' · AQI ' + w.aqi_us : '')); }
 		if (d.delivered_by) { lines.push('By ' + d.delivered_by); }
 		return lines.join('\n');
 	}
@@ -1615,7 +1627,7 @@
 		copyText(text);
 	}
 	function copyText(text) {
-		var done = function () { toast('Copied — paste it into a text or email.'); };
+		var done = function () { toast('Copied. Paste it into a text or email.'); };
 		if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text) ? done() : toast(text, 20000); }); return; }
 		if (legacyCopy(text)) { done(); } else { toast(text, 20000); }
 	}
@@ -1704,7 +1716,7 @@
 			if (st.coverage !== 'partial' || !segs.length) {
 				addrs.forEach(function (a) { nd.sel[a._k] = true; });
 				segs.forEach(function (s) { st.selectedSegs[s.id] = true; });
-				st.autoNote = st.coverage === 'partial' ? 'No road segments available — all addresses pre-selected; untick the ones not covered.' : '';
+				st.autoNote = st.coverage === 'partial' ? 'No road segments available: all addresses pre-selected; untick the ones not covered.' : '';
 				return;
 			}
 			var fromSegs = g.segByKey[streetKey(st.from)] || [];
@@ -1716,10 +1728,10 @@
 			if (!chosen && (nf.length || nt.length)) {
 				var ns = nf.length ? nf : nt;
 				chosen = segs.filter(function (s) { return ns.indexOf(s.fnode) >= 0 || ns.indexOf(s.tnode) >= 0; });
-				st.autoNote = 'Only one cross street was found (' + (nf.length ? st.from : st.to) + ') — extend the selection by tapping road segments.';
+				st.autoNote = 'Only one cross street was found (' + (nf.length ? st.from : st.to) + '); extend the selection by tapping road segments.';
 			}
 			if (!chosen) {
-				st.autoNote = 'Could not locate the cross streets ' + (st.from || '?') + ' / ' + (st.to || '?') + ' — tap the covered road segments or draw an area.';
+				st.autoNote = 'Could not locate the cross streets ' + (st.from || '?') + ' / ' + (st.to || '?') + '. Tap the covered road segments or draw an area.';
 				return;
 			}
 			chosen.forEach(function (s) { st.selectedSegs[s.id] = true; });
@@ -1738,13 +1750,13 @@
 		var qk = nd.quick;
 		if (qk) {
 			var mins = Math.max(1, Math.round((qk.finished - qk.started) / 60000)), mi = qk.walkM / 1609.34;
-			var walkLine = 'Walked ' + (mi >= 0.1 ? mi.toFixed(1) + ' mi' : Math.round(qk.walkM * 3.28) + ' ft') + ' in ' + mins + ' min' + (qk.driveMin ? ' (' + qk.driveMin + ' min driving skipped)' : '') + '.';
-			if (qk.gaps && qk.gaps.length) { notes.push('⚠ GPS was off ' + qk.gaps.map(function (g) { return fmtClock(g[0]) + '–' + fmtClock(g[1]); }).join(', ') + ' (phone locked?) — streets walked then are not ticked. ' + (qk.gapHouses ? 'The houses around that stretch are on the map in grey: tap a dot or a road to add them, or use Draw area.' : 'Tap their houses on the map, use a street\'s All button, or use Draw area — it also looks up houses outside the map.')); }
+			var walkLine = 'Walked ' + distText(qk.walkM) + ' in ' + mins + ' min' + (qk.driveMin ? ' (' + qk.driveMin + ' min driving skipped)' : '') + '.';
+			if (qk.gaps && qk.gaps.length) { notes.push('⚠ GPS was off ' + qk.gaps.map(function (g) { return fmtClock(g[0]) + '–' + fmtClock(g[1]); }).join(', ') + ' (phone locked?): streets walked then are not ticked. ' + (qk.gapHouses ? 'The houses around that stretch are on the map in grey: tap a dot or a road to add them, or use Draw area.' : 'Tap their houses on the map, use a street\'s All button, or use Draw area; it also looks up houses outside the map.')); }
 		}
 		main.innerHTML =
 			'<div class="zdh-card zdh-card-tight">' +
-				'<h2>' + (qk ? tx('Houses you passed', 'Confirm the houses you passed') : (nd.mode === 'map' ? 'Confirm the houses' : (nd.batchItem ? 'Check the houses — ' + esc(sheetTitle(nd.batchItem)) : '4. Confirm the houses'))) + '</h2>' +
-				'<p class="zdh-help">' + tx('Colored dots = logged. Tap a dot or a road to change it. Missing a street? Draw area around it.', (qk ? 'Green dots get logged as delivered. Tap a dot to add or remove a house, or tap a road to flip that whole stretch. A street you walked that is not on the map at all: <em>Draw area</em> around it and its houses are looked up.' : 'Colored dots are the houses that will be recorded (one color per walk). Tap a dot to toggle one house, tap a road to toggle that whole stretch, or use <em>Draw area</em> and tap around the covered blocks — houses outside the map are looked up too.')) + '</p>' +
+				'<h2>' + (qk ? tx('Houses you passed', 'Confirm the houses you passed') : (nd.mode === 'map' ? 'Confirm the houses' : (nd.batchItem ? 'Check the houses: ' + esc(sheetTitle(nd.batchItem)) : '4. Confirm the houses'))) + '</h2>' +
+				'<p class="zdh-help">' + tx('Colored dots = logged. Tap a dot or a road to change it. Missing a street? Draw area around it.', (qk ? 'Green dots get logged as delivered. Tap a dot to add or remove a house, or tap a road to flip that whole stretch. A street you walked that is not on the map at all: <em>Draw area</em> around it and its houses are looked up.' : 'Colored dots are the houses that will be recorded (one color per walk). Tap a dot to toggle one house, tap a road to toggle that whole stretch, or use <em>Draw area</em> and tap around the covered blocks; houses outside the map are looked up too.')) + '</p>' +
 				(qk ? '<div class="zdh-note" id="r-walknote">' + esc(walkLine) + ' <span id="r-sidenote">' + esc(sideLine(qk)) + '</span></div>' : '') +
 				noteBox(notes) +
 				'<div class="zdh-maptools">' +
@@ -1761,9 +1773,9 @@
 				'<div class="zdh-count"><strong id="r-count">' + totalSel + '</strong> of ' + g.addresses.length + ' ' + tx('selected', 'addresses selected') + '<span id="r-units-note"></span><span id="r-walks-note"></span><span class="zdh-desk"> &bull; source: ' + esc(g.source === 'osm' ? 'OpenStreetMap' : (C.areaSource || 'address map')) + '</span></div>' +
 			'</div>' +
 			(qk ? '' : '<div class="zdh-card zdh-walks" id="r-walks-card"><h3>Walks</h3>' +
-				'<p class="zdh-help">' + tx('Split into sessions of about this many houses, in walking order.', 'The route is split into walks of about this many houses — each a contiguous stretch in walking order, so one walk is one session on foot. Change the number or the style and the split updates.') + '</p>' +
+				'<p class="zdh-help">' + tx('Split into sessions of about this many houses, in walking order.', 'The route is split into walks of about this many houses: each a contiguous stretch in walking order, so one walk is one session on foot. Change the number or the style and the split updates.') + '</p>' +
 				'<div class="zdh-grid" style="margin-bottom:.5rem"><label>' + tx('Houses per walk', 'Houses per walk (one session)') + '<input type="number" id="w-size" inputmode="numeric" min="5" max="500" value="' + esc(nd.walkOpts.size) + '"></label>' +
-				'<label>' + tx('Walk style', 'How each walk goes') + '<select id="w-style"><option value="loop"' + (nd.walkOpts.style === 'loop' ? ' selected' : '') + '>Loop the block — one side, round and back</option><option value="street"' + (nd.walkOpts.style === 'street' ? ' selected' : '') + '>Street by street — both sides, then the next street</option></select></label></div>' +
+				'<label>' + tx('Walk style', 'How each walk goes') + '<select id="w-style"><option value="loop"' + (nd.walkOpts.style === 'loop' ? ' selected' : '') + '>Loop the block: one side, round and back</option><option value="street"' + (nd.walkOpts.style === 'street' ? ' selected' : '') + '>Street by street: both sides, then the next street</option></select></label></div>' +
 				'<div id="w-list"></div></div>') +
 			'<div class="zdh-card"><h3>Streets</h3><div id="r-streets"></div></div>' +
 			(nd.mode === 'map'
@@ -1803,7 +1815,7 @@
 				rs.setAttribute('aria-pressed', nd.quick.bothSides ? 'true' : 'false');
 				var sn = document.getElementById('r-sidenote'); if (sn) { sn.textContent = sideLine(nd.quick); }
 				refreshSelection();
-				toast(nd.quick.bothSides ? 'Both sides kept — ' + nd.quick.farKeys.length + ' houses across the street added back.' : 'Only the side you walked — ' + nd.quick.farKeys.length + ' houses across the street left out.');
+				toast(nd.quick.bothSides ? 'Both sides kept: ' + nd.quick.farKeys.length + ' houses across the street added back.' : 'Only the side you walked: ' + nd.quick.farKeys.length + ' houses across the street left out.');
 			});
 		}
 		var ru = document.getElementById('r-units');
@@ -1842,7 +1854,7 @@
 		});
 		var totalMin = W.walks.reduce(function (s, w) { return s + w.est_min; }, 0);
 		var wn = document.getElementById('r-walks-note'); if (wn) { wn.textContent = many ? ' · ' + W.walks.length + ' walks' : ''; }
-		list.innerHTML = '<p class="zdh-walks-sum"><strong>' + W.walks.length + ' walk' + (many ? 's' : '') + '</strong> &bull; ' + esc(fmtMin(totalMin)) + ' on foot at ' + esc(W.perHour) + ' houses/hour' + (many ? '' : tx('', ' — everything fits in one session')) + '</p>' +
+		list.innerHTML = '<p class="zdh-walks-sum"><strong>' + W.walks.length + ' walk' + (many ? 's' : '') + '</strong> &bull; ' + esc(fmtMin(totalMin)) + ' on foot at ' + esc(W.perHour) + ' houses/hour' + (many ? '' : tx('', ': everything fits in one session')) + '</p>' +
 			W.walks.map(function (w) { return '<div class="zdh-walk-row"><span class="zdh-walk-swatch" style="background:' + walkColor(w.n) + '"></span><span class="zdh-walk-main"><strong>Walk ' + w.n + '</strong> &bull; ' + w.count + ' houses &bull; ≈ ' + esc(fmtMin(w.est_min)) + '<br><span class="zdh-walk-streets">' + esc(w.streets.join(', ')) + '</span></span></div>'; }).join('');
 	}
 
@@ -1875,8 +1887,8 @@
 			var dot = L.circleMarker([a.lat, a.lng], { radius: 6, weight: 1.5, color: '#fff', fillOpacity: 0.95 }).addTo(map);
 			var segForLabel = a._seg != null ? (g.segByKey[a.street_key] || []).filter(function (s2) { return s2.id === a._seg; })[0] : null;
 			numberLabel(dot, a.number + (a.unit ? '#' + a.unit : ''), labelSide([a.lat, a.lng], segForLabel ? segForLabel.path : null));
-			dot.on('click', function (e) { L.DomEvent.stop(e); if (review.drawing) { addDrawPoint(e.latlng); return; } if (a.no_solicit) { toast('No Soliciting sign noted at ' + a.number + ' ' + a.street + ' — left off the route.', 5000); return; } nd.sel[a._k] ? delete nd.sel[a._k] : (nd.sel[a._k] = true); refreshSelection(); });
-			if (a.no_solicit) { dot.bindTooltip('No Soliciting — left off', { direction: 'top' }); dot._nosol = true; }
+			dot.on('click', function (e) { L.DomEvent.stop(e); if (review.drawing) { addDrawPoint(e.latlng); return; } if (a.no_solicit) { toast('No Soliciting sign noted at ' + a.number + ' ' + a.street + ': left off the route.', 5000); return; } nd.sel[a._k] ? delete nd.sel[a._k] : (nd.sel[a._k] = true); refreshSelection(); });
+			if (a.no_solicit) { dot.bindTooltip('No Soliciting: left off', { direction: 'top' }); dot._nosol = true; }
 			review.dots[a._k] = dot;
 			if (nd.sel[a._k] || !g.spatial) { bounds.push([a.lat, a.lng]); }
 		});
@@ -1952,7 +1964,7 @@
 				'<div class="zdh-streetline-main"><strong>' + esc(st.name) + '</strong> <span class="zdh-badge-soft">' + esc(cov) + '</span>' +
 				'<div class="zdh-muted">' + on + ' of ' + addrs.length + ' addresses' + (range ? ' &bull; ' + range : '') + (unitsOn ? ' &bull; ' + unitsOn + ' unit' + (unitsOn > 1 ? 's' : '') + ' in complexes' : '') + (!g.spatial && st.coverage === 'partial' && (st.from || st.to) ? ' &bull; ' + esc(st.from || '?') + ' → ' + esc(st.to || '?') : '') + '</div>' +
 				(st.note ? '<div class="zdh-muted">' + esc(st.note) + '</div>' : '') + (st.autoNote ? '<div class="zdh-muted zdh-warn">' + esc(st.autoNote) + '</div>' : '') +
-				(!addrs.length ? '<div class="zdh-muted zdh-warn">No address points found for this street — it will still be recorded as covered by name.</div>' : '') + '</div>' +
+				(!addrs.length ? '<div class="zdh-muted zdh-warn">No address points found for this street: it will still be recorded as covered by name.</div>' : '') + '</div>' +
 				(addrs.length ? '<div class="zdh-streetline-btns"><button type="button" class="zdh-mini zdh-checkbtn" data-a="all" aria-pressed="' + (on === addrs.length ? 'true' : (on ? 'mixed' : 'false')) + '" title="Tap to select or clear every house on this street">All</button></div>' : '') + '</div>');
 			var tb = row.querySelector('[data-a="all"]');
 			if (tb) { tb.addEventListener('click', function () { // all → none, anything else → all
@@ -2006,7 +2018,7 @@
 			});
 			r.segments.forEach(function (sg) { if (!segHave[sg.id]) { segHave[sg.id] = true; g.segments.push(sg); } });
 			logEv('review.area', added + ' more houses');
-			if (!added) { toast('No other houses in that area — the ones inside it are ticked.', 5000); return; }
+			if (!added) { toast('No other houses in that area; the ones inside it are ticked.', 5000); return; }
 			prepareGeo();
 			g.streets = streetsFromAddresses(g.addresses.map(function (a) { return { street: a.street, street_key: a.street_key, zip: a.zip, city: a.city, selected: !!nd.sel[a._k] }; }));
 			var view = review.map ? { c: review.map.getCenter(), z: review.map.getZoom() } : null;
@@ -2025,7 +2037,7 @@
 
 	function autoName(f, names) {
 		var core = names.slice(0, 2).join(' & ') + (names.length > 2 ? ' +' + (names.length - 2) : '');
-		return ((f.city ? f.city + ' ' : '') + (f.zip ? f.zip + ' — ' : '— ') + core).trim();
+		return ((f.city ? f.city + ' ' : '') + (f.zip ? f.zip + ' · ' : '· ') + core).trim();
 	}
 	/* a route's parts (houses, streets, segments, walks, status) and its saved form, from any route's state — the
 	   screen's, or a sheet of the old-routes list being saved straight from its card. */
@@ -2073,7 +2085,7 @@
 				notes: f.notes + ((a.marks || []).length && !nd.quick ? (f.notes ? ' ' : '') + '[Map marks: ' + a.marks.map(function (m) { return (m.color || 'mark') + ' = ' + (m.meaning || '?') + (m.streets && m.streets.length ? ' (' + m.streets.slice(0, 8).join(', ') + ')' : ''); }).join('; ') + ']' : ''), lat: g.center ? g.center[0] : null, lng: g.center ? g.center[1] : null,
 				attachment_ids: nd.uploaded.map(function (u) { return u.id; }),
 				status: rp.status, revisit_days: f.revisit_days === '' ? null : +f.revisit_days, method: nd.quick ? 'quick' : (nd.mode === 'map' ? 'map' : (paper ? 'paper' : 'screenshot')),
-				name: f.name || (nd.quick && !names.length ? 'Quick walk — ' + fmtDate(localDT(nd.quick.started).slice(0, 10), true) + ' ' + fmtClock(nd.quick.started) + ' (no houses)' : autoName(f, names))
+				name: f.name || (nd.quick && !names.length ? 'Quick walk · ' + fmtDate(localDT(nd.quick.started).slice(0, 10), true) + ' ' + fmtClock(nd.quick.started) + ' (no houses)' : autoName(f, names))
 			},
 			analysis: a, geometry: geometry, addresses: rp.addresses, streets: rp.streets, walks: rp.walksMeta
 		};
@@ -2101,7 +2113,7 @@
 				return api('drops/' + nd.editId, { method: 'POST', body: { name: f.name || autoName(f, names), hanger_type: f.hanger_type, hanger_side: f.hanger_side, delivered_by: f.delivered_by, drop_date: f.date, revisit_days: f.revisit_days, notes: f.notes } });
 			}).then(function () {
 				S.drops = null; clearDraft();
-				if (startNow) { return startSession(nd.editId).catch(function (e) { if (!e.silent) { throw e; } resetNewDrop(); S.tab = 'map'; render(); toast('The route is saved — start it from Clusters when you are ready.'); }); }
+				if (startNow) { return startSession(nd.editId).catch(function (e) { if (!e.silent) { throw e; } resetNewDrop(); S.tab = 'map'; render(); toast('The route is saved. Start it from Clusters when you are ready.'); }); }
 				resetNewDrop(); S.tab = 'map'; render();
 			}).catch(function (e) { nd.error = 'Save failed: ' + e.message; nd.step = 'review'; render(); });
 			return;
@@ -2129,7 +2141,7 @@
 			if (r.duplicate && nd.quick) { // this walk was saved already — show that one, write nothing
 				clearDraft(); saveQuick(null); paceReset(); S.drops = null;
 				logEv('quick.dup', 'save refused: already #' + r.id);
-				toast('This walk was already saved as #' + r.id + ' — nothing was added twice.', 9000);
+				toast('This walk was already saved as #' + r.id + '. Nothing was added twice.', 9000);
 				resetNewDrop(); S.tab = 'map'; store('tab', 'map'); render();
 				return 'dup';
 			}
@@ -2143,7 +2155,7 @@
 			clearDraft();
 			if (nd.quick) { nd.finishedMeta = { minutes: Math.max(1, Math.round((nd.quick.finished - nd.quick.started) / 60000)), walkM: nd.quick.walkM || 0 }; saveQuick(null); paceReset(); }
 			S.drops = null;
-			if (startNow) { return startSession(r.id).then(function () { return 'started'; }).catch(function (e) { if (!e.silent) { throw e; } toast('The route is saved — start it from Clusters when you are ready.'); return null; }); }
+			if (startNow) { return startSession(r.id).then(function () { return 'started'; }).catch(function (e) { if (!e.silent) { throw e; } toast('The route is saved. Start it from Clusters when you are ready.'); return null; }); }
 			if (payload.drop.status === 'planned') { return null; }
 			setBusy('Saved as drop #' + r.id + '. Adding weather, air quality, fire-zone and neighborhood data…');
 			return api('drops/' + r.id + '/enrich', { method: 'POST' }).catch(function () { return null; });
@@ -2157,8 +2169,8 @@
 	function renderDone(main) {
 		var nd = S.nd, e = nd.enrichment || {}, w = e.weather || {}, c = e.census || {};
 		var chips = [];
-		if (w.temp_f != null) { chips.push('🌡 ' + w.temp_f + '°F'); }
-		if (w.heat_index_f != null && w.heat_index_f !== w.temp_f) { chips.push('feels like ' + w.heat_index_f + '°F'); }
+		if (w.temp_f != null) { chips.push('🌡 ' + tempText(w.temp_f)); }
+		if (w.heat_index_f != null && w.heat_index_f !== w.temp_f) { chips.push('feels like ' + tempText(w.heat_index_f)); }
 		if (w.wind_mph != null) { chips.push('wind ' + w.wind_mph + ' mph' + (w.wind_direction ? ' ' + w.wind_direction : '')); }
 		if (w.aqi_us != null) { chips.push('AQI ' + w.aqi_us); }
 		if (e.fire_hazard_zone) { chips.push('🔥 ' + e.fire_hazard_zone); }
@@ -2175,8 +2187,8 @@
 		}
 		var pcD = summaryD ? paceOf(summaryD) : '';
 		var big = fm ? '<div class="zdh-done-nums"><div><strong>' + esc(summaryD.quantity) + '</strong><span>hangers</span></div><div><strong>' + esc(fmtMin(fm.minutes)) + '</strong><span>on foot</span></div>' + (fm.walkM >= 160 ? '<div><strong>' + esc(fmtMiles(fm.walkM)) + '</strong><span>walked</span></div>' : '') + (pcD ? '<div><strong>' + pcD + '</strong><span>an hour</span></div>' : '') + '</div>' : '';
-		main.innerHTML = '<div class="zdh-card zdh-done"><div class="zdh-done-icon">✓</div><h2>' + (planned ? esc(nd.savedName || ('Cluster #' + nd.savedId)) + ' is planned' : (fm ? 'Done — logged' : 'Drop #' + esc(nd.savedId) + ' saved')) + '</h2>' + big + '<p>' + esc(nd.savedCount) + ' houses ' + (planned ? (when ? 'for <strong>' + esc(when) + '</strong>' : 'queued') + tx('.', ' — it shows in green under Clusters; tap "Start delivering" when you\'re there.') : (fm ? 'delivered' + tx('.', '. Logged with the time, your walking track and the weather.') : 'recorded' + (nd.uploaded.length ? ' and ' + nd.uploaded.length + ' screenshot' + (nd.uploaded.length > 1 ? 's' : '') + ' filed in the media library.' : '.'))) + '</p>' +
-			(chips.length ? '<div class="zdh-chips">' + chips.map(function (x) { return '<span class="zdh-chip">' + esc(x) + '</span>'; }).join('') + '</div>' : (planned ? '' : '<p class="zdh-muted">Context data (weather, neighborhood) could not be fetched right now — use “Refresh data” on the drop card later.</p>')) +
+		main.innerHTML = '<div class="zdh-card zdh-done"><div class="zdh-done-icon">✓</div><h2>' + (planned ? esc(nd.savedName || ('Cluster #' + nd.savedId)) + ' is planned' : (fm ? 'Done and logged' : 'Drop #' + esc(nd.savedId) + ' saved')) + '</h2>' + big + '<p>' + esc(nd.savedCount) + ' houses ' + (planned ? (when ? 'for <strong>' + esc(when) + '</strong>' : 'queued') + tx('.', '. It shows in green under Clusters; tap "Start delivering" when you\'re there.') : (fm ? 'delivered' + tx('.', '. Logged with the time, your walking track and the weather.') : 'recorded' + (nd.uploaded.length ? ' and ' + nd.uploaded.length + ' screenshot' + (nd.uploaded.length > 1 ? 's' : '') + ' filed in the media library.' : '.'))) + '</p>' +
+			(chips.length ? '<div class="zdh-chips">' + chips.map(function (x) { return '<span class="zdh-chip">' + esc(x) + '</span>'; }).join('') + '</div>' : (planned ? '' : '<p class="zdh-muted">Context data (weather, neighborhood) could not be fetched right now; use “Refresh data” on the drop card later.</p>')) +
 			'<div class="zdh-actions">' + (summaryD ? '<button class="zdh-secondary" id="d-share">Share</button>' : '') + '<button class="zdh-primary" id="d-new">Plan another</button></div><p class="zdh-help" style="text-align:center"><button type="button" class="zdh-linkbtn" id="d-map">See it under Clusters</button></p></div>';
 		var dsh = document.getElementById('d-share'); if (dsh) { dsh.addEventListener('click', function () { shareText('Door-hanger walk #' + nd.savedId, dropSummaryText(summaryD)); }); }
 		document.getElementById('d-new').addEventListener('click', function () { resetNewDrop(); render(); });
@@ -2250,7 +2262,7 @@
 					logEv('pdf', file.name + ': ' + pdf.numPages + ' pages');
 					return (function page(k) {
 						if (k > n || !S.batch) { return Promise.resolve(); }
-						batchNote('Opening ' + file.name + ' — page ' + k + ' of ' + n + '…');
+						batchNote('Opening ' + file.name + ', page ' + k + ' of ' + n + '…');
 						return pdfPageImage(pdf, k, 2600, base).then(function (img) { if (img) { addSheet(img, (pdf.numPages > 1 ? 'Page ' + k + ' of ' : '') + file.name); renderBatchList(); pumpBatch(); } }).then(function () { return page(k + 1); });
 					})(1).then(function () { if (pdf.numPages > 40) { toast('Only the first 40 pages of ' + file.name + ' were added.', 6000); } try { pdf.destroy(); } catch (e) {} });
 				}).catch(function (e) { toast('Could not open ' + file.name + ': ' + e.message, 8000); logEv('pdf', 'failed: ' + e.message); })
@@ -2359,7 +2371,7 @@
 			if (e && e.removed) { logEv('batch', '#' + sh.id + ' removed while being read'); return; }
 			logEv('batch', '#' + sh.id + ' failed: ' + e.message);
 			sh.tries++;
-			if (sh.tries < 2 && (e.network || document.hidden)) { sh.status = 'waiting'; sh.after = Date.now() + 5000; sh.progress = 'Connection dropped — trying again…'; return; }
+			if (sh.tries < 2 && (e.network || document.hidden)) { sh.status = 'waiting'; sh.after = Date.now() + 5000; sh.progress = 'Connection dropped, trying again…'; return; }
 			sh.status = 'failed'; sh.error = e.message; sh.progress = '';
 		}).then(function () { BT.inflight = Math.max(0, BT.inflight - 1); if (gone()) { freeSheet(sh); } updateSheetCard(sh); renderBatchHead(); pumpBatch(); });
 	}
@@ -2436,7 +2448,7 @@
 		if (sh.status === 'saving') { return head('<span class="zdh-spinner zdh-bs-busy" aria-hidden="true"></span>Saving…'); }
 		if (sh.status === 'saved') { return head('<span class="zdh-bs-ok">✓ Saved</span> &bull; ' + esc(sh.savedCount) + ' houses &bull; ' + esc(fmtDate(sheetDate(sh), true))); }
 		if (sh.status === 'empty') {
-			return head('Nothing to log on this page — no highlighted streets were read.') +
+			return head('Nothing to log on this page: no highlighted streets were read.') +
 				'<div class="zdh-bs-actions">' + remove + '<button type="button" class="zdh-tool" data-a="streets">Add streets by hand</button></div>';
 		}
 		if (sh.status === 'failed') {
@@ -2449,7 +2461,7 @@
 			'<div class="zdh-bs-pics">' + (small ? '<a class="zdh-bs-photo"' + (sh.url ? ' href="' + sh.url + '" target="_blank" rel="noopener"' : '') + '><img src="' + small + '" alt="The sheet"></a>' : '<span></span>') + sheetSketch(sh) + '</div>' +
 			'<label class="zdh-bs-date">Walked on <input type="date" data-a="date" value="' + esc(sheetDate(sh)) + '"></label>' +
 			(flags.length ? '<ul class="zdh-bs-flags">' + flagsHTML(flags) + '</ul>' : '') +
-			'<div class="zdh-bs-actions">' + remove + '<button type="button" class="zdh-tool" data-a="fix">Fix</button><button type="button" class="zdh-primary zdh-bs-go" data-a="save"' + (blocked ? ' disabled' : '') + '>✓ Looks right — save</button></div>';
+			'<div class="zdh-bs-actions">' + remove + '<button type="button" class="zdh-tool" data-a="fix">Fix</button><button type="button" class="zdh-primary zdh-bs-go" data-a="save"' + (blocked ? ' disabled' : '') + '>✓ Looks right, save</button></div>';
 	}
 	function updateSheetCard(sh, textOnly) {
 		var card = document.getElementById('zdh-bs-' + sh.id); if (!card) { return; }
@@ -2531,7 +2543,7 @@
 		main.innerHTML =
 			'<div class="zdh-card zdh-batch-intro">' +
 				'<h2>Routes you already walked</h2>' +
-				'<p class="zdh-help">' + tx('Photos or a PDF of the highlighted route sheets. Each sheet becomes a route.', 'Photos (or a PDF) of the printed route sheets with the walked streets highlighted. Pick as many as you like — each sheet becomes its own route. Reading starts straight away; check each one below and save it.') + '</p>' +
+				'<p class="zdh-help">' + tx('Photos or a PDF of the highlighted route sheets. Each sheet becomes a route.', 'Photos (or a PDF) of the printed route sheets with the walked streets highlighted. Pick as many as you like: each sheet becomes its own route. Reading starts straight away; check each one below and save it.') + '</p>' +
 				'<label class="zdh-filebtn zdh-batch-add"><input type="file" id="zdh-batch-files" accept="image/*,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" multiple> ' + ICON_CAMERA + ' Add photos or a PDF</label>' +
 				'<p class="zdh-help zdh-muted" id="zdh-batch-empty"' + (S.batch.sheets.length ? ' hidden' : '') + '>' + tx('Sheet flat, all of it in the picture, street names readable.', 'For a good read: the sheet flat, all of it in the picture, good light, street names readable at four or more corners.') + '</p>' +
 				'<p class="zdh-help zdh-muted">' + (C.paperKey ? tx('Colors are read with the team\'s key.', 'Highlighter colors are read with the team\'s key (Zorderz → Doorhangers → Paper map key).') : tx('Several highlighter colors? Set the key in Zorderz → Doorhangers.', 'More than one highlighter color on the sheets? Put what each color means under Zorderz → Doorhangers → Paper map key.')) + '</p>' +
@@ -2557,7 +2569,7 @@
 		document.getElementById('zdh-batch-done').addEventListener('click', function () {
 			var c2 = batchCounts();
 			var leave = function () { if (S.batchPrev) { S.nd = S.batchPrev; S.batchPrev = null; S.nd.step = S.nd.step === 'review' && S.nd.geo ? 'review' : 'draw'; } else { resetNewDrop(); } render(); };
-			if (c2.ready || c2.busy || c2.waiting) { askSheet({ title: 'Leave the sheets for now?', html: esc(batchSummaryText()) + '. They stay here until the app reloads — tap “Add routes you already walked” to come back to them.', primary: 'Back to planning', onPrimary: leave, secondary: 'Stay' }); return; }
+			if (c2.ready || c2.busy || c2.waiting) { askSheet({ title: 'Leave the sheets for now?', html: esc(batchSummaryText()) + '. They stay here until the app reloads; tap “Add routes you already walked” to come back to them.', primary: 'Back to planning', onPrimary: leave, secondary: 'Stay' }); return; }
 			if (c2.all && c2.saved === c2.all) { S.batch.sheets.forEach(function (sh) { freeSheet(sh); }); S.batch = null; }
 			leave();
 		});
@@ -2630,13 +2642,13 @@
 		if (!D.cluster || D.cluster.id !== ses.id) {
 			main.innerHTML = '<div class="zdh-card zdh-busy"><div class="zdh-spinner"></div><div class="zdh-busy-text">Loading the cluster…</div></div>';
 			api('drops/' + ses.id).then(function (d) {
-				if (d.status !== 'in_progress') { leaveDelivery(d.status === 'done' ? 'That cluster was already finished — nothing left to deliver.' : 'That cluster is back to planned — start it again from Clusters when you\'re ready.', true); return; }
+				if (d.status !== 'in_progress') { leaveDelivery(d.status === 'done' ? 'That cluster was already finished: nothing left to deliver.' : 'That cluster is back to planned; start it again from Clusters when you\'re ready.', true); return; }
 				D.cluster = d; if (S.tab === 'deliver') { render(); }
 			}).catch(function (e) {
-				if (e.status === 404) { leaveDelivery('The cluster you had open was deleted — cleared.', true); return; }
+				if (e.status === 404) { leaveDelivery('The cluster you had open was deleted, so it was cleared.', true); return; }
 				main.innerHTML = '<div class="zdh-error">' + esc(e.message) + '</div><div class="zdh-actions"><button class="zdh-secondary" id="dv-retry">Try again</button><button class="zdh-secondary" id="dv-leave">Stop for now</button></div>';
 				document.getElementById('dv-retry').addEventListener('click', function () { render(); });
-				document.getElementById('dv-leave').addEventListener('click', function () { leaveDelivery('Stopped for now — resume it from Clusters later.'); });
+				document.getElementById('dv-leave').addEventListener('click', function () { leaveDelivery('Stopped for now. Resume it from Clusters later.'); });
 			});
 			return;
 		}
@@ -2645,7 +2657,7 @@
 		var done = mine.filter(function (a) { return ses.delivered[a.id]; }).length;
 		main.innerHTML =
 			'<div class="zdh-card zdh-card-tight zdh-deliver">' +
-				'<div class="zdh-deliver-head"><div>' + (wl ? '<div class="zdh-walk-tag" style="background:' + walkColor(wn) + '">' + esc(wl) + '</div>' : '') + '<h2>' + esc(d.name || d.streets_summary) + '</h2><div class="zdh-muted">' + esc(d.city) + ' ' + esc(d.zip) + ' &bull; started ' + esc(new Date(ses.started).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })) + '<span id="dv-wx">' + (wxText() ? ' · ' + esc(wxText()) : '') + '</span></div></div>' +
+				'<div class="zdh-deliver-head"><div>' + (wl ? '<div class="zdh-walk-tag" style="background:' + walkColor(wn) + '">' + esc(wl) + '</div>' : '') + '<h2>' + esc(d.name || d.streets_summary) + '</h2><div class="zdh-muted">' + esc(d.city) + ' ' + esc(d.zip) + ' &bull; started ' + esc(new Date(ses.started).toLocaleTimeString(lang(), { hour: 'numeric', minute: '2-digit' })) + '<span id="dv-wx">' + (wxText() ? ' · ' + esc(wxText()) : '') + '</span></div></div>' +
 					'<div class="zdh-deliver-count"><strong id="dv-done">' + done + '</strong><span>of ' + mine.length + '</span></div></div>' +
 				'<div class="zdh-deliver-status" id="dv-status">Finding your position…</div>' +
 				'<div class="zdh-maptools">' +
@@ -2654,17 +2666,17 @@
 					'<button type="button" class="zdh-tool zdh-tool-warn" id="dv-pause" aria-pressed="true">GPS on</button>' +
 					'<button type="button" class="zdh-tool" id="dv-stretch" aria-pressed="false" title="Tap the first and the last house of a run to tick every house between them">Mark a stretch</button>' +
 					'<button type="button" class="zdh-tool zdh-tool-warn" id="dv-nosol" aria-pressed="false" title="Standing at a house with a No Soliciting sign? Press this: it is marked not delivered and remembered for every future route">🚫 No-Solicit House</button>' +
-					'<button type="button" class="zdh-tool" id="dv-pocket" title="Black, touch-proof screen for your pocket — the GPS keeps recording">🌙 Pocket</button>' +
+					'<button type="button" class="zdh-tool" id="dv-pocket" title="Black, touch-proof screen for your pocket; the GPS keeps recording">🌙 Pocket</button>' +
 				'</div>' +
 				navWrap('dv-map') +
-				'<p class="zdh-help" style="margin-top:.6rem">' + tx('Houses turn green as you pass. Tap one to change it. Keep the screen on — a locked iPhone stops the GPS.', 'Houses turn green as you pass them (within ' + (C.autoRadius || 25) + ' m). Tap a house to tick or untick it by hand; <strong>Mark a stretch</strong> ticks a whole run between two houses. Keep the app open with the screen on: an iPhone stops location for web apps the moment the screen locks.') + (wl ? tx(' Grey dots = other walks.', ' The dotted line is the suggested order; grey dots belong to the other walks.') : '') + '</p>' +
+				'<p class="zdh-help" style="margin-top:.6rem">' + tx('Houses turn green as you pass. Tap one to change it. Keep the screen on: a locked iPhone stops the GPS.', 'Houses turn green as you pass them (within ' + (C.autoRadius || 25) + ' m). Tap a house to tick or untick it by hand; <strong>Mark a stretch</strong> ticks a whole run between two houses. Keep the app open with the screen on: an iPhone stops location for web apps the moment the screen locks.') + (wl ? tx(' Grey dots = other walks.', ' The dotted line is the suggested order; grey dots belong to the other walks.') : '') + '</p>' +
 			'</div>' +
 			actionBar('<button class="zdh-stop" id="dv-finish">■ ' + (wl ? 'Done with this walk' : 'Done delivering') + '</button>');
 		buildDeliveryMap();
 		document.getElementById('dv-follow').addEventListener('click', function () { setFollow(!D.follow); });
 		bindNav(D.map);
 		document.getElementById('dv-wake').addEventListener('click', function (e) { toggleWake(e.currentTarget); });
-		document.getElementById('dv-pause').addEventListener('click', function (e) { var b = e.currentTarget; if (D.watch != null) { stopGps(); b.textContent = 'GPS paused'; b.setAttribute('aria-pressed', 'false'); setStatus('GPS paused — houses only tick by hand.'); } else { startGps(); b.textContent = 'GPS on'; b.setAttribute('aria-pressed', 'true'); } });
+		document.getElementById('dv-pause').addEventListener('click', function (e) { var b = e.currentTarget; if (D.watch != null) { stopGps(); b.textContent = 'GPS paused'; b.setAttribute('aria-pressed', 'false'); setStatus('GPS paused: houses only tick by hand.'); } else { startGps(); b.textContent = 'GPS on'; b.setAttribute('aria-pressed', 'true'); } });
 		D.stretch = { on: false, first: null };
 		document.getElementById('dv-stretch').addEventListener('click', function (e) { stretchToggle(e.currentTarget); });
 		document.getElementById('dv-nosol').addEventListener('click', function () { noSolicitHere('walk'); });
@@ -2681,19 +2693,19 @@
 		var e = document.getElementById('dv-status'); if (!e) { return; }
 		var w = e.querySelector('.zdh-status-t');
 		if (!w) { e.textContent = ''; w = document.createElement('span'); w.className = 'zdh-status-t'; e.appendChild(w); }
-		w.textContent = t + (navigator.onLine === false ? ' · 📵 no signal — still recording' : '');
+		w.textContent = t + (navigator.onLine === false ? ' · 📵 no signal, still recording' : '');
 	}
 	/* While the detector says "driving", the walker can overrule it with one tap — and the other way round. */
 	function onFootButton(kind) {
 		var e = document.getElementById('dv-status'); if (!e || e.querySelector('#dv-onfoot')) { return; }
 		var b = el('<button type="button" class="zdh-mini zdh-mini-primary zdh-pace-btn" id="dv-onfoot">I\'m on foot</button>');
-		b.addEventListener('click', function () { var st = kind === 'quick' ? quick() : session(); if (!st) { return; } forceWalking(st, kind); setStatus('GPS on — counting again.'); redrawTrack(kind); paceButton(kind, 'walk'); });
+		b.addEventListener('click', function () { var st = kind === 'quick' ? quick() : session(); if (!st) { return; } forceWalking(st, kind); setStatus('GPS on, counting again.'); redrawTrack(kind); paceButton(kind, 'walk'); });
 		e.appendChild(b);
 	}
 	function drivingButton(kind) {
 		var e = document.getElementById('dv-status'); if (!e || e.querySelector('#dv-driving')) { return; }
 		var b = el('<button type="button" class="zdh-mini zdh-pace-btn" id="dv-driving" title="In the car? Tap this so the houses you drive past are not ticked">🚗 I\'m driving</button>');
-		b.addEventListener('click', function () { var st = kind === 'quick' ? quick() : session(); if (!st) { return; } forceDriving(st, kind); setStatus('🚗 driving — not ticking houses'); paceButton(kind, 'drive'); });
+		b.addEventListener('click', function () { var st = kind === 'quick' ? quick() : session(); if (!st) { return; } forceDriving(st, kind); setStatus('🚗 driving, not ticking houses'); paceButton(kind, 'drive'); });
 		e.appendChild(b);
 	}
 	/* the one override that fits the moment: "I'm on foot" while driving, "I'm driving" while walking */
@@ -2722,9 +2734,9 @@
 			var other = multi && (+a.walk || 1) !== wn;
 			var dot = L.circleMarker([a.lat, a.lng], { radius: other ? 4 : 7, weight: other ? 1 : 1.5, color: '#fff', fillOpacity: other ? 0.7 : 0.95 }).addTo(D.map);
 			if (!other) { numberLabel(dot, a.house_number + (a.unit ? '#' + a.unit : ''), labelSide([a.lat, a.lng], segPaths[a.road_seg_id] || null)); } else { dot.bindTooltip(a.house_number + ' ' + a.street + ' (walk ' + a.walk + ')', { direction: 'top', offset: [0, -6] }); }
-			dot.on('click', function (e) { L.DomEvent.stop(e); if (a.no_solicit) { toast('No Soliciting sign noted at ' + (a.full_address || (a.house_number + ' ' + a.street)) + ' — this house is never ticked.', 5000); return; } toggleHouse(a.id); });
+			dot.on('click', function (e) { L.DomEvent.stop(e); if (a.no_solicit) { toast('No Soliciting sign noted at ' + (a.full_address || (a.house_number + ' ' + a.street)) + ': this house is never ticked.', 5000); return; } toggleHouse(a.id); });
 			dot._other = other; dot._nosol = !!a.no_solicit;
-			if (a.no_solicit) { dot.bindTooltip('No Soliciting — not delivered', { direction: 'top' }); }
+			if (a.no_solicit) { dot.bindTooltip('No Soliciting: not delivered', { direction: 'top' }); }
 			D.dots[a.id] = dot;
 			if (!other) { pts.push([a.lat, a.lng]); }
 		});
@@ -2760,7 +2772,7 @@
 		D.stretch = D.stretch && D.stretch.on ? { on: false, first: null } : { on: true, first: null };
 		var b = btn || document.getElementById('dv-stretch'); if (b) { b.setAttribute('aria-pressed', D.stretch.on ? 'true' : 'false'); }
 		stretchPaint();
-		setStatus(D.stretch.on ? 'Mark a stretch: tap the FIRST house of the run.' : 'GPS on — houses tick as you pass them.');
+		setStatus(D.stretch.on ? 'Mark a stretch: tap the FIRST house of the run.' : 'GPS on: houses tick as you pass them.');
 		if (!D.stretch.on) { var h = document.getElementById('dv-stretch-hint'); if (h) { h.remove(); } }
 	}
 	function stretchPaint() {
@@ -2805,7 +2817,7 @@
 			});
 		};
 		D.stretch = { on: false, first: null }; var b = document.getElementById('dv-stretch'); if (b) { b.setAttribute('aria-pressed', 'false'); }
-		stretchPaint(); setStatus('GPS on — houses tick as you pass them.');
+		stretchPaint(); setStatus('GPS on: houses tick as you pass them.');
 		if (list.length > 80) { askSheet({ title: 'Mark ' + list.length + ' houses?', html: 'That is every house between ' + esc(label) + ' in the order of this walk. Tap two houses on the same street to mark just that street.', primary: 'Mark them', onPrimary: apply, secondary: 'Cancel' }); return; }
 		apply();
 	}
@@ -2851,27 +2863,27 @@
 		var host = document.getElementById(kind === 'quick' ? 'qv-map' : 'dv-map'); if (!host) { return; }
 		var old = document.getElementById('zdh-gap'); if (old) { old.remove(); }
 		var min = Math.round((to - from) / 60000);
-		var n = el('<div class="zdh-gap" id="zdh-gap"><strong>GPS was off for ' + min + ' min</strong> (' + esc(fmtClock(from)) + '–' + esc(fmtClock(to)) + ' — phone locked or app in the background). ' +
-			(kind === 'quick' ? 'Nothing was recorded for that stretch — when you tap Done, the houses around it are shown in grey so you can add the ones you did.' : 'Houses you passed then were <em>not</em> ticked: tap them, or use <strong>Mark a stretch</strong> to tick a run of houses at once.') +
+		var n = el('<div class="zdh-gap" id="zdh-gap"><strong>GPS was off for ' + min + ' min</strong> (' + esc(fmtClock(from)) + '–' + esc(fmtClock(to)) + '; phone locked or app in the background). ' +
+			(kind === 'quick' ? 'Nothing was recorded for that stretch; when you tap Done, the houses around it are shown in grey so you can add the ones you did.' : 'Houses you passed then were <em>not</em> ticked: tap them, or use <strong>Mark a stretch</strong> to tick a run of houses at once.') +
 			' <button type="button" class="zdh-mini" id="zdh-gap-ok">OK</button></div>');
 		host.parentNode.insertBefore(n, host);
 		n.querySelector('#zdh-gap-ok').addEventListener('click', function () { n.remove(); });
 	}
 	function startGps() {
-		if (!navigator.geolocation) { setStatus('This device has no GPS access — tick houses by hand.'); logEv('gps', 'no geolocation'); return; }
+		if (!navigator.geolocation) { setStatus('This device has no GPS access: tick houses by hand.'); logEv('gps', 'no geolocation'); return; }
 		stopGps();
 		if (recall('loc') === 'denied') { setStatusDenied(); }
 		logEv('gps.start', S.tab);
 		D.watch = navigator.geolocation.watchPosition(onFix, function (err) {
 			logEv('gps.error', err.code + ' ' + (err.message || ''));
 			if (err.code === 1) { store('loc', 'denied'); setStatusDenied(); return; }
-			setStatus(err.code === 2 ? 'No GPS signal yet — houses can be ticked by hand meanwhile.' : 'Waiting for GPS…');
+			setStatus(err.code === 2 ? 'No GPS signal yet: houses can be ticked by hand meanwhile.' : 'Waiting for GPS…');
 			if (S.tab === 'deliver' || S.tab === 'quick') { clearTimeout(D.retry); D.retry = setTimeout(startGps, 5000); }
 		}, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
 	}
 	function setStatusDenied() {
 		var e = document.getElementById('dv-status'); if (!e) { return; }
-		e.innerHTML = 'Location is blocked for this site — houses only tick by hand. <button type="button" class="zdh-linkbtn" id="dv-lochelp">How to turn it on</button>';
+		e.innerHTML = 'Location is blocked for this site: houses only tick by hand. <button type="button" class="zdh-linkbtn" id="dv-lochelp">How to turn it on</button>';
 		var b = document.getElementById('dv-lochelp'); if (b) { b.addEventListener('click', openLocationHelp); }
 	}
 	function stopGps() { if (D.watch != null && navigator.geolocation) { navigator.geolocation.clearWatch(D.watch); logEv('gps.stop'); flushFixNote(); } D.watch = null; clearTimeout(D.retry); }
@@ -2883,7 +2895,7 @@
 		if (recall('loc') !== 'ok') { store('loc', 'ok'); }
 		var was = PACE.state, pace = paceUpdate(lat, lng, now, acc, gpsSpeed(pos));
 		weatherFor(ll);
-		setStatus('GPS ±' + acc + ' m' + (acc > 45 ? ' — weak signal, auto-tick paused' : '') + (pace === 'drive' ? ' — 🚗 driving, not ticking houses' : ''));
+		setStatus('GPS ±' + acc + ' m' + (acc > 45 ? ', weak signal, auto-tick paused' : '') + (pace === 'drive' ? ', 🚗 driving, not ticking houses' : ''));
 		paceButton('planned', pace);
 		var ses = session(), ticked = 0;
 		if (ses) {
@@ -3230,7 +3242,7 @@
 		state.pace = 'walk';
 		if (kind === 'quick') { saveQuick(state); } else { saveSession(state); }
 		logEv('pace', 'forced walking, cleared ' + n);
-		toast('Counting houses again — the last two minutes count as walking.', 5000);
+		toast('Counting houses again: the last two minutes count as walking.', 5000);
 	}
 	/* "I'm driving": the walker overrules the detector the other way — driving from now on, so no house ticks and the
 	   stretch is drawn dashed (and marked 'd' in the track, which Hours reads). Houses already ticked stay ticked: tap one
@@ -3244,7 +3256,7 @@
 		if (last && now - last[2] < 15000 && last[4] !== 'd') { last[4] = 'd'; } // the fix the walker is standing on
 		if (kind === 'quick') { saveQuick(state); } else { saveSession(state); }
 		logEv('pace', 'forced driving');
-		toast('Driving — houses won\'t tick until you\'re on foot again.', 5000);
+		toast('Driving: houses won\'t tick until you\'re on foot again.', 5000);
 		redrawTrack(kind);
 	}
 	/* A walk is one outing: after a hole of 6+ hours in the fixes the earlier points belong to another day (a session that
@@ -3335,7 +3347,7 @@
 		return p.then(function (r) {
 			var b = outbox(); b.shift(); saveOutbox(b); S.drops = null;
 			logEv('outbox.sent', item.kind + ' #' + item.id);
-			if (item.kind === 'finish') { toast((item.name ? '“' + item.name + '”' : 'Cluster #' + item.id) + (item.body.walk ? ' — walk ' + item.body.walk : '') + ' finished — the queued wrap-up went through.', 8000); if (S.tab === 'map') { render(); } }
+			if (item.kind === 'finish') { toast((item.name ? '“' + item.name + '”' : 'Cluster #' + item.id) + (item.body.walk ? ', walk ' + item.body.walk : '') + ' finished: the queued wrap-up went through.', 8000); if (S.tab === 'map') { render(); } }
 			outboxBusy = false;
 			return flushOutbox();
 		}).catch(function (e) {
@@ -3352,10 +3364,10 @@
 		var a = outbox(), n = document.getElementById('zdh-outbox');
 		if (!a.length) { if (n) { n.remove(); } return; }
 		var txt = a.length === 1 ? (a[0].kind === 'finish' ? 'A wrap-up is waiting to be sent' : (a[0].kind === 'discard' ? 'A discarded walk is waiting to be cleared' : 'Ticked houses are waiting to be sent')) : a.length + ' updates are waiting to be sent';
-		var html = '<span>📶 ' + txt + ' — it goes by itself when the phone is online.</span><span class="zdh-banner-btns"><button type="button" class="zdh-mini" id="zdh-outbox-send">Send now</button></span>';
+		var html = '<span>📶 ' + txt + '. It goes by itself when the phone is online.</span><span class="zdh-banner-btns"><button type="button" class="zdh-mini" id="zdh-outbox-send">Send now</button></span>';
 		if (!n) { n = el('<div class="zdh-banner zdh-outbox" id="zdh-outbox"></div>'); var top = document.querySelector('.zdh-top'); if (top && top.parentNode) { top.parentNode.insertBefore(n, top.nextSibling); } else { return; } }
 		n.innerHTML = html;
-		n.querySelector('#zdh-outbox-send').addEventListener('click', function () { flushOutbox().then(function () { if (outbox().length) { toast('Still no connection — it will keep trying.'); } }); });
+		n.querySelector('#zdh-outbox-send').addEventListener('click', function () { flushOutbox().then(function () { if (outbox().length) { toast('Still no connection; it will keep trying.'); } }); });
 	}
 	setInterval(function () { if (outbox().length) { flushOutbox(); } }, 30000);
 	function wakeBtn(on) { var b = document.getElementById('dv-wake'); if (b) { b.setAttribute('aria-pressed', on ? 'true' : 'false'); } }
@@ -3378,7 +3390,7 @@
 	function noSolicitHere(where) {
 		var ses = session(), q = quick(), fix = D.lastFix, acc = D.lastAcc == null ? null : D.lastAcc;
 		var ageS = D.lastFixAt ? (Date.now() - D.lastFixAt) / 1000 : null;
-		if (!fix || ageS == null || ageS > 120) { noSolicitSay(where, 'No GPS fix just now — wait for the GPS, then press again.', true); logEv('nosol', where + ': no fix'); return; }
+		if (!fix || ageS == null || ageS > 120) { noSolicitSay(where, 'No GPS fix just now; wait for the GPS, then press again.', true); logEv('nosol', where + ': no fix'); return; }
 		var house = null, dist = null;
 		if (ses && D.cluster && D.cluster.id === ses.id) {
 			var wn = ses.walk || 1, multi = walkList(D.cluster).length > 1;
@@ -3398,10 +3410,10 @@
 		var body = { lat: fix[0], lng: fix[1], acc: acc, drop_id: ses ? ses.id : (q && q.id ? q.id : 0), address_id: house ? house.id : 0 };
 		logEv('nosol', where + (house ? ': #' + house.id + ' ' + Math.round(dist) + ' m' : ': by position') + ' ±' + acc);
 		var label = house ? (house.full_address || (house.house_number + ' ' + house.street)) : null;
-		noSolicitSay(where, 'No Soliciting noted' + (label ? ' — ' + label : ' at this spot') + '. Not delivered.' + (navigator.onLine === false ? ' (sent when back in signal)' : ''), false);
+		noSolicitSay(where, 'No Soliciting noted' + (label ? ' at ' + label : ' at this spot') + '. Not delivered.' + (navigator.onLine === false ? ' (sent when back in signal)' : ''), false);
 		if (navigator.onLine === false) { queueOutbox({ kind: 'nosolicit', id: body.drop_id, body: body }); return; }
 		api('nosolicit', { method: 'POST', body: body }).then(function (r) {
-			if (r && r.full_address && !label) { noSolicitSay(where, 'No Soliciting noted — ' + r.full_address + '. Not delivered.', false); }
+			if (r && r.full_address && !label) { noSolicitSay(where, 'No Soliciting noted at ' + r.full_address + '. Not delivered.', false); }
 			logEv('nosol.ok', (r && r.resolved) + (r && r.already ? ' (known)' : '') + ' ' + (r && r.full_address ? 'addr' : 'no addr'));
 		}).catch(function (e) {
 			if (isNetError(e)) { queueOutbox({ kind: 'nosolicit', id: body.drop_id, body: body }); return; }
@@ -3473,7 +3485,7 @@
 		set('pk-big', st.big); set('pk-label', st.label); set('pk-sub', st.sub); pocketNav(NV.last);
 		if (POCKET.noteUntil && Date.now() > POCKET.noteUntil) { POCKET.noteUntil = 0; set('pk-note', ''); }
 		var ago = st.fix ? Math.round((Date.now() - st.fix) / 1000) : null;
-		set('pk-gps', (ago == null ? 'Waiting for GPS…' : (ago < 180 ? 'GPS recording ✓' : 'No GPS fix for ' + fmtMin(ago / 60) + ' — is location on?')) + (navigator.onLine === false ? ' · no signal (fine — it syncs later)' : '') + (WX.feels != null ? ' · ' + WX.feels + '°F' : ''));
+		set('pk-gps', (ago == null ? 'Waiting for GPS…' : (ago < 180 ? 'GPS recording ✓' : 'No GPS fix for ' + fmtMin(ago / 60) + '. Is location on?')) + (navigator.onLine === false ? ' · no signal (fine, it syncs later)' : '') + (WX.feels != null ? ' · ' + tempText(WX.feels) : ''));
 	}
 
 	/* ===================================================== WEATHER + WATER BREAKS
@@ -3492,7 +3504,7 @@
 			.then(function (j) { if (!j || !j.current) { return; } WX.ll = ll; WX.temp = Math.round(j.current.temperature_2m); WX.feels = Math.round(j.current.apparent_temperature); paintWx(); logEv('wx', WX.temp + '°F feels ' + WX.feels); })
 			.catch(function () { WX.at = Date.now() - 25 * 60000; }); // try again in ~5 min
 	}
-	function wxText() { if (WX.temp == null) { return ''; } return '🌡 ' + WX.temp + '°F' + (WX.feels >= WX.temp + 3 ? ' (feels ' + WX.feels + ')' : ''); }
+	function wxText() { if (WX.temp == null) { return ''; } return '🌡 ' + tempText(WX.temp) + (WX.feels >= WX.temp + 3 ? ' (feels ' + tempNum(WX.feels) + ')' : ''); }
 	function paintWx() { var e = document.getElementById('dv-wx'); if (e) { var t = wxText(); e.textContent = t ? ' · ' + t : ''; } }
 	function waterCheck() {
 		var q = quick(), ses = session(), w = q && !q.ended ? q : ses;
@@ -3503,7 +3515,7 @@
 		if (Date.now() - last < every) { return; }
 		if (!w.lastFixAt || Date.now() - w.lastFixAt > 10 * 60000) { return; } // not out walking right now
 		store('water_at', w.started + ':' + Date.now());
-		var msg = '💧 ' + fmtMin((Date.now() - w.started) / 60000) + ' in' + (WX.feels != null ? ', feels like ' + WX.feels + '°F' : '') + ' — time for some water' + (hot ? ' and a pinch of salt' : '') + '.';
+		var msg = '💧 ' + fmtMin((Date.now() - w.started) / 60000) + ' in' + (WX.feels != null ? ', feels like ' + tempText(WX.feels) : '') + '. Time for some water' + (hot ? ' and a pinch of salt' : '') + '.';
 		logEv('water', msg);
 		try { if (navigator.vibrate) { navigator.vibrate([90, 60, 90]); } } catch (e) {}
 		var pn = document.getElementById('pk-note'); if (pn) { pn.textContent = msg; }
@@ -3522,11 +3534,11 @@
 		var last = !others.length; // finishing this walk completes the cluster
 		var clusterDone = d.addresses.filter(function (a) { return ses.delivered[a.id]; }).length;
 		box.innerHTML = '<div><h2 class="zdh-install-title">' + (multi ? 'Wrap up walk ' + wn + ' of ' + list.length : 'Wrap up') + '</h2><p class="zdh-help">' + done + ' of ' + mine.length + ' ticked' + (remaining ? ', ' + remaining + ' not passed.' : '.') + (multi && !last ? ' ' + others.length + ' walk' + (others.length > 1 ? 's' : '') + ' still to do.' : '') + '</p>' +
-			(remaining ? '<label class="zdh-check"><input type="checkbox" id="fin-rest" checked> ' + tx('Mark the other ' + remaining + ' delivered too', 'I hung the remaining ' + remaining + ' too — mark them delivered') + '</label>' : '') +
+			(remaining ? '<label class="zdh-check"><input type="checkbox" id="fin-rest" checked> ' + tx('Mark the other ' + remaining + ' delivered too', 'I hung the remaining ' + remaining + ' too: mark them delivered') + '</label>' : '') +
 			(last ? '<div class="zdh-grid"><label>Hangers hung<input type="number" id="fin-qty" value="' + (remaining ? clusterDone + remaining : clusterDone) + '"></label><label>By<input type="text" id="fin-by" list="zdh-team" value="' + esc(d.delivered_by || recall('deliverer') || C.userName || '') + '"><datalist id="zdh-team">' + peopleNames().map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist></label><label class="zdh-span2">Notes<textarea id="fin-notes" rows="2">' + esc(d.notes || '') + '</textarea></label></div>' : '<div class="zdh-grid"><label>By<input type="text" id="fin-by" list="zdh-team" value="' + esc(d.delivered_by || recall('deliverer') || C.userName || '') + '"><datalist id="zdh-team">' + peopleNames().map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist></label></div>') +
-			'<div class="zdh-actions"><button class="zdh-secondary" id="fin-cancel">Keep going</button><button class="zdh-primary" id="fin-go">' + (last ? (multi ? 'Finish — cluster done' : 'Finish') : 'Finish walk ' + wn) + '</button></div>' +
-			'<p class="zdh-help" style="text-align:center;margin-top:.8rem"><button type="button" class="zdh-linkbtn" id="fin-leave">Stop for now</button>' + tx('', ' — what you ticked is saved and you can resume from Clusters') + '</p></div>';
-		document.getElementById('fin-leave').addEventListener('click', function () { wrap.remove(); leaveDelivery('Stopped for now — tap Resume on the cluster when you\'re back.'); });
+			'<div class="zdh-actions"><button class="zdh-secondary" id="fin-cancel">Keep going</button><button class="zdh-primary" id="fin-go">' + (last ? (multi ? 'Finish the cluster' : 'Finish') : 'Finish walk ' + wn) + '</button></div>' +
+			'<p class="zdh-help" style="text-align:center;margin-top:.8rem"><button type="button" class="zdh-linkbtn" id="fin-leave">Stop for now</button>' + tx('', ': what you ticked is saved and you can resume from Clusters') + '</p></div>';
+		document.getElementById('fin-leave').addEventListener('click', function () { wrap.remove(); leaveDelivery('Stopped for now. Tap Resume on the cluster when you\'re back.'); });
 		var rest = document.getElementById('fin-rest'), qty = document.getElementById('fin-qty');
 		if (rest && qty) { rest.addEventListener('change', function () { var s2 = session(); var cd = d.addresses.filter(function (a) { return s2.delivered[a.id]; }).length; qty.value = rest.checked ? cd + remaining : cd; }); }
 		document.getElementById('fin-cancel').addEventListener('click', function () { wrap.remove(); });
@@ -3556,7 +3568,7 @@
 					queueOutbox({ kind: 'finish', id: s0.id, name: s0.name, body: body });
 					saveSession(null); D.cluster = null;
 					S.tab = 'map'; render();
-					toast('No connection right now — the wrap-up is saved on this phone and will finish the ' + (multi ? 'walk' : 'cluster') + ' by itself as soon as you have signal.', 12000);
+					toast('No connection right now; the wrap-up is saved on this phone and will finish the ' + (multi ? 'walk' : 'cluster') + ' by itself as soon as you have signal.', 12000);
 					return;
 				}
 				logEv('finish.fail', e.message);
@@ -3573,7 +3585,7 @@
 		main.innerHTML = '<div class="zdh-card zdh-done"><div class="zdh-done-icon">✓</div><h2>Walk ' + doneN + ' done</h2><p>' + (doneW && doneW.delivered != null ? doneW.delivered + ' houses delivered. ' : '') + left + ' walk' + (left > 1 ? 's' : '') + ' of ' + list.length + ' still to do.</p>' +
 			(next ? '<div class="zdh-walk-row zdh-walk-next"><span class="zdh-walk-swatch" style="background:' + walkColor(+next.n) + '"></span><span class="zdh-walk-main"><strong>Next: Walk ' + next.n + '</strong> &bull; ' + next.count + ' houses' + (next.est_min ? ' &bull; ≈ ' + esc(fmtMin(next.est_min)) : '') + '<br><span class="zdh-walk-streets">' + esc(next.streets || '') + '</span></span></div>' : '') +
 			'<div class="zdh-actions">' + (next ? '<button class="zdh-go" id="nw-start">▶ Start walk ' + next.n + '</button>' : '') + '<button class="zdh-secondary" id="nw-stop">Stop for now</button></div>' +
-			'<p class="zdh-help" style="text-align:center">' + tx('Stopping keeps everything saved.', 'Stop for now keeps everything saved — the cluster stays in progress and the next walk waits under Clusters.') + '</p></div>';
+			'<p class="zdh-help" style="text-align:center">' + tx('Stopping keeps everything saved.', 'Stop for now keeps everything saved: the cluster stays in progress and the next walk waits under Clusters.') + '</p></div>';
 		var st = document.getElementById('nw-start');
 		if (st) { st.addEventListener('click', function () { st.disabled = true; st.textContent = 'Starting…'; primeLocation(); startSession(d.id, +next.n).catch(function (e) { st.disabled = false; st.textContent = '▶ Start walk ' + next.n; if (!e.silent) { toast(e.message); } }); }); }
 		document.getElementById('nw-stop').addEventListener('click', function () { S.tab = 'map'; render(); });
@@ -3606,7 +3618,7 @@
 	function quick() { try { var j = localStorage.getItem(QUICK_KEY); return j ? JSON.parse(j) : null; } catch (e) { return null; } }
 	function saveQuick(q) { try { if (q) { localStorage.setItem(QUICK_KEY, JSON.stringify(q)); } else { localStorage.removeItem(QUICK_KEY); } } catch (e) {} }
 	var Q = { map: null, me: null, acc: null, trail: null, pin: null };
-	function fmtClock(ms) { return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+	function fmtClock(ms) { return new Date(ms).toLocaleTimeString(lang(), { hour: 'numeric', minute: '2-digit' }); }
 	function localDT(ms) { var d = new Date(ms), p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
 	function quickWalkMeters(q) {
 		var m = 0, prev = null;
@@ -3680,10 +3692,10 @@
 	}
 	function quickStatsText(q) {
 		var min = Math.round((Date.now() - q.started) / 60000), mi = quickWalkMeters(q) / 1609.34;
-		return (min >= 60 ? Math.floor(min / 60) + ' h ' + (min % 60) + ' min' : min + ' min') + ' · ' + (mi >= 0.1 ? mi.toFixed(1) + ' mi walked' : Math.round(mi * 5280) + ' ft walked');
+		return (min >= 60 ? Math.floor(min / 60) + ' h ' + (min % 60) + ' min' : min + ' min') + ' · ' + distText(mi * 1609.34) + ' walked';
 	}
 	function startQuick() {
-		if (session()) { toast('You are already delivering a planned cluster — finish or stop it first.'); return; }
+		if (session()) { toast('You are already delivering a planned cluster; finish or stop it first.'); return; }
 		if (quick()) { S.tab = 'quick'; render(); return; }
 		paceReset();
 		primeLocation();
@@ -3699,7 +3711,7 @@
 	   where it can be counted or discarded. No signal: the record is created as soon as there is some. */
 	var quickCreating = false;
 	function quickBody(q) {
-		return { drop: { status: 'in_progress', method: 'quick', name: 'Quick walk — ' + fmtDate(localDT(q.started).slice(0, 10), true) + ' ' + fmtClock(q.started), started_at: localDT(q.started), drop_date: localDT(q.started).slice(0, 10), drop_time: localDT(q.started).slice(11, 16), delivered_by: recall('deliverer') || '', city: C.defaultCity || '', state: C.defaultState || '', service: C.service || '' }, addresses: [], streets: [], track: q.track.slice(0, 3000) };
+		return { drop: { status: 'in_progress', method: 'quick', name: 'Quick walk · ' + fmtDate(localDT(q.started).slice(0, 10), true) + ' ' + fmtClock(q.started), started_at: localDT(q.started), drop_date: localDT(q.started).slice(0, 10), drop_time: localDT(q.started).slice(11, 16), delivered_by: recall('deliverer') || '', city: C.defaultCity || '', state: C.defaultState || '', service: C.service || '' }, addresses: [], streets: [], track: q.track.slice(0, 3000) };
 	}
 	function quickSync(beacon) {
 		var q = quick(); if (!q || navigator.onLine === false) { return Promise.resolve(false); }
@@ -3747,16 +3759,16 @@
 		logEv('quick.dup', 'walk already saved as #' + id + (q ? ' (' + Math.round(quickWalkMeters(q)) + ' m on this phone)' : ''));
 		if (S.tab === 'quick') { S.tab = 'map'; store('tab', 'map'); }
 		render();
-		toast('This walk is already saved (#' + id + ') — nothing was added twice.', 8000);
+		toast('This walk is already saved (#' + id + '). Nothing was added twice.', 8000);
 	}
 	function discardLiveQuick(id) {
 		if (!id) { return; }
 		api('drops/' + id + '/discard-quick', { method: 'POST' }).catch(function (e) { if (isNetError(e)) { queueOutbox({ kind: 'discard', id: id }); } });
 	}
 	function quickDescription(q) {
-		var m = quickWalkMeters(q), mi = m / 1609.34, dist = mi >= 0.1 ? mi.toFixed(1) + ' mi' : Math.round(m * 3.28084) + ' ft';
+		var m = quickWalkMeters(q), dist = distText(m);
 		var when = new Date(q.started), today = new Date();
-		var day = when.toDateString() === today.toDateString() ? 'today' : when.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+		var day = when.toDateString() === today.toDateString() ? 'today' : when.toLocaleDateString(lang(), { weekday: 'long', month: 'short', day: 'numeric' });
 		return 'started ' + day + ' at ' + fmtClock(q.started) + ', ' + dist + ' of walking recorded';
 	}
 	function discardQuick(why) {
@@ -3797,10 +3809,10 @@
 					'<button type="button" class="zdh-tool" id="dv-follow" aria-pressed="' + (D.follow ? 'true' : 'false') + '">Follow me</button>' +
 					'<button type="button" class="zdh-tool" id="dv-wake" aria-pressed="' + (D.wake ? 'true' : 'false') + '">' + tx('Screen on', 'Keep screen on') + '</button>' +
 					'<button type="button" class="zdh-tool zdh-tool-warn" id="dv-nosol" aria-pressed="false" title="Standing at a house with a No Soliciting sign? Press this: it is marked not delivered and remembered for every future route">🚫 No-Solicit House</button>' +
-					'<button type="button" class="zdh-tool" id="dv-pocket" title="Black, touch-proof screen for your pocket — the GPS keeps recording">🌙 Pocket</button>' +
+					'<button type="button" class="zdh-tool" id="dv-pocket" title="Black, touch-proof screen for your pocket; the GPS keeps recording">🌙 Pocket</button>' +
 				'</div>' +
 				navWrap('qv-map') +
-				'<p class="zdh-help" style="margin-top:.6rem">' + tx('Walk as usual. Tap Done when finished.', 'Walk the streets as usual. Driving is detected from your pace and skipped. When you tap <strong>Done delivering</strong>, every house along the walked streets — on the side you kept to — is listed for you to confirm.') + '</p>' +
+				'<p class="zdh-help" style="margin-top:.6rem">' + tx('Walk as usual. Tap Done when finished.', 'Walk the streets as usual. Driving is detected from your pace and skipped. When you tap <strong>Done delivering</strong>, every house along the walked streets (on the side you kept to) is listed for you to confirm.') + '</p>' +
 			'</div>' +
 			'<p class="zdh-help" style="text-align:center"><button type="button" class="zdh-linkbtn" id="qv-discard">Discard this walk</button></p>' +
 			actionBar('<button class="zdh-stop" id="qv-done">■ Done delivering</button>');
@@ -3823,7 +3835,7 @@
 		var holes = (q.gaps || []).map(function (g) { return fmtClock(g[0]) + '–' + fmtClock(g[1]); });
 		main.innerHTML =
 			'<div class="zdh-card zdh-card-tight zdh-deliver"><div class="zdh-deliver-head"><div><h2>Walk recorded</h2><div class="zdh-muted">' + esc(fmtClock(q.started)) + ' – ' + esc(fmtClock(q.ended)) + ' &bull; ' + esc(quickStatsText(q).replace(/^[^·]*· /, '')) + '</div></div></div>' +
-				'<p class="zdh-help">The houses along it have not been counted yet — that needs a connection to the address map. ' + (q.id ? 'The walk is also saved on the site (#' + q.id + '), so it can be counted from any device under Clusters.' : 'It is kept on this phone until then.') + (holes.length ? ' GPS was off for a while (' + esc(holes.join(', ')) + ') — streets walked then will not be in the list; tap them or draw them when you confirm.' : '') + '</p>' +
+				'<p class="zdh-help">The houses along it have not been counted yet; that needs a connection to the address map. ' + (q.id ? 'The walk is also saved on the site (#' + q.id + '), so it can be counted from any device under Clusters.' : 'It is kept on this phone until then.') + (holes.length ? ' GPS was off for a while (' + esc(holes.join(', ')) + '): streets walked then will not be in the list; tap them or draw them when you confirm.' : '') + '</p>' +
 				'<div id="qv-map" class="zdh-map"></div>' +
 			'</div>' +
 			'<p class="zdh-help" style="text-align:center"><button type="button" class="zdh-linkbtn" id="qv-discard">Discard this walk</button></p>' +
@@ -3833,14 +3845,14 @@
 		document.getElementById('qv-discard').addEventListener('click', function () {
 			askSheet({ title: 'Discard this walk?', html: 'Nothing will be logged for it (' + esc(quickDescription(q)) + ').', primary: 'Discard the walk', danger: true, onPrimary: function () { discardQuick('button'); }, secondary: 'Keep it' });
 		});
-		if (navigator.onLine === false) { toast('No connection right now — tap Count the houses when you have signal.', 6000); }
+		if (navigator.onLine === false) { toast('No connection right now; tap Count the houses when you have signal.', 6000); }
 	}
 	/* A live Quick Start walk found on the server (this phone lost it, or another device made it): count it here. */
 	function countQuickFromServer(d) {
 		if (quick()) { toast('Finish or discard the Quick Start walk on this phone first.'); return; }
 		api('drops/' + d.id).then(function (full) {
 			var t = (full.track || []).filter(function (p) { return p && p.length >= 3; });
-			if (!t.length) { toast('That walk has no GPS points on the site — discard it.'); return; }
+			if (!t.length) { toast('That walk has no GPS points on the site: discard it.'); return; }
 			paceReset();
 			saveQuick({ started: t[0][2], lastActive: Date.now(), pin: [t[0][0], t[0][1]], track: t, pace: 'walk', asked: 0, id: full.id, syncedTo: t[t.length - 1][2], ended: t[t.length - 1][2], recovered: true });
 			logEv('quick.recover', '#' + full.id + ' ' + t.length + ' pts');
@@ -3885,7 +3897,7 @@
 		if (Q.map) { if (was !== pace) { drawTrack(Q, q.track, 'quick'); } else if (pushed) { growTrack(Q, 'quick', ll, pace, jump); } }
 		if (pace !== 'drive' && acc <= 40 && QN.ctx && QN.of === q.started && NAVM) { NAVM.markCovered(QN.ctx, ll, 35); } // this block's houses passed
 		quickNearby(ll, acc, pace);
-		setStatus('GPS ±' + acc + ' m · ' + (pace === 'drive' ? '🚗 driving — not counting' : '🚶 walking' + (PACE.mph ? ' ' + PACE.mph.toFixed(1) + ' mph' : '')));
+		setStatus('GPS ±' + acc + ' m · ' + (pace === 'drive' ? '🚗 driving, not counting' : '🚶 walking' + (PACE.mph ? ' ' + PACE.mph.toFixed(1) + ' mph' : '')));
 		paceButton('quick', pace);
 		var st = document.getElementById('qv-stats'), st2 = document.getElementById('qs-stats'), pc = document.getElementById('qv-pace'), pl = document.getElementById('qv-pace-l');
 		if (st) { st.textContent = quickStatsText(q); } if (st2) { st2.textContent = quickStatsText(q); }
@@ -3950,7 +3962,7 @@
 			// nothing usable to work houses out from: say so plainly and offer the way out (a toast was easy to miss)
 			var poor = (q.track || []).filter(function (t) { return t[3] != null && t[3] > 40; }).length, all = (q.track || []).length;
 			logEv('quick.done', 'no strokes: ' + all + ' pts, ' + poor + ' poor');
-			askSheet({ title: 'Nothing to log yet', html: 'This walk ' + esc(quickDescription(q)) + ' — too little for the app to work out any houses' + (all && poor >= all / 2 ? ' (most of the GPS fixes were too inaccurate to use)' : (all ? '' : ' (no GPS fixes at all — was the screen locked?)')) + '. Keep walking with the app open and the screen on, or discard this walk.',
+			askSheet({ title: 'Nothing to log yet', html: 'This walk ' + esc(quickDescription(q)) + ', too little for the app to work out any houses' + (all && poor >= all / 2 ? ' (most of the GPS fixes were too inaccurate to use)' : (all ? '' : ' (no GPS fixes at all; was the screen locked?)')) + '. Keep walking with the app open and the screen on, or discard this walk.',
 				primary: 'Discard this walk', danger: true, onPrimary: function () { discardQuick('nothing'); },
 				secondary: 'Keep going', onSecondary: function () { if (S.tab !== 'quick') { S.tab = 'quick'; render(); } } });
 			return;
@@ -3974,7 +3986,7 @@
 				r.segments.forEach(function (sg) { if (!seenS[sg.id]) { seenS[sg.id] = 1; merged.segments.push(sg); } });
 				if (r.zip && !merged.zip) { merged.zip = r.zip; }
 				next(i + 1);
-			}).catch(function (e) { nd.error = 'House lookup failed: ' + e.message; nd.step = 'draw'; logEv('quick.done', 'lookup failed: ' + e.message); S.tab = 'quick'; render(); toast('Could not look up the houses (' + e.message + '). The walk is kept on this phone' + (q.id ? ' and on the site' : '') + ' — tap Count the houses when you have signal.', 10000); });
+			}).catch(function (e) { nd.error = 'House lookup failed: ' + e.message; nd.step = 'draw'; logEv('quick.done', 'lookup failed: ' + e.message); S.tab = 'quick'; render(); toast('Could not look up the houses (' + e.message + '). The walk is kept on this phone' + (q.id ? ' and on the site' : '') + '. Tap Count the houses when you have signal.', 10000); });
 		})(0);
 		/* GPS holes (a locked screen, a pocket, the border with no signal…). the walker walks those streets anyway and
 		   confirms them on the review map — but the houses were only there if they happened to sit near the recorded
@@ -4013,7 +4025,7 @@
 			nd.quick.bothSides = bothSidesDefault();
 			quickSides(nd);
 			if (!merged.addresses.some(function (a) { return nd.sel[a._k]; })) { nd.error = 'No address points were found along the walked streets.'; }
-			nd.form.name = 'Quick walk — ' + fmtDate(localDT(q.started).slice(0, 10), true) + ' ' + fmtClock(q.started); nd.form.date = localDT(q.started).slice(0, 10);
+			nd.form.name = 'Quick walk · ' + fmtDate(localDT(q.started).slice(0, 10), true) + ' ' + fmtClock(q.started); nd.form.date = localDT(q.started).slice(0, 10);
 			nd.form.status = 'done'; nd.form.time = new Date(q.started).toTimeString().slice(0, 5);
 			nd.step = 'review'; render();
 		}
@@ -4069,7 +4081,7 @@
 	}
 	function sideLine(qk) {
 		if (!qk.farKeys || !qk.farKeys.length) { return 'Both sides kept.'; }
-		return qk.bothSides ? 'Both sides kept — on ' + qk.oneSided + ' block' + (qk.oneSided === 1 ? '' : 's') + ' your GPS stayed on one side; ' + qk.farKeys.length + ' houses across the street are included. Switch off "Both sides" if you skipped them.'
+		return qk.bothSides ? 'Both sides kept: on ' + qk.oneSided + ' block' + (qk.oneSided === 1 ? '' : 's') + ' your GPS stayed on one side; ' + qk.farKeys.length + ' houses across the street are included. Switch off "Both sides" if you skipped them.'
 			: 'Only the side you walked: ' + qk.farKeys.length + ' houses across the street are left out (grey). Tap them to add, or switch "Both sides" back on.';
 	}
 	/* Both sides of the street (default) or only the side the GPS walked — applied to the selection, notes to match. */
@@ -4128,8 +4140,8 @@
 			if ((d.drop_date || '').slice(0, 7) === ym) { monthHung += d.quantity != null ? +d.quantity : (d.delivered_count != null ? +d.delivered_count : +d.address_count || 0); }
 			if (d.walked_m) { walkedM += +d.walked_m; }
 		});
-		var monthName = new Date(todayISO() + 'T12:00:00').toLocaleDateString('en-US', { month: 'long' });
-		var stats = [[st.hangers || 0, 'Hangers hung', ''], [monthHung, 'In ' + monthName, ''], [st.drops || 0, 'Clusters done', ''], [walkedM ? (walkedM / 1609.34).toFixed(walkedM < 16093 ? 1 : 0) : '—', 'Miles walked', 'zdh-desk'], [st.addresses || 0, 'Houses on file', 'zdh-desk'], [st.zips || 0, 'ZIPs', 'zdh-desk'], [anyUp ? totalResp : '—', 'Responses', 'zdh-desk'], [anyUp ? totalConv : '—', 'Converted', 'zdh-desk']];
+		var monthName = new Date(todayISO() + 'T12:00:00').toLocaleDateString(lang(), { month: 'long' });
+		var stats = [[st.hangers || 0, 'Hangers hung', ''], [monthHung, 'In ' + monthName, ''], [st.drops || 0, 'Clusters done', ''], [walkedM ? (metric() ? (walkedM / 1000).toFixed(walkedM < 10000 ? 1 : 0) : (walkedM / 1609.34).toFixed(walkedM < 16093 ? 1 : 0)) : '–', metric() ? 'Kilometres walked' : 'Miles walked', 'zdh-desk'], [st.addresses || 0, 'Houses on file', 'zdh-desk'], [st.zips || 0, 'ZIPs', 'zdh-desk'], [anyUp ? totalResp : '–', 'Responses', 'zdh-desk'], [anyUp ? totalConv : '–', 'Converted', 'zdh-desk']];
 		var due = drops.filter(function (d) { return d.status === 'done' && d.revisit_due && daysUntil(d.revisit_due) <= 14; }).sort(function (a, b) { return a.revisit_due < b.revisit_due ? -1 : 1; });
 		var active = drops.filter(function (d) { return d.status === 'in_progress'; });
 		var todo = drops.filter(isTodo).sort(function (a, b) { return (a.due_by || a.drop_date || '9999') < (b.due_by || b.drop_date || '9999') ? -1 : 1; });
@@ -4213,13 +4225,13 @@
 	/* A Quick Start walk in progress on the server: this phone's own (open it) or one from another device / a lost session (count or discard it). */
 	function quickLiveCard(d) {
 		var q = quick(), mine = q && q.id === d.id;
-		var mi = d.track_m != null ? (d.track_m / 1609.34).toFixed(1) + ' mi' : '';
+		var mi = d.track_m != null ? (metric() ? (d.track_m / 1000).toFixed(1) + ' km' : (d.track_m / 1609.34).toFixed(1) + ' mi') : '';
 		var when = d.track_first ? fmtClock(d.track_first) + (d.track_last ? '–' + fmtClock(d.track_last) : '') : (d.started_at ? String(d.started_at).slice(11, 16) : '');
 		var card = el('<div class="zdh-drop zdh-drop-active zdh-drop-quicklive" style="border-left-color:' + COLOR_ACTIVE + '">' +
 			'<div class="zdh-drop-title"><span class="zdh-badge" style="background:' + COLOR_ACTIVE + '">In progress #' + d.id + '</span><span class="zdh-badge-soft">quick walk</span></div>' +
 			'<div class="zdh-drop-name">' + esc(d.name || 'Quick walk') + '</div>' +
 			'<div class="zdh-drop-detail"><strong>Recorded:</strong> ' + esc(fmtDate(d.drop_date, true)) + (when ? ' ' + esc(when) : '') + (mi ? ' &bull; ' + esc(mi) : '') + (d.track_points ? ' &bull; ' + d.track_points + ' GPS points' : ' &bull; no GPS points yet') + '<br>' +
-				(mine ? '<em>Recording on this phone.</em>' : '<em>The houses have not been counted yet' + (q ? '' : ' — count them here, or discard the walk if it was a mistake') + '.</em>') + '</div>' +
+				(mine ? '<em>Recording on this phone.</em>' : '<em>The houses have not been counted yet' + (q ? '' : '; count them here, or discard the walk if it was a mistake') + '.</em>') + '</div>' +
 			'<div class="zdh-drop-btns">' + (mine ? '<button type="button" class="zdh-mini zdh-mini-primary" data-a="open">Open</button>' : '<button type="button" class="zdh-mini zdh-mini-primary" data-a="count"' + (q ? ' disabled title="Finish the walk on this phone first"' : '') + '>Count the houses</button>') + '<button type="button" class="zdh-mini zdh-danger" data-a="discard">Discard</button></div>' +
 			'<div class="zdh-drop-extra" hidden></div></div>');
 		var o = card.querySelector('[data-a="open"]'); if (o) { o.addEventListener('click', function () { S.tab = 'quick'; render(); }); }
@@ -4272,16 +4284,16 @@
 		var e = d.enrichment || {}, w = e.weather || {}, c = e.census || {}, ss = e.screenshot || {};
 		var planned = d.status === 'planned', active = d.status === 'in_progress';
 		var ctx = [];
-		if (w.temp_f != null) { ctx.push('🌡 ' + w.temp_f + '°F' + (w.heat_index_f != null && w.heat_index_f > w.temp_f ? ' (heat index ' + w.heat_index_f + ')' : '')); }
-		else if (ss.temperature_f != null) { ctx.push('🌡 ' + ss.temperature_f + '°F (screenshot)'); }
+		if (w.temp_f != null) { ctx.push('🌡 ' + tempText(w.temp_f) + (w.heat_index_f != null && w.heat_index_f > w.temp_f ? ' (heat index ' + tempNum(w.heat_index_f) + ')' : '')); }
+		else if (ss.temperature_f != null) { ctx.push('🌡 ' + tempText(ss.temperature_f) + ' (screenshot)'); }
 		if (w.humidity_pct != null) { ctx.push('💧 ' + w.humidity_pct + '%'); }
 		if (w.wind_mph != null) { ctx.push('wind ' + w.wind_mph + ' mph' + (w.wind_direction ? ' ' + w.wind_direction : '') + (w.wind_gusts_mph ? ' (gusts ' + w.wind_gusts_mph + ')' : '')); }
 		if (w.aqi_us != null) { ctx.push('AQI ' + w.aqi_us); } else if (ss.aqi != null) { ctx.push('AQI ' + ss.aqi + ' (screenshot)'); }
-		if (w.daily_high_f != null) { ctx.push('high ' + w.daily_high_f + '°F'); }
+		if (w.daily_high_f != null) { ctx.push('high ' + tempText(w.daily_high_f)); }
 		if (e.fire_hazard_zone) { ctx.push('🔥 ' + e.fire_hazard_zone); }
-		if (e.elevation_ft != null) { ctx.push('⛰ ' + e.elevation_ft + ' ft'); }
+		if (e.elevation_ft != null) { ctx.push('⛰ ' + (metric() ? Math.round(Number(e.elevation_ft) * 0.3048) + ' m' : e.elevation_ft + ' ft')); }
 		if (e.fire_history && e.fire_history.last_fire_year) { ctx.push('past fire ' + e.fire_history.last_fire_year + (e.fire_history.fires > 1 ? ' (' + e.fire_history.fires + ' fires)' : '')); }
-		if (e.miles_to_coast != null) { ctx.push(e.miles_to_coast + ' mi to the coast'); }
+		if (e.miles_to_coast != null) { ctx.push((metric() ? Math.round(Number(e.miles_to_coast) * 1.609344 * 10) / 10 + ' km' : e.miles_to_coast + ' mi') + ' to the coast'); }
 		if (c.acs_level === 'ZIP' && c.zip) { ctx.push('ZIP ' + c.zip + ' figures' + (c.acs_year ? ' (ACS ' + c.acs_year + ')' : '') + ':'); }
 		if (c.median_household_income) { ctx.push('income $' + Math.round(c.median_household_income / 1000) + 'k'); }
 		if (c.median_home_value) { ctx.push('home $' + Math.round(c.median_home_value / 1000) + 'k'); }
@@ -4317,13 +4329,13 @@
 				'<strong>' + (planned ? 'Planned for' : 'Date') + ':</strong> ' + tx(esc(fmtDate(d.drop_date, true)), esc(fmtDate(d.drop_date))) + (!planned && d.drop_time ? ' at ' + esc(fmtTime(d.drop_time)) : '') + timing + '<br>' +
 				(planned ? '<strong>' + d.address_count + '</strong> houses on the route' + (multi ? ' in <strong>' + wlist.length + '</strong> walks' : '') : '<strong>' + (d.delivered_count != null ? d.delivered_count : d.address_count) + '</strong> of ' + d.address_count + ' houses delivered' + (d.quantity != null ? ' &bull; <strong>' + esc(d.quantity) + '</strong> hangers hung' : '')) + '<br>' +
 				todoLine(d) +
-				(todoLine(d) ? '' : '<strong>' + (planned ? 'Deliverer' : 'Delivered by') + ':</strong> ' + personChip(d.delivered_by) + esc(d.delivered_by || '—')) +
+				(todoLine(d) ? '' : '<strong>' + (planned ? 'Deliverer' : 'Delivered by') + ':</strong> ' + personChip(d.delivered_by) + esc(d.delivered_by || '–')) +
 				dueTxt +
 				(d.notes ? '<br><strong>Notes:</strong> ' + esc(String(d.notes).replace(/;? ?tap a grey dot to add it/g, '')) : '') +
 				(window.ZDZSealed ? window.ZDZSealed.buttons(d.sealed) : '') + // Show code for the walker on the route's day
 			'</div>' +
 			(ctx.length ? '<div class="zdh-chips">' + ctx.map(function (x) { return '<span class="zdh-chip">' + esc(x) + '</span>'; }).join('') + '</div>' : '') +
-			(planned || active ? '' : '<div class="zdh-uptake"><span class="zdh-chip ' + (d.responses != null ? 'has' : '') + '">Responses: <b>' + esc(d.responses != null ? d.responses : '—') + '</b></span><span class="zdh-chip ' + (d.converted != null ? 'has' : '') + '">Converted: <b>' + esc(d.converted != null ? d.converted : '—') + '</b></span></div>') +
+			(planned || active ? '' : '<div class="zdh-uptake"><span class="zdh-chip ' + (d.responses != null ? 'has' : '') + '">Responses: <b>' + esc(d.responses != null ? d.responses : '–') + '</b></span><span class="zdh-chip ' + (d.converted != null ? 'has' : '') + '">Converted: <b>' + esc(d.converted != null ? d.converted : '–') + '</b></span></div>') +
 			'<div class="zdh-shots">' + (d.screenshots || []).map(function (s) { return '<a href="' + esc(s.url) + '" target="_blank" rel="noopener"><img src="' + esc(s.thumb) + '" alt="screenshot"></a>'; }).join('') + '</div>' +
 			walksHtml +
 			(planned || active ? '' : BTNS) +
@@ -4346,7 +4358,7 @@
 			splitBtn.addEventListener('click', function () {
 				if (!extra.hidden && extra.dataset.mode === 'split') { extra.hidden = true; return; }
 				extra.hidden = false; extra.dataset.mode = 'split';
-				extra.innerHTML = '<p class="zdh-help">Split this route into walks of about this many houses, each a contiguous stretch in walking order.</p><div class="zdh-grid"><label>Houses per walk<input type="number" class="m-size" inputmode="numeric" min="5" max="500" value="' + esc(+recall('walk_size') || +C.walkSize || 60) + '"></label><label>Walk style<select class="m-style"><option value="loop">Loop the block — one side, round and back</option><option value="street">Street by street — both sides, then the next</option></select></label></div><div class="zdh-actions"><button type="button" class="zdh-secondary m-cancel">Cancel</button><button type="button" class="zdh-primary m-split">Split</button></div>';
+				extra.innerHTML = '<p class="zdh-help">Split this route into walks of about this many houses, each a contiguous stretch in walking order.</p><div class="zdh-grid"><label>Houses per walk<input type="number" class="m-size" inputmode="numeric" min="5" max="500" value="' + esc(+recall('walk_size') || +C.walkSize || 60) + '"></label><label>Walk style<select class="m-style"><option value="loop">Loop the block: one side, round and back</option><option value="street">Street by street: both sides, then the next</option></select></label></div><div class="zdh-actions"><button type="button" class="zdh-secondary m-cancel">Cancel</button><button type="button" class="zdh-primary m-split">Split</button></div>';
 				extra.querySelector('.m-style').value = recall('route_style') || C.routeStyle || 'loop';
 				extra.querySelector('.m-cancel').addEventListener('click', function () { extra.hidden = true; });
 				extra.querySelector('.m-split').addEventListener('click', function (ev) {
@@ -4392,7 +4404,7 @@
 				full.addresses.forEach(function (a) { (by[a.street] = by[a.street] || []).push(a); });
 				extra.innerHTML = Object.keys(by).map(function (street) {
 					return '<div class="zdh-addr-street"><strong>' + esc(street) + '</strong> <span class="zdh-muted">(' + by[street].length + ')</span><div class="zdh-addr-nums">' + by[street].map(function (a) { return '<span>' + esc(a.house_number) + (a.unit ? '#' + esc(a.unit) : '') + '</span>'; }).join('') + '</div></div>';
-				}).join('') || '<div class="zdh-muted">No individual addresses — recorded by street name only: ' + esc(full.streets.map(function (s) { return s.street; }).join(', ')) + '</div>';
+				}).join('') || '<div class="zdh-muted">No individual addresses; recorded by street name only: ' + esc(full.streets.map(function (s) { return s.street; }).join(', ')) + '</div>';
 			}).catch(function (err) { extra.innerHTML = '<div class="zdh-error">' + esc(err.message) + '</div>'; });
 		});
 		card.querySelector('[data-a="uptake"]').addEventListener('click', function () {
@@ -4441,7 +4453,7 @@
 	function renderLookup(main) {
 		main.innerHTML =
 			'<div class="zdh-card"><h2>' + tx('Check an address', 'Did this address get a door hanger?') + '</h2>' +
-				'<p class="zdh-help">' + tx('Street address only, e.g. <em>4100 Example Dr</em>.', 'Type the customer\'s street address (no names are stored here — only addresses). Example: <em>4100 Example Dr</em> or <em>4400 Example St, Exampleton 00000</em>. Planned routes don\'t count until they are marked done.') + '</p>' +
+				'<p class="zdh-help">' + tx('Street address only, e.g. <em>4100 Example Dr</em>.', 'Type the customer\'s street address (no names are stored here, only addresses). Example: <em>4100 Example Dr</em> or <em>4400 Example St, Exampleton 00000</em>. Planned routes don\'t count until they are marked done.') + '</p>' +
 				'<div class="zdh-lookup-row"><input type="text" id="lk-q" placeholder="123 Street Name, City ZIP" autocomplete="off"><button class="zdh-primary" id="lk-go">Check</button></div>' +
 				'<div id="lk-out"></div>' +
 			'</div>' +
@@ -4515,10 +4527,10 @@
 	function nutshellResults(r) {
 		var c = r.counts || {}, n = r.matches.length;
 		var period = r.days ? 'since ' + esc(fmtDate(r.since)) : 'in every batch on file';
-		var head = '<div class="zdh-ns-sum"><strong>' + (n ? n + (n === 1 ? ' customer' : ' customers') + ' got a door hanger ' + period : (!(c.addresses) && ((c.contacts || 0) + (c.accounts || 0) + (c.from_leads || 0)) ? 'Couldn\'t check — no customer addresses came through from the CRM' : 'No CRM customer is at a house we delivered to ' + period)) + '.</strong>' +
-			'<div class="zdh-muted">Checked ' + (c.contacts || 0) + ' people, ' + (c.accounts || 0) + ' companies and ' + (c.leads || 0) + ' leads' + (c.from_leads ? ' (+' + c.from_leads + ' customers behind the leads)' : '') + ' — ' + (c.addresses || 0) + ' addresses — against ' + r.batches + (r.batches === 1 ? ' batch' : ' batches') + '.' +
+		var head = '<div class="zdh-ns-sum"><strong>' + (n ? n + (n === 1 ? ' customer' : ' customers') + ' got a door hanger ' + period : (!(c.addresses) && ((c.contacts || 0) + (c.accounts || 0) + (c.from_leads || 0)) ? 'Couldn\'t check: no customer addresses came through from the CRM' : 'No CRM customer is at a house we delivered to ' + period)) + '.</strong>' +
+			'<div class="zdh-muted">Checked ' + (c.contacts || 0) + ' people, ' + (c.accounts || 0) + ' companies and ' + (c.leads || 0) + ' leads' + (c.from_leads ? ' (+' + c.from_leads + ' customers behind the leads)' : '') + ' (' + (c.addresses || 0) + ' addresses) against ' + r.batches + (r.batches === 1 ? ' batch' : ' batches') + '.' +
 			nsNoAddrNote(r) +
-			(r.partial ? ' <span class="zdh-warn">The CRM has more records than fit in one check — the list may be incomplete; try again in a minute.</span>' : '') +
+			(r.partial ? ' <span class="zdh-warn">The CRM has more records than fit in one check: the list may be incomplete; try again in a minute.</span>' : '') +
 			(r.cached ? ' Customer list as of ' + esc(r.fetched_at) + ' · <a href="#" id="ns-refresh">refresh from the CRM</a>' : '') + '</div></div>';
 		if (!n) { return head; }
 		return head + '<ul class="zdh-list zdh-ns-list">' + r.matches.map(function (m) {
@@ -4527,7 +4539,7 @@
 				return '<div class="zdh-ns-del">✓ ' + esc(fmtDate(d.drop_date, true)) + (d.drop_time ? ' ' + esc(fmtTime(d.drop_time)) : '') + ' &bull; ' + esc(d.drop_name || ('Cluster #' + d.drop_id)) + (d.hanger_type ? ' &bull; ' + esc(d.hanger_type) : '') + (d.delivered_by ? ' &bull; by ' + esc(d.delivered_by) : '') + '</div>';
 			}).join('');
 			return '<li class="zdh-ns-match"><div class="zdh-ns-top"><a href="' + esc(m.url) + '" target="_blank" rel="noopener" class="zdh-ns-name">' + esc(m.name) + '</a> <span class="zdh-status zdh-st-yes">' + esc(m.kind) + '</span></div>' +
-				'<div class="zdh-ns-addr">' + esc(m.address) + (m.level === 'building' ? ' <span class="zdh-warn">— same building, unit not confirmed</span>' : '') + (m.level === 'spelling' && m.deliveries[0] ? ' <span class="zdh-warn">— spelled differently in the CRM; matched to ' + esc(m.deliveries[0].full_address) + '</span>' : '') + (m.zip_checked ? '' : ' <span class="zdh-muted">(ZIP not checked)</span>') + '</div>' + lead + lines + '</li>';
+				'<div class="zdh-ns-addr">' + esc(m.address) + (m.level === 'building' ? ' <span class="zdh-warn">same building, unit not confirmed</span>' : '') + (m.level === 'spelling' && m.deliveries[0] ? ' <span class="zdh-warn">spelled differently in the CRM; matched to ' + esc(m.deliveries[0].full_address) + '</span>' : '') + (m.zip_checked ? '' : ' <span class="zdh-muted">(ZIP not checked)</span>') + '</div>' + lead + lines + '</li>';
 		}).join('') + '</ul>';
 	}
 	/* a check that read people but no addresses can never match — say so plainly instead of "no customer". */
@@ -4537,7 +4549,7 @@
 		var why = sh.no_field && sh.no_field === sh.records ? 'The CRM sent the records without an address field.' :
 			(sh.entries ? 'The CRM sent ' + sh.entries + ' address entr' + (sh.entries === 1 ? 'y' : 'ies') + ' but none had a street line the app could read' + (sh.po_or_place ? ' (' + sh.po_or_place + ' were PO boxes or place names)' : '') + '.' : 'None of these CRM records has a street address filled in.');
 		logEv('nutshell', 'no addresses: ' + JSON.stringify(sh));
-		return ' <div class="zdh-warn" style="margin-top:6px">⚠ No street addresses were readable, so nothing could match. ' + why + (sh.shape ? ' <span class="zdh-muted">Address fields seen: ' + esc(sh.shape) + '</span>' : '') + ' — send this line (or Export → Diagnostics) to whoever looks after the app.</div>';
+		return ' <div class="zdh-warn" style="margin-top:6px">⚠ No street addresses were readable, so nothing could match. ' + why + (sh.shape ? ' <span class="zdh-muted">Address fields seen: ' + esc(sh.shape) + '</span>' : '') + '. Send this line (or Export → Diagnostics) to whoever looks after the app.</div>';
 	}
 	function statusBadge(s) {
 		var map = { delivered: ['zdh-st-yes', '✓ Delivered'], likely: ['zdh-st-likely', '~ Likely (street covered)'], street_partial: ['zdh-st-maybe', '? Street covered, number not on file'], planned: ['zdh-st-maybe', '⏳ On an upcoming route'], none: ['zdh-st-no', 'No record'], invalid: ['zdh-st-no', 'Could not read address'] };
@@ -4546,14 +4558,14 @@
 	}
 	function lookupResult(r) {
 		var html = '<div class="zdh-lookup-res">' + statusBadge(r.status) + ' <span class="zdh-muted">' + (r.corrected ? 'checked as: ' : 'parsed as: ') + esc((r.parsed.number + ' ' + r.parsed.street).trim()) + (r.parsed.unit ? ' #' + esc(r.parsed.unit) : '') + (r.parsed.zip ? ' ' + esc(r.parsed.zip) : '') + '</span>';
-		if (r.no_solicit) { html += '<div class="zdh-fix zdh-nosol-note">🚫 <strong>No Soliciting sign</strong> noted here on ' + esc(r.no_solicit.noted) + (r.no_solicit.address ? ' (' + esc(r.no_solicit.address) + ')' : '') + ' — no hanger is left at this house, and routes skip it.</div>'; }
+		if (r.no_solicit) { html += '<div class="zdh-fix zdh-nosol-note">🚫 <strong>No Soliciting sign</strong> noted here on ' + esc(r.no_solicit.noted) + (r.no_solicit.address ? ' (' + esc(r.no_solicit.address) + ')' : '') + ': no hanger is left at this house, and routes skip it.</div>'; }
 		if (r.corrected) { html += '<div class="zdh-fix">✎ Spelling corrected: you typed <strong>' + esc(r.corrected.typed) + '</strong>, checked <strong>' + esc(r.corrected.street) + '</strong> (' + esc(r.corrected.how) + (r.corrected.source === 'region' ? ', from the address map' : ', a street we delivered to') + '). Same house number' + (r.parsed.zip ? ' and ZIP' : '') + '.</div>'; }
 		if (r.suggestions && r.suggestions.length) { html += '<div class="zdh-fix">Did you mean ' + r.suggestions.map(function (x) { return '<button type="button" class="zdh-linkbtn zdh-suggest" data-q="' + esc(x + (r.parsed.zip ? ' ' + r.parsed.zip : '')) + '">' + esc(x) + '</button>'; }).join(' or ') + '? (More than one street fits, so the app didn\'t pick one.)</div>'; }
 		if (r.matches.length) {
-			html += '<ul class="zdh-list">' + r.matches.map(function (m) { return '<li><strong>' + esc(m.full_address) + '</strong><br>Drop #' + m.drop_id + ' &bull; ' + esc(fmtDate(m.drop_date)) + (m.drop_time ? ' ' + esc(fmtTime(m.drop_time)) : '') + ' &bull; ' + esc(m.hanger_type) + ' &bull; by ' + esc(m.delivered_by || '—') + ' &bull; ' + esc(m.confidence) + ' (' + esc(m.source) + ')</li>'; }).join('') + '</ul>';
+			html += '<ul class="zdh-list">' + r.matches.map(function (m) { return '<li><strong>' + esc(m.full_address) + '</strong><br>Drop #' + m.drop_id + ' &bull; ' + esc(fmtDate(m.drop_date)) + (m.drop_time ? ' ' + esc(fmtTime(m.drop_time)) : '') + ' &bull; ' + esc(m.hanger_type) + ' &bull; by ' + esc(m.delivered_by || '–') + ' &bull; ' + esc(m.confidence) + ' (' + esc(m.source) + ')</li>'; }).join('') + '</ul>';
 		}
 		if (r.streets.length) {
-			html += '<div class="zdh-muted" style="margin-top:6px">Street coverage on file:</div><ul class="zdh-list">' + r.streets.map(function (s) { return '<li>' + esc(s.street) + ', ' + esc(s.city) + ' ' + esc(s.zip) + ' — <strong>' + esc(s.coverage) + '</strong>' + (s.low_number ? ' (' + s.low_number + '–' + s.high_number + ')' : '') + (s.number_in_range === false ? ' <span class="zdh-warn">number outside recorded range</span>' : '') + ' &bull; drop #' + s.drop_id + ' on ' + esc(s.drop_date) + ' &bull; ' + esc(s.hanger_type) + '</li>'; }).join('') + '</ul>';
+			html += '<div class="zdh-muted" style="margin-top:6px">Street coverage on file:</div><ul class="zdh-list">' + r.streets.map(function (s) { return '<li>' + esc(s.street) + ', ' + esc(s.city) + ' ' + esc(s.zip) + ': <strong>' + esc(s.coverage) + '</strong>' + (s.low_number ? ' (' + s.low_number + '–' + s.high_number + ')' : '') + (s.number_in_range === false ? ' <span class="zdh-warn">number outside recorded range</span>' : '') + ' &bull; drop #' + s.drop_id + ' on ' + esc(s.drop_date) + ' &bull; ' + esc(s.hanger_type) + '</li>'; }).join('') + '</ul>';
 		}
 		if (r.upcoming && r.upcoming.length) {
 			html += '<div class="zdh-muted" style="margin-top:6px">Not delivered yet, but on a route:</div><ul class="zdh-list">' + r.upcoming.map(function (u) { return '<li><strong>' + esc(u.full_address) + '</strong><br>' + esc(u.name || ('Cluster #' + u.drop_id)) + ' &bull; ' + (u.status === 'in_progress' ? 'being delivered now' : 'planned for ' + esc(fmtDate(u.drop_date))) + (u.delivered_by ? ' &bull; ' + esc(u.delivered_by) : '') + '</li>'; }).join('') + '</ul>';
@@ -4564,7 +4576,7 @@
 	}
 	/* "did the app actually find that address?": when the house isn't on file as delivered, the server finds it on
 	   the address map and reports the closest delivered houses and the closest walked GPS track. */
-	function fmtDist(m) { return m < 1000 ? m + ' m' : (m / 1609.34).toFixed(1) + ' mi'; }
+	function fmtDist(m) { return m < 1000 ? m + ' m' : (metric() ? (m / 1000).toFixed(1) + ' km' : (m / 1609.34).toFixed(1) + ' mi'); }
 	function nearbyHTML(r) {
 		if (r.status === 'delivered' || r.geo === undefined) { return ''; }
 		if (r.geo === null) { return '<p class="zdh-muted">This address isn\'t on the address map (check the house number and street spelling), so the app can\'t say how close a route came.</p>'; }
@@ -4572,16 +4584,16 @@
 		var batch = function (x) { return esc(x.name || ('Cluster #' + x.drop_id)) + ' (' + esc(fmtDate(x.drop_date, true)) + ')'; };
 		var verdict;
 		if (!h) {
-			verdict = 'No delivered house on file within about ¾ mile. <strong>No recorded route went near this address</strong> — if it got a hanger, it was before the app (the paper-map days) or on a walk that wasn\'t recorded.';
+			verdict = 'No delivered house on file within about ¾ mile. <strong>No recorded route went near this address</strong>: if it got a hanger, it was before the app (the paper-map days) or on a walk that wasn\'t recorded.';
 		} else if (h.dist_m <= 45) {
-			verdict = 'A route went right past it: <strong>' + esc(h.full_address) + '</strong>, ' + fmtDist(h.dist_m) + ' away, got one on ' + batch(h) + '. This house just isn\'t on that route\'s list — it may have been skipped, or left off when the houses were confirmed.';
+			verdict = 'A route went right past it: <strong>' + esc(h.full_address) + '</strong>, ' + fmtDist(h.dist_m) + ' away, got one on ' + batch(h) + '. This house just isn\'t on that route\'s list: it may have been skipped, or left off when the houses were confirmed.';
 		} else if (h.dist_m <= 250) {
 			verdict = 'A route came close but didn\'t include this house: nearest delivered house is <strong>' + esc(h.full_address) + '</strong>, ' + fmtDist(h.dist_m) + ' away, on ' + batch(h) + '.';
 		} else {
 			verdict = 'No route on file reached this street. The nearest delivered house is <strong>' + esc(h.full_address) + '</strong>, ' + fmtDist(h.dist_m) + ' away, on ' + batch(h) + '.';
 		}
 		var extra = '';
-		if (t) { extra += '<li>Closest the walker\'s GPS came: ' + fmtDist(t.dist_m) + ' on ' + batch(t) + (t.dist_m <= 40 && (!h || h.dist_m > 45) ? ' — <span class="zdh-warn">they walked past; worth asking whether they hung one here</span>' : '') + '</li>'; }
+		if (t) { extra += '<li>Closest the walker\'s GPS came: ' + fmtDist(t.dist_m) + ' on ' + batch(t) + (t.dist_m <= 40 && (!h || h.dist_m > 45) ? ': <span class="zdh-warn">they walked past; worth asking whether they hung one here</span>' : '') + '</li>'; }
 		if (nb.within_150) { extra += '<li>' + nb.within_150 + ' delivered house' + (nb.within_150 === 1 ? '' : 's') + ' within 150 m (about a block)</li>'; }
 		if (hs.length > 1) { extra += '<li>Next closest: ' + hs.slice(1).map(function (x) { return esc(x.full_address) + ' (' + fmtDist(x.dist_m) + ', ' + esc(fmtDate(x.drop_date, true)) + ')'; }).join('; ') + '</li>'; }
 		return '<div class="zdh-nearby"><div class="zdh-nearby-head">How close did a route come?</div><p>' + verdict + '</p>' + (extra ? '<ul class="zdh-list">' + extra + '</ul>' : '') + '</div>';
@@ -4596,7 +4608,7 @@
 				'<a class="zdh-primary" href="' + esc(u + 'drops') + '">Download drops CSV</a><p class="zdh-muted">One row per distribution run (and planned route) with totals, revisit dates, uptake and screenshot links.</p>' +
 				'<a class="zdh-secondary" href="' + esc(u + 'json') + '">Download full JSON backup</a><p class="zdh-muted">Raw tables (drops, addresses, streets) including the AI analysis and geometry.</p>' +
 			'</div><div id="ex-stats" class="zdh-muted"></div></div>' +
-			'<div class="zdh-card" id="zdh-diag"><h2>Diagnostics</h2><p class="zdh-help">If a walk did not record the way you expected, this report shows what this phone did: GPS fixes and gaps, ticks, what reached the server, what is still waiting, errors. It holds no customer data — only addresses, times and counts.</p>' +
+			'<div class="zdh-card" id="zdh-diag"><h2>Diagnostics</h2><p class="zdh-help">If a walk did not record the way you expected, this report shows what this phone did: GPS fixes and gaps, ticks, what reached the server, what is still waiting, errors. It holds no customer data: only addresses, times and counts.</p>' +
 				'<div class="zdh-actions zdh-diag-btns"><button type="button" class="zdh-primary" id="dg-share">Share report…</button><button type="button" class="zdh-secondary" id="dg-copy">Copy</button><button type="button" class="zdh-secondary" id="dg-send">Send to the site</button></div>' +
 				'<p class="zdh-muted" id="dg-note">Share… opens the phone\'s share sheet (Messages, Mail, Files…). Send to the site keeps a copy under Zorderz → Doorhangers for whoever looks after the site.</p>' +
 				'<details class="zdh-log"><summary>Show the report</summary><textarea id="dg-text" class="zdh-diag-text" readonly rows="14" spellcheck="false">Building…</textarea></details>' +
@@ -4613,12 +4625,12 @@
 		if (!track || !track.length) { return 'no points'; }
 		var first = track[0][2], last = track[track.length - 1][2], poor = 0, drive = 0, gaps = 0, prev = null, m = 0;
 		track.forEach(function (t) { if (t[3] > 45) { poor++; } if (t[4] === 'd') { drive++; } if (prev && t[2] - prev[2] > 180000) { gaps++; } if (prev && t[4] !== 'd') { var dd = distM([prev[0], prev[1]], [t[0], t[1]]); if (dd <= 150 && t[2] - prev[2] <= 300000) { m += dd; } } prev = t; });
-		return track.length + ' points ' + fmtT(first) + ' → ' + fmtT(last) + ', ' + (m / 1609.34).toFixed(2) + ' mi walked, ' + poor + ' poor (±>45 m), ' + drive + ' driving, ' + gaps + ' holes > 3 min';
+		return track.length + ' points ' + fmtT(first) + ' → ' + fmtT(last) + ', ' + distText(m, 2) + ' walked, ' + poor + ' poor (±>45 m), ' + drive + ' driving, ' + gaps + ' holes > 3 min';
 	}
 	function diagReport() {
 		var ses = session(), q = quick(), ob = outbox(), log = logEntries(), lines = [];
 		var conn = navigator.connection || {};
-		lines.push('Doorhangers ' + (C.version || '') + ' diagnostics — ' + new Date().toString());
+		lines.push('Doorhangers ' + (C.version || '') + ' diagnostics: ' + new Date().toString());
 		lines.push('Doorhangers ' + (C.version || '?') + ' · ' + (isStandalone() ? 'home-screen app' : 'browser') + ' · ' + location.pathname + ' · kit ' + !!kit() + ' · page ' + !!root.closest('.zdz-focused'));
 		lines.push('Device: ' + navigator.userAgent);
 		lines.push('Screen ' + window.innerWidth + '×' + window.innerHeight + ' @' + (window.devicePixelRatio || 1) + ' · online ' + navigator.onLine + (conn.effectiveType ? ' · net ' + conn.effectiveType + (conn.downlink ? ' ' + conn.downlink + ' Mb/s' : '') + (conn.saveData ? ' data-saver' : '') : '') + ' · webgl2 ' + (glOK === null ? '?' : glOK) + ' · wake lock ' + ('wakeLock' in navigator) + ' · share ' + !!navigator.share);
@@ -4659,7 +4671,7 @@
 		build();
 		document.getElementById('dg-copy').addEventListener('click', function () {
 			build().then(function (t) {
-				var done = function () { toast('Report copied — paste it into a message.', 5000); };
+				var done = function () { toast('Report copied. Paste it into a message.', 5000); };
 				if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, function () { ta.parentNode.open = true; ta.focus(); ta.select(); toast('Select the text in the box and copy it.', 6000); }); }
 				else { ta.parentNode.open = true; ta.focus(); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('Select the text in the box and copy it.', 6000); } }
 			});
@@ -4676,8 +4688,8 @@
 		document.getElementById('dg-send').addEventListener('click', function () {
 			var b = document.getElementById('dg-send'); b.disabled = true; b.textContent = 'Sending…';
 			build().then(function (t) { return api('diag-report', { method: 'POST', body: { text: t, label: (recall('deliverer') || '') + ' ' + (isStandalone() ? 'app' : 'browser') } }); }).then(function () {
-				logEv('diag', 'sent to site'); b.textContent = 'Sent ✓'; toast('Report sent — it is kept under Zorderz → Doorhangers on the site.', 7000); setTimeout(function () { b.disabled = false; b.textContent = 'Send to the site'; }, 4000);
-			}).catch(function (e) { b.disabled = false; b.textContent = 'Send to the site'; toast('Could not send: ' + e.message + (isNetError(e) ? ' — use Share or Copy instead.' : ''), 8000); });
+				logEv('diag', 'sent to site'); b.textContent = 'Sent ✓'; toast('Report sent. It is kept under Zorderz → Doorhangers on the site.', 7000); setTimeout(function () { b.disabled = false; b.textContent = 'Send to the site'; }, 4000);
+			}).catch(function (e) { b.disabled = false; b.textContent = 'Send to the site'; toast('Could not send: ' + e.message + (isNetError(e) ? '. Use Share or Copy instead.' : ''), 8000); });
 		});
 	}
 
@@ -4692,7 +4704,7 @@
 			if (!ok && s2 && (Object.keys(s2.pending).length || Object.keys(s2.undel).length)) {
 				// no signal: the ticks go to the outbox instead of being dropped with the session
 				queueOutbox({ kind: 'progress', id: s2.id, name: s2.name, body: progressSnapshot(s2) });
-				msg = (msg ? msg + ' ' : '') + 'Your ticks have not reached the server yet — they are kept on this phone and will be sent when you have signal.';
+				msg = (msg ? msg + ' ' : '') + 'Your ticks have not reached the server yet; they are kept on this phone and will be sent when you have signal.';
 			}
 			saveSession(null); D.cluster = null; S.drops = null;
 			if (S.tab === 'deliver') { S.tab = 'new'; }
@@ -4779,12 +4791,12 @@
 		if (!ses) { staleQuickCheck(); return; }
 		var recent = Date.now() - (ses.lastActive || ses.started || 0) < 10 * 60000;
 		api('drops/' + ses.id).then(function (d) {
-			if (d.status !== 'in_progress') { leaveDelivery(d.status === 'done' ? 'The delivery you had open was already finished — cleared.' : 'The delivery you had open is back to planned — cleared.', true); return; }
+			if (d.status !== 'in_progress') { leaveDelivery(d.status === 'done' ? 'The delivery you had open was already finished, so it was cleared.' : 'The delivery you had open is back to planned, so it was cleared.', true); return; }
 			if (ses.total !== d.addresses.length) { ses.total = d.addresses.length; saveSession(ses); }
 			if (recent) { openDelivery(d.id, d); }
 			else if (Object.keys(ses.pending).length || Object.keys(ses.undel).length) { syncProgress(false); } // ticks made before the phone was put away go up now
 		}).catch(function (e) {
-			if (e.status === 404) { leaveDelivery('The delivery you had open was deleted — cleared.', true); }
+			if (e.status === 404) { leaveDelivery('The delivery you had open was deleted, so it was cleared.', true); }
 		});
 	})();
 	/* "Still delivering?" also on a clock, so a walk that never gets another GPS fix still gets asked. */

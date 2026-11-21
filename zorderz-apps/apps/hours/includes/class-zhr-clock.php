@@ -179,7 +179,7 @@ class ZHR_Clock {
 			return __( "Today's shift is still open. When did you finish?", 'zorderz' );
 		}
 		/* translators: %s: a day such as "Fri Mar 6" */
-		return sprintf( __( 'Your shift from %s is still open. When did you finish?', 'zorderz' ), ( new DateTimeImmutable( $d . ' 12:00:00', ZHR_Time::tz() ) )->format( 'D M j' ) );
+		return sprintf( __( 'Your shift from %s is still open. When did you finish?', 'zorderz' ), ( new DateTimeImmutable( $d . ' 12:00:00', ZHR_Time::tz() ) )->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D M j' ) : 'D M j' ) ) );
 	}
 
 	/**

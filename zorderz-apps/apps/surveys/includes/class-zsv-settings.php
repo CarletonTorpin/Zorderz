@@ -3,13 +3,13 @@
  * Zorderz Surveys — settings + identity resolution.
  *
  * Everything that would differ between businesses lives here as configuration, read
- * from a Core service or a tenant option/filter, never hardcoded:
+ * from a Core service or the business's option/filter:
  *
  *   - the SURVEY OPERATOR (a Party user + a configurable author-match pattern),
  *   - the company EXCLUSION list (admin-managed, EMPTY by default),
  *   - the REVIEW DESTINATION + routing rule (from Business Profile),
  *   - the lifecycle RULES (grace windows, resurvey/cooldown) + the SAFETY FLOOR,
- *   - the WORK-CATEGORY vocabulary (Item Engine filter, NEUTRAL fallback),
+ *   - the WORK-CATEGORY vocabulary (Item Engine filter, generic fallback),
  *   - the status-CLASSIFIER vocabulary (generic, filterable),
  *   - the SENDER identity (Business Profile).
  *
@@ -21,6 +21,31 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class ZSV_Settings {
+
+	/**
+	 * A moment as the business writes it, for the notes Surveys leaves in the CRM: the site's own date and time formats
+	 * (Settings → General) in the site's zone. "M j, Y" and "g:i A" when the site has none. Nothing reads it back.
+	 */
+	public static function stamp( ?int $ts = null ): string {
+		$df = function_exists( 'get_option' ) ? trim( (string) get_option( 'date_format', '' ) ) : '';
+		$tf = function_exists( 'get_option' ) ? trim( (string) get_option( 'time_format', '' ) ) : '';
+		$f  = ( '' !== $df ? $df : 'M j, Y' ) . ' ' . ( '' !== $tf ? $tf : 'g:i A' );
+		return function_exists( 'wp_date' ) ? (string) wp_date( $f, $ts ) : gmdate( $f, null === $ts ? time() : $ts );
+	}
+
+	/** A short day for a list ("Nov 12" in English; the format is translatable, so a language may put the day first). */
+	public static function short_day( int $ts ): string {
+		/* translators: a PHP date format for a short day: month and day ("M j" gives "Nov 12"; "j M" gives "12 Nov") */
+		$f = function_exists( '_x' ) ? (string) _x( 'M j', 'short day format', 'zorderz' ) : 'M j';
+		return function_exists( 'wp_date' ) ? (string) wp_date( $f, $ts ) : gmdate( $f, $ts );
+	}
+
+	/** A short day and the time of day, in the site's time format ("g:i A" when the site has none). */
+	public static function short_stamp( int $ts ): string {
+		$tf = function_exists( 'get_option' ) ? trim( (string) get_option( 'time_format', '' ) ) : '';
+		$tf = '' !== $tf ? $tf : 'g:i A';
+		return self::short_day( $ts ) . ', ' . ( function_exists( 'wp_date' ) ? (string) wp_date( $tf, $ts ) : gmdate( $tf, $ts ) );
+	}
 
 	/* ─────────────────────────────────────────────────────────────────
 	 * Core-service accessors (Connections layer). Fail loudly (return null)
@@ -64,7 +89,7 @@ class ZSV_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * Sender identity — from Business Profile, never a hardcoded from-name.
+	 * Sender identity — from the Business Profile.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/**
@@ -85,8 +110,7 @@ class ZSV_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * The SURVEY OPERATOR — the configurable replacement for the one baked-in
-	 * operator whose first name named two DB columns and an author-substring test.
+	 * The SURVEY OPERATOR: who makes the survey calls is a setting.
 	 *
 	 * An operator is: (a) a configurable Party USER (the person who works the
 	 * survey calls and whose CRM-logged notes we read), and (b) a configurable
@@ -116,7 +140,7 @@ class ZSV_Settings {
 	/**
 	 * The case-insensitive substring used to recognise the operator's authored
 	 * activities/notes in the CRM. Configurable via option/filter; defaults to the
-	 * operator's first name (lowercased) so a tenant that only sets the operator
+	 * operator's first name (lowercased) so a business that only sets the operator
 	 * user gets sensible matching without a second field. Empty = match nothing
 	 * (i.e. treat every reached note as the operator's — see is_operator_author()).
 	 *
@@ -144,7 +168,7 @@ class ZSV_Settings {
 	 *
 	 * When a match pattern is configured, match on it (case-insensitive substring).
 	 * When NONE is configured, fall back to matching the operator's full display
-	 * name; if that is blank too, no author qualifies (the tenant must configure an
+	 * name; if that is blank too, no author qualifies (the business must configure an
 	 * operator before operator-note sync does anything) — we never guess.
 	 *
 	 * @param string $author Author/display name from a CRM activity or note.
@@ -181,7 +205,7 @@ class ZSV_Settings {
 
 	/**
 	 * @return string[] Lowercased name/email fragments to exclude from surveys.
-	 *   Ships EMPTY; a tenant adds their own via Settings or the filter.
+	 *   Ships EMPTY; a business adds its own via Settings or the filter.
 	 */
 	public static function excluded_companies(): array {
 		$raw = get_option( 'zsv_excluded_companies', array() );
@@ -196,8 +220,7 @@ class ZSV_Settings {
 			}
 		}
 		/**
-		 * Filter the survey exclusion list. NEUTRAL (empty) default — no business names
-		 * are shipped.
+		 * Filter the survey exclusion list. Empty by default.
 		 *
 		 * @param string[] $out Lowercased match fragments.
 		 */
@@ -210,9 +233,8 @@ class ZSV_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * REVIEW DESTINATION + routing. Replaces the bespoke review chain
-	 * (a hardcoded review deep-link + a second star-rating page + an
-	 * address-domain rule where the mailbox provider decided the flow).
+	 * REVIEW DESTINATION + routing: the review links come from the Business
+	 * Profile, and settings decide which one a customer is sent.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/** @return string Primary (deep-link) review URL, from Business Profile. */
@@ -238,9 +260,7 @@ class ZSV_Settings {
 	}
 
 	/**
-	 * The review-routing rule. Was "the email domain is the SOLE factor" (one
-	 * mailbox provider -> deep-link, everything else -> star page). Now a
-	 * configurable rule:
+	 * The review-routing rule:
 	 *   'auto'        — deep-link for the configured domains, custom page otherwise;
 	 *   'primary_only'— always the primary review URL;
 	 *   'custom_only' — always the custom review URL;
@@ -256,10 +276,10 @@ class ZSV_Settings {
 
 	/**
 	 * Email domains that receive the PRIMARY (deep-link) review destination under the
-	 * 'auto' rule. NEUTRAL (empty) default — a tenant opts a provider in explicitly,
-	 * so no address family decides anything until configured.
+	 * 'auto' rule. Empty by default — a business opts a provider in explicitly, so no
+	 * address family decides anything until configured.
 	 *
-	 * @return string[] Lowercased email domains a tenant opts in (e.g. a large
+	 * @return string[] Lowercased email domains the business opts in (e.g. a large
 	 *   mailbox provider's domain).
 	 */
 	public static function review_deeplink_domains(): array {
@@ -279,8 +299,8 @@ class ZSV_Settings {
 
 	/**
 	 * Resolve the review destination for a recipient. `operator_status` may force the
-	 * custom page (e.g. a "no primary account" outcome), mirroring the old no_google
-	 * override — but expressed as a status the tenant classifier owns, not a domain.
+	 * custom page (e.g. a "no primary account" outcome): a status the business's note
+	 * vocabulary decides, never a mail domain.
 	 *
 	 * @param string $email           Recipient email.
 	 * @param string $operator_status Parsed operator status for this lead.
@@ -295,8 +315,7 @@ class ZSV_Settings {
 		$primary = self::review_url_primary();
 		$custom  = self::review_url_custom();
 
-		// A tenant-declared "no primary review account" outcome always uses the custom
-		// page (was the no_google override).
+		// A "no primary review account" outcome always uses the custom page.
 		if ( 'no_primary_account' === $operator_status && '' !== $custom ) {
 			return array( 'url' => $custom, 'channel' => 'custom' );
 		}
@@ -371,7 +390,7 @@ class ZSV_Settings {
 	 *
 	 * Item Engine binding: the real taxonomy arrives via `zdz_survey_work_categories`
 	 * (the shared Item Engine is not built yet, so this is the documented seam). The
-	 * NEUTRAL fallback carries only generic service words — NO product name.
+	 * fallback carries only generic service words.
 	 *
 	 * @return string[] Ordered, most-specific first.
 	 */
@@ -411,34 +430,150 @@ class ZSV_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * STATUS-CLASSIFIER vocabulary — generic, filterable. Replaces the ~110
-	 * hardcoded phrase patterns tuned to one operator's note style.
-	 *
-	 * The closed outcome set is platform-owned; only the PHRASES that map onto it
-	 * are tenant vocabulary. All lists are neutral by default.
+	 * STATUS-CLASSIFIER vocabulary: filterable word lists. The closed outcome set
+	 * is the platform's; the PHRASES that map onto it are the business's own.
+	 * Core ships plain English defaults; a business replaces any list from its Identity
+	 * Pack or the filters.
 	 * ────────────────────────────────────────────────────────────────── */
+
+	/** Where an Identity Pack (voice.yml, surveys.status_vocabulary) keeps this business's phrase lists. */
+	const VOCABULARY_OPTION = 'zsv_status_vocabulary';
+
+	/** Where an Identity Pack (voice.yml, surveys.note_reading) keeps how this business's notes are read. */
+	const READING_OPTION = 'zsv_note_reading';
+
+	/** The most phrases one list may hold, and the longest phrase. */
+	const WORDS_MAX       = 200;
+	const WORD_LENGTH_MAX = 80;
+
+	/**
+	 * A phrase list as the note reader uses it: lower case, single spaces, no empties, no
+	 * duplicates, at most WORDS_MAX phrases of at most WORD_LENGTH_MAX characters. Pure.
+	 *
+	 * @param mixed $list
+	 * @return string[]
+	 */
+	public static function clean_words( $list ): array {
+		$out = array();
+		foreach ( is_array( $list ) ? $list : array() as $w ) {
+			if ( ! is_scalar( $w ) ) {
+				continue;
+			}
+			$w = str_replace( array( "\xE2\x80\x99", "\xE2\x80\x98" ), "'", (string) $w ); // a typed curly apostrophe reads as a straight one, as in a note
+			$w = trim( (string) preg_replace( '/\s+/', ' ', strtolower( $w ) ) );
+			if ( '' !== $w && strlen( $w ) <= self::WORD_LENGTH_MAX ) {
+				$out[ $w ] = true;
+			}
+			if ( count( $out ) >= self::WORDS_MAX ) {
+				break;
+			}
+		}
+		return array_map( 'strval', array_keys( $out ) );
+	}
+
+	/** Core's lists with this business's stored lists over them, one key at a time (a key not stored keeps Core's). */
+	private static function with_stored( array $default, string $option ): array {
+		$stored = get_option( $option, array() );
+		if ( is_array( $stored ) ) {
+			foreach ( $default as $k => $list ) {
+				if ( isset( $stored[ $k ] ) && is_array( $stored[ $k ] ) ) {
+					$default[ $k ] = self::clean_words( $stored[ $k ] );
+				}
+			}
+		}
+		return $default;
+	}
 
 	/**
 	 * @return array<string,string[]> outcome => phrase list. Lowercase phrases.
-	 *   Outcomes: issue (-> needs_attention/follow_up), voicemail (-> left_vm),
+	 *   Outcomes: issue (-> follow_up), voicemail (-> left_vm),
 	 *   no_review (-> no_online_review), no_primary_account (-> custom page),
-	 *   satisfied (-> satisfied), voicemail_full (-> left_vm, after satisfied).
-	 *   Everything else defaults to needs_attention:
+	 *   satisfied (-> satisfied), voicemail_full (-> left_vm, after satisfied),
+	 *   attention (-> needs_attention: a person reads the note), and
+	 *   send_instruction (the operator's explicit "send the review request" wording,
+	 *   read in context by ZSV_Note_Reader). Everything else defaults to needs_attention:
 	 *   an invite must be EARNED by a recognised positive signal.
 	 */
 	public static function status_vocabulary(): array {
 		$default = array(
-			'issue'     => array( 'not working', "isn't working", 'still broken', 'problem', 'issue', 'not fixed', 'unhappy', 'complaint', 'call back', 'callback', 'follow up', 'waiting for', 'needs', 'redo', 'come back' ),
+			'issue'     => array( 'not working', "isn't working", 'still broken', 'problem', 'issue', 'not fixed', 'unhappy', 'complaint', 'waiting for', 'needs', 'redo' ),
 			'voicemail' => array( 'left vm', 'left voicemail', 'voicemail', 'no answer', 'did not answer', "didn't answer", 'not home', 'no response', 'called, no' ),
 			'no_review' => array( 'no online review', 'no review', "won't review", 'declined review', 'do not send', "don't send", 'no thanks' ),
-			'no_primary_account' => array( 'no google', 'no google account', 'not on google', 'send the other', 'use the other link' ),
-			'satisfied' => array( 'satisfied', 'happy', 'working fine', 'works great', 'all good', 'great', 'good', 'fine', 'no problems', 'no issues', 'send review', 'send link', 'send google' ),
+			'no_primary_account' => array( 'no google', 'no google account', 'not on google' ),
+			'satisfied' => array( 'satisfied', 'happy', 'working fine', 'works great', 'all good', 'great', 'good', 'fine', 'no problems', 'no issues', 'send review', 'send link' ),
 			// A full voice mailbox, however it is written: the customer was not reached (unless
 			// the same note shows they were — a reached outcome is checked first).
 			'voicemail_full' => array( 'vm full', 'vm is full', 'vm box full', 'voicemail full', 'voicemail is full', 'voice mail full', 'voice mail is full', 'mailbox full', 'mailbox is full', 'mailbox was full', 'voicemail box full', 'voicemail box is full', 'box is full' ),
+			// A call still owed, a follow-up, somebody else to reach: a person reads the note
+			// before anything is sent, unless the note also carries an explicit send instruction
+			// and every one of these sits in an aside that only says the customer may call later.
+			'attention' => array( 'follow up', 'followup', 'follow-up', 'call back', 'callback', 'call-back', 'reach out', 'try again', 'not available', 'come back', 'reschedule', 'schedule callback', 'will call', 'need to call', 'needs to call', 'get back to', 'check back' ),
+			// The operator's explicit instruction to send the review request.
+			'send_instruction' => array( 'send review', 'send the review', 'send link', 'send the link', 'send her the link', 'send him the link', 'send them the link', 'ok to send', 'ready to send', 'go ahead and send' ),
 		);
-		$vocab = apply_filters( 'zsv_status_vocabulary', $default );
+		$default = self::with_stored( $default, self::VOCABULARY_OPTION );
+		$vocab   = apply_filters( 'zsv_status_vocabulary', $default );
 		return is_array( $vocab ) && ! empty( $vocab ) ? $vocab : $default;
+	}
+
+	/**
+	 * How a call note's sentences and clauses are read (ZSV_Note_Reader). Word lists only: the
+	 * reading itself is the platform's. English by default; a business whose operator writes
+	 * differently, or in another language, keeps its own lists in an Identity Pack
+	 * (voice.yml, surveys.note_reading) or on the `zsv_note_reading` filter.
+	 *
+	 *   titles, web_endings  a stop typed with no space after it still ends a sentence
+	 *                        ("again.Send"), except after a title or before a web-address ending;
+	 *   conditions           a send instruction with one of these in its own clause is not a clean
+	 *                        instruction ("send the link if that is ok");
+	 *   send_verbs, waits,   "send … after / once / when <something>" waits on that something and
+	 *   waits_not            holds the e-mail, unless the next word is one of waits_not
+	 *                        ("send it when you get a chance");
+	 *   soft_words           the attention phrases that CAN be a soft aside (the customer may call
+	 *                        the business later), and then only in a clause shaped
+	 *                          <subject> <auxiliary> <call_back> [tail]     "she will call back if anything comes up"
+	 *                          <bare_aside> [tail]                          "will call again"
+	 *                          <subject> <reply> [tail]                     "he'll get back to us if needed"
+	 *                        after an optional lead_in ("and", "but");
+	 *   open_work            word beginnings that say work is not finished or money is in question.
+	 *                        When an aside is excused, none of them may appear anywhere in the note.
+	 *
+	 * @return array<string,string[]>
+	 */
+	public static function note_reading(): array {
+		$tails = array( 'if anything comes up', 'if anything else comes up', 'if needed', 'if any questions', 'anytime', 'any time', 'in the future' );
+		foreach ( array( 'she', 'he', 'they' ) as $who ) {
+			foreach ( array( 'needs', 'need' ) as $verb ) {
+				$tails[] = "if $who $verb anything";
+				$tails[] = "if $who $verb anything else";
+			}
+		}
+		$default = array(
+			'titles'      => array( 'mr', 'mrs', 'ms', 'dr', 'st', 'jr', 'sr' ),
+			'web_endings' => array( 'com', 'net', 'org', 'edu', 'gov', 'us', 'io', 'co', 'app', 'uk', 'ca', 'info', 'biz' ),
+			'conditions'  => array( 'if', 'unless' ),
+			'send_verbs'  => array( 'send' ),
+			'waits'       => array( 'after', 'once', 'when' ),
+			'waits_not'   => array( 'you' ),
+			'lead_ins'    => array( 'and', 'but', 'so', 'then' ),
+			'soft_words'  => array( 'will call', 'call back', 'callback', 'call-back', 'get back to' ),
+			'subjects'    => array( 'she', 'he', 'they', 'customer', 'client' ),
+			'auxiliaries' => array( "'ll", 'will', 'may', 'might', 'can' ),
+			'call_backs'  => array( 'call back', 'callback', 'call-back', 'call us', 'call us back', 'call again' ),
+			'bare_asides' => array( 'will call again', 'will call us', 'may call again', 'may call us' ),
+			'replies'     => array( "'ll get back to us", 'will get back to us' ),
+			'tails'       => $tails,
+			'open_work'   => array( 'install', 'schedul', 'appoint', 'repair', 'fix', 'replac', 'warrant', 'service', 'refund', 'balance', 'credit', 'bill', 'invoice', 'pay', 'dispute', 'part', 'remaining', 'rest of', 'other', 'second', 'another', 'order', 'quote', 'price', 'pricing', 'approv' ),
+		);
+		$default = self::with_stored( $default, self::READING_OPTION );
+		$reading = apply_filters( 'zsv_note_reading', $default );
+		if ( ! is_array( $reading ) ) {
+			return $default;
+		}
+		foreach ( $default as $k => $list ) {
+			$default[ $k ] = isset( $reading[ $k ] ) && is_array( $reading[ $k ] ) ? self::clean_words( $reading[ $k ] ) : $list;
+		}
+		return $default;
 	}
 
 	/** @return string[] Phrases that indicate an issue was RESOLVED (clears a follow-up). */
@@ -451,8 +586,37 @@ class ZSV_Settings {
 		return (array) apply_filters( 'zsv_resolution_phrases', $default );
 	}
 
-	/** @return string[] Negators that flip a following positive phrase (issue, not satisfaction). */
+	/**
+	 * @return string[] Negators: one of these shortly before a positive phrase or a send
+	 *   instruction turns it round ("isn't working well", "don't send the link").
+	 */
 	public static function negation_words(): array {
-		return array( 'not', "isn't", 'isnt', "wasn't", 'wasnt', 'no', 'never', "doesn't", 'doesnt', "won't", 'wont', "can't", 'cant', 'without' );
+		$default = array(
+			'not', 'no', 'never', 'without', 'cannot',
+			"don't", 'dont', "doesn't", 'doesnt', "didn't", 'didnt', "isn't", 'isnt', "aren't", 'arent',
+			"wasn't", 'wasnt', "won't", 'wont', "can't", 'cant',
+			'skip', 'avoid', 'stopped', 'quit', 'refused', 'refuses', 'declined',
+		);
+		$words = apply_filters( 'zsv_negation_words', $default );
+		return is_array( $words ) ? self::clean_words( $words ) : $default;
+	}
+
+	/* ─────────────────────────────────────────────────────────────────
+	 * GOOGLE REVIEWS — how far back a review is matched, and to whom.
+	 * ────────────────────────────────────────────────────────────────── */
+
+	/** @return int Days: a Google review older than this is never matched to a customer (1..365, default 60). */
+	public static function greviews_lookback_days(): int {
+		$n = (int) apply_filters( 'zsv_greviews_lookback_days', (int) get_option( 'zsv_greviews_lookback_days', 60 ) );
+		return max( 1, min( 365, $n ) );
+	}
+
+	/**
+	 * @return int Days: only a customer whose survey follow-up was opened at most this long before
+	 *   the review can be the reviewer (1..730, default 120).
+	 */
+	public static function greviews_candidate_days(): int {
+		$n = (int) apply_filters( 'zsv_greviews_candidate_days', (int) get_option( 'zsv_greviews_candidate_days', 120 ) );
+		return max( 1, min( 730, $n ) );
 	}
 }

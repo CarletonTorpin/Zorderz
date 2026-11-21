@@ -279,6 +279,7 @@
   function plainText(text) {
     return str(text)
       .replace(/\[ZDZ_CONFIRM:[a-f0-9]{32}\]/g, '')
+      .replace(/\[ZANA_RESEARCH(?:_OFFER)?:[a-f0-9]{1,9}\]/g, '')
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/\[ZANA_DM_DRAFT:[^\]]*\]|\[\/ZANA_DM_DRAFT\]|\[ZANA_POST_DRAFT:[^\]]*\]|\[\/ZANA_POST_DRAFT\]|\[\/?ZDZ_EMAIL_DRAFT[^\]]*\]/g, '')
       .replace(/<div class="zana-(?:charts|app)-chips">[\s\S]*?<\/div>/g, '')
@@ -484,6 +485,9 @@
         return items.length ? card({ k: 'chips', items: items }) : '';
       });
       s = s.replace(/\[ZDZ_CONFIRM:([a-f0-9]{32})\]/g, function (all, id) { return card({ k: 'confirm', id: id }); });
+      // deep research: a run (its plan, its progress, or the trail under its answer) and the "Go deeper" button
+      s = s.replace(/\[ZANA_RESEARCH:(\d{1,9})\]/g, function (all, id) { return card({ k: 'research', id: parseInt(id, 10) }); });
+      s = s.replace(/\[ZANA_RESEARCH_OFFER:([a-f0-9]{8})\]/g, function (all, tag) { return card({ k: 'research_offer', tag: tag }); });
       s = s.replace(/<a href="#" data-zana-doc-kind="(invoice|estimate)"[^<>]{0,200}>([^<>]{1,40})<\/a>/g, function (all, kind, words) {
         var ref = docRef(unentity(words), kind);
         if (!ref) return unentity(words);
@@ -498,14 +502,20 @@
 
   /* ── the small chart under "Open in Charts" ────────────────────────────────────────────────────── */
 
-  /** A short figure for a chart's axis: 1.2k, 34k, 1.5M; "$" first when the unit is money. */
+  /** The business's money sign (Business Profile → Locale); "$" where none is known (and outside a browser). */
+  function moneySign() {
+    var g = typeof window !== 'undefined' ? window : {};
+    return (g.ZDZ && g.ZDZ.ui && typeof g.ZDZ.ui.sign === 'function') ? g.ZDZ.ui.sign() : ((g.zdzData && g.zdzData.currencySign) || '$');
+  }
+
+  /** A short figure for a chart's axis: 1.2k, 34k, 1.5M; the business's money sign first when the unit is money. */
   function fmtMini(v, unit) {
     var a = Math.abs(v);
     var t;
     if (a >= 1e6) t = (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
     else if (a >= 1e3) t = (v / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k';
     else t = String(Math.round(v));
-    return unit === '$' ? '$' + t : t;
+    return unit === '$' ? moneySign() + t : t;
   }
 
   /** Series shades: the brand for the first, then steps of the text colour (the theme's colours only). */

@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-status-bar-style" content="default">
-	<meta name="apple-mobile-web-app-title" content="Zorderz">
+	<meta name="apple-mobile-web-app-title" content="<?php echo esc_attr( class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.pwa.short_name', ZDZ_Business_Profile::name() ) : get_bloginfo( 'name' ) ); ?>">
 	<link rel="apple-touch-icon" href="<?php echo esc_url( get_template_directory_uri() . '/assets/images/icon-192.png' ); ?>">
 	<link rel="apple-touch-icon" sizes="180x180" href="<?php echo esc_url( get_template_directory_uri() . '/assets/images/apple-touch-icon-180.png' ); ?>">
 	<link rel="manifest" href="<?php echo esc_url( home_url( '/zdz-manifest.json' ) ); ?>">
@@ -34,10 +34,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	 * script reads localStorage synchronously in <head> so the correct theme is
 	 * already on <html> before the browser lays out the body. Because this runs
 	 * before any stylesheet, it's zero-cost and prevents the flash.
-	 *
-	 * This is the inline script referenced in the README Section 4.
-	 *
-	 * @since 2.14.3
 	 */
 	?>
 	<script>

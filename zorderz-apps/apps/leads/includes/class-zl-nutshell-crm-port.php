@@ -16,7 +16,6 @@
  * separately against the interface.
  *
  * @package Zorderz\Leads
- * @since   2.8.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -210,7 +209,7 @@ class ZL_Nutshell_Crm_Port implements ZL_Crm_Port {
 			try {
 				$note = 'Recovered lead. Batch: ' . $batch_tag;
 				if ( $full_name !== '' ) {
-					$note .= ' — ' . $full_name;
+					$note .= ', ' . $full_name;
 				}
 				$this->ns->new_note( array( 'entityType' => 'Leads', 'id' => $lead_id ), $note );
 			} catch ( \Throwable $e ) {

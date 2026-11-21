@@ -217,7 +217,7 @@ class ZIB_Compose {
 	public static function until( string $utc ): string {
 		$ts = '' !== $utc ? strtotime( $utc . ' UTC' ) : false;
 		if ( ! $ts ) { return ''; }
-		return function_exists( 'wp_date' ) ? (string) wp_date( 'F j, Y', $ts ) : gmdate( 'F j, Y', $ts );
+		return function_exists( 'wp_date' ) ? (string) wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'F j, Y' ) : 'F j, Y' ), $ts ) : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'F j, Y' ) : 'F j, Y' ), $ts );
 	}
 
 	/**

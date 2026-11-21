@@ -23,7 +23,7 @@ final class LedgerAnswersTest extends TestCase {
 				'note_tags'     => array( array( 'label' => 'Example channel', 'tags' => array( 'examplead', 'example ad' ), 'except' => array( 'exampleorg' ) ) ),
 				'aliases'       => array( 'flyer' => 'Flyers' ),
 			),
-			'reference'     => array( 'self_codes' => array( 'EXC' ), 'product_codes' => array( 'GT' => 'Gate' ) ),
+			'reference'     => array( 'self_codes' => array( 'EXC' ), 'product_codes' => array( 'GA' => 'Gate' ) ),
 			'brands'        => array( 'Northwind' => array( 'northwind' ) ),
 			'source_groups' => array(
 				array( 'key' => 'channel', 'label' => 'Example channel', 'words' => array( 'example channel', 'channel ads' ), 'crm' => array( 'example + paid', '=example channel' ), 'billing' => array( '=example channel' ), 'aside' => array( '=example' ), 'aside_label' => 'Plain "example", not marked as paid' ),
@@ -480,7 +480,7 @@ final class LedgerAnswersTest extends TestCase {
 
 	public function test_the_reference_notes_and_location_line_derive_the_columns(): void {
 		$rules = ZANA_Ledger_Rules::get();
-		$r     = ZANA_Ledger_Enrich::parse_reference( '10001-EXC/GT/XY', $rules, array( 'AB' ) );
+		$r     = ZANA_Ledger_Enrich::parse_reference( '10001-EXC/GA/XY', $rules, array( 'AB' ) );
 		$this->assertSame( array( '10001', 'Gate', 'XY', 'Example channel' ), array( $r['zip'], $r['product'], $r['source_code'], $r['source_label'] ) );
 		$r = ZANA_Ledger_Enrich::parse_reference( '10001XY', $rules );
 		$this->assertSame( array( '10001', 'XY' ), array( $r['zip'], $r['source_code'] ), 'a suffix code the rules allow' );

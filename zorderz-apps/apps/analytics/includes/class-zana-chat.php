@@ -17,7 +17,10 @@
  *      connectors are bound (`zdz_analytics_data_context`, ships EMPTY), fenced with the platform's data fence;
  *   8. ask the model through the platform's Ai router (ZANA_LLM_Client → ZDZ_Core_LLM::ask): customer details are coded
  *      before anything leaves, and the answer comes back decoded for the person who asked. When the model asks Charts
- *      for figures first, the charts run and it is asked once more, with their rows (ZANA_Charts_Tool);
+ *      for figures first, the charts run and it is asked once more, with their rows (ZANA_Charts_Tool); when it asks
+ *      to read the business's records first, the lookups run and it is asked once more, with the lines and jobs
+ *      (ZANA_Records). A call over its cost limit is asked once more with its data cut to fit, and the answer says
+ *      part of the data was left out (ZANA_Data_Fit);
  *   9. math written as LaTeX becomes plain text (ZANA_Plain_Math);
  *  10. an action the model asked for becomes an app's answer, a refusal, or a Confirm card (ZANA_Actions) -- never a
  *      write; library links become real, a message draft is held for Send, access codes are cut (ZANA_Routes);
@@ -51,9 +54,11 @@ class ZANA_Chat {
 	 * @param int    $user_id
 	 * @param int    $session_id 0 to start a new session.
 	 * @param string $message
+	 * @param array  $opts       { history: the earlier turns to read in place of this chat's own (a reply in a Messages
+	 *                           thread reads the thread: ZANA_PV_DM_Agent). Only this app's own code passes it. }
 	 * @return array {ok, session_id, answer, tier, verdict, error?}
 	 */
-	public static function send( int $user_id, int $session_id, string $message ): array {
+	public static function send( int $user_id, int $session_id, string $message, array $opts = array() ): array {
 		$started = microtime( true );
 		$message = trim( wp_strip_all_tags( $message ) );
 		if ( '' === $message ) {
@@ -67,10 +72,24 @@ class ZANA_Chat {
 			return self::fail( 0, __( 'The assistant is not available on the shared device.', 'zorderz' ) );
 		}
 		$pv = class_exists( 'ZANA_Pseudonym_Route' ) && ZANA_Pseudonym_Route::is_on( $user_id );
+		// The notes the assistant keeps for a Messages thread are not a chat to write in: only its own reply adds to them.
+		if ( $session_id > 0 && class_exists( 'ZANA_PV_DM_Agent' ) && ZANA_PV_DM_Agent::closed_to( $session_id ) ) {
+			return self::fail( 0, __( 'These are notes for a Messages thread; ask in a chat.', 'zorderz' ) );
+		}
 
 		$session_id = self::ensure_session( $user_id, $session_id, $message );
-		$history    = self::history( $session_id, $user_id );   // before this turn's message is saved
+		$history    = isset( $opts['history'] ) && is_array( $opts['history'] ) ? $opts['history'] : self::history( $session_id, $user_id );   // before this turn's message is saved
 		self::store_message( $session_id, $user_id, 'user', $message, 'confirmed', 'ok' );
+
+		// ── Deep research (BEGIN): a message that asks for a run, or presses one of its buttons, is answered by the run's card ──
+		$research = class_exists( 'ZANA_Research' ) ? ZANA_Research::turn( $user_id, $session_id, $message, $history ) : null;
+		if ( is_array( $research ) && isset( $research['answer'] ) ) {
+			self::store_message( $session_id, $user_id, 'assistant', (string) $research['answer'], 'confirmed', 'ok' );
+			self::touch_session( $session_id );
+			self::timing( $session_id, $started, 'research', 'ok', 'route' );
+			return array( 'ok' => true, 'session_id' => $session_id, 'answer' => (string) $research['answer'], 'tier' => 'confirmed', 'verdict' => 'ok', 'route' => 'research' );
+		}
+		// ── Deep research (END) ──
 
 		// ── A Privacy View code: read it as what it stands for (this chat's own answers only), or answer it ──
 		$for_model = $message;
@@ -109,15 +128,32 @@ class ZANA_Chat {
 			? ZANA_Routes::before_model( $user_id, $for_model, $history, array(
 				'privacy_view'    => $pv,
 				'customer_lookup' => 'customer_lookup' === $context['category'],
+				'session_id'      => $session_id,
 			) )
 			: array( 'answer' => null, 'kind' => '', 'plan' => array() );
 		if ( null !== $route['answer'] ) {
 			$answer = class_exists( 'ZANA_Sealed' ) ? (string) ZANA_Sealed::cut( (string) $route['answer'] ) : (string) $route['answer'];
+			if ( is_array( $research ) && ! empty( $research['banner'] ) ) {
+				$answer = ZANA_Research::banner( (string) $research['banner'] ) . $answer;   // deep research was asked for by name and did not run: said on top
+			}
 			self::store_message( $session_id, $user_id, 'assistant', $answer, 'confirmed', 'ok' );
 			self::touch_session( $session_id );
 			self::after_turn( $user_id, $message, $session_id );
 			self::timing( $session_id, $started, (string) $route['kind'], empty( $route['failed'] ) ? 'ok' : 'failed', 'route' );
 			return array( 'ok' => true, 'session_id' => $session_id, 'answer' => $answer, 'tier' => 'confirmed', 'verdict' => 'ok', 'route' => (string) $route['kind'] );
+		}
+		// ── One email of the person's own, answered as a draft: its own turn, with no earlier turn and no general data ──
+		if ( class_exists( 'ZANA_Mail_Reply_Route' ) && ZANA_Mail_Reply_Route::is_turn( (array) $route['plan'] ) ) {
+			$mr = ZANA_Mail_Reply_Route::answer( $user_id, $for_model, $context, (array) $route['plan'] );
+			if ( empty( $mr['ok'] ) ) {
+				self::timing( $session_id, $started, 'mail_reply', 'failed', 'model', array( 'model_ms' => (int) $mr['model_ms'] ) );
+				return self::fail( $session_id, '' !== (string) $mr['error'] ? (string) $mr['error'] : __( 'I couldn\'t reach the assistant just now. Please try again.', 'zorderz' ) );
+			}
+			self::store_message( $session_id, $user_id, 'assistant', (string) $mr['answer'], (string) $mr['tier'], (string) $mr['verdict'] );
+			self::touch_session( $session_id );
+			self::after_turn( $user_id, $message, $session_id );
+			self::timing( $session_id, $started, 'mail_reply', 'ok', (string) $mr['how'], (array) $mr['numbers'] + array( 'model_ms' => (int) $mr['model_ms'], 'cut_off' => ! empty( $mr['cut_off'] ) ) );
+			return array( 'ok' => true, 'session_id' => (int) $session_id, 'answer' => (string) $mr['answer'], 'tier' => (string) $mr['tier'], 'verdict' => (string) $mr['verdict'], 'route' => 'mail_reply', 'cut_off' => ! empty( $mr['cut_off'] ) );
 		}
 		// An app's answer shown on an earlier turn reaches the model only as its title and a note.
 		if ( class_exists( 'ZANA_App_Reads' ) ) {
@@ -127,6 +163,11 @@ class ZANA_Chat {
 		$vocab  = ( ! $web && class_exists( 'ZANA_Charts_Tool' ) && ZANA_Charts_Tool::available( $user_id ) ) ? ZANA_Charts_Tool::vocab( $user_id ) : array();
 		$flags  = array( 'charts_vocab' => $vocab, 'privacy_view' => $pv, 'web' => $web, 'email_task' => ! empty( $route['plan']['email_task'] ) );
 
+		// A correction typed about the draft the last answer showed is how this administrator writes (ZANA_Style_Memory).
+		if ( class_exists( 'ZANA_Style_Memory' ) ) {
+			ZANA_Style_Memory::note_correction( $user_id, $message, $history );
+		}
+
 		// ── Assemble the instructions (one author) and the turn's data (ships empty) ──
 		$system = ZANA_Prompt_Builder::build( $user_id, $context );
 		if ( class_exists( 'ZANA_Routes' ) ) {
@@ -135,6 +176,11 @@ class ZANA_Chat {
 				$system .= "\n\n" . implode( "\n\n", $extra );
 			}
 		}
+		// ── The business's own records (ZANA_Records): the tool for someone Charts lets see line items; a name written two
+		// ways. Never with a web search or on a turn that answers one received e-mail (what those read is not the business's) ──
+		$rec_ctx = array( 'web' => $web, 'mail_reply' => ! empty( $route['plan']['mail_reply_turn'] ) || ! empty( $route['plan']['mail_reply'] ) );
+		$rec     = class_exists( 'ZANA_Records' ) ? ZANA_Records::begin_turn( $user_id, $for_model, $vocab, $rec_ctx ) : array( 'on' => false, 'system' => '' );
+		$system  = '' !== $rec['system'] ? $system . "\n\n" . $rec['system'] : $system;
 		$data   = apply_filters(
 			'zdz_analytics_data_context',
 			array(
@@ -174,8 +220,24 @@ class ZANA_Chat {
 		$how  = 'model';
 		$cost = array( 'usd' => (float) ( $client->last_numbers['usd'] ?? 0 ), 'model' => (string) ( $client->last_numbers['model'] ?? '' ) );
 
+		// ── The business's own records: the model asked to read invoice lines or job lists first; they are read as the
+		// person asking, and it answers from them (chart requests written beside them run in the same round) ──
+		$rec_round = $rec['on'] ? ZANA_Records::round( $client, $messages, $raw, $user_id, $vocab, self::BUDGET_S - (int) ( microtime( true ) - $model0 ) ) : null;
+		if ( null !== $rec_round ) {
+			if ( empty( $rec_round['ok'] ) ) {
+				self::timing( $session_id, $started, (string) $context['category'], 'failed', (string) $rec_round['how'], array( 'model_ms' => (int) round( ( microtime( true ) - $model0 ) * 1000 ) ) );
+				return self::fail( $session_id, (string) $rec_round['error'] );
+			}
+			$raw          = (string) $rec_round['text'];
+			$how          = (string) $rec_round['how'];
+			$cost['usd'] += (float) $rec_round['usd'];
+			foreach ( (array) $rec_round['verified'] as $vf ) {
+				$data['verified_figures'][] = $vf;
+			}
+		}
+
 		// ── Charts as the calculator: the model asked for charts first; they run, and it answers from their rows ──
-		if ( $vocab && ZANA_Charts_Tool::only_requests( $raw ) ) {
+		if ( null === $rec_round && $vocab && ZANA_Charts_Tool::only_requests( $raw ) ) {
 			ZANA_Charts_Tool::run_specs( ZANA_Charts_Tool::requests_in( $raw ), $user_id, $vocab, 'plan' );
 			$messages[] = array( 'role' => 'assistant', 'content' => $raw );
 			$messages[] = array( 'role' => 'system', 'content' => ZANA_Markers::fence( ZANA_Charts_Tool::block() ) );
@@ -190,6 +252,12 @@ class ZANA_Chat {
 			foreach ( ZANA_Charts_Tool::verified_figures() as $vf ) {
 				$data['verified_figures'][] = $vf;
 			}
+		}
+		if ( class_exists( 'ZANA_Records' ) ) {
+			$raw = ZANA_Records::strip_requests( $raw, ! empty( $rec['on'] ) );   // a records request left in an answer is never run or shown
+		}
+		if ( class_exists( 'ZANA_Data_Fit' ) && $client->data_cut > 0 ) {
+			$raw = ZANA_Data_Fit::said( $raw, (int) $client->data_cut );   // data left out to fit one call's cost limit: said under the answer
 		}
 		$model_ms = (int) round( ( microtime( true ) - $model0 ) * 1000 );
 
@@ -227,6 +295,10 @@ class ZANA_Chat {
 		$answer  = (string) $gated['text'];
 		if ( class_exists( 'ZANA_Routes' ) ) {
 			$answer = ZANA_Routes::finish( $answer, $flags );   // the server's chart buttons and the web note, after the gate
+		}
+		if ( class_exists( 'ZANA_Research' ) ) {
+			// deep research: a token a model wrote is taken out, a run that did not start is said on top, "Go deeper" is offered
+			$answer = ZANA_Research::after_answer( $answer, $user_id, $message, array( 'note' => $research, 'email_task' => ! empty( $flags['email_task'] ), 'privacy_view' => $pv ) );
 		}
 		$verdict = (string) ( $gated['verdict'] ?? 'ok' );
 		// The turn is at best DERIVED unless a system of record backed the figures.
@@ -431,6 +503,11 @@ class ZANA_Chat {
 			),
 			ARRAY_A
 		);
+		// The notes the assistant keeps for a Messages thread are not chats: never listed.
+		$notes = class_exists( 'ZANA_PV_DM_Agent' ) ? ZANA_PV_DM_Agent::session_ids() : array();
+		if ( $notes ) {
+			$rows = array_values( array_filter( (array) $rows, static fn( $r ) => ! in_array( (int) $r['id'], $notes, true ) ) );
+		}
 		return array_map(
 			static fn( $r ) => array(
 				'id'         => (int) $r['id'],

@@ -117,6 +117,7 @@ class ZSCH_Widget {
 
 		wp_localize_script( 'zsch-widget-js', 'zschData', array(
 			'restUrl'   => ZSCH_REST::base_url(),
+			'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
 			'nonce'     => wp_create_nonce( 'wp_rest' ),
 			'userId'    => (int) $user_id,
 			'canWrite'  => (bool) $can_write,
@@ -153,7 +154,7 @@ class ZSCH_Widget {
 						<button type="button" class="zsch-w-navbtn" id="zsch-prev" aria-label="Previous"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
 						<button type="button" class="zsch-w-today" id="zsch-today">Today</button>
 						<button type="button" class="zsch-w-navbtn" id="zsch-next" aria-label="Next"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
-						<span class="zsch-w-period" id="zsch-period">—</span>
+						<span class="zsch-w-period" id="zsch-period">–</span>
 					</div>
 				</div>
 				<div class="zsch-w-hdr-right">
@@ -181,7 +182,7 @@ class ZSCH_Widget {
 			<?php if ( zsch_user_is_read_only( $user_id ) ) : ?>
 				<div class="zsch-w-readonly-banner">
 					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-					View only — the shared device can see the team calendar but can't make changes.
+					View only: the shared device can see the team calendar but can't make changes.
 				</div>
 			<?php endif; ?>
 
@@ -203,12 +204,12 @@ class ZSCH_Widget {
 					<div class="zsch-casc" id="zsch-casc" hidden>
 						<div class="zsch-casc-line zsch-casc-line--strip">
 							<button type="button" class="zsch-casc-chev" id="zsch-casc-mprev" aria-label="Previous month"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
-							<div class="zsch-casc-strip" id="zsch-casc-strip" role="group" aria-label="Month overview — tap a week to load it below"></div>
+							<div class="zsch-casc-strip" id="zsch-casc-strip" role="group" aria-label="Month overview: tap a week to load it below"></div>
 							<button type="button" class="zsch-casc-chev" id="zsch-casc-mnext" aria-label="Next month"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
 						</div>
 						<div class="zsch-casc-line zsch-casc-line--wklabel">
 							<button type="button" class="zsch-casc-chev zsch-casc-chev--wk" id="zsch-casc-wprev" aria-label="Previous week"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
-							<span class="zsch-casc-wklabel" id="zsch-casc-wklabel" aria-live="polite">&mdash;</span>
+							<span class="zsch-casc-wklabel" id="zsch-casc-wklabel" aria-live="polite">&ndash;</span>
 							<button type="button" class="zsch-casc-chev zsch-casc-chev--wk" id="zsch-casc-wnext" aria-label="Next week"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
 						</div>
 						<div class="zsch-casc-week" id="zsch-casc-week" role="group" aria-label="Days of the selected week"></div>
@@ -220,7 +221,7 @@ class ZSCH_Widget {
 
 				<section class="zsch-w-pane" id="zsch-pane-availability" role="tabpanel" aria-label="My availability" hidden>
 					<div class="zsch-w-avail-toolbar">
-						<p class="zsch-w-hint">Pick <strong>Free</strong>, <strong>Busy</strong>, or <strong>Clear</strong>, then <strong>drag down a day</strong> to paint your hours (8am&ndash;8pm). Drag across days to paint several at once. Or tap <strong>Dictate</strong> to say it &mdash; e.g. &ldquo;free Monday to Wednesday.&rdquo;</p>
+						<p class="zsch-w-hint">Pick <strong>Free</strong>, <strong>Busy</strong>, or <strong>Clear</strong>, then <strong>drag down a day</strong> to paint your hours (8am&ndash;8pm). Drag across days to paint several at once. Or tap <strong>Dictate</strong> to say it, e.g. &ldquo;free Monday to Wednesday.&rdquo;</p>
 						<div class="zsch-w-avail-actions" role="group" aria-label="Paint mode">
 							<button type="button" class="zsch-w-pill is-active" id="zsch-paint-open" data-kind="open" aria-pressed="true">Free</button>
 							<button type="button" class="zsch-w-pill" id="zsch-paint-busy" data-kind="busy" aria-pressed="false">Busy</button>
@@ -258,7 +259,7 @@ class ZSCH_Widget {
 					<div class="zsch-w-modal-body">
 						<label class="zsch-w-field">
 							<span>Title</span>
-							<input type="text" id="zsch-f-title" autocomplete="off" placeholder="e.g. Install — Job #4821">
+							<input type="text" id="zsch-f-title" autocomplete="off" placeholder="e.g. Install, Job #4821">
 						</label>
 						<div class="zsch-w-field-row">
 							<label class="zsch-w-field">
@@ -331,7 +332,7 @@ class ZSCH_Widget {
 						<button type="button" class="zsch-w-icon-btn" id="zsch-dictate-close" aria-label="Close">✕</button>
 					</header>
 					<div class="zsch-w-modal-body">
-						<p class="zsch-w-hint">Tap the box, then use your device's dictation to speak it — or just type. For example: <em>"open June 16 to June 18"</em> or <em>"busy next Monday."</em></p>
+						<p class="zsch-w-hint">Tap the box, then use your device's dictation to speak it, or just type. For example: <em>"open June 16 to June 18"</em> or <em>"busy next Monday."</em></p>
 						<div class="zsch-w-dictate-row">
 							<input type="text" id="zsch-dictate-input" placeholder="open Monday to Wednesday" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
 						</div>
@@ -371,7 +372,7 @@ class ZSCH_Widget {
 						<button type="button" class="zsch-w-icon-btn" id="zsch-conncal-close" aria-label="Close">✕</button>
 					</header>
 					<div class="zsch-w-modal-body">
-						<p class="zsch-w-hint">Link your own calendars (personal Google, another Microsoft&nbsp;365 account) so the team scheduler knows when you're busy outside this app. Only you see event details — teammates just see busy time<?php echo '.'; ?></p>
+						<p class="zsch-w-hint">Link your own calendars (personal Google, another Microsoft&nbsp;365 account) so the team scheduler knows when you're busy outside this app. Only you see event details; teammates just see busy time<?php echo '.'; ?></p>
 						<div class="zsch-conncal-list" id="zsch-conncal-list" aria-live="polite">
 							<p class="zsch-conncal-empty">Loading…</p>
 						</div>

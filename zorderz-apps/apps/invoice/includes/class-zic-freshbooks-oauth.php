@@ -55,14 +55,14 @@ class ZIC_FreshBooks_OAuth {
 			return 'Client ID/Secret not configured';
 		}
 		if ( ! self::is_connected() ) {
-			return 'Not connected — click Connect FreshBooks';
+			return 'Not connected. Click Connect FreshBooks';
 		}
 		$exp = (int) get_option( 'zic_fb_token_expires_at', 0 );
 		if ( $exp <= 0 ) {
 			return 'Connected (expiry unknown)';
 		}
 		if ( $exp <= time() ) {
-			return 'EXPIRED at ' . gmdate( 'Y-m-d H:i', $exp ) . ' UTC — will auto-refresh';
+			return 'EXPIRED at ' . gmdate( 'Y-m-d H:i', $exp ) . ' UTC, will auto-refresh';
 		}
 		return 'Valid until ' . gmdate( 'Y-m-d H:i', $exp ) . ' UTC (' . human_time_diff( time(), $exp ) . ' remaining)';
 	}

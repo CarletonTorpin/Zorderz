@@ -362,7 +362,7 @@ class ZEST_Reassign {
 	}
 
 	/** A team member who may be given work: Territories' own rule when it is here, else a staff or admin rung. */
-	private static function can_be_given_work( int $uid ): bool {
+	public static function can_be_given_work( int $uid ): bool {
 		if ( function_exists( 'zter_assignable' ) ) {
 			return (bool) zter_assignable( $uid );
 		}
@@ -646,7 +646,7 @@ class ZEST_Reassign {
 		}
 		$me    = class_exists( 'ZEST_Salesperson' ) ? ZEST_Salesperson::initials_of( $uid ) : '';
 		$paren = trim( (string) get_user_meta( $to_id, 'zdz_user_parenthetical', true ) );
-		$new   = self::rewrite( $doc, (string) $it['from'], $to, $paren, $me, function_exists( 'wp_date' ) ? (string) wp_date( 'n/j/Y' ) : gmdate( 'n/j/Y' ) );
+		$new   = self::rewrite( $doc, (string) $it['from'], $to, $paren, $me, function_exists( 'wp_date' ) ? (string) wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format() : 'n/j/Y' ) ) : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format() : 'n/j/Y' ) ) );
 		if ( is_string( $new ) ) {
 			return $fail( $new );
 		}

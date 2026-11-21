@@ -703,13 +703,30 @@
   function card(c, ctx) {
     if (!c) { return null; }
     var n = null;
-    if (c.k === 'confirm') { n = confirmCard(c.id, ctx.meta); }
-    else if (c.k === 'dm' || c.k === 'post') { n = draftCard(c, ctx.meta); }
-    else if (c.k === 'email') { n = emailCard(c); }
-    else if (c.k === 'chips') { n = chipsCard(c.items); }
-    else if (c.k === 'page') { n = pageCard(c, ctx.meta); }
+    try {
+      if (c.k === 'confirm') { n = confirmCard(c.id, ctx.meta); }
+      else if (c.k === 'dm' || c.k === 'post') { n = draftCard(c, ctx.meta); }
+      else if (c.k === 'email') { n = emailCard(c); }
+      else if (c.k === 'chips') { n = chipsCard(c.items); }
+      else if (c.k === 'page') { n = pageCard(c, ctx.meta); }
+      else if (window.ZanaCards && typeof window.ZanaCards[c.k] === 'function') { n = window.ZanaCards[c.k](c, ctx); }   // a card another script of this app draws
+    } catch (e) {
+      // A card the browser cannot build (an email draft whose words will not go into a mail link) is shown as its
+      // words, and the answer's other cards still draw.
+      n = (c.k === 'email') ? wordsCard(c) : null;
+    }
     if (n) { n.setAttribute('data-no-linkify', '1'); }
+    if (n) { hook('card', n, c, ctx.meta); }
     return n;
+  }
+
+  /** An email draft as its words only (no button): To, Subject and the text, each as plain text. */
+  function wordsCard(c) {
+    var box = h('div', 'zana-card zana-email-card');
+    if (c.to) { box.appendChild(h('div', 'zana-email-line', t('emailTo', 'To') + ': ' + c.to)); }
+    if (c.subject) { box.appendChild(h('div', 'zana-email-line', t('emailSubject', 'Subject') + ': ' + c.subject)); }
+    box.appendChild(h('div', 'zana-draft-body', c.body));
+    return box;
   }
 
   function settledLine(ok, msg) {
@@ -1246,6 +1263,7 @@
       return li;
     }
     k.sheet({ title: t('aboutYou', 'About you'), body: body, actions: [{ label: t('close', 'Close') }] });
+    hook('memory', body);
     empty(t('loading', 'Loading\u2026'));
     var load = CFG.privacyView ? ajax('zana_list_memories', {}) : api('/memory');
     load.then(function (d) {
@@ -1491,9 +1509,21 @@
   }
 
   window.ZanaChat = { open: open, showChat: showChat, ajax: ajax, newChat: newChat };
+  // For a card another script of this app draws: the chat's REST request, a message sent as the person, an answer redrawn.
+  window.ZanaChat.api = api;
+  window.ZanaChat.send = send;
+  window.ZanaChat.fill = fillAnswer;
   // The address matcher and linkifier, for the test harness and for another surface that wants them.
   window.ZanaChat.matchAddresses = matchAddresses;
   window.ZanaChat.linkifyAddresses = linkifyAddresses;
+  // Another script of this app may add to a drawn card or to the "About you" sheet: ZanaChat.on('card' | 'memory', fn).
+  // What it adds is its own; if it throws, the card and the sheet stay as they were.
+  var hooks = {};
+  function hook(name, a, b, c) {
+    (hooks[name] || []).forEach(function (fn) { try { fn(a, b, c); } catch (e) { /* the add-on's own trouble */ } });
+  }
+  window.ZanaChat.on = function (name, fn) { if (typeof fn === 'function') { (hooks[name] = hooks[name] || []).push(fn); } };
+  window.ZanaChat.sessionId = function () { return state.sessionId || 0; };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

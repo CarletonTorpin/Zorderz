@@ -23,7 +23,7 @@ class ZCC_App implements \Zorderz\Widget_App_Interface {
 			'nm'          => __( 'Commission', 'zorderz' ),
 			'icon'        => 'calculator',
 			'cat'         => 'Finance',
-			'cc'          => '#059669',
+			'cc'          => '#0072B2',
 			'desc'        => __( 'Deterministic commission & piece-rate pay from your invoices.', 'zorderz' ),
 			'roles'       => (array) apply_filters( 'zcc_roles', [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator' ] ),
 			'bridge_type' => 'inline_widget',

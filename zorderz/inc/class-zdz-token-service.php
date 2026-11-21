@@ -139,7 +139,7 @@ class ZDZ_Token_Service {
 	private static $watched = array();
 
 	// ─────────────────────────────────────────────────────────────────
-	// PROVIDER REGISTRY (the registration API replaces all hard-coding)
+	// PROVIDER REGISTRY (providers register through this API)
 	// ─────────────────────────────────────────────────────────────────
 
 	/**

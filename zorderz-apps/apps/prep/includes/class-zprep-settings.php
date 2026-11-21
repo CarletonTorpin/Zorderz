@@ -28,8 +28,8 @@ class ZPREP_Settings {
 
 	/* ─────────────────────────────────────────────────────────────────
 	 * Stored settings + defaults. Costs default to 0.00 (EMPTY): the roll
-	 * WIDTHS/COLOURS are the fabrication mechanism (tenant-editable), but no
-	 * supplier price ships in code.
+	 * WIDTHS/COLOURS are the fabrication mechanism (the business edits them), and
+	 * no supplier price ships in code.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/** @return array The default settings blob. Roll costs are 0 (ship empty). */
@@ -99,11 +99,10 @@ class ZPREP_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * The QUEUE TAG + SUBTYPE — the configurable replacement for the baked-in
-	 * single hardcoded product line. A queue tag is a reference token that marks a
-	 * job as prep work; a queue subtype binds the queue to an Item-Engine
-	 * subtype so the product-line gate reads the item's own subtype,
-	 * not a substring in a routing code. BOTH ship EMPTY.
+	 * The QUEUE TAG + SUBTYPE: which work is prep work is the business's own
+	 * setting. A queue tag is a reference token that marks a job as prep work; a
+	 * queue subtype binds the queue to an Item Engine subtype, so the product-line
+	 * gate reads the item's own subtype. BOTH ship EMPTY.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/** @return string The reference-code token that marks a prep job. '' = accept all. */
@@ -153,16 +152,15 @@ class ZPREP_Settings {
 	}
 
 	/* ─────────────────────────────────────────────────────────────────
-	 * ROLL / MATERIAL model. Widths + colours are the fabrication mechanism
-	 * (tenant-editable); COSTS SHIP EMPTY. "60-inch white doesn't exist" is
-	 * expressed as the ABSENCE of that entry in the availability set, not a
-	 * hardcoded isset() guard.
+	 * ROLL / MATERIAL model. Widths + colours are the fabrication mechanism (the
+	 * business edits them); COSTS SHIP EMPTY. A width/colour that does not exist is
+	 * the ABSENCE of that entry in the availability set.
 	 * ────────────────────────────────────────────────────────────────── */
 
 	/**
 	 * The roll/material set. Each entry: { width_in:int, color:string, cost_per_ft:float,
-	 * available:bool }. Ships a NEUTRAL default set (widths + generic colours) with ZERO
-	 * costs; a tenant overrides via Settings or the `zprep_rolls` filter.
+	 * available:bool }. Ships a default set (widths + generic colours) with ZERO costs; a
+	 * business overrides it via Settings or the `zprep_rolls` filter.
 	 *
 	 * @return array<int,array{width_in:int,color:string,cost_per_ft:float,available:bool}>
 	 */
@@ -185,7 +183,7 @@ class ZPREP_Settings {
 			);
 		}
 		/**
-		 * Filter the roll/material set. NEUTRAL default; costs empty.
+		 * Filter the roll/material set. Costs are empty by default.
 		 *
 		 * @param array $out Roll entries.
 		 */
@@ -193,10 +191,9 @@ class ZPREP_Settings {
 	}
 
 	/**
-	 * The neutral default roll set: two widths in a dark colour + one in a light colour.
-	 * This is the fabrication MECHANISM (so the tool works for a demo), carrying NO brand
-	 * names and NO costs. Note there is deliberately no light 60" entry — availability is
-	 * data, so "that width/colour doesn't exist" is simply its absence here.
+	 * The default roll set: two widths in a dark colour + one in a light colour, so the
+	 * tool works for a demo; NO brand names and NO costs. Availability is data: a
+	 * width/colour that does not exist is simply absent.
 	 *
 	 * @return array
 	 */
@@ -412,6 +409,169 @@ class ZPREP_Settings {
 		// Neutral fallback: round pieces are pre-made deliverables; the rest are cut.
 		$cuttable = ( 'circle' !== $shape );
 		return (bool) apply_filters( 'zprep_is_cuttable_piece', $cuttable, $kind, $shape );
+	}
+
+	/* ─────────────────────────────────────────────────────────────────
+	 * INTERNAL ORDERS — what the shop cuts for itself. What an order may be
+	 * for (and the short code each purpose puts in a reference code), the
+	 * stock sheet the form starts from, the kinds of piece it offers and what
+	 * the material costs are the business's: an administrator sets them on
+	 * Prep's settings page, or an Identity Pack does (rules.yml
+	 * prep.internal_orders, costs.yml prep.material_cost_per_sq_in). Core
+	 * ships one general purpose, no sheet size and no cost.
+	 * ────────────────────────────────────────────────────────────────── */
+
+	const INTERNAL_OPT   = 'zprep_internal_orders';
+	const COST_RATES_OPT = 'zprep_material_cost_rates';
+	/** How the business numbers a building's sides, as one line the parser is told (Identity Pack rules.yml prep.side_convention). */
+	const SIDES_OPT      = 'zprep_side_convention';
+	const DEFAULT_SIDES  = 'Side 1 is the front-entrance side; sides are numbered 1→2→3→4 going counter-clockwise.';
+
+	/** A side convention as stored: one line of at most 300 characters, or '' (Core's default applies). */
+	public static function clean_side_convention( $raw ): string {
+		$v = is_scalar( $raw ) ? trim( preg_replace( '/\s+/u', ' ', (string) $raw ) ) : '';
+		$v = preg_replace( '/[\x00-\x1F\x7F]/u', '', $v );
+		return mb_substr( (string) $v, 0, 300 );
+	}
+
+	/** The side convention the parser is told: the business's own, else Core's; code may change it (zprep_side_convention filter). */
+	public static function side_convention(): string {
+		$own   = function_exists( 'get_option' ) ? self::clean_side_convention( get_option( self::SIDES_OPT, '' ) ) : '';
+		$sides = '' !== $own ? $own : self::DEFAULT_SIDES;
+		$f     = function_exists( 'apply_filters' ) ? apply_filters( 'zprep_side_convention', $sides ) : $sides;
+		$f     = self::clean_side_convention( $f );
+		return '' !== $f ? $f : self::DEFAULT_SIDES;
+	}
+	const MAX_PURPOSES   = 20;
+
+	/** The one purpose Core ships: key => { label, code }. */
+	public static function default_internal_purposes(): array {
+		return array(
+			'general' => array( 'label' => __( 'Internal use', 'zorderz' ), 'code' => 'GEN' ),
+		);
+	}
+
+	/**
+	 * Purposes as data: key => { label, code }. A key is a slug; a code is 2 to 6 capital letters or digits (it is the
+	 * middle of a reference code); a purpose missing either, or its label, is left out, and a code is used once.
+	 * Accepts a list of { key, label, code } or a map key => { label, code }. PURE apart from sanitize_key.
+	 */
+	public static function clean_internal_purposes( $raw ): array {
+		$out  = array();
+		$used = array();
+		foreach ( is_array( $raw ) ? $raw : array() as $k => $p ) {
+			if ( ! is_array( $p ) ) {
+				continue;
+			}
+			$key   = substr( sanitize_key( (string) ( $p['key'] ?? ( is_string( $k ) ? $k : '' ) ) ), 0, 40 );
+			$label = trim( strip_tags( (string) ( $p['label'] ?? '' ) ) );
+			$code  = strtoupper( (string) preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $p['code'] ?? '' ) ) );
+			if ( '' === $key || '' === $label || strlen( $code ) < 2 || strlen( $code ) > 6 || isset( $out[ $key ] ) || isset( $used[ $code ] ) ) {
+				continue;
+			}
+			$used[ $code ] = true;
+			$out[ $key ]   = array( 'label' => substr( $label, 0, 60 ), 'code' => $code );
+			if ( count( $out ) >= self::MAX_PURPOSES ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/** The stored internal-orders settings, cleaned: { purposes, default_sheet }. */
+	public static function internal_orders(): array {
+		$raw = get_option( self::INTERNAL_OPT, array() );
+		$raw = is_array( $raw ) ? $raw : array();
+		return array(
+			'purposes'      => self::clean_internal_purposes( $raw['purposes'] ?? array() ),
+			'default_sheet' => self::clean_sheet( $raw['default_sheet'] ?? null ),
+		);
+	}
+
+	/** A stock sheet { w, l } by the engine's one rule, or null. */
+	public static function clean_sheet( $sheet ): ?array {
+		if ( ! class_exists( 'ZPREP_Engine' ) ) {
+			require_once __DIR__ . '/class-zprep-engine.php';
+		}
+		return ZPREP_Engine::clean_stock_sheet( $sheet );
+	}
+
+	/** What an internal order may be for: the business's purposes, else the one Core ships. key => { label, code }. */
+	public static function internal_purposes(): array {
+		$mine = self::internal_orders()['purposes'];
+		$mine = self::clean_internal_purposes( apply_filters( 'zprep_internal_purposes', $mine ) );
+		return $mine ? $mine : self::default_internal_purposes();
+	}
+
+	/** The stock sheet the internal-order form starts from, or null (the boxes start empty). */
+	public static function internal_default_sheet(): ?array {
+		return self::clean_sheet( apply_filters( 'zprep_internal_default_sheet', self::internal_orders()['default_sheet'] ) );
+	}
+
+	/**
+	 * The kinds of piece an internal order may hold: the catalog's kinds for this queue that are cut from stock exactly
+	 * as typed, and Custom. slug => label. With an empty catalog: Custom alone.
+	 */
+	public static function internal_kinds(): array {
+		$out = array();
+		if ( class_exists( 'ZDZ_Item_Engine' ) ) {
+			$filter  = array();
+			$subtype = self::queue_subtype();
+			if ( '' !== $subtype ) {
+				$filter['subtype'] = $subtype;
+			}
+			foreach ( ZDZ_Item_Engine::all( $filter ) as $id => $item ) {
+				$id = (string) $id;
+				if ( 'custom' !== $id && preg_match( '/^[a-z0-9_\-]{1,80}$/', $id ) && self::is_cuttable_piece( $id, 'rectangle' ) ) {
+					$out[ $id ] = (string) ( $item['display_name'] ?? self::kind_label( $id ) );
+				}
+			}
+		}
+		$out   = (array) apply_filters( 'zprep_internal_kinds', $out );
+		$clean = array();
+		foreach ( $out as $id => $label ) {
+			$id = (string) $id;
+			if ( 'custom' !== $id && preg_match( '/^[a-z0-9_\-]{1,80}$/', $id ) && '' !== trim( (string) $label ) ) {
+				$clean[ $id ] = (string) $label;
+			}
+		}
+		$clean['custom'] = __( 'Custom', 'zorderz' );
+		return $clean;
+	}
+
+	/**
+	 * Material cost rates as data: colour (or '*' for every colour) => cost per square inch, each over 0 and under
+	 * 100. Accepts one number (every colour) or a map colour => number. PURE.
+	 */
+	public static function clean_cost_rates( $raw ): array {
+		if ( is_numeric( $raw ) ) {
+			$raw = array( '*' => $raw );
+		}
+		$out = array();
+		foreach ( is_array( $raw ) ? $raw : array() as $color => $rate ) {
+			$color = strtolower( trim( (string) $color ) );
+			if ( '' === $color || ! preg_match( '/^(\*|[a-z0-9 _\-]{1,32})$/', $color ) || ! is_numeric( $rate ) ) {
+				continue;
+			}
+			$rate = (float) $rate;
+			if ( $rate > 0 && $rate < 100 ) {
+				$out[ $color ] = round( $rate, 6 );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * What the cut material costs per square inch in one colour, or 0.0 when the business has not said. Never a
+	 * figure worked out here: an order made with no rate on file says so on the year-end page.
+	 */
+	public static function material_cost_rate( string $color ): float {
+		$color = strtolower( trim( $color ) );
+		$rates = self::clean_cost_rates( get_option( self::COST_RATES_OPT, array() ) );
+		$rate  = $rates[ $color ] ?? ( $rates['*'] ?? 0.0 );
+		$rate  = apply_filters( 'zprep_material_cost_rate', $rate, $color );
+		$rate  = is_numeric( $rate ) ? (float) $rate : 0.0;
+		return ( $rate > 0 && $rate < 100 ) ? $rate : 0.0;
 	}
 
 	/* ─────────────────────────────────────────────────────────────────

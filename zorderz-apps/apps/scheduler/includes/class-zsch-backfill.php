@@ -214,13 +214,13 @@ class ZSCH_Backfill {
 		}
 
 		$lines = array( sprintf(
-			'Zorderz Scheduler backfill: batch %d row(s) — uid+%d, duration+%d, skipped %d (no round-trip), %d remaining%s',
+			'Zorderz Scheduler backfill: batch %d row(s): uid+%d, duration+%d, skipped %d (no round-trip), %d remaining%s',
 			(int) $r['processed'],
 			(int) ( $r['uid_set'] ?? 0 ),
 			(int) ( $r['duration_set'] ?? 0 ),
 			(int) ( $r['skipped_no_roundtrip'] ?? 0 ),
 			(int) ( $r['remaining'] ?? 0 ),
-			! empty( $r['done'] ) ? ' — COMPLETE' : ''
+			! empty( $r['done'] ) ? ', COMPLETE' : ''
 		) );
 
 		if ( empty( $r['done'] ) ) {
@@ -231,12 +231,12 @@ class ZSCH_Backfill {
 		$lines[]  = ( $unfilled > 0 )
 			? sprintf(
 				'Zorderz Scheduler backfill: COMPLETE with %d appointment(s) still carrying no duration. '
-				. 'These were LEFT ALONE on purpose — an exact duration did not reproduce the '
+				. 'These were LEFT ALONE on purpose: an exact duration did not reproduce the '
 				. 'end instant already stored on the row, so filling one would have moved an '
 				. 'appointment. Run ZSCH_Backfill::verify() for the rows that DID fill.',
 				$unfilled
 			)
-			: 'Zorderz Scheduler backfill: COMPLETE — every appointment now has a uid and a duration.';
+			: 'Zorderz Scheduler backfill: COMPLETE; every appointment now has a uid and a duration.';
 
 		return $lines;
 	}

@@ -18,7 +18,7 @@
  * groups, no \A or \z. They carry no delimiters. Each is applied case-insensitively. Apps may add launch rows with the
  * filter `zdz_ask_launch_rows`.
  *
- * The words of the business's own trade (the things it makes, fits or sells: "gate", "awning", "valve") are not
+ * The words of the business's own trade (the things it makes, fits or sells: "boiler", "radiator", "valve") are not
  * Core's to know. trade_words() reads them from the option `zdz_ask_trade_words` (a catalog pack writes it) and the
  * filter of the same name; Core ships none. They are used where a rule must tell a thing from a person.
  *
@@ -70,7 +70,7 @@ class ZDZ_Ask_Phrases {
 	}
 
 	/**
-	 * The trade's words as pattern alternatives ("gate(?:s|es)?|awning(?:s|es)?"), '' when there are none. A hyphen is
+	 * The trade's words as pattern alternatives ("boiler(?:s|es)?|radiator(?:s|es)?"), '' when there are none. A hyphen is
 	 * escaped; nothing else in a word is special.
 	 */
 	public static function trade_alt(): string {
@@ -100,19 +100,19 @@ class ZDZ_Ask_Phrases {
 	 */
 	public static function launch_rows(): array {
 		$rows = array(
-			array( 'ids' => array( 'scheduler' ), 're' => '\b(schedule|scheduler|calendar|appointments?|availability)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => 'period', 'key' => 'focus', 'icon' => 'calendar', 'cc' => '#0EA5E9' ),
-			array( 'ids' => array( 'estimate-creator' ), 're' => '\b(estimate|estimates|quote|quotes|bid|bids|proposal)\b', 'verb' => 'New', 'require_verb' => true, 'ctx' => 'for', 'key' => 'customer', 'icon' => 'file-text', 'cc' => '#F59E0B' ),
-			array( 'ids' => array( 'zdz-sketch-pad' ), 're' => '\b(sketch|sketchpad|draw(?:ing)?|doodle|diagram)\b', 'verb' => 'Start', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'pencil', 'cc' => '#F59E0B' ),
-			array( 'ids' => array( 'stock' ), 're' => '\b(stock|inventory|in stock|on hand)\b', 'verb' => 'Check', 'require_verb' => true, 'ctx' => 'for', 'key' => 'query', 'icon' => 'package', 'cc' => '#3B82F6' ),
-			array( 'ids' => array( 'commission-calculator' ), 're' => '\b(commission|commissions|payroll|installer pay|sales ledger|my pay)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => 'period', 'key' => 'period', 'icon' => 'calculator', 'cc' => '#10B981' ),
-			array( 'ids' => array( 'leads' ), 're' => '\b(leads?|lead generator|prospects?)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'target', 'cc' => '#22C55E' ),
-			array( 'ids' => array( 'surveys' ), 're' => '\b(surveys?|satisfaction|csat)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'clipboard-check', 'cc' => '#3B82F6' ),
-			array( 'ids' => array( 'prep' ), 're' => '\b(prep|prep queue|shop queue|work queue|fabricat\w*)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'scissors', 'cc' => '#F59E0B' ),
-			array( 'ids' => array( 'receipts' ), 're' => '\b(receipts?)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'receipt', 'cc' => '#0EA5E9' ),
-			array( 'ids' => array( 'knowledge-vault' ), 're' => '\b(knowledge|knowledge vault|knowledge base)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'book-open', 'cc' => '#22C55E' ),
-			array( 'ids' => array( 'internal-messaging' ), 're' => '\b(messages?|messaging|team chat|inbox)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'message-square', 'cc' => '#3B82F6' ),
-			array( 'ids' => array( 'zdz-media', 'zdz-media-all' ), 're' => '\b(media|photos? library|gallery|image library)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'image', 'cc' => '#64748B' ),
-			array( 'ids' => array( 'game' ), 're' => '\b(game|play a game)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'gamepad-2', 'cc' => '#84CC16' ),
+			array( 'ids' => array( 'scheduler' ), 're' => '\b(schedule|scheduler|calendar|appointments?|availability)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => 'period', 'key' => 'focus', 'icon' => 'calendar', 'cc' => '#56B4E9' ),
+			array( 'ids' => array( 'estimate-creator' ), 're' => '\b(estimate|estimates|quote|quotes|bid|bids|proposal)\b', 'verb' => 'New', 'require_verb' => true, 'ctx' => 'for', 'key' => 'customer', 'icon' => 'file-text', 'cc' => '#E69F00' ),
+			array( 'ids' => array( 'zdz-sketch-pad' ), 're' => '\b(sketch|sketchpad|draw(?:ing)?|doodle|diagram)\b', 'verb' => 'Start', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'pencil', 'cc' => '#CC79A7' ),
+			array( 'ids' => array( 'stock' ), 're' => '\b(stock|inventory|in stock|on hand)\b', 'verb' => 'Check', 'require_verb' => true, 'ctx' => 'for', 'key' => 'query', 'icon' => 'package', 'cc' => '#009E73' ),
+			array( 'ids' => array( 'commission-calculator' ), 're' => '\b(commission|commissions|payroll|installer pay|sales ledger|my pay)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => 'period', 'key' => 'period', 'icon' => 'calculator', 'cc' => '#0072B2' ),
+			array( 'ids' => array( 'leads' ), 're' => '\b(leads?|lead generator|prospects?)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'target', 'cc' => '#E69F00' ),
+			array( 'ids' => array( 'surveys' ), 're' => '\b(surveys?|satisfaction|csat)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'clipboard-check', 'cc' => '#0072B2' ),
+			array( 'ids' => array( 'prep' ), 're' => '\b(prep|prep queue|shop queue|work queue|fabricat\w*)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'scissors', 'cc' => '#009E73' ),
+			array( 'ids' => array( 'receipts' ), 're' => '\b(receipts?)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'receipt', 'cc' => '#009E73' ),
+			array( 'ids' => array( 'knowledge-vault' ), 're' => '\b(knowledge|knowledge vault|knowledge base)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'book-open', 'cc' => '#0072B2' ),
+			array( 'ids' => array( 'internal-messaging' ), 're' => '\b(messages?|messaging|team chat|inbox)\b', 'verb' => 'Open', 'require_verb' => true, 'ctx' => '', 'key' => '', 'icon' => 'message-square', 'cc' => '#56B4E9' ),
+			array( 'ids' => array( 'zdz-media', 'zdz-media-all' ), 're' => '\b(media|photos? library|gallery|image library)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'image', 'cc' => '#CC79A7' ),
+			array( 'ids' => array( 'game' ), 're' => '\b(game|play a game)\b', 'verb' => 'Open', 'require_verb' => false, 'ctx' => '', 'key' => '', 'icon' => 'gamepad-2', 'cc' => '#CC79A7' ),
 		);
 		if ( function_exists( 'apply_filters' ) ) {
 			$rows = apply_filters( 'zdz_ask_launch_rows', $rows );

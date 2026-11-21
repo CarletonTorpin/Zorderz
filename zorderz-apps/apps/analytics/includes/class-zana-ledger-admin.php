@@ -37,7 +37,7 @@ class ZANA_Ledger_Admin {
 		if ( ! $t ) {
 			return __( 'never', 'zorderz' );
 		}
-		return function_exists( 'wp_date' ) ? (string) wp_date( 'M j, g:i a', $t ) : gmdate( 'M j, H:i', $t ) . ' UTC';
+		return function_exists( 'wp_date' ) ? (string) wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:i a' ) : 'M j, g:i a' ), $t ) : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, H:i' ) : 'M j, H:i' ), $t ) . ' UTC';
 	}
 
 	public static function render_panel(): void {
@@ -83,7 +83,7 @@ class ZANA_Ledger_Admin {
 			foreach ( $sum as $k => $v ) {
 				$bits[] = $k . ': ' . (int) $v;
 			}
-			echo '<p class="description">' . esc_html( __( 'Shadow check over the last 30 days', 'zorderz' ) . ' — ' . implode( ', ', $bits ) ) . '</p>';
+			echo '<p class="description">' . esc_html( __( 'Shadow check over the last 30 days', 'zorderz' ) . ': ' . implode( ', ', $bits ) ) . '</p>';
 		}
 		if ( empty( $cov['staging'] ) ) {
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';

@@ -37,7 +37,6 @@
  * verified and every source must confirm" is Core. No company / person / product
  * / provider / amount is named or baked here.
  *
- * @since   3.11.0
  * @package Zorderz\Receipts
  */
 
@@ -163,7 +162,7 @@ class ZRCPT_Finalize {
 		$claim_paid = self::claim_paid( $ctx );
 
 		$heading = $claim_paid
-			? self::section_text( 'paid_invoice_heading', 'Paid Invoice — Payment in Full', $ctx )
+			? self::section_text( 'paid_invoice_heading', 'Paid Invoice · Payment in Full', $ctx )
 			: self::section_text( 'unpaid_invoice_heading', 'Your Invoice', $ctx );
 
 		$body = '<h2 style="font-size:16px;margin:0 0 10px;">' . self::esc_html( $heading ) . '</h2>';
@@ -185,7 +184,7 @@ class ZRCPT_Finalize {
 			$open = self::section_text( 'open_invoice_label', 'Open invoice online', $ctx );
 			$body .= '<p style="margin:0 0 6px;word-break:break-all;font-size:12px;color:#555;">' . self::esc_html( $link ) . '</p>';
 			$body .= '<p style="margin:0;"><a href="' . $href . '" target="_blank" rel="noopener nofollow" '
-				. 'style="display:inline-block;padding:8px 14px;background:#1E4D6E;color:#fff;text-decoration:none;border-radius:4px;">'
+				. 'style="display:inline-block;padding:8px 14px;background:' . self::brand_hex() . ';color:#fff;text-decoration:none;border-radius:4px;">'
 				. self::esc_html( $open ) . '</a></p>';
 		}
 
@@ -423,6 +422,12 @@ class ZRCPT_Finalize {
 			array( '&amp;', '&quot;', '&#039;', '&lt;', '&gt;' ),
 			$s
 		);
+	}
+
+	/** The business's brand colour for a mail button (Business Profile → Brand, step 600), else Zorderz' own. */
+	private static function brand_hex(): string {
+		$v = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.ramp.600', '#433FBD' ) : '#433FBD';
+		return preg_match( '/^#[0-9A-Fa-f]{6}$/', $v ) ? $v : '#433FBD';
 	}
 
 	private static function esc_html( string $s ): string {

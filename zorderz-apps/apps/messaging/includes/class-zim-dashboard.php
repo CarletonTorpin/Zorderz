@@ -696,7 +696,7 @@ class ZIM_Dashboard {
 	}
 
 	// ─────────────────────────────────────────────────────────────
-	// DM open (deterministic — a design rule)
+	// DM open (deterministic)
 	// ─────────────────────────────────────────────────────────────
 
 	public function ajax_dm_open() {

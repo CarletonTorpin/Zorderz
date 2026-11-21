@@ -29,7 +29,7 @@ class ZJOB_App implements \Zorderz\Widget_App_Interface {
 			'nm'          => 'Jobs',
 			'icon'        => 'clipboard-list',
 			'cat'         => 'Field',
-			'cc'          => '#0E9F8E',
+			'cc'          => '#009E73',
 			'desc'        => 'Your jobs to do, and work assigned to specialists. Split a job component off to a teammate as a separate tracked job.',
 			// Everyone with a real seat; NOT the shared kiosk.
 			'roles'       => (array) apply_filters( 'zdz_job_roles', array( 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech' ) ),
@@ -135,7 +135,7 @@ class ZJOB_App implements \Zorderz\Widget_App_Interface {
 			<?php if ( $show_form ) : ?>
 			<!-- NEW JOB PANEL -->
 			<div class="zjob-w-panel" data-panel="new">
-				<p class="zjob-note"><?php esc_html_e( 'Split a sub-job to a specialist. Tracked here and in the CRM', 'zorderz' ); ?> &mdash; <strong><?php esc_html_e( 'not', 'zorderz' ); ?></strong> <?php esc_html_e( 'on the customer\'s billing document.', 'zorderz' ); ?></p>
+				<p class="zjob-note"><?php esc_html_e( 'Split a sub-job to a specialist. Tracked here and in the CRM', 'zorderz' ); ?>, <strong><?php esc_html_e( 'not', 'zorderz' ); ?></strong> <?php esc_html_e( 'on the customer\'s billing document.', 'zorderz' ); ?></p>
 				<div class="zjob-field-row">
 					<div class="zjob-field">
 						<label for="zjob-component"><?php esc_html_e( 'Component', 'zorderz' ); ?></label>
@@ -185,7 +185,7 @@ class ZJOB_App implements \Zorderz\Widget_App_Interface {
 					</div>
 					<div class="zjob-field">
 						<label for="zjob-parent"><?php esc_html_e( 'CRM lead #', 'zorderz' ); ?> <span class="zjob-opt"><?php esc_html_e( '(optional)', 'zorderz' ); ?></span></label>
-						<input id="zjob-parent" type="number" min="0" placeholder="<?php esc_attr_e( 'e.g. 7328', 'zorderz' ); ?>" inputmode="numeric" />
+						<input id="zjob-parent" type="number" min="0" placeholder="<?php esc_attr_e( 'e.g. 1001', 'zorderz' ); ?>" inputmode="numeric" />
 					</div>
 				</div>
 				<div class="zjob-field">

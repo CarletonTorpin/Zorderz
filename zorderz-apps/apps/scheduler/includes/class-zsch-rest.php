@@ -59,7 +59,7 @@ class ZSCH_REST {
 
 	/** Shared 429 shape. */
 	private static function rate_limited( int $retry ) {
-		return new WP_Error( 'zsch_rate_limited', 'Too many requests — try again in ' . $retry . 's.', array( 'status' => 429, 'retry_after' => $retry ) );
+		return new WP_Error( 'zsch_rate_limited', 'Too many requests. Try again in ' . $retry . 's.', array( 'status' => 429, 'retry_after' => $retry ) );
 	}
 
 	/**
@@ -598,7 +598,7 @@ class ZSCH_REST {
 				'deferred' => $deferred,
 			);
 			if ( $deferred > 0 ) {
-				$out['message'] = sprintf( '%d event(s) will be picked up on the next sync — a change you just saved is still being sent to Outlook.', $deferred );
+				$out['message'] = sprintf( '%d event(s) will be picked up on the next sync: a change you just saved is still being sent to Outlook.', $deferred );
 			}
 			return rest_ensure_response( $out );
 		} finally {

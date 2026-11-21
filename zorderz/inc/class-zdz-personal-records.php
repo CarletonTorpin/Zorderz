@@ -16,7 +16,6 @@
  * larger value — no lock contention, no lost updates.
  *
  * @package Zorderz
- * @since   2.13.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

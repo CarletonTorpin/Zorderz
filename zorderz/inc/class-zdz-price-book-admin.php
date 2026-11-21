@@ -54,13 +54,13 @@ class ZDZ_Price_Book_Admin {
 	/* ------------------------------------------------------------------ screen */
 
 	private static function money( $v ) {
-		return null === $v ? '<span class="zdz-pb-muted">—</span>' : esc_html( number_format_i18n( (float) $v, ( floor( (float) $v ) == (float) $v ) ? 0 : 2 ) );
+		return null === $v ? '<span class="zdz-pb-muted">–</span>' : esc_html( number_format_i18n( (float) $v, ( floor( (float) $v ) == (float) $v ) ? 0 : 2 ) );
 	}
 
 	private static function user_label( $uid ) {
 		$uid = (int) $uid;
 		if ( $uid <= 0 ) {
-			return '—';
+			return '–';
 		}
 		$ini = (string) get_user_meta( $uid, 'zdz_user_initials', true );
 		if ( '' !== $ini ) {
@@ -175,7 +175,7 @@ class ZDZ_Price_Book_Admin {
 			echo '<tr><td>' . esc_html( (string) $sku ) . '</td><td>' . esc_html( (string) ( $it['label'] ?? '' ) ) . ( ! empty( $it['warning'] ) ? '<br><span class="zdz-pb-warn">' . esc_html( (string) $it['warning'] ) . '</span>' : '' ) . '</td>';
 			echo '<td class="n">' . self::money( $it['price'] ) . '</td><td class="n">' . self::money( $it['double_price'] ?? null ) . '</td>';   // phpcs:ignore -- money() escapes
 			if ( $costs ) {
-				$m = ( null !== $c && (float) $it['price'] > 0 ) ? round( 100 * ( (float) $it['price'] - $c ) / (float) $it['price'] ) . '%' : '—';
+				$m = ( null !== $c && (float) $it['price'] > 0 ) ? round( 100 * ( (float) $it['price'] - $c ) / (float) $it['price'] ) . '%' : '–';
 				echo '<td class="n">' . self::money( $c ) . '</td><td class="n">' . esc_html( $m ) . '</td>';   // phpcs:ignore -- money() escapes
 			}
 			echo '<td>' . esc_html( (string) ( $it['price_basis'] ?? '' ) ) . '</td></tr>';

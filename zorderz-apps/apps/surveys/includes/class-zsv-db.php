@@ -2,11 +2,9 @@
 /**
  * Zorderz Surveys — schema install + migrations + the disposition helper.
  *
- * Ships EMPTY: install() creates tables only, never seeds a row. The one migration
- * that matters is the SURVEY-OPERATOR column rename — the configurable replacement for
- * the baked-in operator's first name that used to name two DB columns. It is a real
- * ALTER guarded by a version option, with a data copy, and is recorded in
- * schema_migrations.
+ * Ships EMPTY: install() creates tables only, never seeds a row. One migration moves
+ * older operator and CRM columns to operator_* / crm_*: a real ALTER guarded by a
+ * version option, with a data copy, recorded in schema_migrations.
  *
  * @package Zorderz\Surveys
  */
@@ -20,7 +18,7 @@ class ZSV_DB {
 	/** Schema version. Bump to trigger maybe_upgrade(). */
 	const DB_VERSION = '2.12.0';
 
-	/** Table basenames (without $wpdb->prefix). Zorderz-neutral, no legacy names. */
+	/** Table basenames (without $wpdb->prefix). */
 	const BATCHES_TABLE  = 'zdz_survey_batches';
 	const LEADS_TABLE    = 'zdz_survey_leads';
 	const MEMORY_TABLE   = 'zdz_survey_invoice_memory';
@@ -46,9 +44,8 @@ class ZSV_DB {
 	/**
 	 * Create the tables (idempotent via dbDelta). No data is ever seeded.
 	 *
-	 * The leads table ships with SCHEMA-NEUTRAL operator columns —
-	 * `operator_notes` / `operator_status` — instead of a column named after one
-	 * person. A survey operator is now a configurable Party user (see ZSV_Settings).
+	 * The leads table's operator columns are `operator_notes` / `operator_status`; who
+	 * the survey operator is, is a setting (a Party user, see ZSV_Settings).
 	 */
 	public static function install(): void {
 		global $wpdb;
@@ -119,8 +116,8 @@ class ZSV_DB {
 			) {$charset};"
 		);
 
-		// Invoice memory: FreshBooks-neutral. Stores ONLY billing invoice IDs +
-		// disposition codes. NO customer PII.
+		// Invoice memory: stores ONLY billing invoice IDs + disposition codes.
+		// NO customer PII.
 		dbDelta(
 			"CREATE TABLE {$memory} (
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -147,9 +144,8 @@ class ZSV_DB {
 	 */
 	public static function maybe_upgrade(): void {
 		if ( get_option( 'zsv_db_version' ) === self::DB_VERSION ) {
-			// Even on a matching version, the operator migration is cheap + idempotent
-			// and guards the upgrade-from-legacy case where the table was renamed by
-			// the platform but columns kept their legacy names.
+			// Even on a matching version, the column migration is cheap + idempotent
+			// and covers a table whose columns still carry older names.
 			self::migrate_operator_columns();
 			return;
 		}
@@ -157,19 +153,18 @@ class ZSV_DB {
 	}
 
 	/**
-	 * SURVEY-OPERATOR SCHEMA MIGRATION (the required real migration).
+	 * OPERATOR AND CRM COLUMN MIGRATION.
 	 *
 	 * An install whose `zdz_survey_leads` table came from an earlier schema can carry
-	 * older COLUMN names, two of them named after a person (an add-on supplies those
-	 * names on the `zsv_legacy_operator_column_renames` filter; Core names no person). This renames them to
-	 * the schema-neutral `operator_notes` / `operator_status`, preserving data, and
-	 * also folds the even-older provider-named `nutshell_*` columns to `crm_*`.
+	 * older column names: the CRM columns listed below, and any operator columns an
+	 * add-on names on the `zsv_legacy_operator_column_renames` filter. This renames
+	 * them to `crm_*` and `operator_notes` / `operator_status`, preserving data.
 	 *
 	 * Guarded by the `zsv_operator_cols_migrated` option so it runs once. On a fresh
-	 * Zorderz install install() already created neutral columns, so every branch
-	 * no-ops. On an upgrade it ALTERs in place (CHANGE COLUMN preserves data); where
-	 * both legacy and neutral columns somehow coexist it COPIES then DROPs the legacy
-	 * one, so no data is lost either way.
+	 * install, install() already created the current columns, so every branch no-ops.
+	 * On an upgrade it ALTERs in place (CHANGE COLUMN preserves data); where an older
+	 * and a current column somehow coexist it COPIES then DROPs the older one, so no
+	 * data is lost either way.
 	 */
 	public static function migrate_operator_columns(): void {
 		if ( get_option( 'zsv_operator_cols_migrated' ) === 'yes' ) {
@@ -183,29 +178,26 @@ class ZSV_DB {
 			return;
 		}
 
-		// Map of legacy column => neutral column + its definition. Core names no person:
-		// the neutral operator_* columns are the migration TARGET (install() already creates
-		// them); a tenant's person-named legacy operator columns arrive from the private
-		// migration pack via the filter below, shaped exactly like these entries.
+		// Map of older column => current column + its definition. The operator_* columns
+		// are the migration target (install() already creates them); an add-on may name
+		// more older columns on the filter below, shaped exactly like these entries.
 		$renames = array(
 			'nutshell_lead_id'    => array( 'to' => 'crm_lead_id',    'def' => "VARCHAR(100) DEFAULT NULL" ),
 			'nutshell_contact_id' => array( 'to' => 'crm_contact_id', 'def' => "VARCHAR(100) DEFAULT NULL" ),
 			'nutshell_status'     => array( 'to' => 'crm_status',     'def' => "VARCHAR(100) DEFAULT NULL" ),
 			'nutshell_synced_at'  => array( 'to' => 'crm_synced_at',  'def' => 'DATETIME DEFAULT NULL' ),
-			// even-older single-column artifact from an early beta.
+			// an older single-column form of the salesperson code.
 			'salesperson_initials' => array( 'to' => 'salesperson_code', 'def' => "VARCHAR(16) DEFAULT NULL" ),
 		);
 
 		/**
-		 * Tenant-supplied legacy operator-column renames (Business Identity). A tenant
-		 * upgrading from the earlier schema may hold operator columns named
-		 * after a specific person; its private pack registers them here. Every target is
-		 * still a neutral column, so no person-named column survives. Core ships none.
-		 * Shape: array( 'legacy_col' => array( 'to' => 'neutral_col', 'def' => '<column def>' ) ).
+		 * More older operator-column renames, supplied by an add-on. Every target is one of
+		 * the current operator_* columns. Core ships none.
+		 * Shape: array( 'older_col' => array( 'to' => 'current_col', 'def' => '<column def>' ) ).
 		 */
-		$tenant_renames = apply_filters( 'zsv_legacy_operator_column_renames', array() );
-		if ( is_array( $tenant_renames ) && ! empty( $tenant_renames ) ) {
-			$renames = array_merge( $renames, $tenant_renames );
+		$more_renames = apply_filters( 'zsv_legacy_operator_column_renames', array() );
+		if ( is_array( $more_renames ) && ! empty( $more_renames ) ) {
+			$renames = array_merge( $renames, $more_renames );
 		}
 
 		foreach ( $renames as $old => $spec ) {
@@ -225,11 +217,11 @@ class ZSV_DB {
 				$wpdb->query( "ALTER TABLE {$leads} CHANGE COLUMN `{$old}` `{$new}` {$spec['def']}" );
 				error_log( "Zorderz Surveys: migrated column {$old} -> {$new}." );
 			} elseif ( $has_old && $has_new ) {
-				// Both exist — copy legacy values into the neutral column where the
-				// neutral one is empty, then drop the legacy column.
+				// Both exist — copy the older column's values into the current column where
+				// the current one is empty, then drop the older column.
 				$wpdb->query( "UPDATE {$leads} SET `{$new}` = `{$old}` WHERE (`{$new}` IS NULL OR `{$new}` = '') AND `{$old}` IS NOT NULL" );
 				$wpdb->query( "ALTER TABLE {$leads} DROP COLUMN `{$old}`" );
-				error_log( "Zorderz Surveys: copied {$old} into {$new} and dropped legacy column." );
+				error_log( "Zorderz Surveys: copied {$old} into {$new} and dropped the older column." );
 			}
 			// has_new only, or neither: nothing to do.
 		}

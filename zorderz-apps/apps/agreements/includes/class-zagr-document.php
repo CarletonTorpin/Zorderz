@@ -327,7 +327,7 @@ class ZAGR_Document {
 		}
 		$neg = $cents < 0;
 		$c   = abs( $cents );
-		$s   = $sign . number_format( $c / 100, 0 === $c % 100 ? 0 : 2 );
+		$s   = $sign . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $c / 100, 0 === $c % 100 ? 0 : 2 ) : number_format( $c / 100, 0 === $c % 100 ? 0 : 2 ) );
 		return $neg ? '-' . $s : $s;
 	}
 

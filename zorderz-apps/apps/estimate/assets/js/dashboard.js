@@ -10,7 +10,8 @@
  *                                    the billing system has it, with the same editor
  *   the Documents tab                your documents, and "Open #"
  *   the Tools tab (admin tier)       re-assigning stubs (preview, apply, finish, past batches, undo) and the deposit list
- *   the New tab                      a customer lookup as you type
+ *   the New tab                      a customer lookup as you type: at most two matches at once, the name searched
+ *                                    for first, the rest behind "More matches (n)"
  *
  * Every decision is the server's: this file shows what the server sends and sends back what the person chose. Nothing
  * changes on a tap: a change starts with a deliberate press (or a press and hold on a word), and nothing is written
@@ -42,9 +43,11 @@
 		return b;
 	}
 
+	// The business's money (Business Profile → Locale), through the theme's kit.
 	function money( v ) {
 		if ( v === null || v === undefined || v === '' ) { return ''; }
 		var n = Number( v ) || 0;
+		if ( window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.money === 'function' ) { return window.ZDZ.ui.money( n ); }
 		return ( n < 0 ? '-$' : '$' ) + Math.abs( n ).toLocaleString( 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 } );
 	}
 
@@ -966,6 +969,127 @@
 
 	/* ------------------------------------------------------------ the customer lookup in New */
 
+	/**
+	 * An e-mail address as typed, dictated or pasted, without its sentence's punctuation ("... alex@example.com." keeps
+	 * no full stop), as the server's own cleaner does it: opening brackets and quotes go from the front, closing
+	 * punctuation, brackets and quotes from the end, and a mailto: prefix. "!", "?" and "{" are legal at the front of
+	 * an address, so they stay. '' when what is left is no address. The server decides; this keeps a search honest.
+	 */
+	function cleanEmail( v ) {
+		var s = String( v == null ? '' : v ).trim();
+		if ( s.length > 320 ) { return ''; }
+		var front = /^[\s(\[<"'\u201C\u2018\uFEFF]+/, back = /[\s.,;:!?)\]}>"'\u201D\u2019\uFEFF]+$/;
+		s = s.replace( front, '' ).replace( back, '' ).replace( /^mailto:/i, '' );
+		s = s.replace( front, '' ).replace( back, '' ).toLowerCase();
+		if ( ! s || [ 'unknown', 'n/a', 'na', 'none', 'no email', 'noemail' ].indexOf( s ) !== -1 ) { return ''; }
+		return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( s ) ? s : '';
+	}
+
+	/*
+	 * Which match cards show before "More matches (n)", and in what order.
+	 *
+	 * The server's order is a ranking, but not by name alone: a record with an e-mail and a phone on file outranks one
+	 * without, and a nickname or a couple's record scores as high as the exact name. So its first is not always the name
+	 * that was searched for. The cards are drawn in this order, the server's order kept inside each step:
+	 *   1. a record the server marked as a contact match (auto_fill: the e-mail or phone searched for is its own);
+	 *   2. records under the name searched for (capitals, spaces and punctuation aside);
+	 *   3. records one letter from it (a letter added, dropped or changed);
+	 *   4. everything else.
+	 * Two cards show; the rest are behind "More matches (n)". One card shows alone when only one came back, or when the
+	 * first card carries the name searched for and the next is neither that name, one letter from it, nor a contact
+	 * match. Two records under one name may be two people: both show. Display only: the request, the server's answer
+	 * and what Use does are unchanged, and nothing is filled in by itself.
+	 */
+	function matchKey( fname, lname ) {
+		var s = ( String( fname == null ? '' : fname ) + String( lname == null ? '' : lname ) ).toLowerCase();
+		if ( s.normalize ) { try { s = s.normalize( 'NFC' ); } catch ( e ) { /* kept as typed */ } }
+		return s.replace( /[\s.,'\u2019`"&()\-]+/g, '' );
+	}
+
+	function matchNameKey( c ) { return matchKey( c && c.fname, c && c.lname ); }
+
+	/** The same, or one letter added, dropped or changed. */
+	function namesNearSame( a, b ) {
+		if ( a === b ) { return true; }
+		var la = a.length, lb = b.length;
+		if ( Math.abs( la - lb ) > 1 ) { return false; }
+		var i = 0, j = 0, diff = 0;
+		while ( i < la && j < lb ) {
+			if ( a.charAt( i ) === b.charAt( j ) ) { i++; j++; continue; }
+			if ( ++diff > 1 ) { return false; }
+			if ( la > lb ) { i++; } else if ( lb > la ) { j++; } else { i++; j++; }
+		}
+		return diff + ( la - i ) + ( lb - j ) <= 1;
+	}
+
+	/** Indexes into clients, in the order the cards are drawn. */
+	function matchOrder( clients, key ) {
+		var order = [], seen = {};
+		function take( test ) {
+			for ( var i = 0; i < clients.length; i++ ) {
+				if ( ! seen[ i ] && test( clients[ i ] || {} ) ) { seen[ i ] = true; order.push( i ); }
+			}
+		}
+		take( function ( c ) { return !! c.auto_fill; } );
+		if ( key ) {
+			take( function ( c ) { return matchNameKey( c ) === key; } );
+			take( function ( c ) { return namesNearSame( matchNameKey( c ), key ); } );
+		}
+		take( function () { return true; } );
+		return order;
+	}
+
+	/** How many cards show before "More matches (n)": one or two. */
+	function matchUpFront( clients, order, key ) {
+		if ( ! clients.length ) { return 0; }
+		if ( clients.length === 1 ) { return 1; }
+		var first = clients[ order[ 0 ] ] || {}, next = clients[ order[ 1 ] ] || {};
+		var alone = !! key && matchNameKey( first ) === key && ! next.auto_fill && ! namesNearSame( matchNameKey( next ), key );
+		return alone ? 1 : 2;
+	}
+
+	/**
+	 * Draw the match cards. `state.open`: "More matches" was pressed for this search (typing on keeps it open). Each
+	 * card carries its own client, so Use always names that client and no neighbour.
+	 */
+	function drawMatches( list, clients, searched, state, onUse ) {
+		clients = clients || [];
+		var key = matchKey( searched && searched.fname, searched && searched.lname );
+		var order = matchOrder( clients, key );
+		var upFront = matchUpFront( clients, order, key );
+		var count = state.open ? clients.length : upFront;
+		list.innerHTML = '';
+		var cards = [];
+		order.slice( 0, count ).forEach( function ( i ) {
+			var c = clients[ i ] || {};
+			var name = ( ( c.fname || '' ) + ' ' + ( c.lname || '' ) ).trim();
+			var el = h( 'div', 'zest-row zest-match' );
+			el.tabIndex = -1;
+			var words = h( 'div', '' );
+			words.appendChild( h( 'div', 'zest-row-name', name || c.organization || 'Unnamed customer' ) );
+			var kept = c.withheld ? ( c.has_email || c.has_phone ? ' (contact on file, kept for the salesperson)' : ' (details kept for the salesperson)' ) : '';
+			words.appendChild( h( 'div', 'zest-row-sub', [ c.city, c.state ].filter( Boolean ).join( ', ' ) + kept ) );
+			el.appendChild( words );
+			var use = btn( 'Use', 'zest-btn-secondary zest-match-use', function ( e ) { e.stopPropagation(); onUse( c, name ); } );
+			use.setAttribute( 'aria-label', 'Use ' + ( name || c.organization || 'this customer' ) );
+			el.appendChild( use );
+			el.addEventListener( 'click', function () { onUse( c, name ); } );
+			list.appendChild( el );
+			cards.push( el );
+		} );
+		if ( clients.length > count ) {
+			var more = btn( 'More matches (' + ( clients.length - count ) + ')', 'zest-btn-secondary zest-match-more', function () {
+				state.open = true;
+				var added = drawMatches( list, clients, searched, state, onUse )[ upFront ];
+				// The focus goes to the first card added, never to a Use button: a second Enter or Space must not pick a
+				// customer.
+				if ( added && added.focus ) { try { added.focus(); } catch ( e ) { /* a browser that will not focus it: nothing lost */ } }
+			} );
+			list.appendChild( more );
+		}
+		return cards;
+	}
+
 	function clientSearch( panel ) {
 		var input = document.getElementById( 'zest-input' );
 		if ( ! panel || ! input || panel.querySelector( '.zest-client-search' ) ) { return; }
@@ -976,33 +1100,36 @@
 		box.appendChild( q ); box.appendChild( list );
 		panel.insertBefore( box, panel.firstChild );
 		var timer = null, seq = 0;
+		var state = { open: false };
+		function use( c, name ) {
+			seq++;                    // a late answer never draws the list again after a customer was picked
+			clearTimeout( timer );
+			state.open = false;       // the next list starts with "More matches" closed
+			var line = [ name, c.email, c.phone, c.street, c.city, c.state, c.zip ].filter( Boolean ).join( ', ' );
+			input.value = line + ( input.value ? '\n' + input.value : '' );
+			list.innerHTML = '';
+			q.value = '';
+			input.focus();
+		}
 		q.addEventListener( 'input', function () {
 			clearTimeout( timer );
 			var v = q.value.trim();
-			if ( v.length < 2 ) { list.innerHTML = ''; return; }
+			if ( v.length < 2 ) { list.innerHTML = ''; state.open = false; return; }
 			timer = setTimeout( function () {
 				var my = ++seq;
 				var p = { quick: 1 };
-				if ( v.indexOf( '@' ) !== -1 ) { p.email = v; }
+				var searched = { fname: '', lname: '' };
+				if ( v.indexOf( '@' ) !== -1 ) { p.email = cleanEmail( v ) || v; }
 				else if ( /^[\d\s()+.\-]{5,}$/.test( v ) ) { p.phone = v; }
-				else { var parts = v.split( /\s+/ ); p.fname = parts.length > 1 ? parts[ 0 ] : ''; p.lname = parts.length > 1 ? parts.slice( 1 ).join( ' ' ) : parts[ 0 ]; }
+				else {
+					var parts = v.split( /\s+/ );
+					p.fname = parts.length > 1 ? parts[ 0 ] : '';
+					p.lname = parts.length > 1 ? parts.slice( 1 ).join( ' ' ) : parts[ 0 ];
+					searched = { fname: p.fname, lname: p.lname };
+				}
 				post( 'zest_search_clients', p ).then( function ( res ) {
 					if ( my !== seq ) { return; }
-					list.innerHTML = '';
-					( ( res && res.success && res.data.results ) || [] ).slice( 0, 6 ).forEach( function ( c ) {
-						var name = ( ( c.fname || '' ) + ' ' + ( c.lname || '' ) ).trim();
-						var el = h( 'div', 'zest-row' );
-						el.appendChild( h( 'div', 'zest-row-name', name || c.organization || '' ) );
-						el.appendChild( h( 'div', 'zest-row-sub', [ c.city, c.state ].filter( Boolean ).join( ', ' ) + ( c.withheld ? ' (details kept for the salesperson)' : '' ) ) );
-						el.addEventListener( 'click', function () {
-							var line = [ name, c.email, c.phone, c.street, c.city, c.state, c.zip ].filter( Boolean ).join( ', ' );
-							input.value = line + ( input.value ? '\n' + input.value : '' );
-							list.innerHTML = '';
-							q.value = '';
-							input.focus();
-						} );
-						list.appendChild( el );
-					} );
+					drawMatches( list, ( res && res.success && res.data.results ) || [], searched, state, use );
 				} );
 			}, 300 );
 		} );
@@ -1039,7 +1166,7 @@
 		return true;
 	}
 
-	window.ZESTDash = { openEstimate: openEstimate, openDocument: openDocument };
+	window.ZESTDash = { openEstimate: openEstimate, openDocument: openDocument, _match: { key: matchKey, near: namesNearSame, order: matchOrder, upFront: matchUpFront, draw: drawMatches }, _cleanEmail: cleanEmail };
 	if ( ! boot() ) {
 		var tries = 0;
 		document.addEventListener( 'zdz_widgets_rendered', boot );

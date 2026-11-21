@@ -655,7 +655,7 @@
 		var tools = !asThem() && (e.can_edit || canFinish);
 		return '<li class="zhr-entry' + (e.running ? ' is-running' : '') + (open ? ' is-open' : '') + '" data-id="' + e.id + '">'
 			+ '<div class="zhr-entry-main"><span class="zhr-span">' + t12(e.start) + ' – ' + endWords + '</span>'
-			+ '<span class="zhr-mins">' + (open ? '—' : fmt(liveMin(e))) + '</span></div>'
+			+ '<span class="zhr-mins">' + (open ? '–' : fmt(liveMin(e))) + '</span></div>'
 			+ (set || hints ? '<div class="zhr-entry-meta">' + set + hints + '</div>' : '')
 			+ '<div class="zhr-entry-meta"><span class="zhr-src">' + src + '</span>' + (full ? evidenceChip(e) : '') + flags
 			+ (places.length ? '<span class="zhr-places">' + places.join(' · ') + '</span>' : '') + '</div>'
@@ -777,7 +777,7 @@
 			+ '<button type="button" class="zhr-day-head" data-date="' + x.date + '" aria-expanded="' + open + '">'
 			+ '<span class="zhr-day-name">' + (x.date === S.data.today ? 'Today' : dayLabel(x.date)) + '</span>'
 			+ '<span class="zhr-bar" aria-hidden="true"><span class="zhr-bar-fill" style="width:' + w + '%"></span>' + (std ? '<span class="zhr-bar-std" style="left:' + std + '%"></span>' : '') + '</span>'
-			+ '<span class="zhr-day-n">' + (x.raw || x.running ? fmt(x.worked + (x.running ? Math.floor((Date.now() - S.loadedAt) / 60000) : 0)) : (x.off_day ? '—' : '0')) + '</span>'
+			+ '<span class="zhr-day-n">' + (x.raw || x.running ? fmt(x.worked + (x.running ? Math.floor((Date.now() - S.loadedAt) / 60000) : 0)) : (x.off_day ? '–' : '0')) + '</span>'
 			+ '<span class="zhr-tags">' + tags + '</span>'
 			+ '</button>'
 			+ '<div class="zhr-day-body" id="zhr-day-' + x.date + '"' + (open ? '' : ' hidden') + '>' + (open ? dayBody(x) : '') + '</div>'

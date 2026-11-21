@@ -5,10 +5,8 @@
  *
  * Two configurable settings live here, both clearly disclosed:
  *   - Platform fee (%)  — default 0 / off. Applied as a Stripe Connect
- *     application fee only when a connected account is set. Replaces the old
- *     baked 0.5% constant.
+ *     application fee only when a connected account is set.
  *   - Thank-you / return URL — blank shows the built-in on-site thank-you page.
- *     Replaces the old hardcoded production URL.
  *
  * Secrets (Stripe secret key and webhook signing secret, the FreshBooks client
  * secret, the legacy static token) are write-only: their inputs render empty,
@@ -183,8 +181,8 @@ class ZIC_Admin {
 					<tr><th><label>Client name</label></th><td><input type="text" name="client_name" required size="40" /></td></tr>
 					<tr><th><label>Client email</label></th><td><input type="email" name="client_email" required size="40" /></td></tr>
 					<tr><th><label>Description</label></th><td><textarea name="description" rows="4" cols="60" required></textarea></td></tr>
-					<tr><th><label>Amount (USD)</label></th><td><input type="number" step="0.01" min="0.50" name="amount_usd" required /></td></tr>
-					<tr><th><label>Currency</label></th><td><input type="text" name="currency" value="usd" size="6" /></td></tr>
+					<tr><th><label>Amount</label></th><td><input type="number" step="0.01" min="0.50" name="amount_usd" required /></td></tr>
+					<tr><th><label>Currency</label></th><td><input type="text" name="currency" value="<?php echo esc_attr( strtolower( class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency', 'USD' ) : 'USD' ) ); ?>" size="6" /></td></tr>
 					<tr><th><label>FreshBooks Invoice ID (optional)</label></th><td><input type="text" name="freshbooks_invoice_id" size="20" /></td></tr>
 				</table>
 				<?php submit_button( 'Create Invoice' ); ?>
@@ -238,14 +236,14 @@ class ZIC_Admin {
 		$fee_on  = zic_platform_fee_rate() > 0;
 		?>
 		<div class="wrap">
-			<h1>Invoice Creator — Dashboard
+			<h1>Invoice Creator: Dashboard
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=zic_new_invoice' ) ); ?>" class="page-title-action">Add New</a>
 			</h1>
 			<div style="display:flex;gap:16px;flex-wrap:wrap;margin:12px 0 20px">
 				<?php if ( $fee_on ) : ?>
 				<div style="background:#fff;border:1px solid #ddd;padding:14px 20px;border-radius:6px;">
 					<div style="font-size:12px;color:#666">Retained Platform Fees (MTD)</div>
-					<div style="font-size:22px;font-weight:600">$<?php echo esc_html( number_format( $net_mtd / 100, 2 ) ); ?></div>
+					<div style="font-size:22px;font-weight:600"><?php echo esc_html( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $net_mtd / 100, 2 ) : number_format( $net_mtd / 100, 2 ) ) ); ?></div>
 				</div>
 				<?php endif; ?>
 				<div style="background:#fff;border:1px solid #ddd;padding:14px 20px;border-radius:6px;">
@@ -274,8 +272,8 @@ class ZIC_Admin {
 				<tr>
 					<td><?php echo (int) $r['id']; ?></td>
 					<td><?php echo esc_html( $r['client_name'] ); ?><br><small><?php echo esc_html( $r['client_email'] ); ?></small></td>
-					<td>$<?php echo esc_html( number_format( $r['amount_cents'] / 100, 2 ) ); ?></td>
-					<td>$<?php echo esc_html( number_format( ( (int) $r['refunded_cents'] ) / 100, 2 ) ); ?></td>
+					<td><?php echo esc_html( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign_for( (string) ( $r['currency'] ?? '' ) ) : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $r['amount_cents'] / 100, 2 ) : number_format( $r['amount_cents'] / 100, 2 ) ) ); ?></td>
+					<td><?php echo esc_html( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign_for( (string) ( $r['currency'] ?? '' ) ) : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( ( (int) $r['refunded_cents'] ) / 100, 2 ) : number_format( ( (int) $r['refunded_cents'] ) / 100, 2 ) ) ); ?></td>
 					<td><?php echo esc_html( $r['status'] ); ?></td>
 					<td><a href="<?php echo esc_url( $pay_url ); ?>" target="_blank">open</a></td>
 					<td>
@@ -287,7 +285,7 @@ class ZIC_Admin {
 							<input type="number" step="0.01" min="0.01" max="<?php echo esc_attr( number_format( $max / 100, 2, '.', '' ) ); ?>" name="amount_usd" placeholder="<?php echo esc_attr( number_format( $max / 100, 2, '.', '' ) ); ?>" style="width:90px" />
 							<button class="button button-small" type="submit">Refund</button>
 						</form>
-					<?php else : echo '—'; endif; ?>
+					<?php else : echo '–'; endif; ?>
 					</td>
 				</tr>
 				<?php endforeach; ?>
@@ -302,18 +300,18 @@ class ZIC_Admin {
 		if ( ! current_user_can( self::CAP ) ) {
 			return;
 		}
-		$fb_status        = class_exists( 'ZIC_FreshBooks_OAuth' ) ? ZIC_FreshBooks_OAuth::token_status_label() : '—';
+		$fb_status        = class_exists( 'ZIC_FreshBooks_OAuth' ) ? ZIC_FreshBooks_OAuth::token_status_label() : '–';
 		$default_redirect = class_exists( 'ZIC_FreshBooks_OAuth' ) ? ZIC_FreshBooks_OAuth::default_redirect_uri() : '';
 		$flash            = isset( $_GET['zic_fb'] ) ? sanitize_text_field( wp_unslash( $_GET['zic_fb'] ) ) : '';
 		?>
 		<div class="wrap">
-			<h1>Invoice Creator — Settings</h1>
+			<h1>Invoice Creator: Settings</h1>
 			<?php if ( 'connected' === $flash ) : ?>
 				<div class="notice notice-success is-dismissible"><p>FreshBooks connected successfully.</p></div>
 			<?php elseif ( 'state_mismatch' === $flash ) : ?>
-				<div class="notice notice-error is-dismissible"><p>OAuth state mismatch — try again.</p></div>
+				<div class="notice notice-error is-dismissible"><p>OAuth state mismatch. Try again.</p></div>
 			<?php elseif ( 'exchange_failed' === $flash ) : ?>
-				<div class="notice notice-error is-dismissible"><p>OAuth token exchange failed — check error log.</p></div>
+				<div class="notice notice-error is-dismissible"><p>OAuth token exchange failed. Check error log.</p></div>
 			<?php elseif ( 'not_configured' === $flash ) : ?>
 				<div class="notice notice-warning is-dismissible"><p>Set Client ID + Client Secret below before connecting.</p></div>
 			<?php endif; ?>

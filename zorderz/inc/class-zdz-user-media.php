@@ -19,7 +19,6 @@
  *   'team'     — all logged-in Zorderz users can see it
  *   'public'   — visible to anyone (admin approval may be required)
  *
- * @since   2.17.1
  * @package Zorderz
  */
 
@@ -167,6 +166,16 @@ class ZDZ_User_Media {
 	 * existing site while new code writes to it). 6: marks_json, the drawings on a photo.
 	 */
 	const SCHEMA_VERSION = 6;
+
+	/**
+	 * Make the table, or bring it up to SCHEMA_VERSION, now rather than on the first save. The theme's
+	 * set-up and every admin request call this (a stamped site leaves after one option read), so a new
+	 * site never runs on the first-release table: readers that never save (the hourly Jobs location
+	 * pass, the receipt photo match) ask for captured_at and gps_lat from the start.
+	 */
+	public static function install(): void {
+		self::ensure_table();
+	}
 
 	private static function ensure_table(): void {
 		// Fast path: schema already verified this process
@@ -1568,3 +1577,5 @@ class ZDZ_User_Media {
 }
 
 add_action( 'template_redirect', array( 'ZDZ_User_Media', 'maybe_serve' ) );
+// A site whose table was made at an older schema and has saved nothing since is brought up to date here.
+add_action( 'admin_init', array( 'ZDZ_User_Media', 'install' ) );

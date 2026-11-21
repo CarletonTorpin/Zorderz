@@ -317,11 +317,11 @@
 
   Surface.prototype.emptyMessage = function () {
     if (this.scope === 'mine') {
-      return 'You haven\u2019t added any media yet. Add photos here, take them with the Camera app, or save a sketch \u2014 they\u2019ll all show up here.';
+      return 'You haven\u2019t added any media yet. Add photos here, take them with the Camera app, or save a sketch; they\u2019ll all show up here.';
     }
     // v2.3.0 \u2014 admin-only "All" scope: every photo org-wide, incl. private.
     if (this.scope === 'all') {
-      return 'No media in the organization yet. Every photo \u2014 from any user, including private ones \u2014 will appear here.';
+      return 'No media in the organization yet. Every photo (from any user, including private ones) will appear here.';
     }
     return 'No public media yet. Items shared to the organization will appear here.';
   };
@@ -441,7 +441,7 @@
     // which steps left of it in CSS).
     var who = whoBadge(it, 'zml-cell-who');
     return '<button type="button" class="zml-cell' + selCls + '" data-pos="' + pos + '" data-id="' + it.id + '" ' +
-      'aria-label="' + escAttr((it.title || 'Media') + ' — ' + sourceBadge(it) + (who ? ' — uploaded by ' + it.uploader_initials : '')) + '">' +
+      'aria-label="' + escAttr((it.title || 'Media') + ': ' + sourceBadge(it) + (who ? ', uploaded by ' + it.uploader_initials : '')) + '">' +
       '<span class="zml-cell-thumb">' +
         '<img class="zml-cell-img" src="' + escAttr(it.thumbnail_url) + '"' + thumbSrcset(it) + ' alt="' + escAttr(it.title) + '" loading="lazy" />' +
         '<span class="zml-cell-badge">' + esc(sourceBadge(it)) + '</span>' +
@@ -746,7 +746,7 @@
           '<div class="zml-up-body">' +
             '<label class="zml-up-note-label" for="zml-up-note">Note for this batch <span class="zml-up-note-opt">(optional)</span></label>' +
             '<textarea id="zml-up-note" class="zml-up-note" rows="2" maxlength="2000" ' +
-              'placeholder="Add a note for every photo in this batch — e.g. site, job, or what these show."></textarea>' +
+              'placeholder="Add a note for every photo in this batch, e.g. site, job, or what these show."></textarea>' +
             '<p class="zml-up-note-hint">This note is saved on each photo (you can edit it per-photo later) and tagged on the whole batch.</p>' +
             '<div class="zml-up-pickrow">' +
               '<button type="button" class="zml-up-pick" data-up="pick">Choose photos…</button>' +
@@ -1043,7 +1043,7 @@
         confirmBtn.textContent = 'Delete…';
         confirmBtn.classList.remove('zml-cf-final');
       } else {
-        stepEl.textContent = 'Step 2 of 2 — confirm again';
+        stepEl.textContent = 'Step 2 of 2: confirm again';
         t.textContent = 'Permanently delete ' + (one ? 'this photo' : n + ' photos') + '?';
         b.textContent = 'This can’t be undone. ' + (one
           ? 'The photo and its file are deleted permanently.'

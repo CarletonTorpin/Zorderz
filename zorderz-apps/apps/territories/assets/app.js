@@ -276,7 +276,7 @@
 		} }];
 		if (!isNew) { actions.push({ label: 'Remove', onClick: function () { return save(rowsWith(null), 'Zone removed.'); } }); }
 		actions.push({ label: 'Cancel' });
-		sheet({ title: isNew ? 'New zone' : 'Zone — ' + x.label, body: body, actions: actions });
+		sheet({ title: isNew ? 'New zone' : 'Zone: ' + x.label, body: body, actions: actions });
 		// An area has no kinds of work, and an everywhere zone no ZIP list: hide what does not apply.
 		function fit() {
 			var kind = (document.querySelector('input[name="tz-kind"]:checked') || {}).value;
@@ -340,7 +340,7 @@
 			if (z.length < 5) { out.textContent = ''; return; }
 			var who = (d.people || []).filter(function (p) { return (p.zips || []).indexOf(z) >= 0; });
 			var zs = zonesAt(z);
-			out.textContent = (who.length ? who.map(function (p) { return p.name + (p.initials ? ' (' + p.initials + ')' : ''); }).join(', ') : 'Nobody — a stub there goes to the “everything else” rule.')
+			out.textContent = (who.length ? who.map(function (p) { return p.name + (p.initials ? ' (' + p.initials + ')' : ''); }).join(', ') : 'Nobody: a stub there goes to the “everything else” rule.')
 				+ (zs.length ? ' · Zones: ' + zs.map(function (x) { return x.label; }).join(', ') : '');
 		});
 		on($('[data-act="settings"]'), 'click', function (e) {
@@ -358,7 +358,7 @@
 			+ '<label for="zter-zips">ZIP codes (commas, spaces or one per line)</label><textarea id="zter-zips" rows="8" spellcheck="false">' + esc((p.zips || []).join(', ')) + '</textarea>'
 			+ '<p class="zter-muted">Overlaps are fine: the rules decide them.</p></div>';
 		sheet({
-			title: 'Territory — ' + p.name, body: body,
+			title: 'Territory: ' + p.name, body: body,
 			actions: [{ label: 'Save', kind: 'primary', onClick: function () {
 				var v = document.getElementById('zter-zips').value;
 				return api('zips', { method: 'POST', body: { user_id: uid, zips: v } }).then(function (r) {
@@ -391,7 +391,7 @@
 		h += '<h3 class="zter-h3">Words → item</h3><p class="zter-muted">How a line becomes one of Team Roles’ items. The catalog’s own names and aliases already name most lines; these rows are for what the catalog can’t tell apart. Whether it is new work or a repair is read from the line (repair, fix, broken…). First matching row wins. The same table serves both stages.' + (d.jobs ? '' : ' The Jobs app is not active here, so rows that name a kind of project never match.') + '</p>';
 		h += '<div class="zter-tablewrap"><table class="zter-table"><thead><tr><th scope="col">#</th><th scope="col">Kind of project</th><th scope="col">Words</th><th scope="col">For</th><th scope="col">Means</th></tr></thead><tbody>'
 			+ d.words.map(function (w, i) {
-				return '<tr><td>' + (i + 1) + '</td><td>' + (w.type ? esc(typeLabel(w.type)) : '<span class="zter-muted">any</span>') + '</td><td>' + (w.words.length ? esc(w.words.join(', ')) : '<span class="zter-muted">—</span>') + '</td><td>' + esc(REPAIR[w.repair]) + '</td><td>' + esc(abilityLabel(w.item || w.ability)) + '</td></tr>';
+				return '<tr><td>' + (i + 1) + '</td><td>' + (w.type ? esc(typeLabel(w.type)) : '<span class="zter-muted">any</span>') + '</td><td>' + (w.words.length ? esc(w.words.join(', ')) : '<span class="zter-muted">–</span>') + '</td><td>' + esc(REPAIR[w.repair]) + '</td><td>' + esc(abilityLabel(w.item || w.ability)) + '</td></tr>';
 			}).join('') + '</tbody></table></div>';
 		h += '<p>' + (d.canEdit ? '<button type="button" class="zdz-btn zdz-btn--secondary" data-act="words">Edit the words</button> ' : '') + '<button type="button" class="zdz-btn zdz-btn--secondary" data-act="try">Try ' + (inst ? 'a won job' : 'a stub') + '</button></p>';
 		h += '<div data-service></div>';
@@ -454,7 +454,7 @@
 			return '<option value="' + k + '"' + (r.who === k ? ' selected' : '') + '>' + esc(who[k]) + '</option>';
 		}).join('') + '</select>'
 			+ '<p class="zter-muted" data-tr-refer>When every item on the job is offered only in service zones that don’t hold its ZIP (Zones). It names nobody: ' + (inst ? 'no suggestion' : 'the asking app keeps its own pick') + ', and the job is listed as needing a referral, where a person finds another company and opens the email to the customer. Nothing is sent by itself. A job with no ZIP, or a line that doesn’t say what the work is, is never a referral.</p>'
-			+ '<div data-tr-person><label for="tr-person">Person</label><select id="tr-person"><option value="0">—</option>' + team.map(function (t) {
+			+ '<div data-tr-person><label for="tr-person">Person</label><select id="tr-person"><option value="0">–</option>' + team.map(function (t) {
 				return '<option value="' + t.id + '"' + (+r.person === +t.id ? ' selected' : '') + '>' + esc(t.name + ' (' + t.initials + ')') + '</option>';
 			}).join('') + '</select></div>'
 			+ (r.fallback ? '' : chk('tr-can', r.need_can, inst ? 'Only if they can install or repair every item on it (Team Roles)' : 'Only if they can sell every item on it (Team Roles)', ' data-tr-can'))
@@ -637,7 +637,7 @@
 		var team = (D().team || D().people || []).filter(function (t) { return t.initials; });
 		var h = '<div class="zter-form"><label for="tt-zip">ZIP</label><input id="tt-zip" inputmode="numeric" maxlength="10" placeholder="5 digits">'
 			+ '<label for="tt-lines">Lines, one per line (name | description)</label><textarea id="tt-lines" rows="4" placeholder="Item name | description"></textarea>'
-			+ (inst ? '<label for="tt-seller">Sold by</label><select id="tt-seller"><option value="0">—</option>' + team.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name + ' (' + t.initials + ')') + '</option>'; }).join('') + '</select>'
+			+ (inst ? '<label for="tt-seller">Sold by</label><select id="tt-seller"><option value="0">–</option>' + team.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name + ' (' + t.initials + ')') + '</option>'; }).join('') + '</select>'
 				: '<label for="tt-def">Today’s pick (initials the estimate app would write)</label><input id="tt-def" maxlength="3" placeholder="optional">')
 			+ '<p class="zter-muted">Nothing is recorded and no turn is taken.</p><div data-tryout aria-live="polite"></div></div>';
 		sheet({
@@ -725,7 +725,7 @@
 					return '<li><button type="button" class="zter-dec' + (differ ? ' zter-dec--diff' : '') + '" data-dec="' + i + '">'
 						+ '<span class="zter-dec-when">' + esc(when(d.at)) + (d.test ? ' · <span class="zter-test">test</span>' : '') + '</span>'
 						+ '<span class="zter-dec-what">' + (d.label ? esc(d.label) + ' · ' : '') + (d.zip ? esc(d.zip) : 'no ZIP') + ' · ' + (d.kinds.length ? esc(d.kinds.map(function (k) { return k.label; }).join(', ')) : (d.kindState === 'none' ? 'no work lines' : 'kind unknown')) + '</span>'
-						+ '<span class="zter-dec-who">' + (inst ? 'Sold by: ' + (d.seller ? esc(d.seller) : '<span class="zter-muted">—</span>') : 'Today: ' + ini(d['default'])) + ' · Rules: <strong>' + ini(d.would) + '</strong>' + (d.ruleNo ? ' (rule ' + d.ruleNo + ')' : '') + (inst && d.confirmed ? ' · Confirmed: ' + esc(d.confirmed) : '') + (differ ? ' <span class="zter-diffmark">≠</span>' : '') + (d.mode === 'live' ? ' · <span class="zter-mode zdz-pair zter-mode--live">● Live</span>' : '') + (d.refer ? ' · <span class="zter-refer">Needs a referral' + (d.refer === 2 ? '' : ' (shadow)') + '</span>' : '') + '</span>'
+						+ '<span class="zter-dec-who">' + (inst ? 'Sold by: ' + (d.seller ? esc(d.seller) : '<span class="zter-muted">–</span>') : 'Today: ' + ini(d['default'])) + ' · Rules: <strong>' + ini(d.would) + '</strong>' + (d.ruleNo ? ' (rule ' + d.ruleNo + ')' : '') + (inst && d.confirmed ? ' · Confirmed: ' + esc(d.confirmed) : '') + (differ ? ' <span class="zter-diffmark">≠</span>' : '') + (d.mode === 'live' ? ' · <span class="zter-mode zdz-pair zter-mode--live">● Live</span>' : '') + (d.refer ? ' · <span class="zter-refer">Needs a referral' + (d.refer === 2 ? '' : ' (shadow)') + '</span>' : '') + '</span>'
 						+ (d.note ? '<span class="zter-dec-note">Note: ' + esc(d.note.reason) + '</span>' : '')
 						+ '</button></li>';
 				}).join('') + '</ul>';
@@ -743,16 +743,16 @@
 		var two = (d.wouldPeople || []).length > 1;
 		var h = '<dl class="zter-dl">'
 			+ '<dt>ZIP</dt><dd>' + (d.zip ? esc(d.zip) + (d.zipFrom === 'reference' ? ' (from the reference)' : '') : 'none') + '</dd>'
-			+ '<dt>Kind of work</dt><dd>' + (d.kinds.length ? esc(d.kinds.map(function (k) { return k.label; }).join(', ')) : '—') + (d.kindState === 'unknown' ? ' <span class="zter-warn">(a line’s kind is unknown)</span>' : d.kindState === 'none' ? ' <span class="zter-muted">(no line says what the work is)</span>' : '') + '</dd>'
+			+ '<dt>Kind of work</dt><dd>' + (d.kinds.length ? esc(d.kinds.map(function (k) { return k.label; }).join(', ')) : '–') + (d.kindState === 'unknown' ? ' <span class="zter-warn">(a line’s kind is unknown)</span>' : d.kindState === 'none' ? ' <span class="zter-muted">(no line says what the work is)</span>' : '') + '</dd>'
 			+ '<dt>Rule</dt><dd>' + (d.ruleNo ? 'Rule ' + d.ruleNo + ' (version ' + d.ruleVersion + '): ' + esc(d.sentence) : 'none') + '</dd>'
-			+ (inst ? '<dt>Sold by</dt><dd>' + (d.seller ? esc(d.seller) : '—') + '</dd>' : '<dt>Today’s pick</dt><dd>' + ini(d['default']) + '</dd>')
+			+ (inst ? '<dt>Sold by</dt><dd>' + (d.seller ? esc(d.seller) : '–') + '</dd>' : '<dt>Today’s pick</dt><dd>' + ini(d['default']) + '</dd>')
 			+ '<dt>The rules pick</dt><dd><strong>' + ini(d.would) + '</strong> (all rules, live or not)' + (two ? ' <span class="zter-muted">(two people: the first for the item the rule names, the second for the rest of the work)</span>' : '') + '</dd>'
 			+ '<dt>' + (inst ? 'Suggested' : 'Answered') + '</dt><dd>' + ini(d.answered) + (d.mode === 'live' ? ' (live rule ' + (d.liveRuleNo || '?') + ')' : inst ? ' (no live rule: no suggestion)' : ' (no live rule: today’s pick)') + '</dd>'
 			+ (inst && d.confirmed ? '<dt>Confirmed</dt><dd>' + esc(d.confirmed) + (d.confirmedDone !== false && d.answered && d.confirmed !== d.answered ? ' (Another)' : '') + '</dd>' : '')
 			+ '</dl>';
 		if (d.lines.length) {
 			h += '<h4 class="zter-h4">Lines</h4><ul class="zter-plain">' + d.lines.map(function (l) {
-				return '<li>Line ' + l.n + ': ' + (l.types.length ? esc(l.types.map(typeLabel).join(' + ')) : '—') + (l.repair ? ' (repair)' : ' (new)') + ' → ' + (l.label ? esc(l.label) + ' <span class="zter-muted">(' + (l.by === 'catalog' ? 'the catalog' : 'words row ' + rowNo(l.by)) + ')</span>' : '<span class="zter-warn">' + (l.by === 'repair' ? 'a repair that names no item' : 'unknown' + (/^gone:/.test(l.by) ? ' (not in Team Roles)' : '')) + '</span>') + '</li>';
+				return '<li>Line ' + l.n + ': ' + (l.types.length ? esc(l.types.map(typeLabel).join(' + ')) : '–') + (l.repair ? ' (repair)' : ' (new)') + ' → ' + (l.label ? esc(l.label) + ' <span class="zter-muted">(' + (l.by === 'catalog' ? 'the catalog' : 'words row ' + rowNo(l.by)) + ')</span>' : '<span class="zter-warn">' + (l.by === 'repair' ? 'a repair that names no item' : 'unknown' + (/^gone:/.test(l.by) ? ' (not in Team Roles)' : '')) + '</span>') + '</li>';
 			}).join('') + '</ul>';
 		}
 		h += '<h4 class="zter-h4">How it was decided</h4><ol class="zter-trail">' + d.trail.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>';
@@ -772,7 +772,7 @@
 		var team = (D().team || D().people || []).filter(function (t) { return t.initials; });
 		var h = '<div class="zter-form">' + decisionHtml(d, false)
 			+ '<h4 class="zter-h4">Note who it really went to</h4><p class="zter-muted">' + (d.stage === 'install' ? 'The installer is confirmed in the Jobs app.' : 'The change itself is made in the estimate app.') + ' The note shows in this comparison so the rules can be fixed.</p>'
-			+ '<label for="td-to">Went to</label><select id="td-to"><option value="0">—</option>' + team.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name + ' (' + t.initials + ')') + '</option>'; }).join('') + '</select>'
+			+ '<label for="td-to">Went to</label><select id="td-to"><option value="0">–</option>' + team.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name + ' (' + t.initials + ')') + '</option>'; }).join('') + '</select>'
 			+ '<label for="td-why">Why</label><input id="td-why" maxlength="300"></div>';
 		var sh = sheet({
 			title: (d.label || (d.stage === 'install' ? 'Won job' : 'Stub')) + (d.zip ? ' · ' + d.zip : ''), body: h,

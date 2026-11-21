@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Messaging
  * Plugin URI:  https://zorderz.org
  * Description: One-to-one direct messages and team channels inside the Zorderz Field OS. @mentions, phone notifications held to quiet hours, estimate and invoice cards shared one document at a time.
- * Version:     1.9.0
+ * Version:     1.10.0
  * Author:      Zorderz
  * Text Domain: zdz-internal-messaging
  * Requires PHP: 8.0
@@ -109,7 +109,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIM_VERSION', '1.9.0' );
+define( 'ZIM_VERSION', '1.10.0' );
 define( 'ZIM_PLUGIN_FILE', __FILE__ );
 define( 'ZIM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -397,28 +397,6 @@ function zim_maybe_upgrade() {
 		// Flag so the includes-loader re-seeds after classes are available.
 		update_option( 'zim_needs_reseed', '1' );
 	}
-	zim_migrate_attachment_meta_keys();
-}
-
-/**
- * Chat attachments written by Zorderz 2.0.0 and earlier carry older meta key names. Rename them once,
- * so existing attachments stay out of the Media Library and their signed links keep working.
- * Idempotent; a fresh install has nothing to rename. Removed in a later release.
- */
-function zim_migrate_attachment_meta_keys() {
-	if ( '1' === get_option( 'zim_attachment_meta_keys_v2' ) ) {
-		return;
-	}
-	global $wpdb;
-	$renames = array(
-		'_zim_chat_attachment' => '_zim_chat_attachment',
-		'_zim_att_token'       => '_zim_att_token',
-	);
-	foreach ( $renames as $old => $new ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time key rename.
-		$wpdb->update( $wpdb->postmeta, array( 'meta_key' => $new ), array( 'meta_key' => $old ) );
-	}
-	update_option( 'zim_attachment_meta_keys_v2', '1', false );
 }
 
 // ── Load all class files ───────────────────────────────────────────
@@ -481,6 +459,8 @@ function zim_load_includes() {
 	add_filter( 'zdz_register_capabilities', array( 'ZIM_Unread_Counts', 'register_capabilities' ) );
 	// The business's own channels, from its Identity Pack (org.yml messaging.channels).
 	add_filter( 'zdz_identity_pack_consumers', array( 'ZIM_Channels', 'pack_consumer' ) );
+	// The class names of the business's own training-video pages (mappings.yml messaging.video_embed_classes).
+	add_filter( 'zdz_identity_pack_consumers', array( 'ZIM_Messages', 'pack_consumer' ) );
 
 	// Full-page route — ?zim_page=1 renders the inline widget full-viewport.
 	add_action( 'template_redirect', 'zim_maybe_render_full_page' );
@@ -679,7 +659,7 @@ add_action( 'after_setup_theme', function() {
 					'nm'          => 'Messages',
 					'icon'        => 'message-square',
 					'cat'         => 'Team',
-					'cc'          => '#3B82F6',
+					'cc'          => '#56B4E9',
 					'desc'        => 'Team messaging, channels, @mentions.',
 					// v1.0.24 — zdz_general (shared kiosk) is included so the
 					// Messages tile is visible on the workshop iPad. Its access
@@ -724,7 +704,7 @@ add_action( 'after_setup_theme', function() {
 					'nm'          => 'Messages',
 					'icon'        => 'message-square',
 					'cat'         => 'Team',
-					'cc'          => '#3B82F6',
+					'cc'          => '#56B4E9',
 					'desc'        => 'Team messaging.',
 					// v1.0.24 — see Tier 2 note: kiosk gets read-only access.
 					'roles'       => array( 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'zdz_general' ),

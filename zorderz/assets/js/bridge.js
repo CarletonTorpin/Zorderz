@@ -368,7 +368,7 @@ const Bridge = {
         }
       })
       .catch(() => {
-        body.innerHTML = '<div class="app-error">Connection error — please try again.</div>';
+        body.innerHTML = '<div class="app-error">Connection error. Please try again.</div>';
       });
     }
   },

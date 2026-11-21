@@ -40,14 +40,14 @@ if ( in_array( $inv['status'], array( 'paid', 'refunded' ), true ) || $zic_strip
 $biz         = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::name() : get_bloginfo( 'name' );
 $pi_url      = class_exists( 'ZIC_REST' ) ? ZIC_REST::payment_intent_url() : '';
 $return_url  = function_exists( 'zic_return_url' ) ? zic_return_url( $inv['token'] ) : home_url( '/' );
-?><!doctype html><html><head><meta charset="utf-8"><title><?php echo esc_html( 'Pay Invoice — ' . $biz ); ?></title>
+?><!doctype html><html><head><meta charset="utf-8"><title><?php echo esc_html( 'Pay Invoice · ' . $biz ); ?></title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="<?php echo esc_url( ZIC_PLUGIN_URL . 'assets/css/checkout.css' ); ?>">
 <script src="https://js.stripe.com/v3/"></script></head><body>
 <div class="zic-pay">
 <h1>Invoice #<?php echo (int) $inv['id']; ?></h1>
 <p><?php echo esc_html( $inv['description'] ); ?></p>
-<p><strong>$<?php echo esc_html( number_format( $inv['amount_cents'] / 100, 2 ) ); ?></strong></p>
+<p><strong><?php echo esc_html( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign_for( (string) ( $inv['currency'] ?? '' ) ) : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $inv['amount_cents'] / 100, 2 ) : number_format( $inv['amount_cents'] / 100, 2 ) ) ); ?></strong></p>
 <div id="payment-element"></div>
 <button id="submit">Pay</button>
 <div id="error-message"></div>

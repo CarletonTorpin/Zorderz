@@ -24,7 +24,7 @@
  *
  * What belongs to the business, not to Core:
  *   - its own name, as a spoken greeting ("hey <name>, ..."): wake_words(), from ZDZ_Business_Profile;
- *   - its trade's words for things ("gate", "awning"): ZDZ_Ask_Phrases::trade_words(), from a catalog pack. Core's rows
+ *   - its trade's words for things ("boiler", "radiator"): ZDZ_Ask_Phrases::trade_words(), from a catalog pack. Core's rows
  *     use only words every trade shares (materials, parts, supplies, hardware, pieces, panels).
  *
  * Patterns use the subset PCRE and JavaScript share (no lookbehind, possessive quantifiers, named groups or \A / \z);

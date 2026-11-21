@@ -20,8 +20,6 @@
  *
  * Idempotent: each column/index is guarded by an existence check, and the
  * whole routine short-circuits on the zdz_migrated_2_20_4 option flag.
- *
- * @since 2.20.4
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

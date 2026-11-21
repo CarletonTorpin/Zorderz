@@ -52,7 +52,7 @@ class ZEST_Admin {
 				<td>
 					<input type="text" name="zdz_user_initials" id="zdz_user_initials"
 						value="<?php echo esc_attr( $code ); ?>" class="regular-text" maxlength="4" />
-					<p class="description"><?php esc_html_e( 'Your rep code, used on the location line and attribution. Stored without delimiters (e.g. GT, not (GT)).', 'zorderz' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Your short code (initials), printed in brackets after the job address on estimates and used to credit your work. Type it without brackets (e.g. AB, not (AB)).', 'zorderz' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -79,6 +79,10 @@ class ZEST_Admin {
 	public static function save_profile_fields( $user_id ): void {
 		$user_id = (int) $user_id;
 		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			return;
+		}
+		// An account in Privacy View changes nothing here: a short code decides whose an estimate is.
+		if ( class_exists( 'ZEST_Privacy_View' ) && ZEST_Privacy_View::on() ) {
 			return;
 		}
 		if ( isset( $_POST['zdz_user_initials'] ) ) {

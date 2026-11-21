@@ -274,9 +274,9 @@ class ZDZ_Answer_Authority {
 	}
 
 	/**
-	 * Currency detection is locale-driven, never dollar-hardcoded — so a non-USD
-	 * tenant still gets money extraction AND the shared-device scrub. The sigil
-	 * comes from the Business Profile when present; the Core default is neutral.
+	 * Currency detection follows the business's locale, so a business that works in another
+	 * currency still gets money extraction AND the shared-device scrub. The sign is the Business
+	 * Profile's `locale.currency_sign` (Business Profile → Locale), "$" when none is set.
 	 *
 	 * @return array{sigil:string,decimal:string,thousands:string}
 	 */
@@ -285,9 +285,17 @@ class ZDZ_Answer_Authority {
 		$decimal   = '.';
 		$thousands = ',';
 		if ( class_exists( 'ZDZ_Business_Profile' ) ) {
-			$s = (string) ZDZ_Business_Profile::get( 'currency_sign', '' );
+			$s = trim( (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '' ) );
+			if ( '' === $s ) {
+				$s = trim( (string) ZDZ_Business_Profile::get( 'currency_sign', '' ) ); // a profile stored flat
+			}
 			if ( '' !== $s ) {
 				$sigil = $s;
+			}
+			// grouping and decimal point as the business writes numbers (Business Profile → Locale → Numbers)
+			$sep = ZDZ_Business_Profile::NUMBER_FORMATS[ (string) ZDZ_Business_Profile::get( 'locale.number_format', '1,234.56' ) ] ?? null;
+			if ( is_array( $sep ) ) {
+				list( $decimal, $thousands ) = $sep;
 			}
 		}
 		$c = apply_filters(
@@ -608,7 +616,7 @@ class ZDZ_Answer_Authority {
 
 	/** A caveat appended to a PARTIAL answer. */
 	public static function caveat_text( array $assessment = array() ): string {
-		return __( 'Note: some figures above are not confirmed by the underlying records — treat them as provisional.', 'zorderz' );
+		return __( 'Note: some figures above are not confirmed by the underlying records; treat them as provisional.', 'zorderz' );
 	}
 
 	/* ----------------- Reconciliation, scope, disclosure and payment checks ------- */
@@ -674,7 +682,7 @@ class ZDZ_Answer_Authority {
 		foreach ( $rows as $r ) {
 			if ( self::to_cents( $r ) === $gap_cents ) {
 				$cur   = self::currency();
-				$shown = $cur['sigil'] . number_format( $gap_cents / 100, 2 );
+				$shown = $cur['sigil'] . number_format( $gap_cents / 100, 2, (string) ( $cur['decimal'] ?? '.' ), (string) ( $cur['thousands'] ?? ',' ) );
 				return sprintf(
 					/* translators: %s is a money amount. */
 					__( 'a value of %s appears counted twice; the printed total is probably the correct one', 'zorderz' ),
@@ -688,8 +696,8 @@ class ZDZ_Answer_Authority {
 	/** The reader-facing caveat for a total/row-sum disagreement (an ADDITION, not a rewrite). */
 	public static function reconcile_caveat_text( array $rec ): string {
 		$cur     = self::currency();
-		$printed = $cur['sigil'] . number_format( (float) ( $rec['printed'] ?? 0 ), 2 );
-		$rowsum  = $cur['sigil'] . number_format( (float) ( $rec['row_sum'] ?? 0 ), 2 );
+		$printed = $cur['sigil'] . number_format( (float) ( $rec['printed'] ?? 0 ), 2, (string) ( $cur['decimal'] ?? '.' ), (string) ( $cur['thousands'] ?? ',' ) );
+		$rowsum  = $cur['sigil'] . number_format( (float) ( $rec['row_sum'] ?? 0 ), 2, (string) ( $cur['decimal'] ?? '.' ), (string) ( $cur['thousands'] ?? ',' ) );
 		if ( ! empty( $rec['probable_cause'] ) ) {
 			return sprintf(
 				/* translators: 1: printed total, 2: row sum, 3: probable-cause clause. */

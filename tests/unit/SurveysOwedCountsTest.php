@@ -67,6 +67,8 @@ require_once $zsv . 'class-zsv-settings.php';
 require_once $zsv . 'class-zsv-budget.php';
 require_once $zsv . 'class-zsv-owed.php';
 require_once $zsv . 'class-zsv-counts.php';
+require_once $zsv . 'class-zsv-note-reader.php';
+require_once $zsv . 'class-zsv-send-once.php';
 require_once $zsv . 'class-zsv-survey-manager.php';
 require_once $zsv . 'class-zsv-review-checker.php';
 require_once $zsv . 'class-zsv-dashboard.php';

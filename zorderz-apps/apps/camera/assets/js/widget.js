@@ -443,7 +443,7 @@
     if (box.innerHTML) { box.hidden = false; return; }
     box.hidden = false;
     box.innerHTML =
-      '<span class="zcam-w-geo-chip-txt">Location is off &mdash; photos are saving without a place.</span>' +
+      '<span class="zcam-w-geo-chip-txt">Location is off: photos are saving without a place.</span>' +
       '<button type="button" class="zcam-w-geo-chip-how" id="zcam-w-geo-how">How to turn it on</button>' +
       '<button type="button" class="zcam-w-geo-chip-x" id="zcam-w-geo-x" aria-label="Dismiss">&times;</button>' +
       '<p class="zcam-w-geo-chip-help" id="zcam-w-geo-help" hidden></p>';
@@ -539,7 +539,7 @@
     if (box.innerHTML) { box.hidden = false; return; }
     box.hidden = false;
     box.innerHTML =
-      '<span class="zcam-w-geo-chip-txt">Camera access is off &mdash; using your device&rsquo;s camera app instead.</span>' +
+      '<span class="zcam-w-geo-chip-txt">Camera access is off: using your device&rsquo;s camera app instead.</span>' +
       '<button type="button" class="zcam-w-geo-chip-how" id="zcam-w-cam-how">How to turn it on</button>' +
       '<button type="button" class="zcam-w-geo-chip-x" id="zcam-w-cam-x" aria-label="Dismiss">&times;</button>' +
       '<p class="zcam-w-geo-chip-help" id="zcam-w-cam-help" hidden></p>';

@@ -213,7 +213,7 @@ class ZRO_Pack {
 				$r   = ZRO_DB::set( $uid, $key, $level, $old ? $old['note'] : '', $old ? $old['since'] : '', $by, 'pack', $detail );
 				if ( is_wp_error( $r ) ) {
 					/* translators: 1: cell, 2: reason */
-					$msgs[] = sprintf( __( 'Team Roles: %1$s not set — %2$s', 'zorderz' ), 'people.' . $plan['names'][ $uid ] . '.' . $key, $r->get_error_message() );
+					$msgs[] = sprintf( __( 'Team Roles: %1$s not set. %2$s', 'zorderz' ), 'people.' . $plan['names'][ $uid ] . '.' . $key, $r->get_error_message() );
 					continue;
 				}
 				$set                += $r['changed'] ? 1 : 0;
@@ -225,7 +225,7 @@ class ZRO_Pack {
 		$msgs[] = sprintf( __( 'Team Roles: %1$d mark(s) set for %2$d people.', 'zorderz' ), $set, count( $plan['marks'] ) );
 		foreach ( $plan['refused'] as $r ) {
 			/* translators: 1: path, 2: reason */
-			$msgs[] = sprintf( __( 'Team Roles: %1$s refused — %2$s', 'zorderz' ), $r['path'], $r['why'] );
+			$msgs[] = sprintf( __( 'Team Roles: %1$s refused. %2$s', 'zorderz' ), $r['path'], $r['why'] );
 		}
 		return $msgs;
 	}

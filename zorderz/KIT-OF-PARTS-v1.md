@@ -59,7 +59,7 @@ come from the business's own role names.
 
 ```js
 ZDZ.ui.personChip(7)            // <span class="zdz-person zdz-person--hexagon" role="img" aria-label="AB · Owner"><svg>…</svg></span>
-ZDZ.ui.personChip('FR', { size: 'sm', title: 'Uploaded by' })   // sizes: sm 22 px, default 30 px, lg 44 px
+ZDZ.ui.personChip('JB', { size: 'sm', title: 'Uploaded by' })   // sizes: sm 22 px, default 30 px, lg 44 px
 ZDZ.ui.person(7)                // { id, initials, color, ink, edge, shape } — never a name or email
 ZDZ.ui.badge('pentagon')        // the shape alone (role badges, legends); ZDZ.ui.shapes() names them
 ```
@@ -251,6 +251,27 @@ layer.edit({ id: item.id, context: 'project:79', done: function (view, saved) { 
   drawing moved (two devices), and the bar then shows what is there now. The kit never sends an author.
 - Popups (the note card, the Drawings list) sit above every viewer (z-index 100095) and close with Escape or a tap
   outside. Notes and names are text nodes only, never markup.
+
+## 11. Money, dates, units and address words
+
+Everything a person reads follows the business's Locale (Business Profile → Locale, or `profile.yml locale` in an
+Identity Pack). Each setting left blank follows the country in the business's address.
+
+| Need | JS (kit 1.8.0) | PHP |
+|---|---|---|
+| A sum | `ZDZ.ui.money(1200)` → "$1,200.00" / "£1,200.00" | `ZDZ_Business_Profile::money( 1200 )` |
+| A number | `ZDZ.ui.num(12500)` → "12,500" / "12.500" | `ZDZ_Business_Profile::number( 12500 )` |
+| A calendar date | `ZDZ.ui.ymd('2026-11-19')` → "11/19/2026" / "19/11/2026" | `wp_date( ZDZ_Business_Profile::date_format(), $ts )` |
+| A date with the month's name | `toLocaleDateString(ZDZ.ui.locale(), …)` | `wp_date( ZDZ_Business_Profile::date_text( 'M j, Y' ), $ts )` |
+| A temperature (given in °F) | `ZDZ.ui.temp(72)` → "72°F" / "22°C" | `ZDZ_Business_Profile::temperature( 72 )` |
+| Rain (given in inches) | `ZDZ.ui.rain(0.25)` → "0.25 in" / "6 mm" | `ZDZ_Business_Profile::rain( 0.25 )` |
+| The word for a postal code | `ZDZ.ui.postcodeLabel()` → "ZIP" / "Postcode" | `ZDZ_Business_Profile::postcode_label()` |
+| The word for a region | `ZDZ.ui.regionLabel()` → "State" / "County" | `ZDZ_Business_Profile::region_label()` |
+| "us" or "metric" | `ZDZ.ui.units()` | `ZDZ_Business_Profile::units()` |
+
+- **Write a textual date month first, as the United States does** (`'M j, Y'`, `'D, M j'`, `'M j, g:i a'`) and pass
+  it through `date_text()`: a month-first business gets it unchanged, any other gets it day first with its own clock.
+- **Keep a measure in one unit inside** (an app that stores inches keeps inches) and convert only what a person reads.
 
 ## Testing checklist
 

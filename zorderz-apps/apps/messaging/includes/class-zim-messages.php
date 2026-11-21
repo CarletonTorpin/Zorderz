@@ -196,6 +196,17 @@ class ZIM_Messages {
 			);
 		}
 
+		// Other apps may act on a new message: `zim_message_posted` ( message id, conversation id, author's user id ).
+		// It fires after the message is stored, so nothing a listener does can undo the send, and a listener's own
+		// trouble never fails it.
+		if ( function_exists( 'do_action' ) ) {
+			try {
+				do_action( 'zim_message_posted', $message_id, $conversation_id, $author_user_id );
+			} catch ( \Throwable $e ) {
+				unset( $e );
+			}
+		}
+
 		return array(
 			'message_id'         => $message_id,
 			'mentioned_user_ids' => $mentioned_ids,
@@ -496,10 +507,10 @@ class ZIM_Messages {
 	}
 
 	/* ═════════════════════════════════════════════════════════════════════
-	 * Vimeo chapter embed (v1.1.4) — trusted-origin distillation.
+	 * Vimeo chapter embed — trusted-origin distillation.
 	 *
 	 * A first-party training-video embed (a Vimeo player + a clickable chapter
-	 * list, marked up with the reader's class names) cannot survive the write
+	 * list, marked up with the classes embed_classes() names) cannot survive the write
 	 * chokepoint: wp_kses_post() strips <iframe>/<script>/<style> and the client
 	 * DOMPurify re-strips on render, so the seeking script never runs and the raw
 	 * chapter links fall through as blocked popups. Rather than WEAKEN either
@@ -561,8 +572,9 @@ class ZIM_Messages {
 			$body = preg_replace( '#<script\b[^>]*/\s*>#i', '', $body );
 			$body = preg_replace( '#<style\b[^>]*>.*?</style>#is', '', $body );
 			// Strip any stray producer scaffolding not absorbed with a container.
-			$body = preg_replace( '#<a\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-ch\b[^"\']*\1[^>]*>.*?</a>#is', '', $body );
-			$body = preg_replace( '#<p\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-heading\b[^"\']*\1[^>]*>.*?</p>#is', '', $body );
+			$cls  = self::embed_classes();
+			$body = preg_replace( '#<a\b[^>]*\bclass\s*=\s*("|\')[^"\']*\b' . preg_quote( $cls['chapter'], '#' ) . '\b[^"\']*\1[^>]*>.*?</a>#is', '', $body );
+			$body = preg_replace( '#<p\b[^>]*\bclass\s*=\s*("|\')[^"\']*\b' . preg_quote( $cls['heading'], '#' ) . '\b[^"\']*\1[^>]*>.*?</p>#is', '', $body );
 		}
 
 		return $body;
@@ -589,16 +601,93 @@ class ZIM_Messages {
 		return array_values( array_unique( $out ) );
 	}
 
+	/** Option holding the class names the business's own video pages use (Identity Pack mappings.yml messaging.video_embed_classes). */
+	const VIDEO_CLASSES_OPT = 'zim_video_embed_classes';
+
+	/** Core's own class names for a chapter embed. */
+	const VIDEO_CLASSES = array( 'embed' => 'zdz-video-embed', 'chapter' => 'zdz-video-chapter', 'heading' => 'zdz-video-heading', 'title' => 'zdz-video-title' );
+
+	/** One class name as Messaging accepts it: letters, digits, "-" and "_", starting with a letter, or ''. */
+	public static function clean_class_name( $v ) {
+		$x = is_string( $v ) ? trim( $v ) : '';
+		return preg_match( '/^[A-Za-z][A-Za-z0-9_-]{0,40}$/', $x ) ? $x : '';
+	}
+
 	/**
-	 * Tokenize the first trusted Vimeo embed found. Prefers a full zdz-video-embed
+	 * The class names a chapter embed is marked up with: its container, a chapter link, the heading over the list and a
+	 * chapter's title. Core's are its own (zdz-video-*); a business whose pages come from another producer names that
+	 * producer's classes in its Identity Pack (mappings.yml messaging.video_embed_classes, option
+	 * zim_video_embed_classes), and code with the zim_video_embed_classes filter. Letters, digits, "-" and "_" only, so
+	 * a class name never changes a pattern.
+	 *
+	 * @return array{embed:string,chapter:string,heading:string,title:string}
+	 */
+	private static function embed_classes() {
+		$d   = self::VIDEO_CLASSES;
+		$own = function_exists( 'get_option' ) ? get_option( self::VIDEO_CLASSES_OPT, array() ) : array();
+		foreach ( is_array( $own ) ? $own : array() as $k => $v ) {
+			if ( isset( $d[ $k ] ) && '' !== self::clean_class_name( $v ) ) {
+				$d[ $k ] = self::clean_class_name( $v );
+			}
+		}
+		$c = function_exists( 'apply_filters' ) ? apply_filters( 'zim_video_embed_classes', $d ) : $d;
+		foreach ( $d as $k => $v ) {
+			$x       = is_array( $c ) && isset( $c[ $k ] ) ? self::clean_class_name( $c[ $k ] ) : '';
+			$d[ $k ] = '' !== $x ? $x : $v;
+		}
+		return $d;
+	}
+
+	/** Registers mappings.yml messaging.video_embed_classes on the Identity Pack's consumer registry. */
+	public static function pack_consumer( $consumers ) {
+		$consumers = is_array( $consumers ) ? $consumers : array();
+		if ( ! class_exists( 'ZDZ_Identity_Pack' ) || ! method_exists( 'ZDZ_Identity_Pack', 'option_consumer' ) ) {
+			return $consumers;
+		}
+		$consumers['messaging-video'] = ZDZ_Identity_Pack::option_consumer( __( 'Messaging', 'zorderz' ), 'mappings', array( 'messaging.video_embed_classes' ), array( __CLASS__, 'plan_video_classes' ) );
+		return $consumers;
+	}
+
+	/**
+	 * mappings.yml messaging.video_embed_classes { embed, chapter, heading, title } → the class names of the business's
+	 * own training-video pages, so a pasted page's chapter list is read. Any of the four may be given; the rest stay
+	 * Core's. Each is one class name: letters, digits, "-" and "_", starting with a letter.
+	 */
+	public static function plan_video_classes( array $data ) {
+		$plan = ZDZ_Identity_Pack::plan();
+		$path = 'messaging.video_embed_classes';
+		$raw  = $data[ $path ] ?? null;
+		if ( ! is_array( $raw ) || ! $raw ) {
+			$plan['refused'][] = array( 'path' => $path, 'why' => 'Give the class names as embed, chapter, heading and title.' );
+			return $plan;
+		}
+		$ok = array();
+		foreach ( $raw as $k => $v ) {
+			if ( ! is_string( $k ) || ! isset( self::VIDEO_CLASSES[ $k ] ) ) {
+				$plan['refused'][] = array( 'path' => $path . '.' . $k, 'why' => 'Not a setting here (known: embed, chapter, heading, title).' );
+			} elseif ( '' === self::clean_class_name( $v ) ) {
+				$plan['refused'][] = array( 'path' => $path . '.' . $k, 'why' => 'One class name: letters, digits, "-" and "_", starting with a letter.' );
+			} else {
+				$ok[ $k ] = self::clean_class_name( $v );
+			}
+		}
+		if ( $ok ) {
+			ZDZ_Identity_Pack::plan_option( $plan, $path, self::VIDEO_CLASSES_OPT, $ok );
+		}
+		return $plan;
+	}
+
+	/**
+	 * Tokenize the first trusted Vimeo embed found. Prefers a full embed
 	 * container (player + chapters); otherwise a bare trusted iframe.
 	 *
 	 * @return array{0:string,1:bool}  [ new body, whether an embed was tokenized ]
 	 */
 	private static function tokenize_one_video( $body, array $hosts ) {
-		// 1) A full zdz-video-embed container (player + chapter list together).
+		// 1) A full embed container (player + chapter list together).
+		$cls = self::embed_classes();
 		if ( preg_match(
-			'/<div\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-embed\b[^"\']*\1[^>]*>/i',
+			'/<div\b[^>]*\bclass\s*=\s*("|\')[^"\']*\b' . preg_quote( $cls['embed'], '/' ) . '\b[^"\']*\1[^>]*>/i',
 			$body, $m, PREG_OFFSET_CAPTURE
 		) ) {
 			$open_start = (int) $m[0][1];
@@ -661,7 +750,7 @@ class ZIM_Messages {
 
 	/**
 	 * Build a token from a chunk of HTML that contains a trusted iframe and,
-	 * optionally, zdz-video-chapter chapter anchors. Returns null when no trusted iframe.
+	 * optionally, chapter anchors. Returns null when no trusted iframe.
 	 */
 	private static function build_token_from_html( $html, array $hosts ) {
 		if ( ! preg_match( '/<iframe\b[^>]*>/i', $html, $fm ) ) {
@@ -713,7 +802,7 @@ class ZIM_Messages {
 	}
 
 	/**
-	 * Collect chapter markers from zdz-video-chapter anchors: floored seconds + plain-text
+	 * Collect chapter markers from the chapter anchors: floored seconds + plain-text
 	 * label. Labels are tag-stripped here and re-inserted via textContent on the
 	 * client, so a hostile label can carry no markup through either layer.
 	 *
@@ -721,8 +810,9 @@ class ZIM_Messages {
 	 */
 	private static function collect_chapters( $html ) {
 		$chapters = array();
+		$cls      = self::embed_classes();
 		if ( preg_match_all(
-			'/<a\b[^>]*\bclass\s*=\s*("|\')[^"\']*\bttv-ch\b[^"\']*\1[^>]*>(.*?)<\/a>/is',
+			'/<a\b[^>]*\bclass\s*=\s*("|\')[^"\']*\b' . preg_quote( $cls['chapter'], '/' ) . '\b[^"\']*\1[^>]*>(.*?)<\/a>/is',
 			$html, $am, PREG_SET_ORDER
 		) ) {
 			foreach ( $am as $a ) {
@@ -735,7 +825,7 @@ class ZIM_Messages {
 				if ( $sec < 0 ) {
 					$sec = 0;
 				}
-				if ( preg_match( '/<span\b[^>]*\bttv-title\b[^>]*>(.*?)<\/span>/is', $inner, $ttl ) ) {
+				if ( preg_match( '/<span\b[^>]*\b' . preg_quote( $cls['title'], '/' ) . '\b[^>]*>(.*?)<\/span>/is', $inner, $ttl ) ) {
 					$label = $ttl[1];
 				} else {
 					$label = $inner;

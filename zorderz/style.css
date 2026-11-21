@@ -4,7 +4,7 @@ Theme URI: https://zorderz.org
 Author: Zorderz
 Author URI: https://zorderz.com
 Description: The Zorderz platform kernel. Turns a WordPress site into a business app: a mobile-first dashboard with runtime plugin auto-discovery, a four-mode theme system, roles and per-user data permissions, a shared media store with EXIF and offline place lookup, secret share-links, an alert router, and a REST surface plugins build on. Out of the box it is a blank slate - the business supplies its own identity, people, catalog and rules.
-Version: 2.0.1
+Version: 2.1.0
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
@@ -22,10 +22,10 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
 
 /* ---- TIER 1: Primitive Tokens ---- */
 :root {
-  --ref-brand-50:#EBF5FF;--ref-brand-100:#D6EBFF;--ref-brand-200:#ADCFFF;
-  --ref-brand-300:#7AB3FF;--ref-brand-400:#4796F7;--ref-brand-500:#2C5F8A;
-  --ref-brand-600:#1E3A5F;--ref-brand-700:#162D4A;--ref-brand-800:#0F1F35;
-  --ref-brand-900:#091526;--ref-brand-950:#050D18;
+  --ref-brand-50:#F5F6FE;--ref-brand-100:#EAEDFE;--ref-brand-200:#D3DAFF;
+  --ref-brand-300:#B1BCFF;--ref-brand-400:#7D87FB;--ref-brand-500:#5150D6;
+  --ref-brand-600:#433FBD;--ref-brand-700:#36339C;--ref-brand-800:#282876;
+  --ref-brand-900:#1D1D56;--ref-brand-950:#11123A;
   --ref-gray-0:#FFFFFF;--ref-gray-50:#F8FAFC;--ref-gray-100:#F1F5F9;
   --ref-gray-200:#E2E8F0;--ref-gray-300:#CBD5E1;--ref-gray-400:#94A3B8;
   --ref-gray-500:#64748B;--ref-gray-600:#475569;--ref-gray-700:#334155;
@@ -48,9 +48,9 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   --ref-ease:cubic-bezier(.4,0,.2,1);--ref-ease-out:cubic-bezier(0,0,.2,1);
   --ref-ease-spring:cubic-bezier(.32,.72,0,1);
   /* Category Colors */
-  --cat-sales:#7C3AED;--cat-finance:#059669;--cat-service:#2563EB;
-  --cat-field:#EA580C;--cat-admin:#DC2626;
-  --cat-ops:#0891B2;--cat-team:#DB2777;
+  --cat-sales:#E69F00;--cat-finance:#0072B2;--cat-service:#0072B2;
+  --cat-field:#009E73;--cat-admin:#0072B2;
+  --cat-ops:#009E73;--cat-team:#56B4E9;
 }
 
 /* ---- TIER 2: Semantic Tokens — LIGHT (default) ---- */
@@ -60,8 +60,8 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
   /* surface-raised is now slate-50 (one step from base white surface)
      so plugins relying on a real one-step elevation — alternating rows,
      skeleton shimmer gradients, card-on-card patterns — render the same in
-     light mode as they already do in dark/system. Pre-2.14 this resolved
-     to var(--ref-gray-0) (=#FFFFFF), giving zero contrast against surface. */
+     light mode as they already do in dark/system. Resolving it to the
+     surface white would give zero contrast against the surface. */
   --sys-surface-blur:rgba(255,255,255,.82);
   --sys-surface-subtle:rgba(0,0,0,.03);
   --sys-text:var(--ref-gray-900);--sys-text-sec:var(--ref-gray-600);
@@ -108,7 +108,11 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
      AAA) and ter=gray-400 (5.71:1, AA) on gray-800. */
   --sys-text:var(--ref-gray-100);--sys-text-sec:var(--ref-gray-300);
   --sys-text-ter:var(--ref-gray-400);--sys-text-inv:var(--ref-gray-900);
-  --sys-text-brand:var(--ref-gray-0);
+  /* ink on a brand fill. Dark mode lightens the fill to brand-400 so brand TEXT
+     reads on dark surfaces (4.7:1 on gray-800); white on that fill would be only
+     3.1:1, and on the brand-300 hover 1.8:1. The darkest brand step reads on both
+     (5.7:1 and 10:1). Light and sunlight modes keep white. */
+  --sys-text-brand:var(--ref-brand-950);
   --sys-border:var(--ref-gray-700);--sys-border-strong:var(--ref-gray-600);
   --sys-brand:var(--ref-brand-400);--sys-brand-light:var(--ref-brand-900);
   --sys-brand-hover:var(--ref-brand-300);--sys-brand-dark:var(--ref-brand-200);
@@ -180,7 +184,11 @@ Tags: mobile-first, one-column, custom-colors, custom-logo, full-width-template,
      sec=gray-300 (9.85:1 AAA), ter=gray-400 (5.71:1 AA) on --sys-surface. */
   --sys-text:var(--ref-gray-100);--sys-text-sec:var(--ref-gray-300);
   --sys-text-ter:var(--ref-gray-400);--sys-text-inv:var(--ref-gray-900);
-  --sys-text-brand:var(--ref-gray-0);
+  /* ink on a brand fill. Dark mode lightens the fill to brand-400 so brand TEXT
+     reads on dark surfaces (4.7:1 on gray-800); white on that fill would be only
+     3.1:1, and on the brand-300 hover 1.8:1. The darkest brand step reads on both
+     (5.7:1 and 10:1). Light and sunlight modes keep white. */
+  --sys-text-brand:var(--ref-brand-950);
   --sys-border:var(--ref-gray-700);--sys-border-strong:var(--ref-gray-600);
   --sys-brand:var(--ref-brand-400);--sys-brand-light:var(--ref-brand-900);
   --sys-brand-hover:var(--ref-brand-300);--sys-brand-dark:var(--ref-brand-200);

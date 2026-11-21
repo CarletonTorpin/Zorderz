@@ -119,6 +119,21 @@ class ZRP_Weather {
 		return rtrim( rtrim( number_format( (float) $v, 1, '.', '' ), '0' ), '.' );
 	}
 
+	/** True when the business reads km/h and millimetres (Business Profile → Locale → Units). Limits stay in mph and inches. */
+	private static function metric(): bool {
+		return class_exists( 'ZDZ_Business_Profile' ) && ZDZ_Business_Profile::metric();
+	}
+
+	/** A wind speed given in mph, as the business reads it: "18 mph" or "29 km/h". */
+	private static function wind( $mph ): string {
+		return self::metric() ? (string) round( (float) $mph * 1.609344 ) . ' km/h' : self::mph( $mph ) . ' mph';
+	}
+
+	/** Rain given in inches, as the business reads it: "0.25 in" or "6 mm". */
+	private static function rain( $in ): string {
+		return self::metric() ? (string) round( (float) $in * 25.4 ) . ' mm' : rtrim( rtrim( number_format( (float) $in, 2 ), '0' ), '.' ) . ' in';
+	}
+
 	private static function num( $v ) {
 		return is_numeric( $v ) ? (float) $v : null;
 	}
@@ -178,10 +193,10 @@ class ZRP_Weather {
 			$out['reasons'][] = 'Rain chance ' . $out['rain_pct'] . '% (over ' . $lim['rain_pct'] . '%)';
 		}
 		if ( null !== $out['rain_in'] && $out['rain_in'] > $lim['rain_in'] ) {
-			$out['reasons'][] = rtrim( rtrim( number_format( $out['rain_in'], 2 ), '0' ), '.' ) . ' in of rain that day (over ' . rtrim( rtrim( number_format( $lim['rain_in'], 2 ), '0' ), '.' ) . ' in)';
+			$out['reasons'][] = self::rain( $out['rain_in'] ) . ' of rain that day (over ' . self::rain( $lim['rain_in'] ) . ')';
 		}
 		if ( null !== $out['wind_mph'] && $out['wind_mph'] > $lim['wind_mph'] ) {
-			$out['reasons'][] = 'Steady wind ' . $out['wind_mph'] . ' mph (over ' . $lim['wind_mph'] . ' mph)';
+			$out['reasons'][] = 'Steady wind ' . self::wind( $out['wind_mph'] ) . ' (over ' . self::wind( $lim['wind_mph'] ) . ')';
 		}
 		// gusts, against their own limit. Over it: a warning and a lower score (plan.js), the day still good.
 		// Over gust_flag x it: the day is flagged by the gusts alone.
@@ -190,10 +205,10 @@ class ZRP_Weather {
 			$gf  = isset( $lim['gust_flag'] ) && is_numeric( $lim['gust_flag'] ) ? max( 1.0, (float) $lim['gust_flag'] ) : self::GUST_FLAG;
 			$top = $gl * $gf;
 			if ( $out['gust_mph'] > $top ) {
-				$out['reasons'][] = 'Gusts to ' . $out['gust_mph'] . ' mph (over ' . self::mph( $top ) . ' mph, ' . self::mph( $gf ) . ' x the gust limit)';
+				$out['reasons'][] = 'Gusts to ' . self::wind( $out['gust_mph'] ) . ' (over ' . self::wind( $top ) . ', ' . self::mph( $gf ) . ' x the gust limit)';
 			} else {
 				$out['gusty']      = true;
-				$out['warnings'][] = self::GUSTY . ' (gusts to ' . $out['gust_mph'] . ' mph, over ' . self::mph( $gl ) . ' mph)';
+				$out['warnings'][] = self::GUSTY . ' (gusts to ' . self::wind( $out['gust_mph'] ) . ', over ' . self::wind( $gl ) . ')';
 			}
 		}
 		if ( $out['reasons'] ) {

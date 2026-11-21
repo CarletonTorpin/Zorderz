@@ -5,7 +5,6 @@
  * Creates the wp_zdz_notifications table for in-app alert delivery.
  * Cached via option so it only runs ONCE, not on every request.
  *
- * @since   2.19.0
  * @package Zorderz
  */
 

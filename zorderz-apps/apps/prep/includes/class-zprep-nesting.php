@@ -105,6 +105,7 @@ class ZPREP_Nesting {
 	private float $max_len;      // max sheet length (in) for this workspace
 	private int   $roll_w;       // nominal roll width (in)
 	private array $debug = [];   // last pack()'s search trace (see get_debug())
+	private array $dropped = []; // pieces the last pack() was handed and did not place (see get_dropped())
 
 	/**
 	 * @param int   $roll_w  Nominal roll width (e.g. 36 or 60).
@@ -125,6 +126,52 @@ class ZPREP_Nesting {
 	 * @return array[] Page records (see emit_page()).
 	 */
 	public function pack( array $pieces ): array {
+		$this->dropped = [];
+		$pages = $this->lay_out( $pieces );
+		$this->name_unplaced( $pieces, $pages );
+		return $pages;
+	}
+
+	/**
+	 * The pieces the last pack() was handed and did not put on a sheet, one entry per piece:
+	 * { label, kind, w, h, reason }. Empty on a sound layout. What was placed plus what is named
+	 * here is always what was handed in, so a piece can never leave a cut plan unnoticed.
+	 */
+	public function get_dropped(): array { return $this->dropped; }
+
+	/**
+	 * Count what the pages hold against what was handed in, per size, and name any shortfall.
+	 * The count covers every way a piece could go missing (a size no sheet takes, a layout that
+	 * came up short), not one known cause.
+	 */
+	private function name_unplaced( array $pieces, array $pages ): void {
+		$asked = []; $one = [];
+		foreach ( $pieces as $p ) {
+			$k = (string) ( $p['label'] ?? '' );
+			$asked[ $k ] = ( $asked[ $k ] ?? 0 ) + 1;
+			$one[ $k ]   = $p;
+		}
+		foreach ( $pages as $pg ) {
+			foreach ( (array) ( $pg['pieces'] ?? [] ) as $pp ) {
+				$k = (string) ( $pp['label'] ?? '' );
+				if ( isset( $asked[ $k ] ) ) $asked[ $k ]--;
+			}
+		}
+		foreach ( $asked as $k => $short ) {
+			for ( $n = 0; $n < $short; $n++ ) {
+				$this->dropped[] = [
+					'label'  => (string) $k,
+					'kind'   => (string) ( $one[ $k ]['kind'] ?? '' ),
+					'w'      => (float) ( $one[ $k ]['w'] ?? 0 ),
+					'h'      => (float) ( $one[ $k ]['h'] ?? 0 ),
+					'reason' => 'not_placed',
+				];
+			}
+		}
+	}
+
+	/** Search for the best layout of the pieces and return its pages. */
+	private function lay_out( array $pieces ): array {
 		$pieces = array_values( array_filter( $pieces, fn( $p ) => ( $p['w'] ?? 0 ) > 0 && ( $p['h'] ?? 0 ) > 0 ) );
 		if ( empty( $pieces ) ) return [];
 
@@ -289,7 +336,7 @@ class ZPREP_Nesting {
 		// 1) The goal / priority the search optimized.
 		$R[] = [ 'stage' => 'goal', 'note' =>
 			'Optimized in priority order: (1) fewest sheets, (2) clean guillotine cuts ' .
-			'(no cut stops at a perpendicular one — T-junctions), (3) least waste / fill ' .
+			'(no cut stops at a perpendicular one, so no T-junctions), (3) least waste / fill ' .
 			'the width, (4) prefer full-length cuts as a tie-breaker.' ];
 
 		// 2) Search outcome — how hard it looked and what it found.
@@ -307,7 +354,7 @@ class ZPREP_Nesting {
 			elseif ( $gap >= self::W_TJUNCT * 0.5 ) $why = 'it removed an interrupted (T-junction) cut';
 			else                                    $why = 'it wasted less material with equally clean cuts';
 			$R[] = [ 'stage' => 'winner', 'note' =>
-				'Chosen trial #' . ( $winner['trial'] ?? 0 ) . ' (orientation: ' . ( $winner['orient_mode'] ?? '—' ) .
+				'Chosen trial #' . ( $winner['trial'] ?? 0 ) . ' (orientation: ' . ( $winner['orient_mode'] ?? '–' ) .
 				', strip-fill: ' . ( ! empty( $winner['strip_fill'] ) ? 'on' : 'off' ) . '). It beat the ' .
 				'next-best candidate because ' . $why . '.' ];
 		} else {
@@ -318,11 +365,11 @@ class ZPREP_Nesting {
 		// 4) Cut-quality verdict.
 		if ( (int) $bd['t_junctions'] === 0 ) {
 			$R[] = [ 'stage' => 'cuts', 'note' =>
-				'Every sheet decomposes into full edge-to-edge cuts — no cut has to stop at ' .
+				'Every sheet decomposes into full edge-to-edge cuts: no cut has to stop at ' .
 				'a perpendicular one. This is the cleanest cut quality the rule asks for.' ];
 		} else {
 			$R[] = [ 'stage' => 'cuts', 'note' =>
-				$bd['t_junctions'] . ' interrupted (T-junction) cut(s) remain — the tightest ' .
+				$bd['t_junctions'] . ' interrupted (T-junction) cut(s) remain; the tightest ' .
 				'arrangement found still needed them to avoid adding a sheet.' ];
 		}
 
@@ -336,12 +383,12 @@ class ZPREP_Nesting {
 
 			if ( $ntypes === 1 ) {
 				if ( $ps['waste_pct'] <= 12 ) {
-					$note .= 'a clean single-type sheet, packed tight — the ideal case.';
+					$note .= 'a clean single-type sheet, packed tight, the ideal case.';
 				} elseif ( $lenpct >= 95 ) {
 					$note .= 'a single type that fills the full ' . ( (float) $cap ) . '" length but only part of the width; ' .
 					         'the leftover width strip was too small/!shaped to take another whole part without spilling to a new sheet.';
 				} else {
-					$note .= 'the trailing remainder of one type — what is left after its full sheets; it cannot combine ' .
+					$note .= 'the trailing remainder of one type: what is left after its full sheets; it cannot combine ' .
 					         'with another partial without exceeding the ' . ( (float) $cap ) . '" length cap.';
 				}
 			} else {
@@ -360,10 +407,10 @@ class ZPREP_Nesting {
 			$R[] = [ 'stage' => 'ceiling', 'note' =>
 				'Theoretical floor for this job is ' . $floor . ' sheets (pure area). The clean-block, ' .
 				'straight-cut rule costs ' . ( $min_sheets - $floor ) . ' extra sheet(s) vs. an interleaved ' .
-				'nest — a deliberate trade of a little material for cut simplicity.' ];
+				'nest: a deliberate trade of a little material for cut simplicity.' ];
 		} else {
 			$R[] = [ 'stage' => 'ceiling', 'note' =>
-				'This matches the theoretical floor (' . $floor . ' sheets) — no material is being left on the table.' ];
+				'This matches the theoretical floor (' . $floor . ' sheets): no material is being left on the table.' ];
 		}
 
 		return $R;
@@ -727,6 +774,7 @@ class ZPREP_Nesting {
 		foreach ( $partials as $bin ) {
 			$spec = $this->bin_to_typespec( $bin );
 			$spec['force_rot'] = $bin['__force_rot'] ?? null;
+			$spec['bin'] = $bin;   // the sheet as it was packed, kept in case the re-lay cannot hold it
 			$items[] = $spec;
 		}
 		// Largest length first.
@@ -741,7 +789,21 @@ class ZPREP_Nesting {
 
 			$bin = $this->new_bin();
 			$base = $this->build_type_block( $items[ $i ]['bucket'], $items[ $i ]['qty'], $usable_w, 0.0, $this->max_len, $use_strip, $items[ $i ]['force_rot'] );
-			$this->apply_block_to_bin( $bin, $base );
+			if ( $base['count'] >= $items[ $i ]['qty'] ) {
+				$this->apply_block_to_bin( $bin, $base );
+			} else {
+				/* A RE-LAY MUST NOT LOSE A PIECE.
+				 *
+				 * bin_to_typespec() hands the block back as (long, short), while the orientation it is
+				 * re-laid with (force_rot) was chosen for the piece as it was measured. When the two
+				 * disagree the re-laid block can hold fewer pieces than the sheet it replaces, and a
+				 * layout with a piece missing is shorter, so the scorer would prefer it.
+				 *
+				 * So when the re-lay holds fewer, the sheet stays exactly as it was packed; a layout
+				 * whose re-lay holds all its pieces is re-laid. */
+				$bin = $items[ $i ]['bin'];
+				unset( $bin['__force_rot'] );
+			}
 			$cursor = $bin['used_len'];
 
 			// Try to stack other partials' blocks beneath, clean and contiguous,

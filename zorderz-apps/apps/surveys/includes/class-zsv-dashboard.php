@@ -26,15 +26,28 @@ class ZSV_Dashboard {
 		add_action( 'wp_ajax_zsv_exclude', array( __CLASS__, 'ajax_exclude' ) );
 	}
 
+	/**
+	 * May this person see survey customers at all? An administrator, or someone the data
+	 * permissions let see other people's customers; never the shared device. The one question
+	 * every survey endpoint asks (the list, the sends, the Google reviews panel).
+	 */
+	public static function can_see( int $uid ): bool {
+		if ( $uid < 1 ) {
+			return false;
+		}
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $uid ) ) {
+			return false;
+		}
+		if ( user_can( $uid, 'manage_options' ) ) {
+			return true;
+		}
+		return class_exists( 'ZDZ_Data_Permissions' ) && method_exists( 'ZDZ_Data_Permissions', 'can' ) && (bool) ZDZ_Data_Permissions::can( $uid, 'view_others_data' );
+	}
+
 	/** Guard: valid nonce + operator/admin capability, or die with JSON. */
 	private static function guard(): void {
 		check_ajax_referer( ZSV_NONCE, 'nonce' );
-		$uid = get_current_user_id();
-		$ok  = user_can( $uid, 'manage_options' );
-		if ( ! $ok && class_exists( 'ZDZ_Data_Permissions' ) && method_exists( 'ZDZ_Data_Permissions', 'can' ) ) {
-			$ok = (bool) ZDZ_Data_Permissions::can( $uid, 'view_others_data' );
-		}
-		if ( ! $ok ) {
+		if ( ! self::can_see( get_current_user_id() ) ) {
 			wp_send_json_error( 'Unauthorized' );
 		}
 	}
@@ -54,26 +67,50 @@ class ZSV_Dashboard {
 		);
 	}
 
+	/** CRM states that mean a person has closed the lead (any outcome). */
+	const CRM_CLOSED = array( 'won', 'lost', 'cancelled', 'canceled', 'deleted' );
+
+	/**
+	 * One row of the widget's list, from a survey row. `invited` is true when the customer was
+	 * e-mailed by the row's own time, its send log, or the list of e-mails whose time the row would
+	 * not take ($apart), so the page never offers Send for a customer the site would refuse.
+	 * `closed` says the lead is closed in the CRM. With `invited` and `reviewed` it is what the page
+	 * needs to know whether anybody has handled the customer yet. Pure.
+	 */
+	public static function recent_row( array $r, array $apart = array() ): array {
+		$id      = (int) ( $r['id'] ?? 0 );
+		$emailed = ZSV_Send_Once::emailed_at( $r );
+		if ( '' === $emailed && isset( $apart[ $id ] ) ) {
+			$emailed = (string) $apart[ $id ];
+		}
+		return array(
+			'id'         => $id,
+			'name'       => trim( ( $r['first_name'] ?? '' ) . ' ' . ( $r['last_name'] ?? '' ) ),
+			'city'       => (string) ( $r['city'] ?? '' ),
+			'status'     => (string) ( $r['operator_status'] ?? '' ),
+			'invited'    => '' !== $emailed,
+			'emailed_at' => $emailed,
+			'reviewed'   => ! empty( $r['review_left'] ),
+			'closed'     => in_array( strtolower( trim( (string) ( $r['crm_status'] ?? '' ) ) ), self::CRM_CLOSED, true ),
+			'notes'      => trim( (string) ( $r['operator_notes'] ?? '' ) ),
+			'work'       => trim( (string) ( $r['work_description'] ?? '' ) ),
+			'date'       => (string) ( $r['created_at'] ?? '' ),
+		);
+	}
+
 	public static function ajax_recent(): void {
 		self::guard();
 		global $wpdb;
 		$leads = ZSV_DB::leads_table();
 		$rows  = $wpdb->get_results(
-			"SELECT id, first_name, last_name, city, operator_status, email_sent_at, review_left, created_at
+			"SELECT id, first_name, last_name, city, operator_status, operator_notes, work_description, crm_status, email_sent_at, email_send_log, review_left, created_at
 			 FROM {$leads} ORDER BY created_at DESC LIMIT 30",
 			ARRAY_A
 		);
-		$out = array();
+		$apart = ZSV_Send_Once::unrecorded();
+		$out   = array();
 		foreach ( (array) $rows as $r ) {
-			$out[] = array(
-				'id'      => (int) $r['id'],
-				'name'    => trim( ( $r['first_name'] ?? '' ) . ' ' . ( $r['last_name'] ?? '' ) ),
-				'city'    => (string) ( $r['city'] ?? '' ),
-				'status'  => (string) ( $r['operator_status'] ?? '' ),
-				'invited' => ! empty( $r['email_sent_at'] ),
-				'reviewed' => ! empty( $r['review_left'] ),
-				'date'    => (string) ( $r['created_at'] ?? '' ),
-			);
+			$out[] = self::recent_row( (array) $r, $apart );
 		}
 		wp_send_json_success( $out );
 	}
@@ -129,35 +166,133 @@ class ZSV_Dashboard {
 	 * manager (an id cannot bypass it); the CRM's part runs after the e-mail under its own
 	 * short budget, and what it could not do is owed, never lost.
 	 *
-	 * @return array{id:int,result:string,reason:string,crm:string}
+	 * ONE E-MAIL PER CUSTOMER, UNLESS A PERSON ASKS AGAIN (ZSV_Send_Once). In order:
+	 *   1. what holds an invite back whoever asks (no address, the call outcome, no review
+	 *      destination): a skip, and the customer's lock is never taken;
+	 *   2. the customer's send lock, without waiting: held elsewhere, or not answered by the
+	 *      database, and nothing is sent;
+	 *   3. the row read AGAIN under the lock, then the list of e-mails whose time a row would not
+	 *      take: a customer already e-mailed is skipped unless $again;
+	 *   4. a lead a person closed as lost or cancelled in the CRM is skipped;
+	 *   5. the e-mail; then the time and the send log are written from the fresh copy. A write that
+	 *      fails is tried once more, and failing that the customer is remembered apart;
+	 *   6. the lock is let go, on every way out, before the CRM work.
+	 *
+	 * @param bool $again A person asked to e-mail this customer again (see asked_again()).
+	 * @return array{id:int,result:string,reason:string,crm:string} plus, when they apply:
+	 *   already_emailed + emailed_at (skipped: e-mailed before), in_progress (skipped: another
+	 *   request is e-mailing them now), send_no (sent: which send this was), unrecorded (sent, but
+	 *   the row would not take the time; the site remembers it and will refuse a second send).
 	 */
-	public static function send_one( ZSV_Survey_Manager $manager, int $lead_id ): array {
+	public static function send_one( ZSV_Survey_Manager $manager, int $lead_id, bool $again = false ): array {
 		global $wpdb;
 		$leads = ZSV_DB::leads_table();
 		$lead  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$leads} WHERE id = %d", $lead_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $leads is $wpdb->prefix plus a fixed table name; the id is a placeholder.
+		$skip  = static function ( string $reason, array $more = array() ) use ( $lead_id ): array {
+			return array( 'id' => $lead_id, 'result' => 'skipped', 'reason' => $reason, 'crm' => 'none' ) + $more;
+		};
 		if ( ! $lead ) {
-			return array( 'id' => $lead_id, 'result' => 'skipped', 'reason' => 'not_found', 'crm' => 'none' );
+			return $skip( 'not_found' );
 		}
-		// The invite guard is the state, not the request shape.
-		if ( ! empty( $lead['email_sent_at'] ) ) {
-			return array( 'id' => $lead_id, 'result' => 'skipped', 'reason' => 'already_invited', 'crm' => 'none' );
+		// The invite guard is the state, not the request shape; it needs no lock.
+		$hold = $manager->invite_hold( $lead );
+		if ( '' !== $hold ) {
+			return $skip( $hold );
 		}
-		$res = $manager->send_invite( $lead );
-		if ( empty( $res['sent'] ) ) {
-			$reason = (string) $res['reason'];
-			return array( 'id' => $lead_id, 'result' => 'send_failed' === $reason ? 'failed' : 'skipped', 'reason' => $reason, 'crm' => 'none' );
+
+		$lock = ZSV_Send_Once::lock( $lead_id );
+		if ( 1 !== $lock ) {
+			if ( -1 === $lock ) {
+				error_log( sprintf( 'Zorderz Surveys: survey e-mail — #%d NOT sent: the database did not answer the send lock.', $lead_id ) );
+				return $skip( 'lock_unavailable' );
+			}
+			return $skip( 'send_in_progress', array( 'in_progress' => true ) );
 		}
-		$wpdb->update(
-			$leads,
-			array( 'email_sent_at' => current_time( 'mysql' ), 'email_type' => (string) $res['channel'] ),
-			array( 'id' => $lead_id ),
-			array( '%s', '%s' ),
-			array( '%d' )
-		);
+
+		$unrecorded = false;
+		try {
+			$fresh = $wpdb->get_row( $wpdb->prepare( "SELECT email_sent_at, email_send_log FROM {$leads} WHERE id = %d", $lead_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $leads is $wpdb->prefix plus a fixed table name; the id is a placeholder.
+			if ( ! is_array( $fresh ) ) {
+				return $skip( 'row_unreadable' ); // never sent on a guess
+			}
+			$lead['email_sent_at']  = $fresh['email_sent_at'] ?? null;
+			$lead['email_send_log'] = $fresh['email_send_log'] ?? null;
+			$log        = ZSV_Send_Once::send_log( $lead );
+			$emailed_at = ZSV_Send_Once::emailed_at( $lead );
+			if ( '' === $emailed_at ) {
+				$apart = ZSV_Send_Once::unrecorded();
+				if ( isset( $apart[ $lead_id ] ) ) {
+					$emailed_at = (string) $apart[ $lead_id ];
+				}
+			}
+			if ( '' !== $emailed_at && ! $again ) {
+				return $skip( 'already_invited', array( 'already_emailed' => true, 'emailed_at' => $emailed_at ) );
+			}
+			// A send the log never took still counts, so a send a person asks for again is send #2.
+			if ( '' !== $emailed_at && ! $log ) {
+				$log = array( $emailed_at );
+			}
+			if ( in_array( strtolower( trim( (string) ( $lead['crm_status'] ?? '' ) ) ), array( 'lost', 'cancelled', 'canceled', 'deleted' ), true ) ) {
+				return $skip( 'crm_closed' );
+			}
+
+			$res = $manager->send_invite( $lead );
+			if ( empty( $res['sent'] ) ) {
+				$reason = (string) $res['reason'];
+				return array( 'id' => $lead_id, 'result' => 'send_failed' === $reason ? 'failed' : 'skipped', 'reason' => $reason, 'crm' => 'none' );
+			}
+
+			$now   = current_time( 'mysql' );
+			$log[] = $now;
+			$data  = array( 'email_sent_at' => $now, 'email_type' => (string) $res['channel'], 'email_send_log' => wp_json_encode( $log ) );
+			$wrote = $wpdb->update( $leads, $data, array( 'id' => $lead_id ), array( '%s', '%s', '%s' ), array( '%d' ) );
+			if ( false === $wrote ) {
+				$wrote = $wpdb->update( $leads, $data, array( 'id' => $lead_id ), array( '%s', '%s', '%s' ), array( '%d' ) );
+			}
+			if ( false === $wrote ) {
+				// The e-mail went and the row would not take its time: remembered apart, while the
+				// lock is still held, so the next press is refused all the same.
+				$unrecorded = true;
+				ZSV_Send_Once::unrecorded_add( $lead_id, $now );
+				error_log( sprintf( 'Zorderz Surveys: survey e-mail — #%d WAS E-MAILED but the time could not be written to its row (tried twice). It is remembered as e-mailed and will not be sent again; check the row.', $lead_id ) );
+			} else {
+				ZSV_Send_Once::unrecorded_forget( $lead_id );
+			}
+		} finally {
+			ZSV_Send_Once::unlock( $lead_id );
+		}
+
+		$send_no = count( $log );
+		if ( $again && $send_no > 1 ) {
+			error_log( sprintf( 'Zorderz Surveys: survey e-mail — #%d e-mailed AGAIN because a person asked (send #%d).', $lead_id, $send_no ) );
+		}
 		zsv_usage( 'survey_emails_sent', $lead_id );
 		// Emailing is a satisfactory signal → close as Won with a reason (owed when it fails).
-		$crm = ! empty( $lead['crm_lead_id'] ) ? $manager->after_send_bookkeeping( $lead_id, (int) $lead['crm_lead_id'], (string) $res['channel'] ) : 'none';
-		return array( 'id' => $lead_id, 'result' => 'sent', 'reason' => '', 'crm' => $crm );
+		$crm = ! empty( $lead['crm_lead_id'] ) ? $manager->after_send_bookkeeping( $lead_id, (int) $lead['crm_lead_id'], (string) $res['channel'], $send_no ) : 'none';
+		$out = array( 'id' => $lead_id, 'result' => 'sent', 'reason' => '', 'crm' => $crm, 'send_no' => $send_no );
+		if ( $unrecorded ) {
+			$out['unrecorded'] = true;
+		}
+		return $out;
+	}
+
+	/**
+	 * The customers of this request a person asked to e-mail AGAIN: the request's `send_again`,
+	 * counted only for customers the same request names, and only when the person asking is an
+	 * administrator who may see survey customers (the one screen that asks the question is
+	 * theirs; never the shared device). For anyone else it is ignored, and a customer already
+	 * e-mailed is skipped as usual.
+	 *
+	 * @param int[] $lead_ids The customers this request is for.
+	 * @param mixed $raw      The request's send_again value.
+	 * @param int   $uid      Who is asking.
+	 * @return int[]
+	 */
+	public static function asked_again( array $lead_ids, $raw, int $uid ): array {
+		if ( null === $raw || '' === $raw || ! user_can( $uid, 'manage_options' ) || ! self::can_see( $uid ) ) {
+			return array();
+		}
+		return ZSV_Send_Once::named_again( $raw, $lead_ids );
 	}
 
 	/** One customer per request (the widget sends them in order and shows "Sending 2 of 6"). */
@@ -167,7 +302,9 @@ class ZSV_Dashboard {
 		if ( $id < 1 ) {
 			wp_send_json_error( 'No lead selected' );
 		}
-		wp_send_json_success( self::send_one( new ZSV_Survey_Manager(), $id ) );
+		$raw   = isset( $_POST['send_again'] ) ? wp_unslash( $_POST['send_again'] ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in self::guard(); asked_again() keeps whole numbers only.
+		$again = self::asked_again( array( $id ), $raw, get_current_user_id() );
+		wp_send_json_success( self::send_one( new ZSV_Survey_Manager(), $id, in_array( $id, $again, true ) ) );
 	}
 
 	/**
@@ -180,6 +317,8 @@ class ZSV_Dashboard {
 		if ( empty( $ids ) ) {
 			wp_send_json_error( 'No leads selected' );
 		}
+		$raw     = isset( $_POST['send_again'] ) ? wp_unslash( $_POST['send_again'] ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in self::guard(); asked_again() keeps whole numbers only.
+		$again   = self::asked_again( $ids, $raw, get_current_user_id() );
 		$manager = new ZSV_Survey_Manager();
 		$t0      = microtime( true );
 		$out     = array();
@@ -188,7 +327,7 @@ class ZSV_Dashboard {
 				$out[] = array( 'id' => $id, 'result' => 'not_reached', 'reason' => 'time', 'crm' => 'none' );
 				continue;
 			}
-			$out[] = self::send_one( $manager, $id );
+			$out[] = self::send_one( $manager, $id, in_array( $id, $again, true ) );
 		}
 		self::log_press( $out );
 		$sent = count( array_filter( $out, function ( $r ) { return 'sent' === $r['result']; } ) );
@@ -224,7 +363,7 @@ class ZSV_Dashboard {
 			$id     = (int) ( $r['id'] ?? 0 );
 			$result = preg_replace( '/[^a-z_]/', '', (string) ( $r['result'] ?? '' ) );
 			$reason = strtolower( (string) ( $r['reason'] ?? '' ) );
-			if ( ! preg_match( '/^(already_invited|not_found|no_email|no_review_destination|send_failed|time|request_failed|no_answer|status_holds_[a-z_]{1,30})$/', $reason ) ) {
+			if ( ! preg_match( '/^(already_invited|send_in_progress|lock_unavailable|row_unreadable|crm_closed|not_found|no_email|no_review_destination|send_failed|time|request_failed|no_answer|status_holds_[a-z_]{1,30})$/', $reason ) ) {
 				$reason = '' === $reason ? '' : 'other'; // the widget sends codes; anything else is never logged as written
 			}
 			if ( 'sent' === $result ) {
@@ -241,7 +380,7 @@ class ZSV_Dashboard {
 			}
 		}
 		$line = sprintf(
-			'Zorderz Surveys: survey e-mails — sent %d, skipped %d%s, failed %d, not reached %d%s',
+			'Zorderz Surveys: survey e-mails sent %d, skipped %d%s, failed %d, not reached %d%s',
 			$sent,
 			count( $skipped ),
 			$skipped ? ' (' . implode( ', ', array_slice( $skipped, 0, 30 ) ) . ')' : '',
@@ -267,7 +406,7 @@ class ZSV_Dashboard {
 			)
 		);
 		if ( empty( $res['ok'] ) ) {
-			wp_send_json_error( 'Nothing was recorded — a reason is required.' );
+			wp_send_json_error( 'Nothing was recorded: a reason is required.' );
 		}
 		wp_send_json_success( $res );
 	}

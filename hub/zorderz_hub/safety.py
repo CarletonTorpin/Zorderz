@@ -654,7 +654,7 @@ class AddressIndex:
 
         A ZIP is required. Within the ZIP, the street as written; then without a direction ("500 Broadway" for
         "500 N BROADWAY") when only one place fits; then without up to three trailing words ("500 N Broadway
-        Oakdale", "Example Hills Rd")."""
+        Midvale", "Example Hills Rd")."""
         num, st = street_key(address_line)
         z = str(zip5 or "")[:5]
         if num is None or not st or len(z) != 5:

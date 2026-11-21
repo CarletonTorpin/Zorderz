@@ -68,7 +68,7 @@ add_action( 'after_setup_theme', function () {
 				return [ 'id'=>'zdz-sketch-pad', 'nm'=>'Sketch', 'name'=>'Sketch', 'icon'=>'pencil',
 					'desc'=>'Draw sketches, diagrams, and visual notes',
 					'description'=>'Draw sketches, diagrams, and visual notes',
-					'cat'=>'Tools', 'cc'=>'#F59E0B',
+					'cat'=>'Tools', 'cc'=>'#CC79A7',
 					'bridge_type'=>'inline_widget', 'order'=>52 ];
 			}
 			public function render_mobile_view( int $user_id ): void { echo '<p>Use the dashboard widget.</p>'; }
@@ -86,7 +86,7 @@ add_action( 'after_setup_theme', function () {
 					</div>
 					<div class="zsp-w-panel" id="zsp-w-tab-draw">
 						<div class="zsp-w-canvas-wrap" id="zsp-w-canvas-wrap">
-							<span class="zsp-w-placeholder" id="zsp-w-placeholder">Draw here &mdash; or tap &#10138; to go full screen</span>
+							<span class="zsp-w-placeholder" id="zsp-w-placeholder">Draw here, or tap &#10138; to go full screen</span>
 							<canvas class="zsp-w-canvas" id="zsp-w-canvas" data-zdz-fill="220"></canvas>
 							<span class="zsp-w-canvas-hint" id="zsp-w-canvas-hint" aria-hidden="true">
 								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -327,6 +327,6 @@ function zsp_ajax_delete_sketch() {
 	$id = (int)( $_POST['media_id'] ?? 0 );
 	if ( ! $id || ! class_exists( 'ZDZ_User_Media' ) ) wp_send_json_error( 'Invalid.' );
 	$deleted = ZDZ_User_Media::delete( $id, get_current_user_id() );
-	if ( ! $deleted ) wp_send_json_error( 'Delete failed — not found or access denied.' );
+	if ( ! $deleted ) wp_send_json_error( 'Delete failed: not found or access denied.' );
 	wp_send_json_success();
 }

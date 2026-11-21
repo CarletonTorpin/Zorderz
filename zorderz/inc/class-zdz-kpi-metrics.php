@@ -204,6 +204,14 @@ class ZDZ_KPI_Metrics {
 		}
 		$user = function_exists( 'get_userdata' ) ? get_userdata( $uid ) : null;
 		$role = ( $user && ! empty( $user->roles ) ) ? (string) array_values( (array) $user->roles )[0] : '';
+		return self::set_for_role( $role );
+	}
+
+	/**
+	 * The tile set a role gets, as set_for() gives it to a person holding it first: '' for none and for the shared
+	 * device's role. PURE. The guided tour reads it to describe a role an administrator previews.
+	 */
+	public static function set_for_role( string $role ): string {
 		if ( '' === $role || 'zdz_general' === $role ) {
 			return '';
 		}
@@ -506,7 +514,7 @@ class ZDZ_KPI_Metrics {
 			'label'       => $label,
 			'state'       => $state,
 			'value'       => null,
-			'display'     => '—',
+			'display'     => '–',
 			'detail'      => '',
 			'definition'  => '',
 			'source'      => '',
@@ -1401,7 +1409,7 @@ class ZDZ_KPI_Metrics {
 		} catch ( \Throwable $e ) {
 			$zone = new DateTimeZone( 'UTC' );
 		}
-		return ( new DateTimeImmutable( '@' . $ts ) )->setTimezone( $zone )->format( 'g:i A' );
+		return ( new DateTimeImmutable( '@' . $ts ) )->setTimezone( $zone )->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i A' ) : 'g:i A' ) );
 	}
 
 	/* ── The company's other tiles ── */
@@ -1866,17 +1874,22 @@ class ZDZ_KPI_Metrics {
 		$m = $amount < 0 ? '-' : '';
 		$a = abs( $amount );
 		if ( $a >= 1000000 ) {
-			return $m . $s . number_format( $a / 1000000, 2 ) . 'M';
+			return $m . $s . self::num( $a / 1000000, 2 ) . 'M';
 		}
 		if ( $a >= 1000 ) {
-			return $m . $s . number_format( $a / 1000, 1 ) . 'K';
+			return $m . $s . self::num( $a / 1000, 1 ) . 'K';
 		}
-		return $m . $s . number_format( $a, 0 );
+		return $m . $s . self::num( $a, 0 );
+	}
+
+	/** A number grouped the business's way (Business Profile → Locale → Numbers). */
+	private static function num( $n, int $places ): string {
+		return class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $n, $places ) : number_format( (float) $n, $places );
 	}
 
 	/** An exact amount for the sheet: "$12,345.67". */
 	private static function money( float $amount ): string {
-		return ( $amount < 0 ? '-' : '' ) . self::sign() . number_format( abs( $amount ), 2 );
+		return ( $amount < 0 ? '-' : '' ) . self::sign() . self::num( abs( $amount ), 2 );
 	}
 
 	private static function plural( int $n, string $word ): string {

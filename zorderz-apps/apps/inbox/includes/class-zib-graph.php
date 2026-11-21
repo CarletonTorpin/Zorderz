@@ -279,7 +279,7 @@ class ZIB_Graph {
 		// a full re-sync, instead of a dead cursor retried forever (v0.9.2 stall fix).
 		$gerr = ( is_array( $json ) && isset( $json['error']['code'] ) ) ? (string) $json['error']['code'] : '';
 		if ( 410 === $code || in_array( $gerr, array( 'resyncRequired', 'SyncStateNotFound', 'SyncStateInvalid' ), true ) ) {
-			return new WP_Error( 'zib_delta_invalid', 'Delta token expired — full resync required (' . ( '' !== $gerr ? $gerr : $code ) . ').' );
+			return new WP_Error( 'zib_delta_invalid', 'Delta token expired: full resync required (' . ( '' !== $gerr ? $gerr : $code ) . ').' );
 		}
 		if ( 401 === $code ) {
 			return new WP_Error( 'zib_graph_401', 'Graph rejected the token.' );
@@ -454,7 +454,7 @@ class ZIB_Graph {
 		}
 		if ( 403 === $code ) {
 			// Missing Mail.Send / Mail.ReadWrite consent lands here — the caller maps it to "reconnect".
-			return new WP_Error( 'zib_graph_403', 'Graph denied the write (permission not granted — reconnect to enable it).' );
+			return new WP_Error( 'zib_graph_403', 'Graph denied the write (permission not granted; reconnect to enable it).' );
 		}
 		if ( 429 === $code || $code >= 500 ) {
 			$ra = wp_remote_retrieve_header( $resp, 'retry-after' );

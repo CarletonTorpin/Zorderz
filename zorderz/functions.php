@@ -16,7 +16,7 @@
  * toast. One constant now feeds all of them.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '2.0.1' );
+	define( 'ZDZ_THEME_VER_FLOOR', '2.1.0' );
 }
 /**
  * The REST namespace, in exactly one place.
@@ -104,7 +104,7 @@ require_once get_template_directory() . '/inc/class-zdz-answer-authority.php'; /
 require_once get_template_directory() . '/inc/class-zdz-rule-governance.php'; // v1.1.0: Rule Governance — rules as typed parameterised objects; the prompt is a rendering of the rule set. A cited rule must exist (fails loudly); the safety floor is non-overridable. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-doc-preservation.php'; // Zdz_Doc_Preservation — shared estimate+invoice preservation lock (arm-from-typed-rules, restore-preserving-internal-fields). Stateless; no self-boot.
 require_once get_template_directory() . '/inc/class-zdz-doc-guard.php';        // Zdz_Doc_Guard — identity-blind, fail-open zero-regression value floor (protects document totals on update). Stateless; no self-boot.
-require_once get_template_directory() . '/inc/class-zdz-model-registry.php'; // v1.1.0: Model Registry — per-task model slots replacing hardcoded model names; capability/fallback/retired maps ship EMPTY; base model read from ZDZ_Core_Settings; Poe stays the v1 gateway. Self-boots.
+require_once get_template_directory() . '/inc/class-zdz-model-registry.php'; // v1.1.0: Model Registry — per-task model slots; capability/fallback/retired maps ship EMPTY; base model read from ZDZ_Core_Settings; Poe stays the v1 gateway. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-request-guard.php';   // Zdz_Request_Guard — wall-clock request budget (reserve-next-call), per-cURL-handle timeout clamp, crash-safe global cron lock. Ends worker-exhaustion 502s. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-service-breaker.php'; // Zdz_Service_Breaker — general per-service circuit breaker (3 fails → 15-min pause) + auth-wall. Self-boots.
 require_once get_template_directory() . '/inc/class-zdz-sweep.php';           // Zdz_Sweep — budgeted wall-clock background sweep composing guard+breaker (cursor, lock, starved-pass logging). The shared sweep that background jobs (schedule inference, the Jobs project and geo sweeps) build on. Self-boots.
@@ -204,6 +204,12 @@ require_once get_template_directory() . '/inc/class-zdz-client-ip.php';     // Z
 require_once get_template_directory() . '/inc/class-zdz-outbound.php';      // ZDZ_Outbound — admin-configured addresses through wp_safe_remote_request(), redirects capped; private only where a service sits there by design
 // ── Kernel: request and outbound safety (END) ───────────────────────────
 
+// ── Kernel: public pages read by the server, and long work in steps (BEGIN) ──
+require_once get_template_directory() . '/inc/class-zdz-page-fetch.php';   // ZDZ_Page_Fetch — one public https page as text: public addresses only (checked again on every redirect), no cookies, size and time caps, a per-run budget; off on a staging copy
+require_once get_template_directory() . '/inc/class-zdz-step-runner.php';  // ZDZ_Step_Runner — a long job as short steps, one request each: one worker a job, Stop, a watchdog
+ZDZ_Step_Runner::boot();
+// ── Kernel: public pages read by the server, and long work in steps (END) ──
+
 // ── Kernel: privacy and usage records ────────────────────────────────
 require_once get_template_directory() . '/inc/class-zdz-sealed.php';       // ZDZ_Sealed — the vault for gate, lockbox, alarm, door and keypad codes; POST /zorderz/v1/sealed/<id>/open
 require_once get_template_directory() . '/inc/class-zdz-private.php';      // ZDZ_Private — codes customer details before words reach a model or an app's own tables (ZDZ_Private::for( 'assistant' ))
@@ -214,6 +220,15 @@ ZDZ_Sealed::boot();
 ZDZ_Sealed_Admin::boot();
 ZDZ_Ask_Context::init();
 ZDZ_Usage::boot();
+// ── Kernel: the app's own key (BEGIN) ───────────────────────────────────
+// One master key of the app's own (ZDZ_APP_KEY, in zdz-secrets.php beside wp-config.php), a subkey per purpose, and
+// sealed values that name their key, so that a change to the WordPress salts only signs people out. Nothing calls it
+// yet: until that file exists there is only the page Zorderz → App key, and no stored value changes.
+require_once get_template_directory() . '/inc/class-zdz-keys.php';         // ZDZ_Keys — the key's state, seal() / open(), mac(), recording the key id; fails closed
+require_once get_template_directory() . '/inc/class-zdz-keys-migrate.php'; // ZDZ_Keys_Migrate — jobs on zdz_keys_migrations: batches with read-back, resumable, never wipes
+require_once get_template_directory() . '/inc/class-zdz-keys-admin.php';   // Zorderz → App key: key ids only, the jobs, Check a printed key, Record; notices and Site Health
+ZDZ_Keys_Admin::boot();
+// ── Kernel: the app's own key (END) ─────────────────────────────────────
 // ── Kernel: the Ai router ───────────────────────────────────────────────
 // One router for every app's Ai call: roles (not model names) resolved through the
 // Model Registry's llm_* slots, customer details coded before anything leaves, a
@@ -241,9 +256,11 @@ ZDZ_LLM_Admin::boot();
 // all on that hook, before any plugin's init, for an account an administrator
 // has put in Privacy View.
 require_once get_template_directory() . '/inc/class-zdz-privacy-view.php';  // ZDZ_Privacy_View — deny-by-default surfaces and pseudonyms for one account; Zorderz → Privacy View look-up
+require_once get_template_directory() . '/inc/class-zdz-privacy-view-gate-file.php'; // ZDZ_Privacy_View_Gate_File — the optional must-use file that runs that gate before any plugin loads: status, an administrator's install / update / remove, Site Health
 require_once get_template_directory() . '/inc/class-zdz-price-book.php';    // ZDZ_Price_Book — the priced catalog over the Item Engine (grid schemes); costs admin-only; filled by the Identity Pack
 require_once get_template_directory() . '/inc/class-zdz-price-book-admin.php'; // Zorderz → Price Book
 ZDZ_Privacy_View::boot();
+ZDZ_Privacy_View_Gate_File::boot();
 ZDZ_Price_Book::boot();
 ZDZ_Price_Book_Admin::init();
 // ── end Privacy View and the price book ─────────────────────────────────
@@ -290,8 +307,11 @@ require_once get_template_directory() . '/inc/class-zdz-geocoder.php';         /
 require_once get_template_directory() . '/inc/class-zdz-media-location.php';   // ZDZ_Media_Location — media-set location classifier (CATEGORICAL STATUS ONLY; closes the raw-centroid leak).
 require_once get_template_directory() . '/inc/class-zdz-magic-link-bridge.php'; // PWA magic login bridge
 require_once get_template_directory() . '/inc/class-zdz-login-next.php';         // ZDZ_Login_Next — signing in returns to the in-app page that asked for it (same-site, allow-listed paths only)
+require_once get_template_directory() . '/inc/class-zdz-signin-routes.php';      // ZDZ_Signin_Routes — sign-in codes kept per account, backup sign-in addresses, the one-time code a person gives; Zorderz → Sign-in routes
+ZDZ_Signin_Routes::boot();
 require_once get_template_directory() . '/inc/class-zdz-alert-router.php'; // Cross-plugin alert routing + notification delivery
 require_once get_template_directory() . '/inc/class-zdz-data-portability.php'; // v1.4.0: Company Data Export / Import (portability, backup, migration) under Tools -> Zorderz Data
+require_once get_template_directory() . '/inc/class-zdz-tour.php'; // the guided tour, offered once the sample company is loaded (ZDZ_Tour; player in assets/js/zdz-tour.js)
 require_once get_template_directory() . '/inc/class-zdz-apps-autoinstall.php'; // v1.6.0: one-upload onboarding — the active theme installs + activates the bundled apps plugin once, so a first install is a single upload
 require_once get_template_directory() . '/db/migrate-2.13.0.php';
 require_once get_template_directory() . '/db/migrate-2.17.1.php'; // zdz_user_media table
@@ -466,6 +486,12 @@ add_action( 'wp_enqueue_scripts', function() {
 	wp_enqueue_style( 'zdz-ask-chat-css', get_template_directory_uri() . '/assets/css/ask-chat.css', [ 'zdz-app-css' ], $asset_ver( '/assets/css/ask-chat.css' ) );
 	wp_enqueue_script( 'zdz-ask-chat-js', get_template_directory_uri() . '/assets/js/ask-chat.js', [ 'zdz-bridge-js' ], $asset_ver( '/assets/js/ask-chat.js' ), true );
 	wp_enqueue_script( 'zdz-bug-reporter-js', get_template_directory_uri() . '/assets/js/bug-reporter.js', ['zdz-app-js'], $asset_ver( '/assets/js/bug-reporter.js' ), true );
+	// The guided tour: drawn only while a tour is offered to this person (an administrator's once the sample company is
+	// loaded, everyone else's on any site), or the person can switch the team tours; see ZDZ_Tour.
+	if ( class_exists( 'ZDZ_Tour' ) && ZDZ_Tour::page_needs( get_current_user_id() ) ) {
+		wp_enqueue_style( 'zdz-tour-css', get_template_directory_uri() . '/assets/css/zdz-tour.css', [ 'zdz-app-css' ], $asset_ver( '/assets/css/zdz-tour.css' ) );
+		wp_enqueue_script( 'zdz-tour-js', get_template_directory_uri() . '/assets/js/zdz-tour.js', [ 'zdz-bridge-js' ], $asset_ver( '/assets/js/zdz-tour.js' ), true );
+	}
 
 	// EXIF inspector: on-demand photo metadata panel. CSS depends on
 	// zdz-app-css for the shared design tokens; JS depends on zdz-app-js so the
@@ -627,6 +653,12 @@ add_action( 'wp_enqueue_scripts', function() {
 		'pushOn'          => is_user_logged_in() && class_exists( 'ZDZ_Push_Setup' ) && ZDZ_Push_Setup::allowed( $user_id ),
 		// The name on the Home Screen icon, for the iPhone steps in Settings -> Notifications.
 		'appName'         => class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.pwa.short_name', ZDZ_Business_Profile::name() ) : get_bloginfo( 'name' ),
+		// The business's money sign and language (Business Profile → Locale), for the page's own sums and dates:
+		// ZDZ.ui.money(), .num() and .ymd() read them.
+		'currencySign'    => class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '$' ) : '$',
+		'locale'          => class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::js_locale() : 'en-US',
+		// Units, the words for postal code and region, the clock and number grouping (ZDZ.ui.units(), .temp(), …).
+		'l10n'            => class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::l10n_for_js() : null,
 		// The activity beacon's settings: beat = the one heartbeat rhythm; rec = may this page's person be recorded at
 		// all (ZDZ_Consent::may_record), so a "no" sends nothing; mine = Settings → Your app use is drawn (never the
 		// shared device, never Demo Mode).
@@ -637,6 +669,9 @@ add_action( 'wp_enqueue_scripts', function() {
 		],
 		'askChatApps'     => class_exists( 'ZDZ_Ask_Context' ) ? ZDZ_Ask_Context::chat_apps() : [],
 		'customerLinkPatterns' => zdz_customer_link_patterns(), // regex sources the kit's paper may copy as a customer link
+		// This person's guided tour (an administrator's sample tour or a team member's own), their place in it, and for
+		// someone who can change the settings the team tours' switch; or only {available:false} (ZDZ_Tour::for_js).
+		'tour'            => class_exists( 'ZDZ_Tour' ) ? ZDZ_Tour::for_js( (int) $user_id ) : [ 'available' => false ],
 	];
 
 	wp_localize_script( 'zdz-app-js', 'zdzData', $zdz_data );
@@ -719,6 +754,7 @@ add_action( 'template_redirect', function () {
 		'zcc'  => 'ZCC_VERSION',
 		'zsch' => 'ZSCH_VERSION',
 		'zim'  => 'ZIM_VERSION',
+		'zdzpvg' => 'ZDZ_PV_GATE_VERSION', // the Privacy View early gate, when its must-use file is installed
 	) as $key => $const ) {
 		if ( defined( $const ) ) {
 			$out[ $key ] = (string) constant( $const );
@@ -1076,7 +1112,7 @@ add_action( 'customize_register', function( $wp_customize ) {
 		'sanitize_callback' => 'esc_url_raw',
 	] );
 	$wp_customize->add_control( new WP_Customize_Image_Control( $wp_customize, 'zdz_logo_light', [
-		'label'       => __( 'Logo — Light Background', 'zorderz' ),
+		'label'       => __( 'Logo: Light Background', 'zorderz' ),
 		'description' => __( 'Dark-text logo used on white/light surfaces (login card, light theme topbar).', 'zorderz' ),
 		'section'     => 'zdz_logos',
 	] ) );
@@ -1087,7 +1123,7 @@ add_action( 'customize_register', function( $wp_customize ) {
 		'sanitize_callback' => 'esc_url_raw',
 	] );
 	$wp_customize->add_control( new WP_Customize_Image_Control( $wp_customize, 'zdz_logo_dark', [
-		'label'       => __( 'Logo — Dark Background', 'zorderz' ),
+		'label'       => __( 'Logo: Dark Background', 'zorderz' ),
 		'description' => __( 'Light-text logo used on dark surfaces (topbar, dark theme).', 'zorderz' ),
 		'section'     => 'zdz_logos',
 	] ) );
@@ -1098,7 +1134,7 @@ add_action( 'customize_register', function( $wp_customize ) {
 		'sanitize_callback' => 'esc_url_raw',
 	] );
 	$wp_customize->add_control( new WP_Customize_Image_Control( $wp_customize, 'zdz_logo_vertical', [
-		'label'       => __( 'Logo — Vertical / Square (Sidebar)', 'zorderz' ),
+		'label'       => __( 'Logo: Vertical / Square (Sidebar)', 'zorderz' ),
 		'description' => __( 'Portrait or 1:1 logo for the sidebar navigation. Recommended: T on top, company name below. Used on tablet/desktop where the nav is a vertical sidebar. Falls back to the standard logo if not set.', 'zorderz' ),
 		'section'     => 'zdz_logos',
 	] ) );
@@ -1150,11 +1186,16 @@ $zdz_fresh_nonce = function () {
 	if ( ! is_user_logged_in() ) {
 		wp_send_json_error( 'not_logged_in', 401 );
 	}
+	$zdz_fresh = wp_create_nonce( 'wp_rest' );
 	wp_send_json_success( array(
-		'rest' => wp_create_nonce( 'wp_rest' ),
+		'rest'  => $zdz_fresh,
+		// The same nonce under "nonce" too: a key an account in Privacy View is always sent whole (its replies are
+		// masked, and a value under any other key could come back rewritten), so that account's page reads it from
+		// there. "rest" stays for the pages and widgets that read it.
+		'nonce' => $zdz_fresh,
 		// Whether THIS device is in Demo Mode, so the PIN sheet can tell the truth after a failed request (the
 		// nonce above is already for whichever identity the device now runs as).
-		'demo' => class_exists( 'ZDZ_Kiosk_Demo' ) && ZDZ_Kiosk_Demo::is_active(),
+		'demo'  => class_exists( 'ZDZ_Kiosk_Demo' ) && ZDZ_Kiosk_Demo::is_active(),
 	) );
 };
 add_action( 'wp_ajax_zdz_fresh_nonce', $zdz_fresh_nonce );
@@ -1223,6 +1264,22 @@ add_action( 'admin_enqueue_scripts', function ( $hook_suffix = '' ) {
 		'customerLinkPatterns' => zdz_customer_link_patterns(),
 	];
 	wp_add_inline_script( 'zdz-kit-js', 'window.zdzData=Object.assign(' . wp_json_encode( $kit ) . ',window.zdzData||{});', 'before' );
+} );
+
+/**
+ * Every wp-admin page knows the business's money sign, language, units and address words (Business Profile → Locale),
+ * so an app's admin screen writes sums, dates and measures the business's way with or without the kit.
+ */
+add_action( 'admin_print_scripts', function () {
+	if ( ! class_exists( 'ZDZ_Business_Profile' ) || ! function_exists( 'wp_print_inline_script_tag' ) ) {
+		return;
+	}
+	$loc = [
+		'currencySign' => (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '$' ),
+		'locale'       => ZDZ_Business_Profile::js_locale(),
+		'l10n'         => ZDZ_Business_Profile::l10n_for_js(),
+	];
+	wp_print_inline_script_tag( 'window.zdzData=Object.assign(' . wp_json_encode( $loc ) . ',window.zdzData||{});' );
 } );
 
 /**

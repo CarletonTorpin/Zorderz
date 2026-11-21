@@ -96,7 +96,7 @@
 		} catch (e) { /* old browser: harmless leftover param */ }
 		var flag = m[1];
 		if (flag === 'ok') {
-			toast('Calendar connected ✓ — pulling your busy times…');
+			toast('Calendar connected ✓, pulling your busy times…');
 			openModal(modal);
 			// v1.7.0 — kick an immediate sync so busy times show within seconds
 			// instead of waiting up to 5 min for the cron. Fire-and-forget;
@@ -105,11 +105,11 @@
 		} else if (flag === 'cancel') {
 			toast('Connection cancelled', true);
 		} else if (flag === 'rate') {
-			toast('Too many connection attempts — try again in an hour', true);
+			toast('Too many connection attempts. Try again in an hour', true);
 		} else if (flag === 'login') {
 			toast('Please sign in, then connect again', true);
 		} else if (flag === 'err') {
-			toast("Connection didn't complete — try again", true);
+			toast("Connection didn't complete. Try again", true);
 		}
 	}
 
@@ -160,7 +160,7 @@
 			var accounts = (res && res.accounts) || [];
 			if (!accounts.length) {
 				list.appendChild(el('p', 'zsch-conncal-empty',
-					'No calendars connected yet. Use a Connect button below — you’ll sign in with that account and pick which calendars count as busy time.'));
+					'No calendars connected yet. Use a Connect button below; you’ll sign in with that account and pick which calendars count as busy time.'));
 				return;
 			}
 			accounts.forEach(function (a) { list.appendChild(renderAccount(a)); });

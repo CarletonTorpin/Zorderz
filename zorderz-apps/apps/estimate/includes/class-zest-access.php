@@ -3,7 +3,7 @@
  * ZEST_Access - the checks every estimate endpoint makes, in one place.
  *
  *   guard()          nonce (zest_nonce) and a signed-in person, else 403; returns the user id
- *   no_kiosk()       the shared device and Demo Mode never write (403)
+ *   no_kiosk()       the shared device, Demo Mode and an account in Privacy View never write (403)
  *   row( $id )       this app's estimate row by id, or null
  *   may_open()       the admin tier, or the estimate is the person's by ZEST_Salesperson::owned_state() (creator, a
  *                    person its codes name, an administrator's grant; never after an administrator removed access)
@@ -38,6 +38,10 @@ class ZEST_Access {
 	public static function no_kiosk( int $uid ): void {
 		if ( self::is_kiosk( $uid ) ) {
 			wp_send_json_error( array( 'message' => __( 'This action is not available on the shared device. Sign in as yourself.', 'zorderz' ) ), 403 );
+		}
+		// An account in Privacy View looks only: nothing the shared device may not do runs for it either.
+		if ( class_exists( 'ZEST_Privacy_View' ) && ZEST_Privacy_View::on( $uid ) ) {
+			wp_send_json_error( ZEST_Privacy_View::refusal(), 403 );
 		}
 	}
 

@@ -1,0 +1,57 @@
+/*
+ * Zorderz Estimates - an estimate with its follow-up on the lists, and the follow-up sheets.
+ *
+ * The theme's tokens only: light, dark, system and sunlight come from --sys-*; a tinted background only with its
+ * paired ink. Buttons, sheets, toasts and the loader are the kit's. Nothing rests on color alone: "Yours to do" and
+ * "Declined" are words.
+ *
+ * An estimate and its follow-up are ONE box (.zest-fu-card, drawn by widget.js). The row inside gives up its own
+ * border; the strip is the box's lower part, under a rule, so it never reads as belonging to the estimate below it.
+ */
+
+/* flex: none - the list is a column; a box with overflow hidden would otherwise be squashed to fit. */
+.zest-fu-card { flex: none; border: 1px solid var(--sys-border, GrayText); border-radius: 10px; background: var(--sys-surface, Canvas); overflow: hidden; }
+.zest-fu-card:focus-within, .zest-fu-card:hover { border-color: var(--sys-brand, Highlight); }
+.zest-fu-card > .zest-row { border: 0; border-radius: 0; background: none; }
+.zest-fu-card > .zest-row:focus-visible { outline: 2px solid var(--sys-brand, Highlight); outline-offset: -2px; }
+.zest-fu-strip { margin: 0; padding: 6px 12px 4px; border-top: 1px solid var(--sys-border, GrayText); font-size: .9rem; line-height: 1.4; color: var(--sys-text, CanvasText); }
+.zest-fu-strip:empty { display: none; }
+.zest-fu-declined { margin-top: 4px; }
+.zest-fu-declined > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; color: var(--sys-text-sec, GrayText); }
+.zest-fu-declined[open] > summary { margin-bottom: 8px; }
+.zest-fu-declined .zest-fu-card { margin-bottom: 8px; }
+.zest-fu-est { font-weight: 700; overflow-wrap: anywhere; }
+.zest-fu-est span { font-weight: 400; }
+.zest-fu-undone { color: var(--sys-text-muted, GrayText); }
+.zest-fu-words { margin: 0 0 2px; overflow-wrap: anywhere; }
+.zest-fu-words--mine { font-weight: 600; }
+.zest-fu-acts { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.zest-fu-acts .zdz-btn { margin: 4px 0; }
+.zest-fu-link { background: none; border: 0; padding: 0 2px; margin: 0; min-height: 44px; font: inherit; font-weight: 600; color: var(--sys-brand, LinkText); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.zest-fu-link:focus-visible { outline: 2px solid var(--sys-brand, Highlight); outline-offset: 2px; }
+.zest-fu-tag { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: .78rem; font-weight: 700; background: var(--sys-tint-neutral-bg, Canvas); color: var(--sys-tint-neutral-fg, CanvasText); }
+.zest-fu-muted { color: var(--sys-text-muted, GrayText); font-size: .9rem; font-weight: 400; }
+.zest-fu-warn { margin: 2px 0; padding: 4px 8px; border-radius: 8px; background: var(--sys-tint-warning-bg, Canvas); color: var(--sys-tint-warning-fg, CanvasText); }
+.zest-fu-warn .zest-fu-link { color: inherit; }
+.zest-fu-err { color: var(--sys-tint-error-fg, CanvasText); }
+
+.zest-fu, .zest-fu * { box-sizing: border-box; }
+.zest-fu { color: var(--sys-text, CanvasText); font-size: 16px; line-height: 1.45; }
+.zest-fu p { margin: 0 0 8px; }
+.zest-fu-set { border: 1px solid var(--sys-border, GrayText); border-radius: 10px; padding: 6px 12px 8px; margin: 0 0 10px; }
+.zest-fu-set legend { font-weight: 700; padding: 0 4px; }
+.zest-fu-check { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.zest-fu-check input { width: 22px; height: 22px; flex: none; }
+.zest-fu-label { display: block; font-weight: 600; font-size: .9rem; margin: 8px 0 4px; }
+.zest-fu-select, .zest-fu-text { width: 100%; min-height: 44px; font: inherit; padding: 8px; border: 1px solid var(--sys-border, GrayText); border-radius: 8px; background: var(--sys-surface, Canvas); color: var(--sys-text, CanvasText); }
+.zest-fu-text { resize: vertical; }
+.zest-fu-banner { padding: 8px 12px; margin-top: 8px; border-radius: 10px; background: var(--sys-tint-info-bg, var(--sys-tint-neutral-bg, Canvas)); color: var(--sys-tint-info-fg, var(--sys-tint-neutral-fg, CanvasText)); }
+.zest-fu [hidden] { display: none; }
+.zest-fu-hist { list-style: none; margin: 0; padding: 0; }
+.zest-fu-hist li { padding: 10px 0; border-top: 1px solid var(--sys-border, GrayText); }
+.zest-fu-hist li:first-child { border-top: 0; padding-top: 0; }
+.zest-fu-hist p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.zest-fu-when { font-weight: 700; font-variant-numeric: tabular-nums; }
+.zest-fu-quote { padding: 6px 10px; border-left: 3px solid var(--sys-border, GrayText); white-space: pre-wrap; }
+.zest-fu-list { margin: 0 0 8px; padding-left: 20px; }
+.zest-fu-list li { margin: 0 0 4px; }

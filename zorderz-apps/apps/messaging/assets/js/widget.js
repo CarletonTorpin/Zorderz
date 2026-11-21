@@ -1352,6 +1352,16 @@
 		// stretches this further while the origin is failing.
 		this.sidebarPoll = pollable(tick, Math.max(8000, data.pollIntervalMs || 10000));
 		this.sidebarPoll.start();
+		// Opened from the Home Screen, the widget was off screen for its first ticks and its lists stayed empty until
+		// the next one, up to ten seconds later. It reads them the moment it comes on screen.
+		if ('IntersectionObserver' in window) {
+			try {
+				this.sidebarSeen = new IntersectionObserver(function (entries) {
+					for (var i = 0; i < entries.length; i++) { if (entries[i].isIntersecting) { tick(); break; } }
+				});
+				this.sidebarSeen.observe(this.root);
+			} catch (e) { this.sidebarSeen = null; /* the poll still covers it */ }
+		}
 	};
 
 	/** Open a conversation by id, if (and only if) this person's sidebar lists it. */
@@ -1376,6 +1386,7 @@
 		// visibilitychange they'd try to restart the polls.
 		if (this.sidebarPoll) { this.sidebarPoll.destroy(); this.sidebarPoll = null; }
 		if (this.mainPoll)    { this.mainPoll.destroy();    this.mainPoll    = null; }
+		if (this.sidebarSeen) { this.sidebarSeen.disconnect(); this.sidebarSeen = null; }
 		this.root.innerHTML = '';
 	};
 
@@ -1546,7 +1557,7 @@
 		this._loadingTimeout = setTimeout(function () {
 			if (self.el.messages && self.el.messages.querySelector('.zim-w-loading')) {
 				self.el.messages.innerHTML =
-					'<div class="zim-w-empty">Still loading — tap to retry.</div>';
+					'<div class="zim-w-empty">Still loading; tap to retry.</div>';
 				self.el.messages.querySelector('.zim-w-empty').style.cursor = 'pointer';
 				self.el.messages.querySelector('.zim-w-empty').addEventListener('click', function () {
 					self.selectConversation(conv);
@@ -2395,7 +2406,7 @@ ZIMController.prototype.renderMessageNode = function (m) {
 			});
 			self.renderAttachChips();
 			self.updateSendEnabled();
-			alert('Upload failed — please try again.');
+			alert('Upload failed. Please try again.');
 		});
 	};
 
@@ -2539,13 +2550,17 @@ ZIMController.prototype.renderMessageNode = function (m) {
 	// own right in Estimates, or a share from the message's sender) and sends the document as the billing system has
 	// it; the panel draws it with the theme's ZDZ.ui.paper. The chip shows a one-line summary.
 	function docKindWord(k) { return k === 'invoice' ? 'Invoice' : (k === 'estimate' ? 'Estimate' : 'Document'); }
+	// Sums and days the business's way (Business Profile → Locale), through the theme's kit.
+	function kitUi() { return (window.ZDZ && window.ZDZ.ui) || {}; }
 	function docMoney(v) {
 		var n = Number(v);
-		return isFinite(n) ? '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+		if (!isFinite(n)) return '';
+		return typeof kitUi().money === 'function' ? kitUi().money(n) : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
 	function docDay(iso) {
 		var d = iso ? new Date(iso) : null;
-		return d && !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+		var loc = typeof kitUi().locale === 'function' ? kitUi().locale() : 'en-US';
+		return d && !isNaN(d.getTime()) ? d.toLocaleDateString(loc, { month: 'short', day: 'numeric' }) : '';
 	}
 	// The words right before a #N, read the way the server reads the stored message (ZIM_Doc_Shares::text_of +
 	// INVOICE_WORDS_RE). A line break, paragraph or list item ends what is said; other tags show no words; &nbsp; is a
@@ -2731,7 +2746,7 @@ ZIMController.prototype.renderMessageNode = function (m) {
 				if (share.active) {
 					anything = true;
 					wrap.appendChild(line('zim-w-share-status', 'Shared ' + listNums(share.numbers) + ' with ' + (share.names || []).join(', ') +
-						' — this document only, read only' + (share.until ? ', until ' + docDay(share.until) : '') + '.'));
+						': this document only, read only' + (share.until ? ', until ' + docDay(share.until) : '') + '.'));
 					if (share.pending && share.pending.length) {
 						var more = button('Share ' + listNums(share.pending) + ' too', 'zdz-btn--secondary', function () { act('zim_share_ref', more); });
 						wrap.appendChild(more);
@@ -2760,7 +2775,7 @@ ZIMController.prototype.renderMessageNode = function (m) {
 				title.textContent = name;
 				if (card) card.setAttribute('aria-label', name);
 				var note = c.via === 'shared'
-					? 'Shared with you by ' + (c.shared_by || 'the sender') + ' — read only' + (c.until ? ', until ' + docDay(c.until) : '') + '.'
+					? 'Shared with you by ' + (c.shared_by || 'the sender') + ', read only' + (c.until ? ', until ' + docDay(c.until) : '') + '.'
 					: 'Read only. Changes are made in Estimates.';
 				var paper = (window.ZDZ && ZDZ.ui && typeof ZDZ.ui.paper === 'function')
 					? ZDZ.ui.paper(c.doc, { note: note, label: name })
@@ -2882,7 +2897,7 @@ ZIMController.prototype.renderMessageNode = function (m) {
 			self.el.previewBody.innerHTML =
 				'<dl>' +
 				'<dt>Type</dt><dd>' + esc(card.document_type || 'general') + '</dd>' +
-				'<dt>Synopsis</dt><dd>' + esc(card.synopsis || '—') + '</dd>' +
+				'<dt>Synopsis</dt><dd>' + esc(card.synopsis || '–') + '</dd>' +
 				(card.uploader_name ? '<dt>Uploaded by</dt><dd>' + esc(card.uploader_name) + '</dd>' : '') +
 				(card.uploaded_at ? '<dt>Date</dt><dd>' + esc(card.uploaded_at.split(' ')[0] || '') + '</dd>' : '') +
 				'</dl>' +

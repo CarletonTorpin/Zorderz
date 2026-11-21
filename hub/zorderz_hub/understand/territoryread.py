@@ -49,7 +49,7 @@ _ALL = re.compile(
 _ZIP_ASK = re.compile(
     r"\bwho\b|\bwhose\b|\bwhich\s+(?:sales\s*(?:person|people|man|men)|salesperson|salesman|reps?|person)\b|"
     r"\bmine\b|\bmy\s+" + _TERR + r"\b|\b(?:do|does)\s+(?:i|we)\s+(?:cover|have|own|get)\b|\bterritor(?:y|ies)\b", re.I)
-# "jordan 's territory" (after the split below), "the territory of FT", "territories for Jordan"
+# "jordan 's territory" (after the split below), "the territory of JB", "territories for Jordan"
 _PERSON = re.compile(
     r"\b([a-z][a-z.-]{1,19})\s+'s\s+(?:" + _TERR + r")\b|"
     r"\b" + _TERR + r"\s+(?:of|for)\s+([a-z][a-z.-]{1,19})\b", re.I)

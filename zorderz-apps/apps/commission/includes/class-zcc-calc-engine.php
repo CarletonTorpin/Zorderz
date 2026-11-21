@@ -51,7 +51,7 @@ class ZCC_Calc_Engine {
 		if ( empty( $plan['configured'] ) ) {
 			// Nothing silent: surface the missing plan, pay nothing.
 			ZCC_Audit::log( 'unconfigured_plan', [ 'party_id' => $party_id ] );
-			$flags[] = [ 'reason' => 'No compensation plan is configured for this party — $0 computed. Configure a plan in Compensation settings.', 'severity' => 'warning' ];
+			$flags[] = [ 'reason' => 'No compensation plan is configured for this party: $0 computed. Configure a plan in Compensation settings.', 'severity' => 'warning' ];
 		}
 
 		if ( $period_key === '' ) {
@@ -190,7 +190,7 @@ class ZCC_Calc_Engine {
 					'description'    => $line['description'] ?? '',
 					'amount'         => round( $line_amount, 2 ),
 					'cogs'           => 0.0,
-					'cogs_source'    => 'Ledger entry (' . $cls['ledger_kind'] . ') — non-product',
+					'cogs_source'    => 'Ledger entry (' . $cls['ledger_kind'] . '): non-product',
 					'commissionable' => false,
 					'category'       => $cls['category'],
 				];
@@ -205,7 +205,7 @@ class ZCC_Calc_Engine {
 					'description'    => $line['description'] ?? '',
 					'amount'         => round( $line_amount, 2 ),
 					'cogs'           => 0.0,
-					'cogs_source'    => 'Location line — never carries a cost',
+					'cogs_source'    => 'Location line: never carries a cost',
 					'commissionable' => true,
 					'net'            => round( $line_amount, 2 ),
 					'category'       => 'location',
@@ -237,10 +237,10 @@ class ZCC_Calc_Engine {
 			$dims     = is_array( $cls['dimensions'] ?? null ) ? $cls['dimensions'] : [];
 			$res      = ZCC_Cost_Book::resolve_cost_detailed( $item_id, $line_qty, $line_amount, $dims );
 			$line_cogs = (float) $res['cost'];
-			$cogs_source = $item_id === '' ? 'No catalog match — $0 COGS' : ( 'COGS: ' . $item_id );
+			$cogs_source = $item_id === '' ? 'No catalog match: $0 COGS' : ( 'COGS: ' . $item_id );
 
 			if ( ! empty( $res['missing'] ) && ! self::is_noise_zero_line( $line_amount, $line['description'] ?? '' ) ) {
-				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => "Classified to item '{$item_id}', which is not in the catalog — $0 COGS applied, flagged.", 'severity' => 'warning' ];
+				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => "Classified to item '{$item_id}', which is not in the catalog; $0 COGS applied, flagged.", 'severity' => 'warning' ];
 			} elseif ( $item_id === '' && ( $cls['confidence'] ?? 0 ) < 0.6 && ! self::is_noise_zero_line( $line_amount, $line['description'] ?? '' ) ) {
 				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => $cls['notes'] ?? 'Low-confidence classification.' ];
 			}
@@ -255,8 +255,8 @@ class ZCC_Calc_Engine {
 				$zero_ok = is_array( $it ) && ! empty( $it['attributes']['cost_on_zero_lines'] ); // an item priced on another line of the job
 			}
 			if ( $line_amount <= 0.005 && $line_cogs > 0.005 && ! $zero_ok ) {
-				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => sprintf( 'This line names an item but is billed $0, so no cost was applied (the cost book says $%s). If the business paid for it, a person decides what to charge.', number_format( $line_cogs, 2 ) ), 'severity' => 'warning' ];
-				$cogs_source .= ' — not applied: the line is billed $0 (flagged for review)';
+				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => sprintf( 'This line names an item but is billed %s, so no cost was applied (the cost book says %s). If the business paid for it, a person decides what to charge.', ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( 0, 0 ) : '$' . number_format( 0, 0 ) ), ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $line_cogs, 2 ) : '$' . number_format( $line_cogs, 2 ) ) ), 'severity' => 'warning' ];
+				$cogs_source .= '; not applied: the line is billed $0 (flagged for review)';
 				$line_cogs    = 0.0;
 			}
 
@@ -278,9 +278,9 @@ class ZCC_Calc_Engine {
 			// COGS sanity cap: cost > revenue is always a wrong match — cap + flag.
 			$cap = ZCC_Cost_Book::apply_sanity_cap( $line_cogs, $line_amount );
 			if ( $cap['capped'] ) {
-				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => sprintf( 'COGS ($%s) exceeded the line price ($%s) — capped; verify the item.', number_format( $line_cogs, 2 ), number_format( $line_amount, 2 ) ), 'severity' => 'warning' ];
+				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => $line['description'] ?? '', 'amount' => $line_amount, 'reason' => sprintf( 'COGS (%s) exceeded the line price (%s), capped; verify the item.', ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $line_cogs, 2 ) : '$' . number_format( $line_cogs, 2 ) ), ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $line_amount, 2 ) : '$' . number_format( $line_amount, 2 ) ) ), 'severity' => 'warning' ];
 				$line_cogs   = $cap['cost'];
-				$cogs_source .= ' — capped at line price';
+				$cogs_source .= ', capped at line price';
 			}
 
 			$gross_billed += $line_amount;
@@ -458,7 +458,7 @@ class ZCC_Calc_Engine {
 			$min_comm     = (float) $rule['min_commission'];
 			if ( $sub_comm < $min_comm ) {
 				$new = round( $other_comm + $min_comm, 2 );
-				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => 'Product minimum applied', 'amount' => $subtype_gross[ $sub ], 'reason' => sprintf( 'Commission on subtype "%s" raised to the $%s minimum (job ≥ $%s).', $sub, number_format( $min_comm, 2 ), number_format( (float) $rule['min_job_gross'], 2 ) ), 'severity' => 'info' ];
+				$flags[] = [ 'invoice' => $inv['invoice_number'] ?? '', 'description' => 'Product minimum applied', 'amount' => $subtype_gross[ $sub ], 'reason' => sprintf( 'Commission on subtype "%s" raised to the %s minimum (job ≥ %s).', $sub, ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $min_comm, 2 ) : '$' . number_format( $min_comm, 2 ) ), ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( (float) $rule['min_job_gross'], 2 ) : '$' . number_format( (float) $rule['min_job_gross'], 2 ) ) ), 'severity' => 'info' ];
 				return [ 'applied' => true, 'rule' => $rule['id'], 'subtype' => $sub, 'computed' => $sub_comm, 'floored_to' => $min_comm, 'new_commission' => $new ];
 			}
 		}
@@ -520,7 +520,7 @@ class ZCC_Calc_Engine {
 			case 'tiered':
 				return 'Tiered';
 			case 'per_job_bonus':
-				return '$' . number_format( (float) ( $plan['bonus_per_job'] ?? 0 ), 2 ) . '/job';
+				return ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) ( $plan['bonus_per_job'] ?? 0 ), 2 ) : number_format( (float) ( $plan['bonus_per_job'] ?? 0 ), 2 ) ) . '/job';
 			case 'salary_only':
 				return 'Salary only';
 			case 'piece_rate':

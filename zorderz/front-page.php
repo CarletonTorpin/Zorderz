@@ -102,6 +102,8 @@ get_header(); ?>
 		<div class="settings-section zdz-consent-section" id="settings-consent" hidden></div>
 		<?php // Your app use: what is recorded about this person, and "Reset my order" where home learns from use. Drawn by assets/js/zdz-usage.js; never on a shared device or in Demo Mode. ?>
 		<div class="settings-section zdz-consent-section zdz-usage-section" id="settings-usage" hidden></div>
+		<?php // Guided tour: drawn by assets/js/zdz-tour.js while the tour is offered (the sample company is loaded). ?>
+		<div class="settings-section zdz-tour-section" id="settings-tour" hidden></div>
 		<div class="settings-section" id="settings-info"></div>
 	</div>
 
@@ -407,7 +409,7 @@ get_header(); ?>
 				</div>
 			</div>
 		</div>
-		<button type="button" id="zdz-nonsafari-copy" style="display:block;width:100%;margin-top:16px;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;background:var(--sys-brand,#2C5F8A);color:#fff;">Copy Link</button>
+		<button type="button" id="zdz-nonsafari-copy" style="display:block;width:100%;margin-top:16px;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;background:var(--sys-brand,#5150D6);color:var(--sys-text-brand,#fff);">Copy Link</button>
 	</div>
 </div>
 

@@ -184,7 +184,7 @@ class ZCC_Classifier {
 			'sign'                     => 'positive',
 			'unit_noun_singular'       => '',
 			'unit_noun_plural'         => '',
-			'notes'                    => 'No catalog match — flagged for review.',
+			'notes'                    => 'No catalog match: flagged for review.',
 			'classified_by'            => 'fallback',
 			'needs_review'             => true,
 		];

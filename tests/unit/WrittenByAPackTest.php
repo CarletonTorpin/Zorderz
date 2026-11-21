@@ -93,6 +93,16 @@ final class WrittenByAPackTest extends TestCase {
 		return $GLOBALS['zdz_test_options'][ $k ] ?? 'ABSENT';
 	}
 
+	public function test_a_profiles_locale_carries_its_sign_and_date_format(): void {
+		$n = ZDZ_Identity_Pack::normalize_profile( array(
+			'domains' => array( 'app' => 'app.example.com' ),
+			'locale'  => array( 'currency' => 'GBP', 'currency_sign' => '£', 'date_format' => 'j/n/Y', 'locale' => 'en_GB' ),
+		) );
+		$this->assertSame( 'canonical', $n['schema'] );
+		$this->assertSame( array( 'currency' => 'GBP', 'currency_sign' => '£', 'date_format' => 'j/n/Y', 'locale' => 'en_GB' ), $n['values']['locale'] );
+		$this->assertSame( array(), preg_grep( '/^locale\./', $n['unconsumed'] ), 'none of the locale keys is left unread' );
+	}
+
 	/* ── rules.yml: preview, apply, revert ───────────────────────────────────────────────────── */
 
 	public function test_rules_round_trip_preview_writes_nothing_and_revert_restores_exactly(): void {
@@ -251,12 +261,14 @@ final class WrittenByAPackTest extends TestCase {
 
 	public function test_privacy_lists_work_domains_and_grants_round_trip(): void {
 		$this->file( 'territories', "place_names:\n  multi_word: [\"North Example\", \"Example Bay\"]\n  ask_visible: [\"Springfield\"]\njurisdiction:\n  code_words: [\"example code\"]\n  postcode: { digits: '^\\d{5}$', region: ST }\n" );
-		$this->file( 'catalog', "vocabulary:\n  plain_words: [widget, \"two words\"]\n  model_words: [ex-100]\nitems:\n  - id: widget\n" );
+		$this->file( 'catalog', "vocabulary:\n  plain_words: [widget, \"two words\"]\n  model_words: [ex-100]\n  visit_words: [Walkthrough, opening, \"two words\", ab]\nitems:\n  - id: widget\n" );
 		$this->file( 'profile', "email:\n  work_domains: [example.com, \"not a domain\", com]\n" );
 		$this->file( 'org', "alerts:\n  role_category_grants:\n    zdz_tech:\n      jobs: [in_app, push]\nchannels:\n  - slug: field\n" );
 
 		$p = ZDZ_Identity_Pack::preview( 'example-co' );
 		$this->assertContains( 'catalog:vocabulary.plain_words', self::refused_paths( $p ) );
+		$this->assertContains( 'catalog:vocabulary.visit_words', self::refused_paths( $p ), 'two words and a two-letter word are refused' );
+		$this->assertContains( 'vocabulary.visit_words', array_column( $p['changes'], 'path' ), 'the words that pass are kept' );
 		$this->assertContains( 'profile:email.work_domains', self::refused_paths( $p ) );
 		$this->assertContains( 'catalog: items', $p['unconsumed'], 'what nothing reads is reported' );
 		$this->assertContains( 'org: channels', $p['unconsumed'] );
@@ -272,10 +284,11 @@ final class WrittenByAPackTest extends TestCase {
 		$this->assertSame( 'example.com', get_option( 'zsch_work_domains' ) );
 		$this->assertSame( array( 'zdz_tech' => array( 'jobs' => array( 'in_app', 'push' ) ) ), ZDZ_Alert_Router::role_category_grants() );
 		$this->assertArrayNotHasKey( 'email', (array) get_option( ZDZ_Business_Profile::OPTION ), 'the profile does not keep what another consumer read' );
+		$this->assertSame( array( 'opening', 'walkthrough' ), get_option( ZDZ_Private::VISIT_WORDS_OPT ) );
 
 		ZDZ_Identity_Pack::revert();
 		$this->assertSame( array(), ZDZ_Private::places(), 'the coder reads its lists again after a revert' );
-		foreach ( array( ZDZ_Private::PLACES_OPT, ZDZ_Private::PLAIN_WORDS_OPT, ZDZ_Ask_Context::PLACES_OPT, ZDZ_Sealed::REGION_WORDS_OPT, ZDZ_Sealed::MODEL_WORDS_OPT, ZDZ_Sealed::POSTCODE_OPT, 'zsch_work_domains', ZDZ_Alert_Router::OPT_ROLE_CATEGORY_GRANTS, ZDZ_Business_Profile::OPTION ) as $k ) {
+		foreach ( array( ZDZ_Private::PLACES_OPT, ZDZ_Private::PLAIN_WORDS_OPT, ZDZ_Private::VISIT_WORDS_OPT, ZDZ_Ask_Context::PLACES_OPT, ZDZ_Sealed::REGION_WORDS_OPT, ZDZ_Sealed::MODEL_WORDS_OPT, ZDZ_Sealed::POSTCODE_OPT, 'zsch_work_domains', ZDZ_Alert_Router::OPT_ROLE_CATEGORY_GRANTS, ZDZ_Business_Profile::OPTION ) as $k ) {
 			$this->assertSame( 'ABSENT', self::opt( $k ), "$k is gone again" );
 		}
 	}

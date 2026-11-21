@@ -482,10 +482,10 @@ final class AssistantChatTest extends TestCase {
 	}
 
 	public function test_the_question_carries_only_the_place_and_the_work(): void {
-		$case = array( 'id' => 5, 'zip' => '10001', 'place' => 'Exampleton', 'estimate_number' => '4321', 'items' => array( array( 'label' => 'Gates' ), array( 'label' => 'Awnings' ) ) );
+		$case = array( 'id' => 5, 'zip' => '10001', 'place' => 'Exampleton', 'estimate_number' => '4321', 'items' => array( array( 'label' => 'Boilers' ), array( 'label' => 'Radiators' ) ) );
 		$q    = ZANA_Referrals::question( $case );
 		$this->assertStringContainsString( '10001', $q );
-		$this->assertStringContainsString( 'gates and awnings', $q );
+		$this->assertStringContainsString( 'boilers and radiators', $q );
 		$this->assertStringNotContainsString( '4321', $q, 'never the estimate number' );
 		$this->assertTrue( ZDZ_Core_LLM::web_safe( array( array( 'role' => 'system', 'content' => ZANA_Referrals::system_prompt() ), array( 'role' => 'user', 'content' => $q ) ) ), 'the router lets it travel with the web' );
 	}
@@ -503,7 +503,7 @@ final class AssistantChatTest extends TestCase {
 		$asked = new ArrayObject();
 		ZANA_Referrals::$invoke = function ( $verb, $args ) use ( $asked ) {
 			$asked[] = $verb;
-			return array( 'success' => true, 'cases' => array( array( 'id' => 5, 'stage' => 'stub', 'mode' => 'live', 'zip' => '10001', 'place' => 'Exampleton', 'items' => array( array( 'label' => 'Gates' ) ), 'saved' => true ) ) );
+			return array( 'success' => true, 'cases' => array( array( 'id' => 5, 'stage' => 'stub', 'mode' => 'live', 'zip' => '10001', 'place' => 'Exampleton', 'items' => array( array( 'label' => 'Boilers' ) ), 'saved' => true ) ) );
 		};
 		ZANA_Referrals::$search = function () { return array( 'Sorry, I could not find', 'end_turn' ); };
 		$v = ZANA_Referrals::find( 7, 5 );

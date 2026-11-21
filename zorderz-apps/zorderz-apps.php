@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Apps
  * Plugin URI:  https://zorderz.org
  * Description: The Zorderz app bundle - 30 apps (Camera, Media, Sketch Pad, Messaging, Quick-ID, Game, Invoices, Knowledge, Scheduler, Jobs, Surveys, Stock, Leads, Prep, Receipts, Estimates, Agreements, Commission, Chat, Dot Plot, Email, Mailbox Identity, Charts, Ai Workspace, Doorhangers, Route Planner, Hours, Security Monitor, Team Roles, Territories). Requires the Zorderz theme, which provides the dashboard, roles, permissions, shared media store, Item Engine and Core services these apps register into.
- * Version:     2.0.1
+ * Version:     2.1.0
  * Author:      Zorderz
  * Author URI:  https://zorderz.com
  * License:     GPL-2.0-or-later
@@ -51,7 +51,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * for the rare boot where get_file_data() is not yet available.
  */
 if ( ! defined( 'ZDZ_APPS_VERSION' ) ) {
-	$zdz_apps_ver = '2.0.1';
+	$zdz_apps_ver = '2.1.0';
 	if ( function_exists( 'get_file_data' ) ) {
 		$zdz_apps_hdr = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
 		if ( ! empty( $zdz_apps_hdr['Version'] ) ) {
@@ -380,7 +380,7 @@ add_action(
 			return;
 		}
 		echo '<div class="notice notice-warning"><p><strong>Zorderz Apps</strong> needs the Zorderz theme to be active. '
-			. 'The theme provides the dashboard, roles and shared media store these apps plug into — '
+			. 'The theme provides the dashboard, roles and shared media store these apps plug into: '
 			. 'without it the apps load but have nowhere to appear.</p></div>';
 	}
 );

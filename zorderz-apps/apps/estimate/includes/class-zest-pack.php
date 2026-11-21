@@ -17,6 +17,7 @@
  *       test_fixture: "Test Customer"                         # the mark a test customer's name starts with
  *       door_handle: { enabled: true, housing_words: [ "widget" ], reference_view: outside }   # team-only handle side
  *       reassign: { from_codes: [ "AB" ] }                    # codes a stub carries while nobody has been chosen
+ *       followup: { billing_line: test }                      # off | test | on: the fixed line on a billing estimate
  *   catalog.yml
  *     estimate:
  *       line_options: { map_version: 1, built, colors, color_context, slots, families }   # the press-and-hold menus
@@ -28,6 +29,11 @@
  *       schedule: { heading, deposit_line, window_line, final_line, total_line, tax_included_suffix, promise_line,
  *                   link_lead, phone_lead, tax_included_names: [] }
  *       sale_form: { blank_url, sha256, fields: { field: fact } }
+ *       followup: { lead, reopened, deciding, changes, callback, going_ahead, other_provider, not_needed, other }
+ *                 # the only words a follow-up writes on a billing estimate: each one line of plain words, no digits
+ *       import_rules: [ "A line that starts with Opt. is an optional extra: kind note." ]
+ *                 # how the business's own paperwork reads, for the import reader: replaces the built-in rules
+ *                 # (option zest_import_paperwork_rules; at most 20, each one line of up to 400 characters)
  *
  * The document-convention keys are written into the document conventions' own option, only these keys under
  * `estimate` (every other key there is kept as it was).
@@ -43,9 +49,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZEST_Pack {
 
-	const DOC_KEYS = array( 'deposit_sentence', 'balance_sentence', 'option_tail', 'edited_by_line', 'schedule' );
-	const RULE_KEYS = array( 'deposit', 'payment_schedule', 'payment_notes_mode', 'test_fixture', 'door_handle', 'reassign' );
+	const DOC_KEYS = array( 'deposit_sentence', 'balance_sentence', 'option_tail', 'edited_by_line', 'schedule', 'followup' );
+	const RULE_KEYS = array( 'deposit', 'payment_schedule', 'payment_notes_mode', 'test_fixture', 'door_handle', 'reassign', 'followup' );
 	const DOC_OPT   = 'zdz_document_conventions';
+	const IMPORT_RULES_OPT = 'zest_import_paperwork_rules';
 
 	public static function init(): void {
 		add_filter( 'zdz_identity_pack_consumers', array( __CLASS__, 'register' ) );
@@ -195,6 +202,16 @@ class ZEST_Pack {
 				} else {
 					$p['writes']['zest_reassign_from_codes'] = array_values( array_unique( $codes ) );
 				}
+			} elseif ( 'followup' === $k ) {
+				foreach ( (array) $v as $fk => $fv ) {
+					if ( 'billing_line' !== $fk ) {
+						$p['unconsumed'][] = 'estimates.followup.' . $fk;
+					} elseif ( in_array( $fv, array( 'off', 'test', 'on' ), true ) ) {
+						$p['writes']['zest_followup_line_mode'] = $fv;
+					} else {
+						$bad( 'estimates.followup.billing_line', __( 'off, test or on', 'zorderz' ) );
+					}
+				}
 			} elseif ( 'test_fixture' === $k ) {
 				$s = trim( (string) $v );
 				if ( '' !== $s && strlen( $s ) <= 60 && ! preg_match( '/[<>]/', $s ) ) {
@@ -235,6 +252,37 @@ class ZEST_Pack {
 				} else {
 					$bad( 'estimate.sale_form', __( 'an https blank_url, its sha256 and a fields map', 'zorderz' ) );
 				}
+			} elseif ( 'followup' === $k ) {
+				// The words a follow-up may write where the customer reads them: every one checked, or none is taken.
+				$words = array();
+				$ok    = is_array( $v ) && class_exists( 'ZEST_Followup' );
+				foreach ( $ok ? $v : array() as $wk => $wv ) {
+					if ( ! is_string( $wk ) || ! isset( ZEST_Followup::WORDS[ $wk ] ) || ! ( 'lead' === $wk ? ZEST_Followup::valid_lead( $wv ) : ZEST_Followup::valid_phrase( $wv ) ) ) {
+						$ok = false;
+						break;
+					}
+					$words[ $wk ] = trim( (string) $wv );
+				}
+				if ( $ok && $words ) {
+					$p['doc'][ $k ] = $words;
+				} else {
+					$bad( 'estimate.followup', __( 'lead, reopened and one phrase per outcome: each one line of plain words, no digits, "@" or "#"', 'zorderz' ) );
+				}
+			} elseif ( 'import_rules' === $k ) {
+				$list = array();
+				$ok   = is_array( $v ) && $v && count( $v ) <= 20;
+				foreach ( $ok ? $v : array() as $r ) {
+					if ( ! is_string( $r ) || '' === trim( $r ) || strlen( $r ) > 400 || false !== strpos( $r, "\n" ) ) {
+						$ok = false;
+						break;
+					}
+					$list[] = trim( $r );
+				}
+				if ( $ok ) {
+					$p['writes'][ self::IMPORT_RULES_OPT ] = $list;
+				} else {
+					$bad( 'estimate.import_rules', __( 'a list of 1 to 20 rules, each one line of up to 400 characters', 'zorderz' ) );
+				}
 			} elseif ( in_array( $k, self::DOC_KEYS, true ) ) {
 				$ok = 'schedule' === $k ? is_array( $v ) : ( is_string( $v ) && strlen( $v ) <= 300 && false === strpos( $v, "\n" ) );
 				if ( $ok ) {
@@ -253,7 +301,7 @@ class ZEST_Pack {
 		if ( 'zest_line_options_pack' === $opt ) {
 			return 'catalog';
 		}
-		return 'zest_postal_cities' === $opt ? 'territories' : ( 'zest_sale_form' === $opt ? 'document-conventions' : 'rules' );
+		return 'zest_postal_cities' === $opt ? 'territories' : ( in_array( $opt, array( 'zest_sale_form', self::IMPORT_RULES_OPT ), true ) ? 'document-conventions' : 'rules' );
 	}
 
 	private static function file_of_path( string $path ): string {
@@ -314,6 +362,9 @@ class ZEST_Pack {
 		if ( class_exists( 'ZEST_Line_Options' ) ) {
 			ZEST_Line_Options::flush();
 		}
+		if ( class_exists( 'ZEST_Followup' ) ) {
+			ZEST_Followup::reset();
+		}
 		$n    = count( $p['writes'] ) + count( $p['doc'] );
 		$msgs = $n ? array( sprintf( _n( 'Estimates: %d setting applied.', 'Estimates: %d settings applied.', $n, 'zorderz' ), $n ) ) : array();
 		foreach ( $p['refused'] as $r ) {
@@ -323,7 +374,7 @@ class ZEST_Pack {
 		return $msgs;
 	}
 
-	const OPTIONS = array( 'zest_deposit_house_limit', 'zest_deposit_product_words', 'zest_deposit_rate_words', 'zest_payment_schedule', 'zest_payment_notes_mode', 'zest_test_fixture', 'zest_postal_cities', 'zest_sale_form', 'zest_door_handle', 'zest_reassign_from_codes', 'zest_line_options_pack', self::DOC_OPT );
+	const OPTIONS = array( 'zest_deposit_house_limit', 'zest_deposit_product_words', 'zest_deposit_rate_words', 'zest_payment_schedule', 'zest_payment_notes_mode', 'zest_test_fixture', 'zest_postal_cities', 'zest_sale_form', 'zest_door_handle', 'zest_reassign_from_codes', 'zest_line_options_pack', self::DOC_OPT, 'zest_followup_line_mode', self::IMPORT_RULES_OPT );
 
 	/** What to keep before a pack writes: each option as it was, or that there was none. */
 	public static function snapshot( ...$unused ) {
@@ -348,6 +399,9 @@ class ZEST_Pack {
 		}
 		if ( class_exists( 'ZDZ_Doc_Conventions' ) ) {
 			ZDZ_Doc_Conventions::flush();
+		}
+		if ( class_exists( 'ZEST_Followup' ) ) {
+			ZEST_Followup::reset();
 		}
 		return array();
 	}

@@ -99,7 +99,7 @@ class ZL_Permissions {
 					),
 					'edit_pricing' => array(
 						'label' => 'Edit Pricing / Amounts',
-						'desc'  => 'Modify estimate pricing values. (Future feature — reserved.)',
+						'desc'  => 'Modify estimate pricing values. (Future feature; reserved.)',
 					),
 				),
 			),

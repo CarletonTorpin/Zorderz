@@ -77,3 +77,16 @@
 .zest-btn.is-active { outline: 2px solid var(--sys-primary, #0e7c86); }
 .zest-client-search { margin-bottom: 8px; }
 .zest-row[role="button"] { cursor: pointer; }
+
+/* ---- typing on a phone ---- */
+/* A box whose text is under 16px makes a phone's browser zoom the whole page when it is tapped. */
+.zest-w .zest-textarea, .zest-w .zest-input, .zest-w select,
+.zest-sheet .zest-textarea, .zest-sheet .zest-input, .zest-sheet select { font-size: max(16px, 1em); }
+.zest-upload { gap: 8px; }
+.zest-upload-icon { flex: none; }
+
+/* ---- the customer lookup's match cards ---- */
+.zest-match { cursor: pointer; }
+.zest-match:focus { outline: 2px solid var(--sys-brand, #0E7C86); outline-offset: 2px; }
+.zest-match-use { flex: none; }
+.zest-match-more { align-self: flex-start; }

@@ -4,8 +4,8 @@
  *
  * Checks the Core review bridge (ZDZ_Core_ReviewBridge) for customers who received an
  * invite but have not been confirmed as having left a review. A confirmed review is a
- * signal that closes the follow-up. The review "source" is a neutral marker
- * ('review_bridge'), not a hostname; the bridge endpoint itself lives in Core config.
+ * signal that closes the follow-up. The review source is recorded as 'review_bridge';
+ * the bridge endpoint itself lives in Core config.
  *
  * @package Zorderz\Surveys
  */
@@ -42,15 +42,26 @@ class ZSV_Review_Checker {
 	 * Check pending leads (invite sent, review not yet confirmed, not checked in 6h)
 	 * against the Core review bridge.
 	 *
+	 * The answer counts only what really happened, so a page can say it in one plain sentence
+	 * and can tell whether asking again at once would help:
+	 *   checked   lookups that COMPLETED (found or a clean "no review"); each customer is stamped
+	 *             and is not looked at again for six hours;
+	 *   found     of those, reviews found (and recorded);
+	 *   errors    customers the review bridge gave no answer for (a rate limit, an outage): not
+	 *             stamped, looked at again by the next check. Asking again at once would only be
+	 *             refused again;
+	 *   deferred  customers not started because this pass ran out of time: asking again helps;
+	 *   error     set when the check could not run at all.
+	 *
 	 * @param bool $bypass_cache
-	 * @return array{checked:int,found:int,errors:int,error?:string}
+	 * @return array{checked:int,found:int,errors:int,deferred:int,error?:string}
 	 */
 	public static function check_pending_leads( bool $bypass_cache = false ): array {
 		$bridge = ZSV_Settings::review_bridge();
 		if ( ! $bridge ) {
 			// Fail loudly rather than pretend a clean run.
 			ZSV_DB::disposition( 'review_bridge_unavailable', array() );
-			return array( 'checked' => 0, 'found' => 0, 'errors' => 0, 'error' => 'review bridge not configured' );
+			return array( 'checked' => 0, 'found' => 0, 'errors' => 0, 'deferred' => 0, 'error' => __( 'The review bridge is not set up.', 'zorderz' ) );
 		}
 
 		global $wpdb;
@@ -74,7 +85,7 @@ class ZSV_Review_Checker {
 			ARRAY_A
 		);
 		if ( empty( $leads ) ) {
-			return array( 'checked' => 0, 'found' => 0, 'errors' => 0 );
+			return array( 'checked' => 0, 'found' => 0, 'errors' => 0, 'deferred' => 0 );
 		}
 
 		$stats   = array( 'checked' => 0, 'found' => 0, 'errors' => 0, 'deferred' => 0 );
@@ -85,7 +96,7 @@ class ZSV_Review_Checker {
 			self::check_leads( $leads, $bridge, $manager, $bypass_cache, $now, $stats );
 		} finally {
 			if ( $opened ) {
-				ZSV_Budget::log_run( 'review_check', $stats['checked'], count( $leads ), $stats['deferred'] );
+				ZSV_Budget::log_run( 'review_check', $stats['checked'] + $stats['errors'], count( $leads ), $stats['deferred'] );
 				ZSV_Budget::close();
 			}
 		}
@@ -127,16 +138,17 @@ class ZSV_Review_Checker {
 				$stats['deferred']++;
 				continue;
 			}
-			$stats['checked']++;
 			$name = trim( ( $lead['first_name'] ?? '' ) . ' ' . ( $lead['last_name'] ?? '' ) );
 
 			$result = $bridge->check_review( (string) $lead['email'], $name, $bypass_cache );
 			if ( null === $result ) {
+				// No answer is not a lookup: the customer is not stamped, and is not counted as checked.
 				$stats['errors']++;
 				ZSV_DB::disposition( 'source_unavailable', array( 'stage' => 'review_check', 'lead_id' => (int) $lead['id'] ) );
 				continue;
 			}
 
+			$stats['checked']++;
 			$wpdb->update( $t, array( 'review_checked_at' => $now ), array( 'id' => (int) $lead['id'] ), array( '%s' ), array( '%d' ) );
 
 			if ( ! empty( $result['found'] ) ) {
@@ -147,7 +159,7 @@ class ZSV_Review_Checker {
 					$t,
 					array(
 						'review_left'       => 1,
-						'review_source'     => 'review_bridge', // neutral marker, not a hostname.
+						'review_source'     => 'review_bridge',
 						'review_date'       => $date,
 						'review_snippet'    => $snippet,
 						'review_checked_at' => $now,
@@ -160,7 +172,7 @@ class ZSV_Review_Checker {
 				// A confirmed review closes the loop with a CRM note — durable: one not posted
 				// now is posted by the next sweep (the lead has left the set this check reads).
 				if ( ! empty( $lead['crm_lead_id'] ) ) {
-					$body = '[Surveys] Review confirmed via bridge on ' . wp_date( 'M j, Y g:i A' );
+					$body = '[Surveys] Review confirmed via bridge on ' . ZSV_Settings::stamp();
 					if ( $snippet ) {
 						$body .= "\n\n\"" . $snippet . '"';
 					}

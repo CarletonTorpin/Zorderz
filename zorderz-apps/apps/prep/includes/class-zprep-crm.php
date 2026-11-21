@@ -270,7 +270,7 @@ class ZPREP_Crm {
 		if ( $created ) {
 			try {
 				$dt           = new \DateTime( $created );
-				$meta['date'] = $dt->format( 'M j, Y' );
+				$meta['date'] = $dt->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ) );
 			} catch ( \Throwable $e ) {
 				// non-fatal.
 			}
@@ -364,7 +364,7 @@ class ZPREP_Crm {
 		$stage            = ZPREP_Settings::cut_stage_name();
 		if ( ! $this->is_ready() || '' === $stage ) {
 			if ( '' === $stage ) {
-				$this->last_trace[] = 'Cut stage not configured — auto-queue disabled.';
+				$this->last_trace[] = 'Cut stage not configured: auto-queue disabled.';
 			}
 			return array();
 		}
@@ -666,7 +666,7 @@ class ZPREP_Crm {
 			array(
 				'activity' => array(
 					'activityTypeId' => $type_id,
-					'name'           => __( 'Pieces cut — Zorderz Prep', 'zorderz' ),
+					'name'           => __( 'Pieces cut · Zorderz Prep', 'zorderz' ),
 					'logNote'        => array( 'note' => __( 'Cut sheets generated and cut.', 'zorderz' ) ),
 					'status'         => 1,
 					'startTime'      => gmdate( 'Y-m-d\TH:i:s\Z' ),
@@ -707,7 +707,7 @@ class ZPREP_Crm {
 
 		$lead = $this->get_lead_by_id( $lead_id );
 		if ( ! is_array( $lead ) ) {
-			$result['errors'][] = __( 'Lead not found — nothing was written to the CRM.', 'zorderz' );
+			$result['errors'][] = __( 'Lead not found: nothing was written to the CRM.', 'zorderz' );
 			return $result;
 		}
 		$stage        = $this->stage_name_for_lead( $lead );
@@ -748,9 +748,9 @@ class ZPREP_Crm {
 			$result['advance_ok'] = true;
 			$result['new_stage']  = $new_stage;
 		} elseif ( 'at_last_stage' === $this->last_advance_status ) {
-			$result['errors'][] = __( 'Lead is already at the final pipeline stage — nothing to advance.', 'zorderz' );
+			$result['errors'][] = __( 'Lead is already at the final pipeline stage: nothing to advance.', 'zorderz' );
 		} else {
-			$result['errors'][] = __( 'Could not advance the pipeline stage automatically — please move this lead forward in the CRM.', 'zorderz' );
+			$result['errors'][] = __( 'Could not advance the pipeline stage automatically. Please move this lead forward in the CRM.', 'zorderz' );
 		}
 
 		$result['activity_ok'] = $this->log_cut_activity( $lead_id );

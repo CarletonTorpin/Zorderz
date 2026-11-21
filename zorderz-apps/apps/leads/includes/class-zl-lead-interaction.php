@@ -534,7 +534,7 @@ class ZL_Lead_Interaction {
 				$wpdb->prefix . 'zl_batches',
 				array(
 					'status'        => 'failed',
-					'error_message' => 'Timed out — no progress for 30+ minutes.',
+					'error_message' => 'Timed out: no progress for 30+ minutes.',
 					'updated_at'    => current_time( 'mysql', true ),
 				),
 				array( 'id' => $bid ),

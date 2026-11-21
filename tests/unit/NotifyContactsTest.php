@@ -72,7 +72,7 @@ final class NotifyContactsTest extends TestCase {
 			'ns_posted' => '', 'note' => '', 'occurred_at' => '2026-01-15 10:00:00', 'reached_at' => null,
 		) );
 		$this->assertSame( 'zdc-9-a', $ref );
-		$this->assertStringContainsString( 'Contact log · Called — no answer (Jan 15, 2026 at 10:00 AM UTC)', $text );
+		$this->assertStringContainsString( 'Contact log · Called, no answer (Jan 15, 2026 at 10:00 AM UTC)', $text );
 		$this->assertStringContainsString( "\n\nRef: zdc-9-a", $text );
 	}
 

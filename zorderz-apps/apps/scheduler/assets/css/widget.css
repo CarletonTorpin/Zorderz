@@ -22,10 +22,10 @@
 .zsch-w {
 	--zsch-bg: var(--sys-bg, #0b1220);
 	--zsch-surface: var(--sys-surface, #131c2e);
-	--zsch-surface-2: var(--sys-surface-2, #1b263b);
+	--zsch-surface-2: var(--sys-surface-2, #1E293B);
 	--zsch-text: var(--sys-text, #e7edf6);
 	--zsch-muted: var(--sys-text-muted, #94a3b8);
-	--zsch-border: var(--sys-border, #283549);
+	--zsch-border: var(--sys-border, #334155);
 	--zsch-accent: var(--sys-brand, #0ea5e9);
 	/* v1.5.3: filled controls need a darker step — white on sky-500 is 2.8:1 */
 	--zsch-accent-strong: #0369A1;

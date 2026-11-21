@@ -274,6 +274,12 @@ class ZCH_Admin {
 			<tr><th><?php esc_html_e( 'Assistant', 'zorderz' ); ?></th><td><label><input type="checkbox" name="bot_totals" value="1" <?php checked( $s['bot_totals'] ); ?>>
 				<?php esc_html_e( 'Let the chat assistant receive Charts totals.', 'zorderz' ); ?></label>
 				<p class="description"><?php esc_html_e( "Off: the assistant can only offer to open the chart here. On: it receives a chart's aggregate rows (never line items or customers), limited to what the person asking may see, and the Charts widget shows an \"Ask chat about this chart\" button. Named business accounts are never named. The assistant's models may run in the cloud; chart numbers are never used for web search.", 'zorderz' ); ?></p></td></tr>
+			<tr><th><?php esc_html_e( 'Assistant: records', 'zorderz' ); ?></th><td><label><input type="checkbox" name="bot_records" value="1" <?php checked( $s['bot_records'] ); ?>>
+				<?php esc_html_e( 'Let the chat assistant read invoice lines and job lists.', 'zorderz' ); ?></label>
+				<p class="description"><?php esc_html_e( "Off: the assistant never receives a line of an invoice. On: when someone who may see line items in Charts asks the chat what was sold or done, the chat may search the text of invoice lines and list jobs for them (only their own jobs when Charts keeps them to their own), with amounts only for people who may see money. No customer name is sent, and e-mail addresses, phone numbers and street addresses typed into a line are taken out first. The assistant's models may run in the cloud; records are never used for web search.", 'zorderz' ); ?></p>
+				<p><label for="zch-rc"><?php esc_html_e( 'Words too common to search alone', 'zorderz' ); ?></label><br>
+				<textarea id="zch-rc" name="records_common" rows="3" cols="50"><?php echo esc_textarea( implode( "\n", ZCH_Records_Verb::clean_words( $s['records_common'] ) ) ); ?></textarea></p>
+				<p class="description"><?php esc_html_e( 'One a line. A word that is on most of your invoice lines finds thousands of them and answers nothing, so the assistant leaves it out of a line search and says so; a phrase that holds it is still searched. Empty: no word is left out.', 'zorderz' ); ?></p></td></tr>
 			<tr><th><label for="zch-alert"><?php esc_html_e( 'Alert email', 'zorderz' ); ?></label></th><td><input type="email" id="zch-alert" name="alert_email" value="<?php echo esc_attr( $s['alert_email'] ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>">
 				<p class="description"><?php esc_html_e( 'Emailed when the hub has been down more than 30 minutes during business hours.', 'zorderz' ); ?></p></td></tr>
 			<tr><th><label for="zch-cp"><?php esc_html_e( 'Measured counts', 'zorderz' ); ?></label></th><td>
@@ -311,11 +317,19 @@ class ZCH_Admin {
 		$s                   = ZCH_Store::settings();
 		$s['snapshots']      = ! empty( $_POST['snapshots'] );
 		$s['bot_totals']     = ! empty( $_POST['bot_totals'] );
+		$s['bot_records']    = ! empty( $_POST['bot_records'] );
+		$s['records_common'] = ZCH_Records_Verb::clean_words( sanitize_textarea_field( wp_unslash( $_POST['records_common'] ?? '' ) ) );
 		$s['alert_email']    = sanitize_email( wp_unslash( $_POST['alert_email'] ?? '' ) );
 		$s['counts_product'] = mb_substr( sanitize_text_field( wp_unslash( $_POST['counts_product'] ?? '' ) ), 0, 80 );
 		$s['counts_match']   = mb_substr( sanitize_text_field( wp_unslash( $_POST['counts_match'] ?? '' ) ), 0, 40 );
 		$shapes              = esc_url_raw( wp_unslash( $_POST['map_shapes'] ?? '' ), array( 'https' ) );
 		$s['map_shapes']     = is_string( $shapes ) ? $shapes : '';
+		$stored              = get_option( ZCH_OPTION, array() );
+		foreach ( array( 'business_hours', 'business_days' ) as $k ) { // kept only when already saved: else they follow the usual hours
+			if ( ! is_array( $stored ) || ! array_key_exists( $k, $stored ) ) {
+				unset( $s[ $k ] );
+			}
+		}
 		update_option( ZCH_OPTION, $s, false );
 		if ( ! $s['snapshots'] ) {
 			global $wpdb;

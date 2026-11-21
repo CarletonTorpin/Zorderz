@@ -171,7 +171,7 @@ class ZIB_Admin {
 		$managed = self::cred_managed( 'ms_inbox' );
 		?>
 		<div class="wrap">
-			<h1>Zorderz Inbox — Connected Email (per-user M365)</h1>
+			<h1>Zorderz Inbox: Connected Email (per-user M365)</h1>
 			<?php if ( isset( $_GET['updated'] ) ) : ?>
 				<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>
 			<?php endif; ?>
@@ -194,7 +194,7 @@ class ZIB_Admin {
 						<th scope="row">App credentials</th>
 						<td>
 							<input type="hidden" name="zdz_cred_managed[ms_inbox]" value="1" />
-							<p>Managed in <a href="<?php echo esc_url( is_callable( array( 'ZDZ_Core_Credentials', 'page_url' ) ) ? ZDZ_Core_Credentials::page_url() : admin_url( 'admin.php?page=zdz-core-credentials' ) ); ?>">Zorderz → Credentials</a> — one set for every app.</p>
+							<p>Managed in <a href="<?php echo esc_url( is_callable( array( 'ZDZ_Core_Credentials', 'page_url' ) ) ? ZDZ_Core_Credentials::page_url() : admin_url( 'admin.php?page=zdz-core-credentials' ) ); ?>">Zorderz → Credentials</a>, one set for every app.</p>
 						</td>
 					</tr>
 					<?php else : ?>
@@ -227,12 +227,12 @@ class ZIB_Admin {
 					<tr>
 						<th scope="row">Ingestion (P1)</th>
 						<td><label><input type="checkbox" name="zib_ingest" value="1" <?php checked( $ingest ); ?> /> Start indexing connected mailboxes</label>
-						<p class="description"><strong>Dark by default — this is the switch that reads real mail.</strong> With it OFF, nothing is indexed even when mailboxes are connected. Turning it ON starts the 12-month backfill + live sync for every connected mailbox, per each user's chosen index mode. Leave it off until you're ready for real mail to be pulled in.</p></td>
+						<p class="description"><strong>Dark by default: this is the switch that reads real mail.</strong> With it OFF, nothing is indexed even when mailboxes are connected. Turning it ON starts the 12-month backfill + live sync for every connected mailbox, per each user's chosen index mode. Leave it off until you're ready for real mail to be pulled in.</p></td>
 					</tr>
 					<tr>
 						<th scope="row">Enrichment (P6)</th>
 						<td><label><input type="checkbox" name="zib_enrich" value="1" <?php checked( $enrich ); ?> /> Derive index cards, extracts &amp; tags from indexed mail</label>
-						<p class="description"><strong>Dark by default.</strong> With it ON, each in-scope message is enriched — a cleaned/searchable body, extracted amounts / order refs / product quantities, and message tags — so the assistant can compute mailbox answers ("how many units have I ordered"). Runs on the sync cron in bounded batches and re-enriches already-indexed mail. Reads only what's already indexed; the live chat model never re-reads a raw body. Safe to run with or without live Ingestion.</p></td>
+						<p class="description"><strong>Dark by default.</strong> With it ON, each in-scope message is enriched (a cleaned/searchable body, extracted amounts / order refs / product quantities, and message tags) so the assistant can compute mailbox answers ("how many units have I ordered"). Runs on the sync cron in bounded batches and re-enriches already-indexed mail. Reads only what's already indexed; the live chat model never re-reads a raw body. Safe to run with or without live Ingestion.</p></td>
 					</tr>
 					<tr>
 						<th scope="row">Sending &amp; triage</th>
@@ -255,7 +255,7 @@ class ZIB_Admin {
 						<td><?php echo esc_html( $r['email_label'] ); ?></td>
 						<td><?php echo esc_html( $r['status'] ); ?></td>
 						<td><?php echo esc_html( $r['index_mode'] ); ?></td>
-						<td><?php echo $r['admin_search_enabled'] ? 'enabled by user' : '—'; ?></td>
+						<td><?php echo $r['admin_search_enabled'] ? 'enabled by user' : '–'; ?></td>
 						<td><?php echo esc_html( $r['backfill_status'] ); ?></td>
 						<td><?php echo (int) $r['indexed_count']; ?></td>
 						<td><?php echo esc_html( $r['connected_at'] ); ?></td>
@@ -263,10 +263,10 @@ class ZIB_Admin {
 				<?php endforeach; endif; ?>
 				</tbody>
 			</table>
-			<p class="description">This table is metadata only — no mail is shown above. An admin can open a mailbox for review below; a mailbox stays closed until an admin turns its gate on, and every read is logged.</p>
+			<p class="description">This table is metadata only. No mail is shown above. An admin can open a mailbox for review below; a mailbox stays closed until an admin turns its gate on, and every read is logged.</p>
 
 			<h2>Read a staff mailbox (admin)</h2>
-			<p class="description"><strong>The admin controls the gate.</strong> Turn a mailbox <strong>On</strong> to allow admin review, <strong>Off</strong> to close it. Enabling <em>indexing</em> for a user never grants read access — this gate is separate, admin-only, and audited. Reading requires <code>manage_options</code> or an identity-plugin reader role; flipping the gate requires <code>manage_options</code>.</p>
+			<p class="description"><strong>The admin controls the gate.</strong> Turn a mailbox <strong>On</strong> to allow admin review, <strong>Off</strong> to close it. Enabling <em>indexing</em> for a user never grants read access: this gate is separate, admin-only, and audited. Reading requires <code>manage_options</code> or an identity-plugin reader role; flipping the gate requires <code>manage_options</code>.</p>
 			<table class="widefat striped">
 				<thead><tr><th>User</th><th>Mailbox</th><th>Indexed</th><th>Admin gate</th><th>Action</th></tr></thead>
 				<tbody>

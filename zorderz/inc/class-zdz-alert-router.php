@@ -30,7 +30,6 @@
  *   ZDZ_Alert_Router::send( 'survey_note_forwarded', $recipient_id, $title, $message, $source )
  *
  * @package Zorderz
- * @since   2.19.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;

@@ -200,11 +200,11 @@ final class ZEST_Payment_Plan {
 
 	/* ------------------------------------------------------------------ money */
 
-	/** 50000 -> "$500", 123450 -> "$1,234.50" (whole cents, no float). */
+	/** 50000 -> "$500", 123450 -> "$1,234.50" (whole cents, no float), in the business's money. */
 	public static function money( int $c ): string {
 		$neg = $c < 0;
 		$c   = abs( $c );
-		return ( $neg ? '-' : '' ) . '$' . number_format( intdiv( $c, 100 ) ) . ( $c % 100 ? '.' . str_pad( (string) ( $c % 100 ), 2, '0', STR_PAD_LEFT ) : '' );
+		return ( $neg ? '-' : '' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( intdiv( $c, 100 ) ) : number_format( intdiv( $c, 100 ) ) ) . ( $c % 100 ? '.' . str_pad( (string) ( $c % 100 ), 2, '0', STR_PAD_LEFT ) : '' );
 	}
 
 	private static function div_round( int $num, int $den ): int {

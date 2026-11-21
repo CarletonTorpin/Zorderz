@@ -72,13 +72,13 @@
 		var cardsEl = $('zrcpt-lookup-cards');
 		if (!cardsEl) return;
 
-		// design rule 2 — warn if we got an estimate but no invoice: receipts attach to invoices.
+		// Warn if we got an estimate but no invoice: receipts attach to invoices.
 		var hasInvoice = matches.some(function (m) { return m.type === 'invoice'; });
 		var hasEstimate = matches.some(function (m) { return m.type === 'estimate'; });
 
 		var html = '';
 		if (!hasInvoice && hasEstimate) {
-			html += '<div class="zrcpt-lookup-warn">⚠ Found an estimate but no invoice yet. A receipt normally attaches to an invoice — once the job is invoiced in FreshBooks, re-run the lookup. You can still proceed using the estimate; the receipt link will be attached to it.</div>';
+			html += '<div class="zrcpt-lookup-warn">⚠ Found an estimate but no invoice yet. A receipt normally attaches to an invoice; once the job is invoiced in FreshBooks, re-run the lookup. You can still proceed using the estimate; the receipt link will be attached to it.</div>';
 		}
 
 		matches.forEach(function (m, i) {
@@ -159,15 +159,15 @@
 			var hintEl = $('zrcpt-lookup-nutshell-hint');
 			if (!hintEl) return;
 			if (!res || !res.success) {
-				hintEl.innerHTML = '<em style="color:#888;">No Nutshell install notes found — proceed with photos only.</em>';
+				hintEl.innerHTML = '<em style="color:#888;">No Nutshell install notes found; proceed with photos only.</em>';
 				return;
 			}
 			var notes = (res.data && res.data.install_notes) || [];
 			if (!notes.length) {
-				hintEl.innerHTML = '<em style="color:#888;">Lead found on Nutshell but no install notes matched — proceed with photos only.</em>';
+				hintEl.innerHTML = '<em style="color:#888;">Lead found on Nutshell but no install notes matched; proceed with photos only.</em>';
 				return;
 			}
-			hintEl.innerHTML = '<strong>' + notes.length + ' install note' + (notes.length === 1 ? '' : 's') + ' found on Nutshell:</strong> <span style="color:#1e4d6e;">AI will include them when generating the receipt.</span>';
+			hintEl.innerHTML = '<strong>' + notes.length + ' install note' + (notes.length === 1 ? '' : 's') + ' found on Nutshell:</strong> <span style="color:var(--sys-brand,#5150D6);">AI will include them when generating the receipt.</span>';
 			// Stash notes on the app for submission.
 			if (app) app.dataset.installNotes = JSON.stringify(notes);
 		}).catch(function () { /* ignore */ });

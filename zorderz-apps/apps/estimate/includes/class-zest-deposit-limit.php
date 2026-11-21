@@ -200,7 +200,7 @@ final class ZEST_Deposit_Limit {
 	}
 
 	public static function money( int $cents ): string {
-		return '$' . number_format( $cents / 100, ( $cents % 100 ) ? 2 : 0 );
+		return ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $cents / 100, ( $cents % 100 ) ? 2 : 0 ) : number_format( $cents / 100, ( $cents % 100 ) ? 2 : 0 ) );
 	}
 
 	private static function pct_text( int $bp ): string {

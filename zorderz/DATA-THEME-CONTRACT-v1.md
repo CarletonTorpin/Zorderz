@@ -139,7 +139,12 @@ The theme defines these token families, resolved per-mode:
 | `--sys-text-sec` | `#475569` (7.58:1)     | `#CBD5E1` (9.85:1)    | `#000000` (21:1)          |
 | `--sys-text-ter` | `#475569` (7.58:1) | `#94A3B8` (5.71:1) | `#1a1a1a` (≈19:1)     |
 | `--sys-border`   | `#E2E8F0`              | `#334155`                        | `#000000`                 |
-| `--sys-brand`    | `#2C5F8A`              | `#4796F7`                        | `#000000`                 |
+| `--sys-brand`    | `#5150D6` (6.0:1)      | `#7D87FB` (4.7:1)                | `#000000` (21:1)          |
+| `--sys-text-brand` (ink on a `--sys-brand` fill) | `#FFFFFF` (6.0:1 on the fill) | `#11123A` (5.7:1 on the fill) | `#FFFFFF` (21:1 on the fill) |
+
+**Brand ink.** A button or chip filled with `--sys-brand` takes `--sys-text-brand` for its text and icons, never a fixed `#fff`: dark mode lightens the fill so that brand-coloured *text* reads on dark surfaces, and white on that lighter fill would fall to about 3:1. A fill pinned to one ramp step (`var(--ref-brand-500)`) does not change with the mode and keeps plain white. Brand-coloured text on a plain surface is `--sys-brand`, not `--sys-text-brand`.
+
+**The default palette.** The shipped ramp is Zorderz indigo; a business replaces it in Business Profile → Appearance, and every value above follows. The app groups on the dashboard use the Okabe-Ito set (orange, bluish green, sky blue, blue, reddish purple, with vermilion reserved for "needs you"), chosen because it stays distinguishable for the common forms of colour blindness; every tile also carries its name and icon, so colour is never the only cue.
 
 **contrast retune (why these changed):** the secondary/tertiary text tokens were previously tuned for contrast against the *page background*, but plugin widgets render on the lighter `--sys-surface`. On dark mode, the old `--sys-text-ter` (gray-500) was only **3.07:1** on the widget surface: a WCAG failure, and the source of the "gray text on dark-gray" field report. Values were raised so **every** `--sys-text-*` token clears AA (≥4.5:1) on `--sys-surface`, with secondary text at AAA. Light-mode tertiary was raised so it also passes on the `--sys-bg` header zone (gray-100), not only on white.
 

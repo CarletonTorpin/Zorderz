@@ -17,7 +17,10 @@
  *   Nothing is confirmed here without a person. While the car moves (Doorhangers' rule: ZDH_PACE) the panel is
  *   voice-only: two 96 px buttons (pause / end), no typing, no small targets. Read-back is off by default.
  *   Gate codes are sealed on the server the moment they arrive and open only for the admin tier or the walker assigned
- *   a route there that day; this page never keeps one (a revealed code is shown for 30 s, then gone). */
+ *   a route there that day; this page never keeps one (a revealed code is shown for 30 s, then gone).
+ *   The start-up read (GET boot) waits and asks again when the host turns it away (429, 502 to
+ *     504, 520 to 524), when it never arrives, and when it is not answered in 30 s; a start that still fails has a
+ *     Try again button and heals when the app is opened. See api() and boot(). */
 (function () {
 	'use strict';
 	var PENDING_MODE = null, PENDING_OPTS = {};
@@ -49,7 +52,7 @@
 		var SCOPES = ['here', 'house', 'side', 'block', 'street', 'neighborhood'];
 		var QKEY = 'zrp_queue_' + (C.userId || 0);
 		var CHUNK = 1048576;
-		var S = { tab: 'survey', planCfg: null, pmap: null, vocab: [], pending: [], retracted: [], drives: [], audio: [], codes: [], codesReady: 0, record: false, reads: 0, readback: false, snap: 1, booted: false, err: '', safety: false, survey: null, map: null, mapLayer: null, filter: {}, memo: null, uploading: false, showTaken: false };
+		var S = { tab: 'survey', planCfg: null, pmap: null, vocab: [], pending: [], retracted: [], drives: [], audio: [], codes: [], codesReady: 0, record: false, reads: 0, readback: false, snap: 1, booted: false, err: '', errRef: '', wait: '', pressed: false, safety: false, survey: null, map: null, mapLayer: null, filter: {}, memo: null, uploading: false, showTaken: false };
 
 		/* ------------------------------------------------------------ utils */
 		function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -71,20 +74,88 @@
 				t = String(t || '').trim(); if (!/^[a-f0-9]{6,20}$/i.test(t)) { throw new Error('signed out'); } C.nonce = t; return t;
 			});
 		}
-		function api(path, opts, again) {
-			opts = opts || {};
+		/* A refusal such as HTTP 429 can come from in front of the site (the host's edge turning requests away for a
+		   moment) rather than from WordPress, so it carries no message. A read marked `patient` waits and asks again: after about 2, 5 and 10 seconds (each a little apart), or as long as the reply's
+		   Retry-After asks, on 429, on 502, 503, 504 and the edge's own 520 to 524, and on a request that never arrived
+		   or was not answered within 30 seconds (what the theme's kit gives an ordinary answer). Up to four asks (a
+		   refreshed nonce, as before, is one more), then the caller is told. A 429 that asks for more than 30 seconds
+		   is not asked again at all: the caller is told at once, with how long. On the other statuses a Retry-After
+		   over 30 seconds is the server's guess, not a count (WordPress's own "briefly unavailable" during an update
+		   sends 600 and is over in seconds), so the usual waits stand. Only a GET waits like this, only the start-up
+		   read is marked, and this waiting never repeats a POST. */
+		var WAITS = [2000, 5000, 10000], WAIT_MAX = 30000, ANSWER_MS = 30000;
+		var BUSY = [429, 502, 503, 504, 520, 521, 522, 523, 524];
+		function busy(e) { return !!e && (e.net === true || BUSY.indexOf(e.status) !== -1); }
+		function tooLong(e) { return !!e && e.status === 429 && e.wait * 1000 > WAIT_MAX; }
+		function waitMs(e, n) {
+			var ms = WAITS[n];
+			if (e && e.wait > 0 && e.wait * 1000 <= WAIT_MAX) { ms = Math.max(ms, e.wait * 1000); } // never sooner than the reply asked
+			return ms + Math.round(Math.random() * 800); // a little apart, so phones refused together do not come back together
+		}
+		function api(path, opts, again, n) {
+			opts = opts || {}; n = n || 0;
 			return apiOnce(path, opts).then(null, function (e) {
-				if (!again && (e.status === 401 || e.status === 403) && /nonce|cookie/i.test(e.code || '')) { return freshNonce().then(function () { return api(path, opts, true); }); }
+				if (!again && (e.status === 401 || e.status === 403) && /nonce|cookie/i.test(e.code || '')) { return freshNonce().then(function () { return api(path, opts, true, n); }); }
+				if (opts.patient && (!opts.method || opts.method === 'GET') && busy(e) && !tooLong(e) && n < WAITS.length) {
+					var ms = waitMs(e, n);
+					if (typeof opts.onwait === 'function') { try { opts.onwait(e, ms); } catch (x) {} }
+					return new Promise(function (go) { setTimeout(go, ms); }).then(function () { return api(path, opts, again, n + 1); });
+				}
 				throw e;
 			});
 		}
+		function head(r, k) { try { return String((r && r.headers && typeof r.headers.get === 'function' && r.headers.get(k)) || ''); } catch (e) { return ''; } }
+		/* Retry-After: a number of seconds, or a date. Anything else is no answer (0). */
+		function retryAfter(v) {
+			v = String(v || '').trim();
+			if (!v) { return 0; }
+			if (/^\d+$/.test(v)) { return Math.min(+v, 1e9); }
+			var t = Date.parse(v);
+			return isNaN(t) ? 0 : Math.max(0, Math.round((t - Date.now()) / 1000));
+		}
 		function apiOnce(path, opts) {
 			var raw = opts.raw != null;
-			return fetch((C.rest || '/wp-json/zorderz/v1/route-planner/') + path, {
+			var init = {
 				method: opts.method || 'GET', credentials: 'same-origin',
 				headers: { 'Content-Type': raw ? 'application/octet-stream' : 'application/json', 'X-WP-Nonce': C.nonce || '' },
 				body: raw ? opts.raw : (opts.body ? JSON.stringify(opts.body) : undefined)
-			}).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) { var e = new Error((j && j.message) || ('HTTP ' + r.status)); e.status = r.status; e.code = (j && j.code) || ''; throw e; } return j; }); });
+			};
+			// A patient read gives the site 30 seconds to answer in full; after that it is dropped and counts as a
+			// request that never arrived (slow), so a stalled connection cannot hold "Loading…" with no way on
+			var ctl = opts.patient && typeof AbortController !== 'undefined' ? new AbortController() : null, clock = null;
+			if (ctl) { init.signal = ctl.signal; }
+			var work = fetch((C.rest || '/wp-json/zorderz/v1/route-planner/') + path, init).then(function (r) {
+				return r.json().catch(function () { return {}; }).then(function (j) { return { r: r, j: j }; });
+			});
+			if (opts.patient) {
+				work = Promise.race([work, new Promise(function (yes, no) {
+					clock = setTimeout(function () {
+						if (ctl) { try { ctl.abort(); } catch (x) {} }
+						var late = new Error('no answer in time'); late.slow = true; no(late);
+					}, ANSWER_MS);
+				})]);
+			}
+			return work.then(function (a) {
+				clearTimeout(clock);
+				var r = a.r, j = a.j;
+				if (!r.ok) {
+					var e = new Error((j && j.message) || ('HTTP ' + r.status)); e.status = r.status; e.code = (j && j.code) || '';
+					// What a refusal says about itself. bare: no WordPress message came with it (the host's edge or
+					// its web server answered, not the site); wait: its Retry-After, in seconds; ray: the edge's own id for
+					// the request, which the host can look up; at: when
+					e.bare = !(j && j.message); e.wait = retryAfter(head(r, 'retry-after')); e.ray = head(r, 'cf-ray'); e.at = Date.now();
+					throw e;
+				}
+				return j;
+			}, function (x) {
+				// The request never arrived (no connection, the line dropped, or no answer in time). The same error
+				// as before, marked; one that cannot be marked is replaced by a new one with its words.
+				clearTimeout(clock);
+				var e = (x && typeof x === 'object') ? x : new Error(String(x || 'no answer'));
+				try { e.net = true; } catch (z) {}
+				if (e.net !== true) { e = new Error(String((x && x.message) || 'no answer')); e.net = true; }
+				throw e;
+			});
 		}
 		function distM(a, b) { var x = (b[1] - a[1]) * Math.cos((a[0] + b[0]) / 2 * Math.PI / 180) * 111320, y = (b[0] - a[0]) * 110540; return Math.sqrt(x * x + y * y); }
 		function bearing(a, b) { var cos = Math.cos(a[0] * Math.PI / 180); return (Math.atan2((b[1] - a[1]) * cos, b[0] - a[0]) * 180 / Math.PI + 360) % 360; }
@@ -152,7 +223,7 @@
 				}
 			});
 		}
-		window.addEventListener('online', function () { flushQueue(); uploadAll(); });
+		window.addEventListener('online', function () { flushQueue(); uploadAll(); if (!S.booted) { boot(); } }); // A start that failed with no signal is tried again when it is back
 		setInterval(function () { if (queue().length && !signedOut) { flushQueue(); } }, 20000);
 
 		function onNoteSaved(n) {
@@ -610,7 +681,7 @@
 			if (sv.rec && sv.recOn) { return; }
 			var rec = sv.rec || new SR();
 			if (!sv.rec) {
-				rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+				rec.lang = (window.ZDZ && window.ZDZ.ui && window.ZDZ.ui.locale) ? window.ZDZ.ui.locale() : 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
 				rec.onstart = function () { sv.recOn = true; paintPanel(); };
 				/* the position for a sentence: the first sign of it (speech start, or its first partial words); a sentence
 				   that was a command or said while paused clears it too (Chrome sends speechstart once a
@@ -706,7 +777,26 @@
 			if (S.tab !== 'map' && S.map) { try { S.map.remove(); } catch (e) {} S.map = null; }
 			if (S.pmap) { try { S.pmap.remove(); } catch (e) {} S.pmap = null; if (S.plan) { S.plan.layers = null; } } // the Plan tab builds its map again
 			var main = root.querySelector('#zrp-main');
-			if (!S.booted) { main.innerHTML = S.err ? '<div class="zrp-card"><p>' + esc(S.err) + '</p></div>' : '<div class="zrp-card"><p class="zrp-help">Loading…</p></div>'; return; }
+			if (!S.booted) {
+				// A start that failed says so with a way on (Try again) and, when the answer came from in front of
+				// the site, a line to pass on; a start that is waiting to ask again says that, not "Loading…". Only the
+				// sentence is the alert, so the line under it is not read out again each time the card is drawn.
+				main.innerHTML = S.err
+					? '<div class="zrp-card"><p role="alert">' + esc(S.err) + '</p><div class="zrp-row"' + (S.errRef ? ' style="margin-bottom:.7rem"' : '') + '><button type="button" class="zrp-btn zrp-btn-primary" id="zrp-again">Try again</button></div>' + (S.errRef ? '<p class="zrp-help">' + esc(S.errRef) + '</p>' : '') + '</div>'
+					: (S.wait ? '<div class="zrp-card" role="status"><p class="zrp-help"><span class="zdz-loading-spinner" aria-hidden="true"></span> ' + esc(S.wait) + '</p></div>' : '<div class="zrp-card"><p class="zrp-help">Loading…</p></div>');
+				var ag = main.querySelector('#zrp-again');
+				if (ag) { ag.addEventListener('click', function () { S.pressed = true; boot(); }); }
+				// the press took the button away: keep the place for a keyboard or a screen reader (the card while it
+				// loads, the button again if it comes back)
+				if (S.pressed) {
+					if (ours()) {
+						if (!ag) { main.setAttribute('tabindex', '-1'); }
+						try { (ag || main).focus({ preventScroll: true }); } catch (x) {}
+					}
+					if (ag) { S.pressed = false; }
+				}
+				return;
+			}
 			if (S.tab === 'plan' && S.planCfg) { renderPlan(main); }
 			else if (S.tab === 'review') { renderReview(main); }
 			else if (S.tab === 'map') { renderMap(main); }
@@ -770,7 +860,7 @@
 						: '<li>Say “scratch that” to take back the last note, “keep that” to confirm it, “pause listening”, “resume”, “end survey”.</li>') +
 					'<li>A gate code: “the gate code is 1 2 3 4”. It is sealed at once and never shown on a note.</li>' +
 					'<li>Describe homes, never people: no names, plates or faces.</li></ul>' +
-					'<div class="zrp-row"><button type="button" class="zrp-btn zrp-btn-primary" id="zrp-safety-ok">I understand — start</button><button type="button" class="zrp-btn zrp-btn-quiet" id="zrp-safety-no">Not now</button></div></div>';
+					'<div class="zrp-row"><button type="button" class="zrp-btn zrp-btn-primary" id="zrp-safety-ok">I understand, start</button><button type="button" class="zrp-btn zrp-btn-quiet" id="zrp-safety-no">Not now</button></div></div>';
 				main.querySelector('#zrp-safety-ok').addEventListener('click', function () { store('zrp_safety_ok', '1'); S.safety = false; startSurvey(); });
 				main.querySelector('#zrp-safety-no').addEventListener('click', function () { S.safety = false; render(); });
 				return;
@@ -799,7 +889,7 @@
 				'<div class="zrp-drive-state" id="zrp-state"></div>' +
 				'<p class="zrp-heard" id="zrp-heard" aria-live="polite"></p><p class="zrp-noted" id="zrp-noted" aria-live="polite"></p><p class="zrp-drive-meta" id="zrp-meta"></p>' +
 				'<div class="zrp-drive-btns"><button type="button" class="zrp-big" id="zrp-pause" aria-pressed="false">Pause</button><button type="button" class="zrp-big" id="zrp-end">End survey</button></div>' +
-				(mv ? '<p class="zrp-voice-only">Moving — voice only. Just speak.</p>' : '<p class="zrp-says">' + (sv.mode === 'record' ? 'Say “scratch that” to take back what you just said. Pause stops the recording.' : 'Say “scratch that”, “keep that”, “pause listening”, “resume” or “end survey”.') + '</p>') + '</div>' +
+				(mv ? '<p class="zrp-voice-only">Moving: voice only. Just speak.</p>' : '<p class="zrp-says">' + (sv.mode === 'record' ? 'Say “scratch that” to take back what you just said. Pause stops the recording.' : 'Say “scratch that”, “keep that”, “pause listening”, “resume” or “end survey”.') + '</p>') + '</div>' +
 				(mv || sv.mode === 'record' ? '' : '<div class="zrp-card"><h2>Parked</h2><p class="zrp-help">You can type a note while the car is stopped.</p><form class="zrp-row" id="zrp-typeform"><input class="zrp-type" id="zrp-type" type="text" maxlength="300" placeholder="e.g. this side has turf" aria-label="Type a note"><button class="zrp-btn" type="submit">Note it</button></form></div>');
 			main.querySelector('#zrp-pause').addEventListener('click', function () { var v = S.survey; if (!v) { return; } if (v.mode === 'record') { pauseSurvey(!v.paused); } else { runCommand(v.paused || v.micStopped ? 'resume' : 'pause'); } });
 			main.querySelector('#zrp-end').addEventListener('click', endSurvey);
@@ -1009,7 +1099,7 @@
 		}
 		// the two winds named as the settings name them: "steady wind 8 mph, gusts to 24 mph"
 		function wxFig(wx) {
-			return 'rain ' + (wx.rain_pct != null ? wx.rain_pct + '%' : '?') + (wx.rain_in ? ', ' + wx.rain_in + ' in' : '') + ' · steady wind ' + (wx.wind_mph != null ? wx.wind_mph + ' mph' : '?') + (wx.gust_mph != null ? ', gusts to ' + wx.gust_mph + ' mph' : '');
+			return 'rain ' + (wx.rain_pct != null ? wx.rain_pct + '%' : '?') + (wx.rain_in ? ', ' + rainText(wx.rain_in) : '') + ' · steady wind ' + (wx.wind_mph != null ? windText(wx.wind_mph) : '?') + (wx.gust_mph != null ? ', gusts to ' + windText(wx.gust_mph) : '');
 		}
 		function wxLine(wx, withDay) {
 			if (!wx) { return ''; }
@@ -1018,6 +1108,10 @@
 			return wx.message || '';
 		}
 		function mphText(n) { return String(Math.round(Number(n) * 10) / 10); }
+		/* wind and rain as the business reads them (Business Profile → Locale → Units); limits are kept in mph and inches */
+		function metricUnits() { var k = window.ZDZ && window.ZDZ.ui; return !!(k && k.units && k.units() === 'metric'); }
+		function windText(mph) { return metricUnits() ? Math.round(Number(mph) * 1.609344) + ' km/h' : mphText(mph) + ' mph'; }
+		function rainText(inch) { return metricUnits() ? Math.round(Number(inch) * 25.4) + ' mm' : inch + ' in'; }
 		function wxBanner() {
 			var res = pr().res; if (!res) { return ''; }
 			var wx = res.forecast, gusty = wx.status === 'ok' && !!wx.gusty, lim = res.limits || {};
@@ -1032,8 +1126,8 @@
 					: '<p>No good day within a week either side in the forecast.</p>';
 			} else if (wx.status !== 'ok') { html += '<p>' + esc(wx.message || '') + '</p>'; }
 			var gl = Number(lim.gust_mph) || 0, gf = Number(lim.gust_flag) || 1.5;
-			html += '<p class="zrp-help">Limits: rain chance over ' + esc(lim.rain_pct) + '%, over ' + esc(lim.rain_in) + ' in of rain, or steady wind over ' + esc(lim.wind_mph) + ' mph in the walking window.' +
-				(gl > 0 ? ' Gusts over ' + esc(mphText(gl)) + ' mph lower a route\'s score; over ' + esc(mphText(gl * gf)) + ' mph, not a hanging day.' : '') + '</p></div>';
+			html += '<p class="zrp-help">Limits: rain chance over ' + esc(lim.rain_pct) + '%, over ' + esc(rainText(lim.rain_in)) + ' of rain, or steady wind over ' + esc(windText(lim.wind_mph)) + ' in the walking window.' +
+				(gl > 0 ? ' Gusts over ' + esc(windText(gl)) + ' lower a route\'s score; over ' + esc(windText(gl * gf)) + ', not a hanging day.' : '') + '</p></div>';
 			return html;
 		}
 		function formHtml() {
@@ -1371,7 +1465,7 @@
 				box.innerHTML = ss.length ? '<div class="zrp-card"><h2>Sent to Doorhangers</h2>' + ss.map(function (x) { return '<p class="zrp-help">' + esc(String(x.at).slice(0, 16)) + ' UTC · ' + esc(x.name) + ' · ' + (+x.houses) + ' houses' + (x.date ? ' · ' + esc(dayText(x.date)) : '') + (x.by ? ' · sent by ' + esc(x.by) : '') + (x.for && x.for !== x.by ? ' for ' + esc(x.for) : '') + '</p>'; }).join('') + '</div>' : '';
 			}, function () {});
 		}
-		/* a launch's options (Doorhangers' button, the ask bar, later the chat's "Open in Route Planner"; NOTE-102626):
+		/* a launch's options (Doorhangers' button, the ask bar, later the chat's "Open in Route Planner"):
 		   area | zip, date | when, count, go. The server re-checks all of it. */
 		function applyLaunch(o) {
 			o = o || {}; var q = pr().req;
@@ -1389,22 +1483,78 @@
 		}
 
 		window.__zrpOpen = function (mode, o) {
+			// A start that failed is tried again when the app is opened. What was asked for (the mode, the day, the
+			// ZIP) waits in PENDING_MODE / PENDING_OPTS and lands when the answer comes, as it does on a first load.
+			if (!S.booted) { boot(); return; }
 			if (mode === 'survey' || S.survey) { if (!S.survey) { S.tab = 'survey'; render(); } return; }
 			if (S.planCfg) { openPlan(o); }
 		};
-		window.__zrpAttach = function (r) { root = r; if (S.map) { try { S.map.remove(); } catch (e) {} S.map = null; } render(); };
+		window.__zrpAttach = function (r) { root = r; if (S.map) { try { S.map.remove(); } catch (e) {} S.map = null; } render(); if (!S.booted) { boot(); } }; // And when the theme draws the card again
 		window.addEventListener('pagehide', function () { var sv = S.survey; try { if (sv && sv.part && sv.part.recorder && sv.part.recorder.state === 'recording') { sv.part.recorder.requestData(); } } catch (e) {} });
-		render();
-		api('boot').then(function (b) {
-			S.booted = true; S.vocab = b.vocab || []; S.pending = b.pending || []; S.retracted = b.retracted || []; S.drives = b.drives || []; S.audio = b.audio || [];
-			S.readback = !!b.readback; S.snap = b.snap ? 1 : 0; S.record = !!b.record; S.reads = b.reads ? 1 : 0; S.codesReady = b.codes ? 1 : 0;
-			S.planCfg = b.plan && P ? b.plan : null;
-			if (S.planCfg) { P.configure({ negative: S.planCfg.negative || [] }); }
-			if (PENDING_MODE === 'survey' || !S.planCfg) { S.tab = 'survey'; }
-			else { S.tab = 'plan'; var goNow = applyLaunch(PENDING_OPTS); }
-			render(); if (S.planCfg && S.tab === 'plan' && goNow) { runPlan(); } flushQueue(); uploadAll();
-			if (S.audio.some(function (a) { return ['ready', 'submitted', 'reading'].indexOf(a.status) !== -1; })) { refreshAudio(); }
-		}, function (e) { S.err = 'The Route Planner could not load: ' + e.message; render(); });
+
+		/* The start-up read. One ask at a time (`booting`),
+		   asked patiently (see api()); if it still fails the card says why in plain words with a Try again button, and
+		   opening the app, a redrawn card or the phone coming back online each try again by themselves. Nothing here
+		   asks on a timer: left alone, a failed start stays failed and quiet. */
+		var booting = false;
+		/* The focus is ours to place only when our own redraw lost it (it fell to the page) or it is still inside the
+		   card: a person who has moved on to another field keeps it. */
+		function ours() { var a = document.activeElement; return !a || a === document.body || root.contains(a); }
+		function about(secs) { var m = Math.ceil(secs / 60); return m <= 1 ? 'about a minute' : (m <= 90 ? 'about ' + m + ' minutes' : (m <= 36 * 60 ? 'about ' + Math.round(m / 60) + ' hours' : 'more than a day')); }
+		function loadSays(e) {
+			var then = e && tooLong(e) ? 'The site asks for ' + about(e.wait) + ' before another try.' : 'Wait a moment, then try again.';
+			if (e && e.slow) { return 'the site did not answer in time. Wait a moment, then try again.'; }
+			if (e && e.net) { return 'this device could not reach the site. Check the connection, then try again.'; }
+			if (e && e.bare && e.status === 429) { return 'too many requests reached the site at once, and this one was turned away (HTTP 429). ' + then; }
+			if (e && e.bare && BUSY.indexOf(e.status) !== -1) { return 'the site did not answer (HTTP ' + e.status + '). ' + then; }
+			if (e && e.bare && e.status) { return 'the site sent an answer the app could not read (HTTP ' + e.status + ').'; }
+			return String((e && e.message) || 'no answer'); // WordPress's own words, as before
+		}
+		/* A line to pass on, so the host can look a refusal up: the edge's id for the request, when it gave one that
+		   looks like one, and the minute (UTC). Only for an answer that did not come from WordPress. */
+		function loadRef(e) {
+			if (!e || !e.bare || !e.status) { return ''; }
+			var ray = /^[A-Za-z0-9-]{8,40}$/.test(e.ray || '') ? e.ray : '';
+			var at = '';
+			try { at = new Date(e.at || Date.now()).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'; } catch (x) {}
+			return 'If this keeps happening, tell whoever looks after the site: ' + (ray ? 'request id ' + ray + ' · ' : '') + at;
+		}
+		function waitSays(e) {
+			if (e && e.slow) { return 'The site is slow to answer. Trying again in a moment…'; }
+			if (e && e.net) { return 'No connection to the site. Trying again in a moment…'; }
+			return 'The site is busy. Trying again in a moment…';
+		}
+		function bootFailed(e) {
+			booting = false; S.wait = '';
+			S.err = 'The Route Planner could not load: ' + loadSays(e); S.errRef = loadRef(e);
+			// a launch that asked to plan at once ("plan 3 routes for Saturday in …") is not carried out later by a start
+			// that heals with nobody pressing: the day and the place stay filled in, the press is the person's
+			if (PENDING_OPTS && PENDING_OPTS.go) { var keep = {}; Object.keys(PENDING_OPTS).forEach(function (k) { if (k !== 'go') { keep[k] = PENDING_OPTS[k]; } }); PENDING_OPTS = keep; }
+			render();
+		}
+		function boot() {
+			if (S.booted || booting) { return; }
+			booting = true; S.err = ''; S.errRef = ''; S.wait = '';
+			render();
+			api('boot', { patient: true, onwait: function (e) { S.wait = waitSays(e); if (!S.booted) { render(); } } }).then(function (b) {
+				// an answer that is not the start-up data (a sign-in or "checking your browser" page sent as 200) is a
+				// failed start, not an empty app
+				if (!b || typeof b !== 'object' || !('vocab' in b)) { var odd = new Error('HTTP 200'); odd.status = 200; odd.bare = true; odd.at = Date.now(); bootFailed(odd); return; }
+				var pressed = S.pressed; // Try again was pressed: the focus goes to the app when it is drawn (below)
+				booting = false; S.wait = ''; S.pressed = false;
+				S.booted = true; S.vocab = b.vocab || []; S.pending = b.pending || []; S.retracted = b.retracted || []; S.drives = b.drives || []; S.audio = b.audio || [];
+				S.readback = !!b.readback; S.snap = b.snap ? 1 : 0; S.record = !!b.record; S.reads = b.reads ? 1 : 0; S.codesReady = b.codes ? 1 : 0;
+				S.planCfg = b.plan && P ? b.plan : null;
+				if (S.planCfg) { P.configure({ negative: S.planCfg.negative || [] }); }
+				if (PENDING_MODE === 'survey' || !S.planCfg) { S.tab = 'survey'; }
+				else { S.tab = 'plan'; var goNow = applyLaunch(PENDING_OPTS); }
+				render();
+				if (pressed && ours()) { var m = root.querySelector('#zrp-main'); if (m) { m.setAttribute('tabindex', '-1'); try { m.focus({ preventScroll: true }); } catch (x) {} } }
+				if (S.planCfg && S.tab === 'plan' && goNow) { runPlan(); } flushQueue(); uploadAll();
+				if (S.audio.some(function (a) { return ['ready', 'submitted', 'reading'].indexOf(a.status) !== -1; })) { refreshAudio(); }
+			}, bootFailed);
+		}
+		boot();
 	}
 	if (document.getElementById('zrp-app')) { start(); }
 	document.addEventListener('zdz_widgets_rendered', start);

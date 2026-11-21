@@ -14,7 +14,6 @@
  *   - 'team' records: any logged-in Zorderz user
  *   - 'public' records: any logged-in user (front-end is gated to logged-in)
  *
- * @since   2.21.0
  * @package Zorderz
  */
 

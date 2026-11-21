@@ -25,7 +25,7 @@ if ( ! class_exists( 'ZDP_App' ) ) {
 				'nm'          => __( 'Dot Plot', 'zorderz' ),
 				'icon'        => 'chart-scatter',
 				'cat'         => 'Admin',
-				'cc'          => '#0F766E',
+				'cc'          => '#E69F00',
 				'desc'        => __( 'Plot any registered event by rep, customer or day over a window.', 'zorderz' ),
 				'roles'       => (array) apply_filters( 'zdz_dotplot_roles', array( 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_operator' ) ),
 				'bridge_type' => 'inline_widget',

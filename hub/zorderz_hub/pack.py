@@ -158,7 +158,7 @@ class Pack:
 
     def regions_and_towns_of(self, words):
         """What a list of region words / names means, split two ways: (region names, bare towns) -- a word may name
-        towns straight ("east of the highway" lists Oakdale … as well as East Region and Backlands)."""
+        towns straight ("east of the highway" lists Midvale … as well as East Region and North Region)."""
         regions, towns = [], []
         for w in words or []:
             w = re.sub(r"^\s*the\s+", "", str(w or "").strip(), flags=re.I)

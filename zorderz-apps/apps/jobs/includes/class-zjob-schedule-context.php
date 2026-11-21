@@ -230,7 +230,7 @@ if ( ! class_exists( 'Zjob_Schedule_Context' ) ) {
 			$code  = (string) ( $project['human_code'] ?? '' );
 			$count = is_array( $jobs ) ? count( $jobs ) : 0;
 			$lines = array();
-			$lines[] = ( '' !== $code ? $code . ' — ' : '' ) . $count . ' component(s).';
+			$lines[] = ( '' !== $code ? $code . ': ' : '' ) . $count . ' component(s).';
 			$lines[] = 'Internal dispatch context; not a customer invoice line.';
 			return implode( "\n", $lines );
 		}

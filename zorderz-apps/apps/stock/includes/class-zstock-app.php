@@ -22,7 +22,7 @@ class ZSTOCK_App implements \Zorderz\Widget_App_Interface {
 			'name'        => 'Stock',
 			'icon'        => 'package',
 			'cat'         => 'Field',
-			'cc'          => '#7C3AED',
+			'cc'          => '#009E73',
 			'desc'        => 'Inventory, incoming supplier orders, counts and low-stock alerts.',
 			'description' => 'Inventory, incoming supplier orders, counts and low-stock alerts.',
 			// Admin/field tool — offered to admin-tier and field roles; live access is per-user.

@@ -395,7 +395,7 @@ class ZSCH_ZANA_Bridge {
 			$end   = ( clone $start )->modify( '+7 days' );
 		}
 
-		$label = $start->format( 'M j' ) . ' – ' . $end->format( 'M j' );
+		$label = $start->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j' ) : 'M j' ) ) . ' – ' . $end->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j' ) : 'M j' ) );
 		$start->setTimezone( new DateTimeZone( 'UTC' ) );
 		$end->setTimezone( new DateTimeZone( 'UTC' ) );
 		return array( $start->format( 'Y-m-d H:i:s' ), $end->format( 'Y-m-d H:i:s' ), $label );

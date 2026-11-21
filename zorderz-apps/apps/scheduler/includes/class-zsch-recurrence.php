@@ -702,7 +702,7 @@ class ZSCH_Recurrence {
 		return array(
 			'ok'    => false,
 			'code'  => 'multiday_is_a_job',
-			'error' => 'This event both recurs and runs longer than a day. A multi-day job is ONE job made of linked appointments sharing a job_id, not an event that repeats — linked rows can be moved, crewed and completed separately, which is what actually happens on a job, whereas moving one recurrence instance means writing an override against the whole series. Create the days as linked appointments instead.',
+			'error' => 'This event both recurs and runs longer than a day. A multi-day job is ONE job made of linked appointments sharing a job_id, not an event that repeats: linked rows can be moved, crewed and completed separately, which is what actually happens on a job, whereas moving one recurrence instance means writing an override against the whole series. Create the days as linked appointments instead.',
 		);
 	}
 

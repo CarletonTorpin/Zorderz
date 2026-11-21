@@ -183,12 +183,12 @@ class ZSV_Budget {
 	/** One line per run: what was done, against the budget, and what was left for the next run. */
 	public static function log_run( string $what, int $done, int $total, ?int $deferred = null ): void {
 		$deferred = null === $deferred ? max( 0, $total - $done ) : $deferred;
-		$msg      = sprintf( 'Zorderz Surveys: %s processed %d of %d — %.1fs of the %.1fs budget used', $what, $done, $total, self::elapsed(), self::$budget );
+		$msg      = sprintf( 'Zorderz Surveys: %s processed %d of %d, %.1fs of the %.1fs budget used', $what, $done, $total, self::elapsed(), self::$budget );
 		if ( self::elapsed() > self::$budget ) {
 			$msg .= sprintf( ' (over budget by %.1fs)', self::elapsed() - self::$budget );
 		}
 		if ( $deferred > 0 ) {
-			$msg .= sprintf( '; stopped early — %d left for the next run', $deferred );
+			$msg .= sprintf( '; stopped early, %d left for the next run', $deferred );
 		}
 		error_log( $msg );
 	}

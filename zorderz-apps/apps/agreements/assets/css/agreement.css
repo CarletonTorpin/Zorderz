@@ -9,17 +9,17 @@
  * 500 to 800 shades.
  */
 :root {
-  --b1: var(--paper-b1, #162d4a); --b2: var(--paper-b2, #1e3a5f); --b3: var(--paper-b3, #2c5f8a); --b4: var(--paper-b4, #4796f7); --b5: var(--paper-b5, #7ab3ff);
-  --c1: var(--paper-c1, #0f1f35); --c2: var(--paper-c2, #162d4a); --c3: var(--paper-c3, #1e3a5f); --c4: var(--paper-c4, #2c5f8a); --c5: var(--paper-c5, #2c5f8a);
+  --b1: var(--paper-b1, #36339c); --b2: var(--paper-b2, #433fbd); --b3: var(--paper-b3, #5150d6); --b4: var(--paper-b4, #7d87fb); --b5: var(--paper-b5, #b1bcff);
+  --c1: var(--paper-c1, #282876); --c2: var(--paper-c2, #36339c); --c3: var(--paper-c3, #433fbd); --c4: var(--paper-c4, #5150d6); --c5: var(--paper-c5, #5150d6);
   --a-bg: var(--sys-bg, #eef3f7);
   --a-card: var(--sys-surface, #ffffff);
   --a-ink: var(--sys-text, #111417);
   --a-mute: var(--sys-text-sec, #4a535c);
   --a-line: var(--sys-border, #d3d8de);
-  --a-brand: var(--paper-brand, #1e3a5f);
+  --a-brand: var(--paper-brand, #433fbd);
   --a-brand-ink: var(--paper-on-brand, #ffffff);
-  --a-soft: var(--paper-soft, #ebf5ff);
-  --a-hello: var(--paper-hello, #2c5f8a);
+  --a-soft: var(--paper-soft, #f5f6fe);
+  --a-hello: var(--paper-hello, #5150d6);
   --a-grey: var(--paper-grey, #484848);
   --a-ok-bg: var(--sys-ok-bg, #e2f3e7);
   --a-ok-fg: var(--sys-ok, #14532d);
@@ -39,10 +39,10 @@
     --a-ink: var(--sys-text, #eef2f6);
     --a-mute: var(--sys-text-sec, #b8c3ce);
     --a-line: var(--sys-border, #2c3a48);
-    --a-brand: var(--paper-brand, #adcfff);
+    --a-brand: var(--paper-brand, #d3daff);
     --a-brand-ink: var(--paper-on-brand, #0c1218);
-    --a-soft: var(--paper-soft, #091526);
-    --a-hello: var(--paper-hello, #7ab3ff);
+    --a-soft: var(--paper-soft, #1D1D56);
+    --a-hello: var(--paper-hello, #b1bcff);
     --a-grey: var(--paper-grey, #c9d2db);
     --a-ok-bg: var(--sys-ok-bg, #12301c);
     --a-ok-fg: var(--sys-ok, #a6e3b8);
@@ -59,10 +59,10 @@
   --a-ink: var(--sys-text, #eef2f6);
   --a-mute: var(--sys-text-sec, #b8c3ce);
   --a-line: var(--sys-border, #2c3a48);
-  --a-brand: var(--paper-brand, #adcfff);
+  --a-brand: var(--paper-brand, #d3daff);
   --a-brand-ink: var(--paper-on-brand, #0c1218);
-  --a-soft: var(--paper-soft, #091526);
-  --a-hello: var(--paper-hello, #7ab3ff);
+  --a-soft: var(--paper-soft, #1D1D56);
+  --a-hello: var(--paper-hello, #b1bcff);
   --a-grey: var(--paper-grey, #c9d2db);
   --a-ok-bg: var(--sys-ok-bg, #12301c);
   --a-ok-fg: var(--sys-ok, #a6e3b8);

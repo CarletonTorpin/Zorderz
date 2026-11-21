@@ -12,7 +12,12 @@
  *
  *  1. DENY BY DEFAULT. The account reaches only listed surfaces: the chat's own AJAX actions, a few REST reads, the Ai
  *     usage screen and its own profile. Every other AJAX action, REST route, wp-admin screen and POST is refused, with
- *     no guessing from names. A surface joins the list only with its own masking and tests.
+ *     no guessing from names. A surface joins the list only with its own masking and tests. A listed request is read
+ *     WHOLE, not by its name: an allowed action carries only its own fields, by its own method, to admin-ajax.php
+ *     itself, its action written once; the address as written is what PHP read from it; no body is left that PHP did
+ *     not turn into those fields; no file is uploaded. One thing more and it is refused, with one word for what was
+ *     wrong (field, file, body, action, address, method, header, not listed) and never anything the request wrote.
+ *     The account keeps only its sign-in cookies; a request header some code acts on refuses the request.
  *  2. BY FIELD. Every JSON reply is walked as JSON: a field that holds a person or company (customer, client, contact
  *     ...) becomes a pseudonym whatever is in it, known or not; an e-mail, phone or street field likewise; an invoice
  *     or estimate number field likewise. No search is involved for those.
@@ -23,11 +28,12 @@
  *     census names; the safe vocabulary below; places and safe phrases as phrases), plus first name + surname-like
  *     word, titles, "Surname, First", greetings, across Markdown, nbsp, one line break and inline tags. Masked words
  *     become "[name]". Every string in a JSON reply gets this pass unless its key is a machine key.
- *  4. NO WAY AROUND IT. The gate runs at after_setup_theme (before any plugin's init); a reply path that clears the
- *     output buffers masks itself; the photo server sends a placeholder; every other response passes the output
- *     filter, which holds chunks to the end, checks there is memory to mask before it starts (a fatal error inside an
- *     output handler would send its input as it is), refuses anything it cannot read, refuses on any error, and
- *     starts again after WordPress's last flush.
+ *  4. NO WAY AROUND IT. The gate runs at after_setup_theme (before any plugin's init); with the optional must-use
+ *     file installed (Zorderz -> Privacy View) it also runs before any plugin's file loads, and again at
+ *     plugins_loaded first of all (early_gate()). A reply path that clears the output buffers masks itself; the photo
+ *     server sends a placeholder; every other response passes the output filter, which holds chunks to the end, checks
+ *     there is memory to mask before it starts (a fatal error inside an output handler would send its input as it
+ *     is), refuses anything it cannot read, refuses on any error, and starts again after WordPress's last flush.
  *
  * Every reply the account gets has its own random tag (four consonants), and every pseudonym in it is Tag·CODE: one
  * shape for customers, team, streets, e-mails, phones, invoices, estimates and photos. Within one reply a thing keeps
@@ -45,9 +51,16 @@
  *
  * It needs the coder (ZDZ_Private). Without it every response to the account is refused, never sent unmasked.
  *
- * Other apps take part through:
+ * Other apps take part through (declared_now() lists what each filter is handed and may add; an app adds its filters
+ * as its file loads or on plugins_loaded, never later):
  *   - zdz_privacy_view_allowed_ajax / zdz_privacy_view_allowed_rest  add an action or route once it masks its own
- *     output and has tests;
+ *     output and has tests; zdz_privacy_view_ajax_keys names the fields each added action's requests carry (none
+ *     named, none allowed; an added action comes by POST and uploads nothing; a route is read, never written);
+ *   - zdz_privacy_view_allowed_apps  the app says it is one made safe for the account, so the app shell lists it;
+ *   - zdz_privacy_view_hidden_controls  selectors of its own buttons the account may not use (not drawn for it);
+ *   - zdz_privacy_view_signin_rest, zdz_privacy_view_trigger_headers, zdz_privacy_view_login_keys  a site's own
+ *     sign-in routes, and the headers and wp-login.php marker its host or page cache uses;
+ *   - zdz_privacy_view_role_words, zdz_privacy_view_system_words  words of the business's own for the prose rules;
  *   - zdz_privacy_view_real_photo ($bool, $media_row)  answer true for a photo that may be shown as it is (re-drawn,
  *     without EXIF or location);
  *   - zdz_privacy_view_shown ($tag)  a whole reply was masked under this tag (a chat keeps it, so a code it showed
@@ -77,31 +90,132 @@ class ZDZ_Privacy_View {
 	const ABC        = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 	const MID        = '·';
 	const BANNER_ID  = 'zdz-pv-banner';
+	/** Controls the account may not use, hidden on its pages: the messaging app's edit, delete, select and swipe-delete
+	 *  (the server refuses each of them for this account anyway). Plain class or id selectors; an app adds its own on
+	 *  the zdz_privacy_view_hidden_controls filter (hidden_controls()). */
+	const HIDDEN_CONTROLS = array( '.zim-w-msg-actions', '.zim-w-select-btn', '.zim-w-swipe-zone' );
 	const NAME_GONE  = '[name]';
 	const MAX_BYTES  = 1500000;   // a response larger than this is refused before masking (no out-of-memory path)
 	const CHUNK      = 16384;     // PHP hands the filter the output in pieces this size; the filter holds them itself
 	const MEM_PER_BYTE = 80;      // what masking costs in memory per byte of output (measured 20-60 with the name rule), with room
 
-	/** 1. The only AJAX actions the account may run: the chat, and the Projects app's two reads. Exact names; nothing is
-	 *  inferred. Search over past chats is NOT here: it matches the stored (unmasked) text, so a guess could be tested
-	 *  letter by letter. */
+	/**
+	 * 1. THE LISTS (deny by default).
+	 *
+	 * The only admin-ajax actions the account may run: the chat's own road for it, the Projects app's two reads and the
+	 * app shell's keep-alive. Exact names; nothing is inferred. Search over past chats is NOT here: it matches the
+	 * stored (unmasked) text, so a guess could be tested letter by letter. The chat's server-to-server calls are not
+	 * here either: the account never sends them.
+	 *
+	 * The keep-alive hands the page a fresh REST nonce. It is listed because its reply carries that nonce under the key
+	 * "nonce", which the second net keeps whole (a machine key); under any other key the nonce could come back
+	 * rewritten as a pseudonym, and every REST call after it would be refused. An action that hands the account a nonce
+	 * joins this list only with a test that the second net keeps its reply's nonce.
+	 */
 	const ALLOWED_AJAX = array(
-		'zana_send_message', 'zana_create_session', 'zana_poll_response', 'zana_continue_turn', 'zana_cancel_turn',
-		'zana_refresh_nonce', 'zana_get_debug_log', 'zana_load_session', 'zana_list_sessions', 'zana_get_favorites',
-		'zana_list_memories', 'zana_dr_stop', 'zana_cancel_pending_action', 'zana_toggle_self_check', 'zana_pin_session',
-		'zana_rename_session',
+		'zana_send_message', 'zana_load_session', 'zana_list_sessions', 'zana_list_memories', 'zana_cancel_pending_action',
+		'zana_refresh_nonce',
 		// Projects: its list and one project, read only (the jobs app sends this account photo addresses through the
 		// photo server only, writes nothing on view and draws no button that writes)
 		'zdz_jobs_projects_list', 'zdz_jobs_project_detail',
+		// the app shell's keep-alive
+		'zdz_fresh_nonce',
 	);
+	/**
+	 * THE WHOLE REQUEST, NOT ITS NAME. WordPress runs every plugin's init and admin_init handlers on admin-ajax.php
+	 * before the action's own handler, so a settings handler that looks for its own fields (a save button's name, a
+	 * sign-in return's ?page=...&code=...) would run beside an allowed read, with the account's rights. So an allowed
+	 * action may carry only its own fields, listed here by name: one field more and the request is refused at the gate,
+	 * before init. "action" and "nonce" are every row's. Each row is read from the action's handler (what it takes) and
+	 * its script (what it sends); every action in ALLOWED_AJAX and DM_AJAX has a row, and a test holds the rows to what
+	 * the shipped scripts send. A script the account runs that gains a field needs the name added HERE, or the account
+	 * is refused (403, why: "field"). No filter changes a row; an app declares rows for its own actions (ajax_keys()).
+	 */
+	const AJAX_BASE_KEYS = array( 'action', 'nonce' );
+	const AJAX_KEYS = array(
+		// the chat
+		'zana_send_message'          => array( 'message', 'session_id' ),
+		'zana_load_session'          => array( 'session_id' ),
+		'zana_list_sessions'         => array(),
+		'zana_list_memories'         => array(),
+		'zana_cancel_pending_action' => array( 'id', 'session_id' ),
+		'zana_refresh_nonce'         => array(),
+		// Projects
+		'zdz_jobs_projects_list'     => array( 'view' ),
+		'zdz_jobs_project_detail'    => array( 'project_id' ),
+		// the app shell's keep-alive ("action" alone)
+		'zdz_fresh_nonce'            => array(),
+		// its one direct-message thread (DM_AJAX): the chat's send, and the messaging app's five
+		'zana_confirm_zim_dm'        => array( 'id', 'session_id' ),
+		'zim_sidebar'                => array(),
+		'zim_fetch_before'           => array( 'conversation_id', 'before' ),
+		'zim_poll'                   => array( 'conversation_id', 'since' ),
+		'zim_mark_read'              => array( 'conversation_id', 'message_id' ),
+		'zim_post'                   => array( 'conversation_id', 'body', 'attachment_ids', 'share_refs' ),
+	);
+	/** The only actions sent by GET, with their fields in the address (the messaging app's three reads). Every other
+	 *  action comes by POST with nothing in the address at all, so no field name of the body's can be written there.
+	 *  The account uploads nothing: a file field, on any action, refuses the request. */
+	const AJAX_GET = array( 'zim_sidebar', 'zim_fetch_before', 'zim_poll' );
+	/** The only query keys a REST call may carry (the route itself where the site has no pretty addresses; the nonce). */
+	const REST_KEYS = array( 'rest_route', '_wpnonce' );
+	/** The only fields wp-login.php may carry for the account, by GET: signing out, and the pages around it. It is
+	 *  signed in already, so the sign-in form's own fields are not here (someone signing in is not yet this account).
+	 *  A host that adds a marker of its own to every wp-login.php address names it on zdz_privacy_view_login_keys. */
+	const WPLOGIN_KEYS = array( 'action', '_wpnonce', 'redirect_to', 'loggedout', 'reauth', 'interim-login', 'wp_lang' );
+	/** The sign-in form's fields and its links' keys: never a wp-login.php key for the account, whatever a filter adds. */
+	const WPLOGIN_NEVER = array( 'log', 'pwd', 'user_login', 'user_pass', 'user_email', 'rememberme', 'testcookie', 'wp-submit', 'key', 'login',
+		'rp_key', 'token', 'user_id', 'page', 'code', 'state', 'rest_route', '_method' );
 	/** The only wp-admin screens, each with the only query keys it may carry. */
 	const ALLOWED_SCREENS = array( 'profile.php' => array(), 'admin.php?page=zdz-llm-usage' => array( 'page' ) );
-	/** The only apps the app shell lists for the account (ZDZ_Plugin_API): the chat and Projects (read only). */
+	/** The only apps the app shell lists for the account (ZDZ_Plugin_API): the chat and Projects (read only). An app
+	 *  that masks its own replies and refuses everything else itself adds its id on zdz_privacy_view_allowed_apps. */
 	const ALLOWED_APPS = array( 'sales-analytics', 'projects' );
 	/** Front end: the app shell itself, and a photo (a placeholder). Each with the only query keys it may carry. */
 	const FRONT_KEYS = array( '' => array( 'cb' ), 'zdz_media' => array( 'zdz_media', 't', 's', 'v' ) );
 	/** The docked direct-message thread page: exactly these keys (and an optional cache-buster). */
 	const DM_PAGE_KEYS = array( 'zim_page', 'zdz_embed', 'zim_compact', 'c' );
+	/**
+	 * THE COOKIES THE ACCOUNT KEEPS. Every other cookie is taken out of the request before anything reads it ($_COOKIE,
+	 * the Cookie header and $_REQUEST), by the early gate before any plugin loads and again at the gate. A cookie is a
+	 * trigger like a field: a page cache may treat a request differently for one, and View As switches people by one.
+	 * Taken out rather than refused, because a browser carries cookies the app never set (a proxy's, an analytics
+	 * script's) and a refusal for one of those would lock the account out for nothing; nothing on the server needs
+	 * them. Kept: WordPress's sign-in cookies (any site hash), its cookie test and screen settings, the sign-in
+	 * language, and the app's "come back here after signing in" path. Patterns, read against the name as PHP keys it.
+	 */
+	const COOKIE_KEEP = array( '/\Awordpress_logged_in_[A-Za-z0-9]+\z/', '/\Awordpress_sec_[A-Za-z0-9]+\z/', '/\Awordpress_[a-f0-9]{32}\z/',
+		'/\Awordpress_test_cookie\z/', '/\Awp-settings-(?:time-)?[0-9]+\z/', '/\Awp_lang\z/', '/\Azdz_next\z/' );
+	/**
+	 * REQUEST HEADERS THAT ARE TRIGGERS. A browser and the proxies in front of a site add many headers, so headers are
+	 * not listed the way fields are; the ones some code acts on are refused outright (why: "header"). Core names the
+	 * method and address overrides some routers act on (X-HTTP-Method-Override is refused already, as a method
+	 * override). A site whose host or page cache acts on a header of its own names it on
+	 * zdz_privacy_view_trigger_headers (trigger_headers()). Each is the start of a $_SERVER name.
+	 */
+	const TRIGGER_HEADERS = array( 'HTTP_X_METHOD_OVERRIDE', 'HTTP_X_ORIGINAL_URL', 'HTTP_X_REWRITE_URL' );
+	/**
+	 * THE SIGN-IN ROUTES a signed-out browser uses (the login page's bridge), under the REST namespace. The early gate
+	 * lets these, and wp-login.php, by before WordPress can say who is signed in, because a browser can still carry the
+	 * account's cookie after its session has ended (signed out elsewhere, or the site's keys changed) and must be able
+	 * to sign in again. They are judged as soon as WordPress can say who it is (plugins_loaded): a request that really
+	 * is the account's is held to the lists as everything else is, so the account itself gets none of them. A new
+	 * sign-in route is named on zdz_privacy_view_signin_rest (signin_rest()).
+	 */
+	const SIGNIN_ROUTES = array( 'magic-link-init', 'magic-link-status', 'magic-link-claim', 'magic-link-code-claim', 'magic-link-send-code' );
+	/** The app's own sign-in pages (the theme's sign-in page is /login/; the bridge sends a phone back to
+	 *  /login/?magic-login-bridge=...), by GET, with only these keys. Same rule as the sign-in routes. */
+	const SIGNIN_PAGES     = array( 'login', 'register' );
+	const SIGNIN_PAGE_KEYS = array( 'magic-login-bridge', 'request_id', 'bridge_token', 'bridge_code', 'zdz_next', 'redirect_to' );
+	/** An ordinary form the account sends is a few hundred bytes; the gate reads no more of a body than this. */
+	const FORM_MAX = 262144;
+	/**
+	 * What the site's apps declare on the filters, as an administrator's last wp-admin request saw it. The early gate
+	 * (the must-use file) judges a request before any app has loaded, so it cannot ask them; it reads this note
+	 * instead, and the gate proper (after_setup_theme) then asks the apps themselves. Kept only while that file is
+	 * installed. array( 'ajax' => [ action => [ field, ... ] ], 'rest' => [], 'signin' => [], 'headers' => [], 'login' => [] ).
+	 */
+	const DECLARED_OPT = 'zdz_privacy_view_declared';
 
 	/** 2. Fields by key (lower case, matched on the whole key or its last _part). */
 	const NAME_KEYS   = array( 'customer', 'customer_name', 'client', 'client_name', 'contact', 'contact_name', 'organization',
@@ -167,7 +281,7 @@ class ZDZ_Privacy_View {
 		'week', 'weeks', 'day', 'days', 'change', 'trend', 'summary', 'note', 'notes', 'next', 'steps', 'step', 'paid', 'owed',
 		'due', 'overdue', 'open', 'closed', 'won', 'lost', 'new', 'old', 'last', 'prior', 'previous', 'same', 'peak', 'peaked',
 		'source', 'sources', 'region', 'regions', 'area', 'areas', 'zip', 'zips', 'county', 'north', 'south', 'east', 'west',
-		'central', 'coastal', 'inland', 'backcountry', 'valley', 'answer', 'answered', 'instant', 'records', 'data', 'what',
+		'central', 'coastal', 'inland', 'valley', 'answer', 'answered', 'instant', 'records', 'data', 'what',
 		'why', 'how', 'where', 'who', 'which', 'when', 'this', 'that', 'these', 'those', 'the', 'and', 'for', 'from', 'with',
 		'per', 'only', 'more', 'less', 'up', 'down', 'still', 'not', 'no', 'yes', 'is', 'are', 'was', 'a', 'an', 'of', 'in',
 		'on', 'by', 'to', 'at', 'as', 'or',
@@ -190,7 +304,7 @@ class ZDZ_Privacy_View {
 		'courier', 'georgia', 'verdana', 'tahoma',
 		// interface words, languages and countries
 		'link', 'links', 'copy', 'paste', 'open', 'tap', 'click', 'save', 'cancel', 'close', 'reload', 'download', 'upload',
-		'english', 'spanish', 'american', 'mexican', 'pacific', 'mexico', 'usa',
+		'english', 'spanish', 'american', 'usa',
 		// payments and retailers everyone names
 		'venmo', 'zelle', 'paypal', 'costco', 'amazon',
 	);
@@ -214,11 +328,22 @@ class ZDZ_Privacy_View {
 	private static $held      = '';
 	private static $dm_names  = null;    // the direct-message partner's name, kept readable where the account writes to them
 	private static $by_code   = array();   // resolve_in()'s customer codes under one tag
+	private static $early       = false;   // verdict() is being asked before WordPress has routed the request (the early gate)
+	private static $early_login = '';      // the Privacy View login a sign-in cookie named, as the early gate found it
+	private static $early_done  = false;
+	private static $defer_ready = false;   // at plugins_loaded, first of all: the apps have loaded no class and declared nothing yet
+	private static $stripped    = array(); // the cookie names taken away from this request (names only)
+	private static $input       = null;    // tests put a request body here (input())
 
 	/* ================================================================== who */
 
 	/** Is Privacy View on for this user (the signed-in user by default)? Only an administrator sets it. */
 	public static function is_on( $user_id = null ) {
+		if ( null === $user_id && '' !== self::$early_login && ! function_exists( 'wp_get_current_user' ) ) {
+			// asked before WordPress can say who is signed in (a plugin's file loading, after the early gate found a
+			// sign-in cookie naming the account): yes -- never a quiet "no"
+			return true;
+		}
 		$user_id = null === $user_id ? ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 ) : (int) $user_id;
 		return $user_id > 0 && '1' === (string) get_user_meta( $user_id, self::META, true );
 	}
@@ -245,8 +370,11 @@ class ZDZ_Privacy_View {
 	/* ================================================================== boot */
 
 	public static function boot() {
-		// The gate runs as soon as the theme is loaded (after_setup_theme, first of all): before any plugin's init or
-		// wp_loaded handler, so nothing outside the lists runs for the account at all. The later hooks are a second net.
+		// The gate runs as soon as the theme is loaded (after_setup_theme, first of all): before any plugin's init,
+		// wp_loaded or admin_init handler. The later hooks are a second net. What a theme cannot be in front of is code
+		// a plugin runs as its file loads or on plugins_loaded / setup_theme (a theme loads after those). The optional
+		// must-use file (mu-plugin/0-zdz-privacy-view-gate.php, installed from Zorderz -> Privacy View) is in front of
+		// those: it calls early_gate() below before any plugin loads.
 		add_action( 'after_setup_theme', array( __CLASS__, 'gate' ), PHP_INT_MIN );
 		add_action( 'init', array( __CLASS__, 'start' ), 0 );
 		add_action( 'admin_init', array( __CLASS__, 'guard_admin' ), 0 );
@@ -267,6 +395,8 @@ class ZDZ_Privacy_View {
 		add_filter( 'authenticate', array( __CLASS__, 'no_xmlrpc' ), 999, 1 );
 		// the business's own safe words and phrases travel in its Identity Pack (knowledge.yml `privacy_view`)
 		add_filter( 'zdz_identity_pack_consumers', array( __CLASS__, 'pack_consumer' ) );
+		// what the apps declare on the filters, noted for the early gate (only while its file is installed)
+		add_action( 'admin_init', array( __CLASS__, 'remember_declared' ), 99 );
 	}
 
 	/* ================================================================== the Identity Pack's part */
@@ -398,25 +528,256 @@ class ZDZ_Privacy_View {
 		return class_exists( 'ZIM_Privacy_View' ) && method_exists( 'ZIM_Privacy_View', 'action_ok' ) && method_exists( 'ZIM_Privacy_View', 'conversation_ok' );
 	}
 
+	/* ---- what the apps declare ---------------------------------------------------------------------------------- */
+
+	/**
+	 * Is the request being judged before the apps have had their say? True at the two looks the early gate takes: before
+	 * any plugin has loaded, and at plugins_loaded first of all (an app may load its classes and add its filters later
+	 * on that same hook). There the apps' declarations are read from the note kept of them (DECLARED_OPT), and what only
+	 * an app can answer -- is the messaging app one that narrows to the one thread? -- is left to the gate proper.
+	 */
+	private static function before_apps() {
+		return self::$early || self::$defer_ready;
+	}
+
+	/**
+	 * A declaration held to its shape, whatever a filter returned or the stored note holds. Anything else is dropped:
+	 *   ajax     [ action => [ field, ... ] ]  lower-case action names Core does not list itself, each with the field
+	 *            names its requests may carry besides "action" and "nonce" (plain names; none declared, none allowed)
+	 *   rest     routes the account may read (GET or HEAD only; rest_allowed() never lets a write or a sign-in route by)
+	 *   signin   sign-in routes a signed-out browser uses (let by before WordPress can say who is signed in)
+	 *   headers  starts of $_SERVER names of request headers that refuse a request (never one every browser sends)
+	 *   login    query keys wp-login.php may carry besides WordPress's own (never a sign-in form's field)
+	 * Sorted, so two equal declarations compare equal.
+	 */
+	public static function clean_declared( $d ) {
+		$d    = is_array( $d ) ? $d : array();
+		$out  = array( 'ajax' => array(), 'rest' => array(), 'signin' => array(), 'headers' => array(), 'login' => array() );
+		$core = array_merge( self::ALLOWED_AJAX, self::DM_AJAX );
+		foreach ( is_array( $d['ajax'] ?? null ) ? $d['ajax'] : array() as $action => $fields ) {
+			if ( ! is_string( $action ) || ! preg_match( '/\A[a-z0-9_\-]{1,80}\z/', $action ) || in_array( $action, $core, true ) || count( $out['ajax'] ) >= 200 ) {
+				continue;   // Core's own actions keep Core's rows
+			}
+			$row = array();
+			foreach ( is_array( $fields ) ? $fields : array() as $f ) {
+				if ( is_string( $f ) && preg_match( '/\A[A-Za-z0-9_\-]{1,64}\z/', $f ) && ! in_array( $f, self::AJAX_BASE_KEYS, true ) && count( $row ) < 40 ) {
+					$row[ $f ] = true;
+				}
+			}
+			ksort( $row );
+			$out['ajax'][ $action ] = array_map( 'strval', array_keys( $row ) );
+		}
+		ksort( $out['ajax'] );
+		foreach ( array( 'rest', 'signin' ) as $part ) {
+			foreach ( is_array( $d[ $part ] ?? null ) ? $d[ $part ] : array() as $route ) {
+				if ( is_string( $route ) && preg_match( '#\A/[A-Za-z0-9_\-/.]{1,160}\z#', $route ) && ! self::odd_path( $route ) && count( $out[ $part ] ) < 100 ) {
+					$out[ $part ][ '/' . trim( $route, '/' ) ] = true;
+				}
+			}
+		}
+		foreach ( is_array( $d['headers'] ?? null ) ? $d['headers'] : array() as $h ) {
+			$h = is_string( $h ) ? strtoupper( $h ) : '';
+			if ( ! preg_match( '/\AHTTP_[A-Z0-9_]{3,60}\z/', $h ) || count( $out['headers'] ) >= 40 ) {
+				continue;
+			}
+			foreach ( array( 'HTTP_HOST', 'HTTP_USER_AGENT', 'HTTP_ACCEPT', 'HTTP_COOKIE', 'HTTP_CONTENT_TYPE', 'HTTP_CONTENT_LENGTH', 'HTTP_REFERER', 'HTTP_X_WP_NONCE', 'HTTP_X_REQUESTED_WITH' ) as $every ) {
+				if ( 0 === strpos( $every, $h ) ) {
+					continue 2;   // it would refuse every request the account's own pages make
+				}
+			}
+			$out['headers'][ $h ] = true;
+		}
+		foreach ( is_array( $d['login'] ?? null ) ? $d['login'] : array() as $k ) {
+			if ( is_string( $k ) && preg_match( '/\A[A-Za-z0-9_\-]{1,40}\z/', $k ) && ! in_array( strtolower( $k ), self::WPLOGIN_NEVER, true ) && count( $out['login'] ) < 20 ) {
+				$out['login'][ $k ] = true;
+			}
+		}
+		foreach ( array( 'rest', 'signin', 'headers', 'login' ) as $part ) {
+			ksort( $out[ $part ] );
+			$out[ $part ] = array_map( 'strval', array_keys( $out[ $part ] ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * What the site's apps and plugins declare right now, on the filters (each is handed Core's own list and returns
+	 * the list; what it adds is added, and Core's own entries stay Core's):
+	 *   zdz_privacy_view_allowed_ajax     action names -- an app adds a read of its own once it masks its own replies
+	 *                                     and has tests
+	 *   zdz_privacy_view_ajax_keys        [ action => [ field names ] ] -- the fields each added action's requests carry
+	 *   zdz_privacy_view_allowed_rest     REST routes it may read
+	 *   zdz_privacy_view_signin_rest      sign-in routes (never opened to the account itself)
+	 *   zdz_privacy_view_trigger_headers  headers this site's host or page cache acts on
+	 *   zdz_privacy_view_login_keys       a host's own marker on wp-login.php addresses
+	 * An app adds its filters as its file loads or on plugins_loaded: the gate judges at after_setup_theme, first of all.
+	 */
+	public static function declared_now() {
+		$ask = function ( $hook, $core ) {
+			$v = function_exists( 'apply_filters' ) ? apply_filters( $hook, $core ) : $core;
+			return is_array( $v ) ? $v : $core;   // a filter that returns nonsense changes nothing
+		};
+		$core = array_merge( self::ALLOWED_AJAX, self::DM_AJAX );
+		$rows = $ask( 'zdz_privacy_view_ajax_keys', self::AJAX_KEYS );
+		$ajax = array();
+		foreach ( $ask( 'zdz_privacy_view_allowed_ajax', self::ALLOWED_AJAX ) as $a ) {
+			if ( is_string( $a ) && ! in_array( $a, $core, true ) ) {
+				$ajax[ $a ] = isset( $rows[ $a ] ) && is_array( $rows[ $a ] ) ? $rows[ $a ] : array();
+			}
+		}
+		// what each filter added to the list it was handed (Core's own entries are Core's, whatever came back)
+		$added = function ( $hook, array $mine ) use ( $ask ) {
+			return array_filter( $ask( $hook, $mine ), function ( $v ) use ( $mine ) {
+				return is_string( $v ) && ! in_array( $v, $mine, true );
+			} );
+		};
+		return self::clean_declared( array(
+			'ajax'    => $ajax,
+			'rest'    => $added( 'zdz_privacy_view_allowed_rest', self::allowed_rest() ),
+			'signin'  => $added( 'zdz_privacy_view_signin_rest', self::core_signin_rest() ),
+			'headers' => $added( 'zdz_privacy_view_trigger_headers', self::TRIGGER_HEADERS ),
+			'login'   => $added( 'zdz_privacy_view_login_keys', self::WPLOGIN_KEYS ),
+		) );
+	}
+
+	/** The note kept of those declarations (see DECLARED_OPT), held to its shape again as it is read. */
+	private static function declared_kept() {
+		return self::clean_declared( function_exists( 'get_option' ) ? get_option( self::DECLARED_OPT, array() ) : array() );
+	}
+
+	private static function declared() {
+		return self::before_apps() ? self::declared_kept() : self::declared_now();
+	}
+
+	/**
+	 * Keeps that note up to date: only while the early gate's file is installed (it is the note's one reader), only from
+	 * an administrator's own wp-admin request, never from an account in Privacy View, and only when something changed.
+	 * $force: the file is being installed in this very request. Without the file a note left behind (the file was
+	 * deleted by hand) is taken away. Returns whether the note was written.
+	 */
+	public static function remember_declared( $force = false ) {
+		if ( self::is_on() || ! function_exists( 'current_user_can' ) || ! current_user_can( 'manage_options' ) || ! function_exists( 'update_option' ) ) {
+			return false;
+		}
+		if ( true !== $force && ! defined( 'ZDZ_PV_GATE_VERSION' ) ) {
+			if ( null !== get_option( self::DECLARED_OPT, null ) ) {
+				self::forget_declared();   // nobody reads it now
+			}
+			return false;
+		}
+		$now = self::declared_now();
+		if ( get_option( self::DECLARED_OPT, null ) === $now ) {
+			return false;
+		}
+		update_option( self::DECLARED_OPT, $now, true );
+		return true;
+	}
+
+	/** The early gate's file was removed: its note goes with it. */
+	public static function forget_declared() {
+		if ( function_exists( 'delete_option' ) ) {
+			delete_option( self::DECLARED_OPT );
+		}
+	}
+
+	/* ---- the lists, asked ---------------------------------------------------------------------------------------- */
+
 	public static function ajax_allowed( $action ) {
 		$action = strtolower( (string) $action );
-		if ( '' !== $action && in_array( $action, self::DM_AJAX, true ) ) {
-			// only once an administrator has chosen who it may message, and only with a messaging app that narrows each
-			// action to that one thread -- never with one that does not
-			return self::dm_partner() > 0 && self::dm_narrowed();
+		if ( '' === $action ) {
+			return false;
 		}
-		return '' !== $action && in_array( $action, (array) apply_filters( 'zdz_privacy_view_allowed_ajax', self::ALLOWED_AJAX ), true );
+		if ( in_array( $action, self::DM_AJAX, true ) ) {
+			// only once an administrator has chosen who it may message, and only with a messaging app that narrows each
+			// action to that one thread -- never with one that does not. Before any plugin has loaded there is no
+			// messaging app to ask; at plugins_loaded, first of all, its class is not loaded yet, but whether anyone
+			// was chosen is already known and is asked there. The gate proper asks both.
+			return self::$early || ( self::dm_partner() > 0 && ( self::$defer_ready || self::dm_narrowed() ) );
+		}
+		if ( self::before_apps() ) {
+			// no app has loaded to declare its own: Core's list, and what the apps declared when last asked. The gate
+			// proper asks the apps themselves, so an action whose app has gone is refused there.
+			return in_array( $action, self::ALLOWED_AJAX, true ) || isset( self::declared_kept()['ajax'][ $action ] );
+		}
+		$list = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_privacy_view_allowed_ajax', self::ALLOWED_AJAX ) : self::ALLOWED_AJAX;
+		if ( ! is_array( $list ) || ! in_array( $action, $list, true ) ) {
+			return false;   // (a filter may take one of Core's away)
+		}
+		return in_array( $action, self::ALLOWED_AJAX, true ) || isset( self::declared_now()['ajax'][ $action ] );
+	}
+
+	/**
+	 * The only field names an allowed action may carry: "action", "nonce" and its own row. Core's rows are Core's: no
+	 * filter widens one. An action an app added names its fields on zdz_privacy_view_ajax_keys; none named, none allowed.
+	 */
+	public static function ajax_keys( $action ) {
+		$action = strtolower( (string) $action );
+		if ( array_key_exists( $action, self::AJAX_KEYS ) ) {
+			return array_merge( self::AJAX_BASE_KEYS, self::AJAX_KEYS[ $action ] );
+		}
+		$d = self::declared();
+		return array_merge( self::AJAX_BASE_KEYS, $d['ajax'][ $action ] ?? array() );
+	}
+
+	private static function rest_ns() {
+		return '/' . trim( defined( 'ZDZ_REST_NS' ) ? (string) ZDZ_REST_NS : 'zorderz/v1', '/' );
 	}
 
 	/** The only REST routes (GET) the account may call: the unread count and its own usage-records consent. */
 	public static function allowed_rest() {
-		$ns = '/' . trim( defined( 'ZDZ_REST_NS' ) ? (string) ZDZ_REST_NS : 'zorderz/v1', '/' );
+		$ns = self::rest_ns();
 		return array( $ns . '/notifications/unread-count', $ns . '/consent' );
 	}
 
+	private static function core_signin_rest() {
+		$ns = self::rest_ns();
+		return array_map( function ( $r ) use ( $ns ) {
+			return $ns . '/' . $r;
+		}, self::SIGNIN_ROUTES );
+	}
+
+	/** The sign-in routes (SIGNIN_ROUTES under the REST namespace, and any the site's sign-in code declares). */
+	public static function signin_rest() {
+		return array_values( array_unique( array_merge( self::core_signin_rest(), self::declared()['signin'] ) ) );
+	}
+
 	public static function rest_allowed( $route, $method ) {
-		return in_array( strtoupper( (string) $method ), array( 'GET', 'HEAD' ), true )
-			&& in_array( '/' . trim( (string) $route, '/' ), (array) apply_filters( 'zdz_privacy_view_allowed_rest', self::allowed_rest() ), true );
+		if ( ! in_array( strtoupper( (string) $method ), array( 'GET', 'HEAD' ), true ) ) {
+			return false;   // reads only, whatever a filter lists
+		}
+		$route = '/' . trim( (string) $route, '/' );
+		if ( in_array( $route, self::signin_rest(), true ) ) {
+			return false;   // the account itself gets no sign-in route, whatever a filter lists
+		}
+		if ( self::before_apps() ) {
+			return in_array( $route, array_merge( self::allowed_rest(), self::declared_kept()['rest'] ), true );
+		}
+		$list = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_privacy_view_allowed_rest', self::allowed_rest() ) : self::allowed_rest();
+		return is_array( $list ) && in_array( $route, $list, true );
+	}
+
+	/**
+	 * May the app shell list this app for the account, and may the account open it? Core's two, and an app that says
+	 * on zdz_privacy_view_allowed_apps that it is one made safe for the account: it masks its own replies where the
+	 * data is, refuses every request of its own but its listed reads, and declares those reads on the two AJAX filters.
+	 * An app that does not say so is not listed, and each of its requests is refused.
+	 */
+	public static function app_allowed( $app_id ) {
+		$app_id = is_string( $app_id ) ? $app_id : '';
+		if ( '' === $app_id ) {
+			return false;
+		}
+		$list = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_privacy_view_allowed_apps', self::ALLOWED_APPS ) : self::ALLOWED_APPS;
+		return is_array( $list ) && in_array( $app_id, $list, true );
+	}
+
+	/** The starts of the $_SERVER names of the request headers that refuse a request: Core's, and this site's own. */
+	public static function trigger_headers() {
+		return array_values( array_unique( array_merge( self::TRIGGER_HEADERS, self::declared()['headers'] ) ) );
+	}
+
+	/** The only query keys wp-login.php may carry for the account: WordPress's own, and a host's marker if one is declared. */
+	public static function login_keys() {
+		return array_values( array_unique( array_merge( self::WPLOGIN_KEYS, self::declared()['login'] ) ) );
 	}
 
 	/** A wp-admin screen, with the query keys it carries (an unexpected key, e.g. a View As switch, refuses it). */
@@ -440,22 +801,23 @@ class ZDZ_Privacy_View {
 		}
 		if ( in_array( 'zim_page', $keys, true ) ) {
 			// its direct-message thread, docked under a chat answer (the messaging app opens only that thread for it),
-			// never the full messaging page
-			return self::dm_partner() > 0 && self::dm_narrowed() && ! array_diff( self::DM_PAGE_KEYS, $keys )
-				&& ! array_diff( $keys, array_merge( self::DM_PAGE_KEYS, array( 'cb' ) ) );
+			// never the full messaging page; asked of the messaging app as the direct-message actions are (ajax_allowed())
+			return ( self::$early || ( self::dm_partner() > 0 && ( self::$defer_ready || self::dm_narrowed() ) ) )
+				&& ! array_diff( self::DM_PAGE_KEYS, $keys ) && ! array_diff( $keys, array_merge( self::DM_PAGE_KEYS, array( 'cb' ) ) );
 		}
 		return ! array_diff( $keys, self::FRONT_KEYS[''] );
 	}
 
+	/* ---- the request, read --------------------------------------------------------------------------------------- */
+
 	/** What kind of request this is, from the request alone (before WordPress routes it). */
 	public static function request_kind() {
-		global $pagenow;
+		$pagenow = self::pagenow();
 		if ( ( defined( 'DOING_AJAX' ) && DOING_AJAX ) || ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) ) {
 			return 'ajax';
 		}
-		if ( self::is_rest_request() ) {
-			return 'rest';
-		}
+		// wp-login.php, wp-admin and XML-RPC are decided BEFORE REST: a wp-admin screen written with
+		// ?rest_route=<a listed route> (or with /wp-json/ somewhere in its address) must never be read as that REST call
 		if ( 'wp-login.php' === (string) $pagenow ) {
 			return 'login';
 		}
@@ -465,23 +827,146 @@ class ZDZ_Privacy_View {
 		if ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) {
 			return 'xmlrpc';
 		}
+		if ( self::is_rest_request() ) {
+			return 'rest';
+		}
 		return 'front';
 	}
 
 	/** The real request method. A method override (?_method=, X-HTTP-Method-Override, a POSTed _method) that differs
 	 *  from it is refused outright (verdict), never read as what it asks for. */
 	private static function method() {
-		return strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) );   // phpcs:ignore
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- compared with fixed method names only
+		return strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) );
+	}
+
+	/**
+	 * The script WordPress is running ($pagenow). WordPress sets it in wp-includes/vars.php, after the must-use plugins
+	 * load; until then it is worked out here the same way, from PHP_SELF (vars.php's own rules).
+	 */
+	public static function pagenow() {
+		global $pagenow;
+		if ( ! self::$early && isset( $pagenow ) && '' !== (string) $pagenow ) {
+			return (string) $pagenow;
+		}
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- matched against fixed patterns to name the script, as WordPress's own vars.php does
+		$self = (string) ( $_SERVER['PHP_SELF'] ?? '' );
+		if ( function_exists( 'is_admin' ) ? is_admin() : ( defined( 'WP_ADMIN' ) && WP_ADMIN ) ) {   // as vars.php asks it
+			if ( defined( 'WP_NETWORK_ADMIN' ) && WP_NETWORK_ADMIN ) {
+				preg_match( '#/wp-admin/network/?(.*?)$#i', $self, $m );
+			} elseif ( defined( 'WP_USER_ADMIN' ) && WP_USER_ADMIN ) {
+				preg_match( '#/wp-admin/user/?(.*?)$#i', $self, $m );
+			} else {
+				preg_match( '#/wp-admin/?(.*?)$#i', $self, $m );
+			}
+			$now = preg_replace( '#\?.*?$#', '', trim( (string) ( $m[1] ?? '' ), '/' ) );
+			if ( '' === $now || 'index' === $now || 'index.php' === $now ) {
+				return 'index.php';
+			}
+			preg_match( '#(.*?)(/|$)#', $now, $m );
+			$now = strtolower( (string) $m[1] );
+			return '.php' === substr( $now, -4 ) ? $now : $now . '.php';
+		}
+		return preg_match( '#([^/]+\.php)([?/].*?)?$#i', $self, $m ) ? strtolower( $m[1] ) : 'index.php';
+	}
+
+	/** The action WordPress will run: $_REQUEST's, which WordPress itself rebuilds from $_GET and $_POST after
+	 *  plugins_loaded. Before that, worked out the same way: $_POST's, else $_GET's (PHP's own $_REQUEST may hold a cookie). */
+	private static function asked() {
+		if ( self::$early ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- the action's name is compared with the lists to decide whether to refuse the request; nothing is run or stored here
+			return $_POST['action'] ?? ( $_GET['action'] ?? null );
+		}
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- the action's name is compared with the lists to decide whether to refuse the request; nothing is run or stored here
+		return $_REQUEST['action'] ?? null;
+	}
+
+	/** A request header some code acts on (trigger_headers()), by its $_SERVER name; '' if the request has none. */
+	private static function trigger_header() {
+		$triggers = self::trigger_headers();
+		foreach ( array_keys( (array) $_SERVER ) as $k ) {
+			foreach ( $triggers as $t ) {
+				if ( is_string( $k ) && 0 === strpos( strtoupper( $k ), $t ) ) {
+					return strtoupper( $k );
+				}
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Takes every cookie but COOKIE_KEEP's out of the request: from $_COOKIE, from the Cookie header
+	 * ($_SERVER['HTTP_COOKIE'], kept piece by piece as written), and from $_REQUEST where PHP put cookies in it. Returns
+	 * the names taken (names only, never a value). Called only for the account.
+	 */
+	public static function keep_cookies() {
+		$keep = function ( $name ) {
+			if ( ! is_string( $name ) && ! is_int( $name ) ) {
+				return false;
+			}
+			$name = (string) $name;
+			foreach ( self::COOKIE_KEEP as $re ) {
+				if ( preg_match( $re, $name ) ) {
+					return true;
+				}
+			}
+			foreach ( array( 'LOGGED_IN_COOKIE', 'AUTH_COOKIE', 'SECURE_AUTH_COOKIE', 'TEST_COOKIE' ) as $c ) {
+				if ( defined( $c ) && constant( $c ) === $name ) {
+					return true;   // a name wp-config.php gave one of WordPress's own cookies
+				}
+			}
+			return false;
+		};
+		$gone = array();
+		foreach ( array_keys( (array) $_COOKIE ) as $name ) {
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated -- $name is one of $_COOKIE's own keys (the loop above); only the value's type is read
+			if ( ! $keep( $name ) || ! is_string( $_COOKIE[ $name ] ) ) {   // a cookie written as a list is no sign-in cookie
+				$gone[] = (string) $name;
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- only whether a name is present: a cookie's copy is taken out of $_REQUEST, nothing is acted on
+				if ( isset( $_REQUEST[ $name ] ) && ! isset( $_GET[ $name ] ) && ! isset( $_POST[ $name ] ) ) {
+					unset( $_REQUEST[ $name ] );
+				}
+				unset( $_COOKIE[ $name ] );
+			}
+		}
+		if ( isset( $_SERVER['HTTP_COOKIE'] ) ) {
+			$kept = array();
+			$seen = array();
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- the header is rewritten keeping whole pieces of itself; nothing of it is stored, echoed or logged
+			foreach ( explode( ';', (string) $_SERVER['HTTP_COOKIE'] ) as $piece ) {
+				$piece = ltrim( $piece, " \t" );
+				$eq    = strpos( $piece, '=' );
+				// the name as PHP keys it: not %-decoded, "." and " " as "_"; the first of two is the one PHP keeps
+				$name  = strtr( false === $eq ? $piece : substr( $piece, 0, $eq ), array( '.' => '_', ' ' => '_' ) );
+				// a value as setcookie() writes it (no "," that a looser reader could split on)
+				$plain = false !== $eq && preg_match( '/\A[A-Za-z0-9%._~+\-]*\z/', rtrim( substr( $piece, $eq + 1 ) ) );
+				if ( '' !== $piece && $plain && ! isset( $seen[ $name ] ) && isset( $_COOKIE[ $name ] ) && $keep( $name ) ) {
+					$kept[]        = $piece;
+					$seen[ $name ] = true;
+				} elseif ( '' !== trim( $piece ) && ! isset( $seen[ $name ] ) && ! in_array( $name, $gone, true ) ) {
+					$gone[] = $name;
+				}
+			}
+			$_SERVER['HTTP_COOKIE'] = implode( '; ', $kept );
+		}
+		self::$stripped = array_values( array_unique( array_merge( self::$stripped, $gone ) ) );
+		return $gone;
 	}
 
 	private static function overridden() {
-		$o = strtoupper( (string) ( $_GET['_method'] ?? ( $_POST['_method'] ?? ( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '' ) ) ) );   // phpcs:ignore
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- compared with the real method; a difference refuses the request
+		$o = $_GET['_method'] ?? ( $_POST['_method'] ?? ( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? '' ) );
+		if ( ! is_string( $o ) ) {
+			return true;   // a list where a word belongs is not a method
+		}
+		$o = strtoupper( $o );
 		return '' !== $o && $o !== self::method();
 	}
 
 	/** The path exactly as sent (no parse_url: "//jobs" has no path to it, and WordPress still routes it). */
 	private static function raw_path() {
-		$uri = (string) ( $_SERVER['REQUEST_URI'] ?? '/' );   // phpcs:ignore
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- the address is only split, matched and compared; the log line made from it is cut to plain characters (plain_line())
+		$uri = (string) ( $_SERVER['REQUEST_URI'] ?? '/' );
 		$cut = strcspn( $uri, '?#' );
 		return substr( $uri, 0, $cut );
 	}
@@ -493,12 +978,190 @@ class ZDZ_Privacy_View {
 	}
 
 	private static function query_keys() {
-		return array_map( 'strval', array_keys( (array) $_GET ) );   // phpcs:ignore
+		return array_map( 'strval', array_keys( (array) $_GET ) );
+	}
+
+	/** Every field name the request carries, in its address and in its body, as PHP (and so every handler) reads them. */
+	private static function field_names() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- field names only, compared with the action's own list; the gate acts on nothing in the request
+		return array_values( array_unique( array_map( 'strval', array_merge( array_keys( (array) $_GET ), array_keys( (array) $_POST ) ) ) ) );
 	}
 
 	/**
-	 * THE GATE (deny by default). Everything not listed is refused here, before WordPress or any plugin acts on it.
-	 * Returns the verdict for tests: '' allowed, or the reason it was refused.
+	 * The address's query exactly as it was sent: name=value pairs of plain characters, each name once, and the same
+	 * names PHP read into $_GET. Some handlers search the raw address for their own word (a sign-in return looks for
+	 * "code=", a wall lets "/.well-known/" by), and PHP's reading of an address is not its text: it drops a pair that
+	 * has no name, keeps the last of two, and turns %xx and + back into characters. So the text is held to what was
+	 * read. $slash: a REST route written as ?rest_route= has slashes in it. $encoded: wp-login.php's redirect_to is an
+	 * address written as %xx (so no "=", "&" or "/" of its own is ever in the text).
+	 */
+	private static function plain_query( $slash = false, $encoded = false ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- the address is only split and matched against fixed patterns
+		$uri   = (string) ( $_SERVER['REQUEST_URI'] ?? '' );
+		$at    = strpos( $uri, '?' );
+		$raw   = false === $at ? '' : substr( $uri, $at + 1 );
+		$names = array();
+		if ( '' !== $raw ) {
+			foreach ( explode( '&', $raw ) as $pair ) {
+				$value = $encoded ? '[A-Za-z0-9_.\-%]*' : ( $slash ? '[A-Za-z0-9_.\-/]*' : '[A-Za-z0-9_.\-]*' );
+				if ( ! preg_match( '#\A([A-Za-z0-9_\-]+)=(' . $value . ')\z#', $pair, $m ) || isset( $names[ $m[1] ] ) ) {
+					return false;
+				}
+				$names[ $m[1] ] = true;
+			}
+		}
+		$read = self::query_keys();
+		$sent = array_map( 'strval', array_keys( $names ) );
+		sort( $read );
+		sort( $sent );
+		return $read === $sent;
+	}
+
+	/**
+	 * The start of the request's body as it was sent (what a handler would get from php://input), at most $max bytes:
+	 * the gate never holds a large body in memory. Reading it here takes nothing from a later reader.
+	 */
+	private static function input( $max ) {
+		if ( null !== self::$input ) {
+			return (string) substr( (string) self::$input, 0, $max );
+		}
+		$raw = @file_get_contents( 'php://input', false, null, 0, $max );   // empty for a form with parts (PHP has read it)
+		return false === $raw ? '' : (string) $raw;
+	}
+
+	/** The body's type as PHP itself reads it: the word before any ";", "," or space, in small letters. */
+	private static function body_type() {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- cut to its first word and compared with two fixed types
+		$type = strtolower( trim( (string) ( $_SERVER['CONTENT_TYPE'] ?? ( $_SERVER['HTTP_CONTENT_TYPE'] ?? '' ) ) ) );
+		return (string) substr( $type, 0, strcspn( $type, ";, \t" ) );
+	}
+
+	/**
+	 * Is there a body that PHP did not turn, whole, into the fields of $_POST? A handler could read such a body for
+	 * itself (php://input) beside an allowed request. So:
+	 * - only a POST has a body at all: on anything else, nothing may have been sent;
+	 * - a POST's type is exactly one of the two forms (not a word that begins like one), or there is no body;
+	 * - a form with parts must have been read by PHP completely (nothing is left of it; no missing boundary);
+	 * - an ordinary form's text is name=value pairs, every one with a name PHP keeps, a plain name once, and those
+	 *   names are $_POST's (PHP drops a pair whose name begins with "[", and everything when the body is over its
+	 *   size limit); and it is short (FORM_MAX).
+	 */
+	private static function unread_body() {
+		$type = self::body_type();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- read as a number
+		$long = (int) ( $_SERVER['CONTENT_LENGTH'] ?? 0 );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- only whether the header is there
+		$some = $long > 0 || '' !== (string) ( $_SERVER['HTTP_TRANSFER_ENCODING'] ?? '' );
+		if ( 'POST' !== self::method() ) {
+			return $some || '' !== self::input( 1 );
+		}
+		if ( 'multipart/form-data' === $type ) {
+			return '' !== self::input( 1 );
+		}
+		if ( 'application/x-www-form-urlencoded' !== $type ) {
+			return '' !== $type || $some || '' !== self::input( 1 );
+		}
+		if ( $long > self::FORM_MAX ) {
+			return true;   // far beyond anything its scripts send; not read
+		}
+		$body = self::input( self::FORM_MAX + 1 );
+		if ( strlen( $body ) > self::FORM_MAX ) {
+			return true;
+		}
+		$names = array();
+		foreach ( '' === $body ? array() : explode( '&', $body ) as $pair ) {
+			$eq = strpos( $pair, '=' );
+			if ( false === $eq || 0 === $eq ) {
+				return true;   // no name, or no "=": not a field
+			}
+			$name = urldecode( substr( $pair, 0, $eq ) );
+			if ( ! preg_match( '/\A[A-Za-z0-9_\-]+(?:\[[A-Za-z0-9_\-]*\])*\z/', $name ) ) {
+				return true;   // a name PHP would drop or rewrite
+			}
+			$top = (string) substr( $name, 0, strcspn( $name, '[' ) );
+			if ( $top === $name && isset( $names[ $top ] ) ) {
+				return true;   // a plain name twice (PHP keeps the last; a handler reading the text might take the first)
+			}
+			$names[ $top ] = true;
+		}
+		$sent = array_map( 'strval', array_keys( $names ) );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- field names only, compared with the names written in the body
+		$read = array_map( 'strval', array_keys( (array) $_POST ) );
+		sort( $sent );
+		sort( $read );
+		return $sent !== $read;
+	}
+
+	/**
+	 * An allowed AJAX action, read as a whole. '' if it is exactly what its script sends, else why not.
+	 * - it came to admin-ajax.php itself: by POST with every field in the body and none in the address, or (AJAX_GET
+	 *   alone) by GET with every field in the address and no body;
+	 * - its action is written once and is the name WordPress will run (not a cookie's, not the name with something
+	 *   around it);
+	 * - it carries no field but its own (ajax_keys()), no file at all, and no body PHP did not read.
+	 */
+	private static function ajax_shape( $action, $path, $method ) {
+		if ( self::odd_path( $path ) || ! preg_match( '#/wp-admin/admin-ajax\.php\z#', $path ) ) {
+			return 'ajax-path:' . $path;
+		}
+		$by_get = in_array( $action, self::AJAX_GET, true );
+		if ( 'POST' !== $method && ! ( 'GET' === $method && $by_get ) ) {
+			return 'ajax-method:' . $method;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- only whether any field came in the wrong place
+		if ( 'POST' === $method ? ! empty( $_GET ) : ! empty( $_POST ) ) {
+			return 'ajax-method:' . $method . ' both';
+		}
+		$asked = self::asked();   // what WordPress runs
+		$seen  = 0;
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- compared with the action WordPress will run; nothing is run or stored here
+		foreach ( array( $_GET['action'] ?? null, $_POST['action'] ?? null ) as $one ) {
+			if ( null === $one ) {
+				continue;
+			}
+			if ( ! is_string( $one ) || $one !== $asked ) {
+				return 'ajax-action:two';
+			}
+			$seen++;
+		}
+		if ( 0 === $seen || ! is_string( $asked ) || $asked !== $action ) {
+			return 'ajax-action:' . $action;
+		}
+		$may = self::ajax_keys( $action );
+		foreach ( self::field_names() as $name ) {
+			if ( ! in_array( $name, $may, true ) ) {
+				return 'ajax-field:' . $action . ':' . $name;
+			}
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- names only: any upload refuses the request
+		foreach ( array_keys( (array) $_FILES ) as $name ) {
+			return 'ajax-file:' . $action . ':' . $name;   // the account uploads nothing
+		}
+		if ( self::unread_body() ) {
+			return 'ajax-body:' . $action;
+		}
+		return '';
+	}
+
+	/** What a refusal may say back: one word from a fixed list, never anything the request itself wrote. */
+	public static function why_word( $why ) {
+		foreach ( array( 'ajax-field' => 'field', 'ajax-file' => 'file', 'ajax-body' => 'body', 'ajax-action' => 'action', 'ajax-path' => 'address',
+			'ajax-method' => 'method', 'rest-field' => 'field', 'login-field' => 'field', 'body' => 'body', 'query' => 'address', 'header' => 'header' ) as $start => $word ) {
+			if ( is_string( $why ) && 0 === strpos( $why, $start . ':' ) ) {
+				return $word;
+			}
+		}
+		return 'not listed';
+	}
+
+	/** A reason as one short line of plain characters for the site's log, whatever the request wrote. */
+	private static function plain_line( $why ) {
+		return (string) preg_replace( '/[^A-Za-z0-9_.:\/ \-]/', '?', substr( is_string( $why ) ? $why : '', 0, 120 ) );
+	}
+
+	/**
+	 * THE GATE (deny by default). Everything not listed is refused here, before WordPress or any plugin's init handler
+	 * acts on it. Returns the verdict for tests: '' allowed, or the reason it was refused.
 	 */
 	public static function verdict() {
 		$kind   = self::request_kind();
@@ -507,33 +1170,64 @@ class ZDZ_Privacy_View {
 		if ( self::overridden() ) {
 			return 'override';
 		}
+		$header = self::trigger_header();
+		if ( '' !== $header ) {
+			return 'header:' . $header;
+		}
 		$path = self::raw_path();
 		if ( 'ajax' !== $kind && 'login' !== $kind && self::odd_path( $path ) ) {
 			return 'path:' . $path;
 		}
-		if ( ! in_array( $kind, array( 'ajax', 'login' ), true ) && ( ! empty( $_POST ) || ! in_array( $method, array( 'GET', 'HEAD' ), true ) ) ) {   // phpcs:ignore
+		if ( 'login' !== $kind && ! self::plain_query( 'rest' === $kind ) ) {   // (wp-login.php: below, with a wider alphabet)
+			return 'query:' . $kind;   // the address says only what its listed keys say
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- only whether a body's fields came at all
+		if ( ! in_array( $kind, array( 'ajax', 'login' ), true ) && ( ! empty( $_POST ) || ! in_array( $method, array( 'GET', 'HEAD' ), true ) ) ) {
 			return $kind . ':' . $method;   // WordPress reads query vars from a POST body too: none may arrive
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- only whether a file came at all
+		if ( ! in_array( $kind, array( 'ajax', 'login' ), true ) && ( ! empty( $_FILES ) || self::unread_body() ) ) {
+			return 'body:' . $kind;   // nor any body at all, which a handler could read for itself
 		}
 		switch ( $kind ) {
 			case 'ajax':
-				$action = strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) ( $_REQUEST['action'] ?? '' ) ) );   // phpcs:ignore
-				return self::ajax_allowed( $action ) ? '' : 'ajax:' . $action;
-			case 'rest':
-				$route = isset( $_GET['rest_route'] ) ? (string) $_GET['rest_route'] : '';   // phpcs:ignore
-				if ( '' === $route ) {
-					$prefix = '/' . trim( function_exists( 'rest_get_url_prefix' ) ? rest_get_url_prefix() : 'wp-json', '/' ) . '/';
-					$at     = strpos( $path, $prefix );
-					$route  = false === $at ? '' : substr( $path, $at + strlen( $prefix ) - 1 );
-				} elseif ( self::odd_path( $route ) ) {
-					return 'rest:odd ' . $route;
+				$asked  = self::asked();
+				$action = strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', is_string( $asked ) ? $asked : '' ) );
+				if ( ! self::ajax_allowed( $action ) ) {
+					return 'ajax:' . $action;
 				}
-				return self::rest_allowed( $route, $method ) ? '' : 'rest:' . $method . ' ' . $route;
+				return self::ajax_shape( $action, $path, $method );   // the whole request, not its name
+			case 'rest':
+				$route = self::rest_route( $path );
+				if ( null === $route ) {
+					return 'rest:odd';
+				}
+				if ( ! self::rest_allowed( $route, $method ) ) {
+					return 'rest:' . $method . ' ' . $route;
+				}
+				$extra = array_diff( $keys, self::REST_KEYS );   // init runs for a REST call too
+				return $extra ? 'rest-field:' . reset( $extra ) : '';
 			case 'login':
-				$act = (string) ( $_REQUEST['action'] ?? '' );   // phpcs:ignore
-				return in_array( $act, array( '', 'login', 'logout', 'loggedout' ), true ) ? '' : 'login:' . $act;
+				// wp-login.php runs init too, so it is held like everything else: by GET, with no body, its address as
+				// PHP read it, and only its listed fields (signing out and the pages around it)
+				$asked = self::asked();
+				$act   = null === $asked ? '' : ( is_string( $asked ) ? $asked : '?' );
+				if ( ! in_array( $act, array( '', 'login', 'logout', 'loggedout' ), true ) || ( isset( $_GET['action'] ) ? $_GET['action'] !== $act : '' !== $act ) ) {
+					return 'login:' . $act;
+				}
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- only whether a body or a file came at all
+				if ( ! in_array( $method, array( 'GET', 'HEAD' ), true ) || ! empty( $_POST ) || ! empty( $_FILES ) || self::unread_body() ) {
+					return 'body:login';
+				}
+				if ( ! self::plain_query( false, true ) ) {
+					return 'query:login';
+				}
+				$extra = array_diff( $keys, self::login_keys() );
+				return $extra ? 'login-field:' . reset( $extra ) : '';
 			case 'admin':
-				global $pagenow;
-				$page = strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) ( $_GET['page'] ?? '' ) ) );   // phpcs:ignore
+				$pagenow = self::pagenow();
+				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- cut to [a-z0-9_-] and compared with the listed screens
+				$page    = strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', is_string( $_GET['page'] ?? '' ) ? (string) ( $_GET['page'] ?? '' ) : '?' ) );
 				return self::screen_allowed( (string) $pagenow, $page, $keys ) ? '' : 'admin:' . $pagenow . ( '' !== $page ? '?page=' . $page : '' );
 			case 'xmlrpc':
 				return 'xmlrpc';
@@ -542,19 +1236,177 @@ class ZDZ_Privacy_View {
 		return self::front_allowed( $path, $keys, '' !== $home ? $home : '/' ) ? '' : 'front:' . $path;
 	}
 
+	/** The REST route a request names (?rest_route= or the address after /wp-json/); null when it is written oddly. */
+	private static function rest_route( $path ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- checked for an odd path, then compared with the listed routes
+		$route = isset( $_GET['rest_route'] ) ? ( is_string( $_GET['rest_route'] ) ? $_GET['rest_route'] : '//' ) : '';
+		if ( '' !== $route ) {
+			return self::odd_path( $route ) ? null : $route;
+		}
+		$prefix = trim( function_exists( 'rest_get_url_prefix' ) ? rest_get_url_prefix() : 'wp-json', '/' ) . '/';
+		foreach ( array( self::home_path() . $prefix, self::home_path() . 'index.php/' . $prefix ) as $start ) {   // from the start of the address only
+			if ( 0 === strpos( $path . '/', $start ) ) {
+				$route = '/' . ltrim( (string) substr( $path, strlen( $start ) ), '/' );
+			}
+		}
+		return $route;
+	}
+
+	/* ================================================================== the early gate (before any plugin loads) */
+
+	/**
+	 * THE GATE, BEFORE ANY PLUGIN LOADS. Called by the must-use file (wp-content/mu-plugins/0-zdz-privacy-view-gate.php,
+	 * shipped in this theme's mu-plugin/ folder and installed by an administrator from Zorderz -> Privacy View) when a
+	 * sign-in cookie on the request names an account in Privacy View -- before any regular plugin's file has run, so
+	 * before a page cache's own request handling, a sign-in plugin, and every plugins_loaded and setup_theme handler.
+	 *
+	 * Three looks, then:
+	 *   1. here, before the plugins. WordPress cannot yet say who is signed in (its sign-in check is loaded after the
+	 *      plugins), so the request is judged on the cookie's word and held to the account's lists as they stand
+	 *      before any app is there to ask (before_apps()). wp-login.php and the sign-in routes and pages are let by,
+	 *      because a browser can carry the account's cookie after its session ended and must be able to sign in.
+	 *   2. plugins_loaded, first of all (early_confirm()). WordPress says whose cookie it really is, and a request that
+	 *      really is the account's is judged in full: refused there, before any plugin's plugins_loaded or setup_theme
+	 *      handler.
+	 *   3. the gate proper (gate(), after_setup_theme), as on a site without the file, where the apps themselves answer.
+	 * Cookies the account does not need are taken out here, before anything reads them.
+	 */
+	public static function early_gate( $login ) {
+		if ( self::$early_done ) {
+			return;
+		}
+		self::$early_done  = true;
+		self::$early_login = (string) $login;
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- $_REQUEST rebuilt from the request's own fields, exactly as WordPress does after plugins_loaded
+		$_REQUEST = array_merge( (array) $_GET, (array) $_POST );   // what WordPress makes of it later (wp_magic_quotes); never the cookies PHP may have put in it
+		self::keep_cookies();
+		$why = self::early_verdict();
+		if ( '' !== $why ) {
+			self::refuse_early( $why );
+			return;
+		}
+		if ( function_exists( 'add_action' ) ) {
+			add_action( 'plugins_loaded', array( __CLASS__, 'early_confirm' ), PHP_INT_MIN );
+		}
+	}
+
+	/** The verdict before WordPress can say who is signed in ('' = let by for now). */
+	public static function early_verdict() {
+		self::$early = true;
+		try {
+			$kind = self::request_kind();
+			if ( 'login' === $kind || ( 'rest' === $kind && in_array( '/' . trim( (string) self::rest_route( self::raw_path() ), '/' ), self::signin_rest(), true ) )
+				|| ( 'front' === $kind && self::signin_page() ) ) {
+				// signing in (or out): judged at plugins_loaded, once WordPress says whose cookie it really is
+				$h = self::trigger_header();
+				return '' === $h ? ( self::overridden() ? 'override' : '' ) : 'header:' . $h;
+			}
+			return self::verdict();
+		} finally {
+			self::$early = false;
+		}
+	}
+
+	/** GET or HEAD of the app's own /login/ or /register/ page, with only its listed keys, its address as PHP read it and no body. */
+	private static function signin_page() {
+		$path = self::raw_path();
+		$home = self::home_path();
+		$page = false;
+		foreach ( self::SIGNIN_PAGES as $slug ) {
+			if ( $path === $home . $slug || $path === $home . $slug . '/' ) {
+				$page = true;
+			}
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- only whether a body or a file came at all
+		return $page && in_array( self::method(), array( 'GET', 'HEAD' ), true ) && empty( $_POST ) && empty( $_FILES )
+			&& ! array_diff( self::query_keys(), self::SIGNIN_PAGE_KEYS ) && self::plain_query( false, true ) && ! self::unread_body();
+	}
+
+	/**
+	 * Who WordPress will say is signed in, asked WITHOUT settling it. Calling wp_get_current_user() here would fix the
+	 * user before the theme's own determine_current_user filters exist (Demo Mode switches a device's user there), so
+	 * the sign-in cookie is checked the way WordPress's own two filters check it: the wp-admin cookie, then the
+	 * signed-in cookie. Either of them naming the account counts.
+	 */
+	private static function cookie_user() {
+		if ( ! function_exists( 'wp_validate_auth_cookie' ) ) {
+			return function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;   // (WordPress's sign-in functions are always there at plugins_loaded)
+		}
+		$uid = (int) wp_validate_auth_cookie( '', '' );
+		if ( ! $uid || ! self::is_on( $uid ) ) {
+			$other = (int) wp_validate_auth_cookie( '', 'logged_in' );
+			$uid   = $other ? $other : $uid;
+		}
+		return $uid;
+	}
+
+	/** plugins_loaded, first of all: now WordPress can say who it is. The account's request in full. */
+	public static function early_confirm() {
+		$uid = self::cookie_user();
+		if ( $uid <= 0 || ! self::is_on( $uid ) ) {
+			return;   // the cookie named the account, but it signs nobody (or somebody else) in: not the account's
+		}
+		self::keep_cookies();
+		// An app loads its classes and adds its filters later on this same hook, so "is that app ready?" and "what did
+		// the apps declare?" cannot be asked of them here: before_apps(). The request is still held to its action,
+		// fields, method and address, and to whether a direct-message partner was chosen.
+		self::$defer_ready = true;
+		try {
+			$why = self::verdict();
+		} finally {
+			self::$defer_ready = false;
+		}
+		if ( '' !== $why ) {
+			self::refuse_early( $why );
+		}
+	}
+
+	/** Tests replace the ending (a refusal ends the request; a test cannot). */
+	public static $halt = null;
+
+	/**
+	 * A refusal before the theme has loaded: the same 403, code, sentence and one word as the gate's, written plainly
+	 * (wp_die, wp_send_json and translations lean on parts of WordPress that are not there yet), never cached.
+	 */
+	private static function refuse_early( $why ) {
+		error_log( 'Zorderz Privacy View: refused (before plugins) ' . self::plain_line( $why ) );
+		self::$early = true;
+		$kind        = self::request_kind();
+		self::$early = false;
+		$json        = 'ajax' === $kind || 'rest' === $kind;
+		$body        = $json
+			? (string) json_encode( array( 'success' => false, 'data' => array( 'code' => 'zdz_privacy_view', 'message' => 'Not available in Privacy View.', 'why' => self::why_word( $why ) ) ) )
+			: '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Privacy View</title></head><body><p>This is not available in Privacy View (customer details are hidden and nothing can be changed from this account).</p></body></html>';
+		if ( null !== self::$halt ) {
+			call_user_func( self::$halt, $why, $json, $body );
+			return;
+		}
+		if ( ! headers_sent() ) {
+			http_response_code( 403 );
+			header( 'Content-Type: ' . ( $json ? 'application/json' : 'text/html' ) . '; charset=utf-8' );
+			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+			header( 'X-Robots-Tag: noindex' );
+			header( 'X-Zorderz-Privacy-Gate: before-plugins' );   // tells this refusal from the gate proper's
+		}
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed text and one word from a fixed list (why_word()): JSON-encoded or constant HTML, nothing the request wrote
+		echo $body;
+		exit;
+	}
+
 	public static function gate() {
 		if ( ! self::is_on() ) {
 			return;
 		}
 		self::start();
+		self::keep_cookies();   // (again: the early gate took them first, where its file is installed)
 		$why = self::verdict();
 		if ( '' === $why ) {
 			return;
 		}
-		error_log( 'Zorderz Privacy View: refused ' . $why );
+		error_log( 'Zorderz Privacy View: refused ' . self::plain_line( $why ) );
 		$kind = self::request_kind();
 		if ( 'ajax' === $kind || 'rest' === $kind ) {
-			wp_send_json_error( array( 'code' => 'zdz_privacy_view', 'message' => __( 'Not available in Privacy View.', 'zorderz' ) ), 403 );
+			wp_send_json_error( array( 'code' => 'zdz_privacy_view', 'message' => __( 'Not available in Privacy View.', 'zorderz' ), 'why' => self::why_word( $why ) ), 403 );
 		}
 		wp_die( esc_html__( 'This is not available in Privacy View (customer details are hidden and nothing can be changed from this account).', 'zorderz' ), esc_html__( 'Privacy View', 'zorderz' ), array( 'response' => 403 ) );
 	}
@@ -566,13 +1418,31 @@ class ZDZ_Privacy_View {
 		wp_die( esc_html__( 'Privacy View is read-only: nothing can be saved or sent from this account.', 'zorderz' ), esc_html__( 'Privacy View', 'zorderz' ), array( 'response' => 403 ) );
 	}
 
+	/** The site's own path ("/" unless WordPress lives in a folder), with a slash at each end. */
+	private static function home_path() {
+		$home = function_exists( 'home_url' ) ? (string) parse_url( home_url( '/' ), PHP_URL_PATH ) : '/';
+		return '/' . ltrim( trim( $home, '/' ) . '/', '/' );
+	}
+
+	/**
+	 * A REST call, from the request alone: only where WordPress itself routes one. The address BEGINS with the site's
+	 * /wp-json/ (or /index.php/wp-json/), or it is the home address with ?rest_route=. "/wp-json/" somewhere in another
+	 * address, or ?rest_route= on another script, is not one.
+	 */
 	private static function is_rest_request() {
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
 			return true;
 		}
-		$uri    = (string) ( $_SERVER['REQUEST_URI'] ?? '' );   // phpcs:ignore
-		$prefix = '/' . trim( function_exists( 'rest_get_url_prefix' ) ? rest_get_url_prefix() : 'wp-json', '/' ) . '/';
-		return false !== strpos( $uri, $prefix ) || isset( $_GET['rest_route'] );   // phpcs:ignore
+		if ( 'index.php' !== self::pagenow() ) {
+			return false;
+		}
+		$path = self::raw_path();
+		$home = self::home_path();
+		if ( isset( $_GET['rest_route'] ) ) {
+			return $path === $home || $path === $home . 'index.php';
+		}
+		$prefix = trim( function_exists( 'rest_get_url_prefix' ) ? rest_get_url_prefix() : 'wp-json', '/' ) . '/';
+		return 0 === strpos( $path . '/', $home . $prefix ) || 0 === strpos( $path . '/', $home . 'index.php/' . $prefix );
 	}
 
 	/** Second net for wp-admin (the gate has already decided). */
@@ -810,8 +1680,8 @@ class ZDZ_Privacy_View {
 	/**
 	 * Team members: 'full' => [name => user id] (display names and first+last, longest first: used everywhere) and
 	 * 'words' => [word => user id] (a first or last name on its own, 3+ letters, not a plain word: prose only),
-	 * 'initials' => [XY => user id] (the salesperson code: prose only, in brackets or after "by"),
-	 * 'logins' => [login => user id].
+	 * 'initials' => [XY => user id] (the salesperson code: prose only; see staff_prose() and initials_prose()),
+	 * 'logins' => [login => user id], 'display' => [one-word display name, lower case => user id] (name fields only).
 	 */
 	public static function staff_names() {
 		if ( null !== self::$staff ) {
@@ -821,6 +1691,7 @@ class ZDZ_Privacy_View {
 		$words  = array();
 		$ini    = array();
 		$logins = array();
+		$display = array();
 		if ( function_exists( 'get_users' ) ) {
 			foreach ( (array) get_users( array( 'fields' => array( 'ID', 'display_name', 'user_login' ), 'number' => 300 ) ) as $u ) {
 				$id = (int) ( is_object( $u ) ? $u->ID : 0 );
@@ -830,6 +1701,10 @@ class ZDZ_Privacy_View {
 				$lg = strtolower( trim( (string) ( $u->user_login ?? '' ) ) );
 				if ( mb_strlen( $lg ) >= 2 ) {
 					$logins[ $lg ] = $id;
+				}
+				$dn = strtolower( trim( (string) ( $u->display_name ?? '' ) ) );
+				if ( mb_strlen( $dn ) >= 2 && false === strpos( $dn, ' ' ) ) {
+					$display[ $dn ] = $id;   // a one-word display name ("admin") in a field that holds a person's name is that person
 				}
 				$first = function_exists( 'get_user_meta' ) ? trim( (string) get_user_meta( $id, 'first_name', true ) ) : '';
 				$last  = function_exists( 'get_user_meta' ) ? trim( (string) get_user_meta( $id, 'last_name', true ) ) : '';
@@ -855,7 +1730,7 @@ class ZDZ_Privacy_View {
 		$len = function ( $a, $b ) { return mb_strlen( $b ) - mb_strlen( $a ); };
 		uksort( $full, $len );
 		uksort( $words, $len );
-		return self::$staff = array( 'full' => $full, 'words' => $words, 'initials' => $ini, 'logins' => $logins );
+		return self::$staff = array( 'full' => $full, 'words' => $words, 'initials' => $ini, 'logins' => $logins, 'display' => $display );
 	}
 
 	/**
@@ -1129,6 +2004,104 @@ class ZDZ_Privacy_View {
 		}
 		foreach ( $s['initials'] as $i => $id ) {
 			$t = (string) preg_replace( '/\(' . $i . '\)|(?<=\bby\s)' . $i . '\b|(?<=\bBy\s)' . $i . '\b|(?<=Submitted by:\s)' . $i . '\b/u', '(' . self::staff( $id ) . ')', $t );
+		}
+		return self::initials_prose( $t, $s['initials'] );
+	}
+
+	/**
+	 * Initials that are also English words or common abbreviations: coded only in a list of codes or after a role word,
+	 * never standing on their own in a sentence. The business's own short words (a region code, a product code) join
+	 * them from its vocabulary (initials_words()).
+	 */
+	const INITIALS_WORDS = array( 'AD', 'AH', 'AM', 'AN', 'AS', 'AT', 'AX', 'BE', 'BY', 'DO', 'GO', 'HA', 'HE', 'HI', 'ID', 'IF',
+		'IN', 'IS', 'IT', 'LA', 'ME', 'MY', 'NO', 'OF', 'OH', 'OK', 'ON', 'OR', 'OX', 'PM', 'RE', 'SO', 'TO', 'UP', 'US', 'WE', 'YE',
+		'AC', 'DC', 'EV', 'HQ', 'HR', 'PC', 'PO', 'PS', 'QA', 'TV', 'UV', 'UK', 'EU', 'FYI', 'ASAP', 'AKA', 'ETA', 'TBD', 'USA' );
+	/** Words that say the initials after them are a person's ("crew: JB", "assigned to MC"). Lower case; a plural "s" is
+	 *  read too. The business's own role labels and the zdz_privacy_view_role_words filter add to them (role_words()). */
+	const ROLE_WORDS = array( 'crew', 'tech', 'technician', 'installer', 'salesperson', 'sales rep', 'rep', 'seller', 'assigned', 'assigned to', 'helper' );
+
+	/** INITIALS_WORDS and the business's own words of two to four letters (its Identity Pack's safe words, the
+	 *  zdz_privacy_view_words filter), in capitals: a region code that is also a team member's initials stays a word. */
+	private static function initials_words() {
+		$out = array_flip( self::INITIALS_WORDS );
+		foreach ( array_keys( self::vocabulary()['words'] ) as $w ) {
+			$w = (string) $w;
+			if ( preg_match( '/\A[a-z]{2,4}\z/', $w ) ) {
+				$out[ strtoupper( $w ) ] = true;
+			}
+		}
+		return $out;
+	}
+
+	/** ROLE_WORDS, the labels the business gives its roles, and what a plugin adds: lower-case words and phrases of letters. */
+	public static function role_words() {
+		$in = self::ROLE_WORDS;
+		if ( class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'get_role_labels' ) ) {
+			$in = array_merge( $in, array_values( (array) ZDZ_User_Roles::get_role_labels() ) );
+		}
+		$f   = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_privacy_view_role_words', $in ) : $in;
+		$out = array();
+		foreach ( array_merge( self::ROLE_WORDS, is_array( $f ) ? $f : array() ) as $w ) {
+			$w = is_string( $w ) ? trim( (string) preg_replace( '/\s+/u', ' ', mb_strtolower( $w ) ) ) : '';
+			if ( preg_match( '/\A\p{L}[\p{L} \-]{2,39}\z/u', $w ) && count( $out ) < 80 ) {
+				$out[ $w ] = true;
+			}
+		}
+		return array_keys( $out );
+	}
+
+	/**
+	 * A team member's initials in a SENTENCE, beyond "(JB)" and "by JB" above: in a list of codes ("JB/MC", "JB, MC and
+	 * IT"), after a role word ("crew: JB", "tech MC", "assigned to IT"), or on their own ("JB will call"). On their own
+	 * only when the code is not also a word (initials_words(): "IT" stays a word there). Only in text with a space in
+	 * it: a value that IS the code (an avatar's letters, a label) is left to its field's rule. Capitals only, whole
+	 * tokens; never inside a code, a word or an address.
+	 */
+	private static function initials_prose( $t, $ini ) {
+		$t = (string) $t;
+		if ( ! $ini || ! preg_match( '/\s/u', trim( $t ) ) ) {
+			return $t;
+		}
+		$keys = array_map( 'strval', array_keys( $ini ) );
+		usort( $keys, function ( $a, $b ) { return strlen( $b ) - strlen( $a ); } );
+		$alt   = implode( '|', array_map( function ( $k ) { return preg_quote( (string) $k, '/' ); }, $keys ) );
+		$edge  = '(?<![\p{L}\p{N}·@_\-\/.#=?&])';
+		$end   = '(?![\p{L}\p{N}·@_\-(=]|\/\w|\.\w)';
+		$wordy = self::initials_words();
+		$one   = function ( $code ) use ( $ini ) {
+			return isset( $ini[ $code ] ) ? self::staff( $ini[ $code ] ) : $code;
+		};
+		$codes = function ( $run ) use ( $alt, $one ) {
+			return (string) preg_replace_callback( '/(?<![\p{L}\p{N}·])(' . $alt . ')(?![\p{L}\p{N}·])/u', function ( $m ) use ( $one ) {
+				return $one( $m[1] );
+			}, $run );
+		};
+		// a pattern that cannot run (the pattern engine's limits, on a very long run of codes) never empties the text:
+		// every code in it is coded instead, word or not (more hidden, never less)
+		$or_all = function ( $r ) use ( $t, $codes ) {
+			return null === $r ? $codes( $t ) : (string) $r;
+		};
+		// a list of two or more codes (at most 40 in one run)
+		$t = $or_all( preg_replace_callback( '/' . $edge . '(?:' . $alt . ')(?:\s*(?:\/|,|&|\+|\band\b|\bor\b)\s*(?:' . $alt . ')){1,40}' . $end . '/u', function ( $m ) use ( $codes ) {
+			return $codes( $m[0] );
+		}, $t ) );
+		// after a role word ("crew: JB", "tech MC"); a code that is also a word only after a ":" or "-" ("crew IT help" stays)
+		$roles = self::role_words();
+		usort( $roles, function ( $a, $b ) { return strlen( $b ) - strlen( $a ); } );
+		$role = implode( '|', array_map( function ( $w ) { return str_replace( ' ', '\s+', preg_quote( $w, '/' ) ); }, $roles ) );
+		$t    = $or_all( preg_replace_callback( '/(?<![\p{L}\p{N}])((?i:(?:' . $role . ')s?)(\s*[:\-]?\s*))(' . $alt . ')' . $end . '/u', function ( $m ) use ( $one, $wordy ) {
+			if ( isset( $wordy[ $m[3] ] ) && ! preg_match( '/[:\-]/', $m[2] ) ) {
+				return $m[0];
+			}
+			return $m[1] . $one( $m[3] );
+		}, $t ) );
+		// on its own, when the code is not also a word
+		$own = array_values( array_filter( $keys, function ( $k ) use ( $wordy ) { return ! isset( $wordy[ $k ] ); } ) );
+		if ( $own ) {
+			$alt2 = implode( '|', array_map( function ( $k ) { return preg_quote( (string) $k, '/' ); }, $own ) );
+			$t    = $or_all( preg_replace_callback( '/' . $edge . '(' . $alt2 . ')' . $end . '/u', function ( $m ) use ( $one ) {
+				return $one( $m[1] );
+			}, $t ) );
 		}
 		return $t;
 	}
@@ -1586,7 +2559,66 @@ class ZDZ_Privacy_View {
 		$t = (string) preg_replace_callback( '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/iu', function ( $m ) {
 			return self::email( $m[0] );
 		}, $t );
+		$t = self::client_ids( $t );   // before the document pass, which would read "customer #30045" as an invoice
 		return self::doc_pass( $t, (bool) preg_match( '/\s/u', trim( $t ) ) );
+	}
+
+	/** The billing and CRM systems whose name before "client" or "customer" makes the number after it that system's id
+	 *  for a customer. Lower case. A business on another system names it on zdz_privacy_view_system_words. */
+	const SYSTEM_WORDS = array( 'freshbooks', 'nutshell', 'quickbooks', 'stripe', 'billing', 'crm' );
+	/** Words after a number that make it a count or a size, not an id ("customer: 120 units"). The business's own
+	 *  product words count too (its catalog and its vocabulary). */
+	const UNIT_WORDS_RE = '/^(?:sq|sqm|square|m2|m²|ft|feet|foot|in|inch|inches|yd|yards?|m|mm|cm|km|metres?|meters?|kg|kilos?|g|lbs?|pounds?|litres?|liters?|dollars?|euros?|units?|jobs?|days?|hours?|minutes?|miles?|percent|of|items?|pieces?)$/iu';
+
+	/** SYSTEM_WORDS and what a plugin adds: lower-case words of letters and digits. */
+	public static function system_words() {
+		$f   = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_privacy_view_system_words', self::SYSTEM_WORDS ) : self::SYSTEM_WORDS;
+		$out = array();
+		foreach ( array_merge( self::SYSTEM_WORDS, is_array( $f ) ? $f : array() ) as $w ) {
+			$w = is_string( $w ) ? mb_strtolower( trim( $w ) ) : '';
+			if ( preg_match( '/\A[\p{L}\p{N}]{2,30}\z/u', $w ) && count( $out ) < 40 ) {
+				$out[ $w ] = true;
+			}
+		}
+		return array_keys( $out );
+	}
+
+	/** Is this word one that counts things: a unit, or one of the business's own product words (singular or plural)? */
+	private static function counts_things( $word ) {
+		$w = mb_strtolower( trim( (string) $word ) );
+		if ( '' === $w ) {
+			return false;
+		}
+		if ( preg_match( self::UNIT_WORDS_RE, $w ) ) {
+			return true;
+		}
+		$own = self::vocabulary()['words'] + self::product_terms()['words'];
+		return isset( $own[ $w ] ) || ( 's' === substr( $w, -1 ) && isset( $own[ substr( $w, 0, -1 ) ] ) );
+	}
+
+	/**
+	 * A billing or CRM system's id for a customer, written in prose, is a customer: "billing client 1000042", "client
+	 * ID: 20031", "customer #30045", "client no. 4005" keep their words and the number becomes a customer code (the one
+	 * a coded customer with no ledger name gets). A bare "client 12345" counts at five digits or more (a count beside
+	 * the word is shorter); a system's name before the word makes any number one; a count or a size is never one, nor
+	 * is a year. It runs before the document pass, which would read "customer #30045" as an invoice.
+	 */
+	private static function client_ids( $t ) {
+		$sys = implode( '|', array_map( function ( $w ) { return preg_quote( $w, '/' ); }, self::system_words() ) );
+		$r   = preg_replace_callback( '/(?<![\p{L}\p{N}_])((?:(?i:' . $sys . ')\s+)?(?i:client|customer))(\s*(?:[_\s]?(?i:id|no\.?|number|num\.?)\s*[:#]?\s*|[:#]\s*|\s+#?))(\d{3,12})(?![\d%\p{L}_]|[.,]\d)(\s+\p{L}+)?/u', function ( $m ) {
+			$system = ! preg_match( '/\A(?i:client|customer)\z/', $m[1] );
+			$named  = (bool) preg_match( '/(?i:id|no|number|num)|#/', $m[2] );   // a ":" alone is not a name for the number
+			if ( ( ! $system && ! $named && strlen( $m[3] ) < 5 ) || ( ! $named && isset( $m[4] ) && self::counts_things( $m[4] ) ) ) {
+				return $m[0];   // a count or a size beside the word ("customer: 120 units", "client 10000 sq ft")
+			}
+			if ( 4 === strlen( $m[3] ) && (int) $m[3] >= 1990 && (int) $m[3] <= 2099 ) {
+				return $m[0];   // a year
+			}
+			$gap = str_replace( '#', '', $m[2] );
+			$gap = '' === $gap ? ' ' : $gap;   // "customer#30045": a space where the "#" was
+			return $m[1] . $gap . self::tag( 'Cust' ) . self::code( 'customer-id', ltrim( $m[3], '0' ) ) . ( $m[4] ?? '' );
+		}, (string) $t );
+		return is_string( $r ) ? $r : (string) $t;
 	}
 
 	/** The team member whose login or display name this whole value is, in any case, or 0. */
@@ -1608,6 +2640,11 @@ class ZDZ_Privacy_View {
 		}
 		if ( isset( $st['logins'][ $k ] ) ) {
 			return (int) $st['logins'][ $k ];
+		}
+		// a one-word display name. A plain word ("admin") reaches this point only in a field that holds a person's name
+		// ($namey, above): there it is the person whose display name it is; in prose it stays a word
+		if ( isset( $st['display'][ $k ] ) ) {
+			return (int) $st['display'][ $k ];
 		}
 		foreach ( $st['words'] as $w => $id ) {
 			if ( strtolower( $w ) === $k ) {
@@ -1998,6 +3035,47 @@ class ZDZ_Privacy_View {
 		if ( '' === trim( $v ) ) {
 			return $v;
 		}
+		// a link written %-encoded ("?to=alex%40example.com") has each encoded piece -- a path segment, a key, a value,
+		// the fragment -- read decoded, masked, and written back encoded, so the link still works. Then the whole link
+		// is read decoded (machine_tail()) over the result, so this step can only add to what is hidden, never take
+		// from it (read piece by piece alone, an e-mail in the path beside an encoded value would get through)
+		if ( preg_match( '/%[0-9A-Fa-f]{2}|\+/', $v ) && ! preg_match( '/\s/u', $v ) ) {
+			$v = self::encoded_parts( $v, $docs );
+		}
+		return self::machine_tail( $v, $docs );
+	}
+
+	/** Each %-encoded piece of a link, decoded, masked (text or a phone: the full pass), re-encoded. */
+	private static function encoded_parts( $v, $docs ) {
+		$parts = preg_split( '/([\/?&=#;])/', (string) $v, -1, PREG_SPLIT_DELIM_CAPTURE );
+		if ( ! is_array( $parts ) ) {
+			return (string) $v;
+		}
+		$query = false;
+		foreach ( $parts as $i => $p ) {
+			if ( '?' === $p || '#' === $p ) {
+				$query = '?' === $p;
+				continue;
+			}
+			if ( 1 === strlen( $p ) && false !== strpos( '/&=;', $p ) ) {
+				continue;
+			}
+			if ( ! preg_match( '/%[0-9A-Fa-f]{2}/', $p ) && ! ( $query && false !== strpos( $p, '+' ) ) ) {
+				continue;
+			}
+			$dv    = $query ? urldecode( $p ) : rawurldecode( $p );
+			$nd    = preg_match_all( '/\d/', $dv );
+			$phone = preg_match( '/^\+?[\d\s().\-]+$/', $dv ) && $nd >= 7 && $nd <= 15;
+			$mv    = ( $phone || preg_match( '/\s/u', $dv ) ) ? self::mask_prose( $dv ) : self::mask_machine( $dv, $docs );
+			if ( $mv !== $dv ) {
+				$parts[ $i ] = rawurlencode( (string) $mv );
+			}
+		}
+		return implode( '', $parts );
+	}
+
+	/** The reading of a machine value below the address: its whole text decoded first. */
+	private static function machine_tail( $v, $docs ) {
 		$d = ( false !== strpos( $v, '%' ) || false !== strpos( $v, '+' ) ) ? rawurldecode( str_replace( '+', ' ', $v ) ) : $v;
 		if ( preg_match( '/\s/u', $d ) ) {
 			$p = self::mask_prose( $d );
@@ -2316,8 +3394,27 @@ class ZDZ_Privacy_View {
 		}
 		$bar = '<div id="' . self::BANNER_ID . '" role="status" style="position:fixed;left:0;right:0;bottom:0;z-index:2147483647;'
 			. 'background:var(--sys-danger,currentColor);color:var(--sys-on-danger,inherit);font:600 13px/1.6 system-ui,sans-serif;'
-			. 'text-align:center;padding:4px 8px;pointer-events:none">' . esc_html( self::banner_text() ) . '</div>';
+			. 'text-align:center;padding:4px 8px;pointer-events:none">' . esc_html( self::banner_text() ) . '</div>'
+			// controls the account may not use are not drawn for it (the server refuses each of them anyway)
+			. '<style id="' . self::BANNER_ID . '-css">' . implode( ',', self::hidden_controls() ) . '{display:none!important}</style>';
 		return preg_match( '/<body\b[^>]*>/i', $out ) ? (string) preg_replace( '/(<body\b[^>]*>)/i', '$1' . $bar, $out, 1 ) : $out;
+	}
+
+	/**
+	 * The selectors of the controls hidden on the account's pages: HIDDEN_CONTROLS, and what an app adds on
+	 * zdz_privacy_view_hidden_controls for buttons of its own that the account may not use. Only plain class and id
+	 * selectors are taken (at most four in a row); Core's own cannot be taken away.
+	 */
+	public static function hidden_controls() {
+		$f   = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_privacy_view_hidden_controls', self::HIDDEN_CONTROLS ) : self::HIDDEN_CONTROLS;
+		$out = array();
+		foreach ( array_merge( self::HIDDEN_CONTROLS, is_array( $f ) ? $f : array() ) as $s ) {
+			$s = is_string( $s ) ? trim( (string) preg_replace( '/\s+/', ' ', $s ) ) : '';
+			if ( preg_match( '/\A[.#][A-Za-z_][A-Za-z0-9_\-]{0,79}(?: [.#][A-Za-z_][A-Za-z0-9_\-]{0,79}){0,3}\z/', $s ) && count( $out ) < 60 ) {
+				$out[ $s ] = true;
+			}
+		}
+		return array_map( 'strval', array_keys( $out ) );
 	}
 
 	/** The line at the foot of every page the account sees. */
@@ -2974,6 +4071,9 @@ class ZDZ_Privacy_View {
 		echo '<h2>' . esc_html__( 'Accounts with Privacy View on', 'zorderz' ) . '</h2>';
 		echo $users ? '<ul>' . implode( '', array_map( function ( $u ) { return '<li>' . esc_html( $u->display_name ) . '</li>'; }, $users ) ) . '</ul>' : '<p>' . esc_html__( 'None.', 'zorderz' ) . '</p>';   // phpcs:ignore -- escaped per item
 		self::render_dm_partner();
+		if ( class_exists( 'ZDZ_Privacy_View_Gate_File' ) ) {
+			ZDZ_Privacy_View_Gate_File::render();   // the optional must-use file: where it stands, and the buttons
+		}
 		echo '</div>';
 	}
 

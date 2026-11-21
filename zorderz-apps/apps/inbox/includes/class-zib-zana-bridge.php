@@ -10,7 +10,7 @@
  *
  *   1. The assistant emits  [ZIB_SEARCH]{"q":"recent supplier orders"}
  *   2. The engine's marker interceptor (in the analytics chat engine,
- *      process_chat, Step 4a) detects it, refuses on kiosk, then — for a real
+ *      process_chat) detects it, refuses on kiosk, then — for a real
  *      person — calls  ZIB_ZANA_Bridge::handle_marker($json, $user_id)  with the
  *      REAL caller's id (server-authoritative; never the model's).
  *   3. This bridge asks the Gatekeeper for THAT user's own mail only, and
@@ -27,6 +27,15 @@
  * marker. The only remaining exposure is the rendered text itself reaching the
  * chat's front-end marker/card pass, so EVERY mail-derived field is neutralised
  * (brackets/backticks/fence-chars defanged) before it enters the answer.
+ *
+ * THE ONE EXCEPTION — answering an email. A reply cannot be written without reading
+ * the email it answers, so reply_source() hands the chat's drafting model exactly ONE
+ * message: the one the person picked (its number in the last list this chat showed
+ * them, or the newest one received from a person they named), from their own mailbox,
+ * received and never sent, only the text a reader can see, cleaned and capped. Which
+ * message is decided by the person's words and this class, never by a model; no
+ * marker lets a model ask for one. Everything else in this file still renders to the
+ * person and is never read back by a model.
  *
  * SERVER-AUTHORITATIVE IDENTITY: the caller id comes from the engine's
  * resolved session, never from the marker JSON. The Gatekeeper additionally
@@ -56,7 +65,7 @@ class ZIB_ZANA_Bridge {
 	const FOLLOWUP_MARKER = 'ZIB_FOLLOWUP';
 
 	/**
-	 * The P6c COMPUTE read marker. Same doctrine as MARKER / FOLLOWUP_MARKER: owner-only,
+	 * The COMPUTE read marker. Same doctrine as MARKER / FOLLOWUP_MARKER: owner-only,
 	 * kiosk-denied, server-rendered, READ-ONLY, identity server-forced. It answers a
 	 * QUANTITATIVE question ("how many units of a product have I ordered", "how much have I
 	 * spent with <vendor>") by aggregating the P6 enrichment EXTRACTS — never a body — and
@@ -66,6 +75,19 @@ class ZIB_ZANA_Bridge {
 
 	/** How many source messages the computed answer lists inline before "…and N more". */
 	const MAX_SOURCES_SHOWN = 6;
+
+	/**
+	 * Answering ONE email from the chat (reply_source()). The numbers in the last list of the person's own mail
+	 * the chat showed them stay good for "reply to #1" for SHOWN_TTL seconds; at most SHOWN_MAX are kept (a "who
+	 * needs a reply" list shows 25); and at most REPLY_TEXT_MAX characters of the one email the person picks are
+	 * handed to the chat's drafting model.
+	 */
+	const SHOWN_TTL      = 7200;
+	const SHOWN_MAX      = 25;
+	const REPLY_TEXT_MAX = 4000;
+
+	/** The chat whose turn this is (the chat app's own conversation id); '' when none was said. */
+	private static $chat = '';
 
 	/**
 	 * Is the mail-chat egress wired up at all? The engine's guard, mirroring the
@@ -186,14 +208,17 @@ class ZIB_ZANA_Bridge {
 	 * invisible Unicode removed, marker / fence syntax defanged, every email address, phone number and
 	 * link replaced by a tag, at most 700 characters. The engine fences the whole block as DATA.
 	 *
+	 * With $to (a reply to one email) the examples are only mail the caller sent to that same address; an
+	 * address that is not a plain one gets none, never mail sent to anyone else.
+	 *
 	 * @return array { ok:bool, related:bool, examples: array<{subject:string, body:string}> }
 	 */
-	public static function style_examples( int $viewer_id, string $topic, int $limit = 3 ): array {
+	public static function style_examples( int $viewer_id, string $topic, int $limit = 3, ?string $to = null ): array {
 		if ( $viewer_id <= 0 || ! self::is_available() || ! class_exists( 'ZIB_Gatekeeper' )
 			|| ! method_exists( 'ZIB_Gatekeeper', 'sent_style_examples' ) ) {
 			return array( 'ok' => false, 'related' => false, 'examples' => array() );
 		}
-		$res = ZIB_Gatekeeper::sent_style_examples( $viewer_id, $topic, $limit );
+		$res = ZIB_Gatekeeper::sent_style_examples( $viewer_id, $topic, $limit, null === $to ? null : self::plain_addr( $to ) );
 		if ( empty( $res['ok'] ) ) {
 			return array( 'ok' => false, 'related' => false, 'examples' => array() );
 		}
@@ -216,6 +241,7 @@ class ZIB_ZANA_Bridge {
 		$s = self::strip_invisibles( $s );
 		$s = str_replace( array( "\r\n", "\r" ), "\n", $s );
 		$s = str_replace( array( '[', ']', '`', "\xE2\x9F\xA6", "\xE2\x9F\xA7" ), array( '(', ')', "'", '(', ')' ), $s );
+		$s = self::no_coded_brackets( $s );
 		$s = (string) preg_replace( '#\b(?:https?://|www\.)\S+#i', '(link)', $s );
 		$s = (string) preg_replace( '/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/', '(email)', $s );
 		$s = (string) preg_replace( '/(?<!\d)(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}(?!\d)/', '(phone)', $s );
@@ -253,11 +279,18 @@ class ZIB_ZANA_Bridge {
 				'ok'        => false,
 				'permitted' => false,
 				'count'     => 0,
-				'render'    => "I can't look at your email right now — it isn't set up for your account. Let me help another way.",
+				'render'    => "I can't look at your email right now: it isn't set up for your account. Let me help another way.",
 			);
 		}
 
 		$rows = ( isset( $res['results'] ) && is_array( $res['results'] ) ) ? $res['results'] : array();
+		// The numbers this answer shows ("**1. …**") are the ones "reply to #1" means. A "latest" answer shows one
+		// message, so it numbers one; a "which person?" answer lists people, not messages, so it numbers nothing.
+		if ( empty( $res['ambiguous'] ) ) {
+			self::remember_shown( $uid, 'latest' === (string) ( $res['mode'] ?? $mode ) ? array_slice( $rows, 0, 1 ) : $rows );
+		} else {
+			self::forget_shown( $uid );
+		}
 		$meta = array(
 			'sender'     => (string) ( $res['sender'] ?? '' ),
 			'ambiguous'  => ! empty( $res['ambiguous'] ),
@@ -283,7 +316,7 @@ class ZIB_ZANA_Bridge {
 
 	/**
 	 * P5 FOLLOW-UPS entry point. Mirrors handle_marker() for the [ZIB_FOLLOWUP]
-	 * read marker. The engine's one-liner (Step 4a-3n, mirroring 4a-3m):
+	 * read marker. The engine's one-liner:
 	 *   $out = ZIB_ZANA_Bridge::handle_followup($payload, (int) $user_id, $ask);
 	 *   $response = $this->inject_marker($re, $out['render']."\n\n", $response);
 	 *
@@ -301,8 +334,8 @@ class ZIB_ZANA_Bridge {
 	}
 
 	/**
-	 * P6c COMPUTE entry point. Mirrors handle_marker() / handle_followup() for the
-	 * [ZIB_ANALYZE] marker. The engine's one-liner (Step 4a-3o):
+	 * COMPUTE entry point. Mirrors handle_marker() / handle_followup() for the
+	 * [ZIB_ANALYZE] marker. The engine's one-liner:
 	 *   $out = ZIB_ZANA_Bridge::handle_analyze($payload, (int) $user_id, $ask);
 	 * Identity is server-authoritative — the caller id is the engine's, never the payload's.
 	 *
@@ -330,7 +363,7 @@ class ZIB_ZANA_Bridge {
 				'ok'        => false,
 				'permitted' => false,
 				'count'     => 0,
-				'render'    => "I can’t look at your email right now — it isn’t set up for your account. Let me help another way.",
+				'render'    => "I can’t look at your email right now: it isn’t set up for your account. Let me help another way.",
 			);
 		}
 		return array(
@@ -405,13 +438,13 @@ class ZIB_ZANA_Bridge {
 			return "📬 I don’t see {$noun}" . ( '' !== $unit ? " in {$unit}" : '' )
 				. " in your indexed mail{$period}."
 				. ( '' !== $coverage ? " ({$coverage}.)" : '' )
-				. " It may be outside that window, phrased differently, or not in an email I’ve indexed — want me to widen the search?";
+				. " It may be outside that window, phrased differently, or not in an email I’ve indexed. Want me to widen the search?";
 		}
 
 		// ── headline ──
 		if ( 'sum_amount' === $metric ) {
 			$plural = ( 1 === $count ) ? 'message' : 'messages';
-			$head = '📬 About **$' . number_format( $value, 2 ) . '**'
+			$head = '📬 About **' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $value, 2 ) : '$' . number_format( $value, 2 ) ) . '**'
 				. ( '' !== $label ? " on “{$label}”" : '' )
 				. " across {$count} {$plural}{$period}.";
 		} elseif ( 'count' === $metric ) {
@@ -422,14 +455,14 @@ class ZIB_ZANA_Bridge {
 			$oc   = count( $orders );
 			$head = '📬 I found **' . $disc . '** ' . ( 1 === $disc ? 'email' : 'emails' )
 				. ( '' !== $label ? " about “{$label}”" : '' )
-				. ' — a total of **' . self::qty_unit( $value, $unit ) . '**'
+				. ', a total of **' . self::qty_unit( $value, $unit ) . '**'
 				. ( $oc > 0 ? ' across **' . $oc . ' ' . ( 1 === $oc ? 'order' : 'orders' ) . '**' : '' ) . '.';
 		}
 
 		$out = array( $head );
 		if ( '' !== $coverage ) {
 			$out[] = '';
-			$out[] = '_Timeframe: ' . $coverage . ' — this counts only what’s in that window._';
+			$out[] = '_Timeframe: ' . $coverage . '. This counts only what’s in that window._';
 		}
 		$out[] = '';
 
@@ -446,7 +479,7 @@ class ZIB_ZANA_Bridge {
 				$date    = self::human_date( (string) ( $o['received_at'] ?? '' ) );
 				$emails  = (int) ( $o['emails'] ?? 0 );
 				$line    = '• **' . self::qty_unit( $oq, $ou ) . '**'
-					. ( '' !== $variant ? " — {$variant}" : '' );
+					. ( '' !== $variant ? " · {$variant}" : '' );
 				$meta = array();
 				if ( '' !== $ref )  { $meta[] = 'Order #' . $ref; }
 				if ( '' !== $date ) { $meta[] = $date; }
@@ -469,14 +502,14 @@ class ZIB_ZANA_Bridge {
 				$subj = ( '' !== $subj ) ? $subj : '(no subject)';
 				$detail = '';
 				if ( isset( $sx['amount'] ) && null !== $sx['amount'] ) {
-					$detail = '$' . number_format( (float) $sx['amount'], 2 );
+					$detail = ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) $sx['amount'], 2 ) : number_format( (float) $sx['amount'], 2 ) );
 				} elseif ( '' !== (string) ( $sx['ref'] ?? '' ) ) {
 					$detail = '#' . self::neutralize( (string) $sx['ref'] );
 				}
 				$meta = array();
 				if ( '' !== $from ) { $meta[] = $from; }
 				if ( '' !== $date ) { $meta[] = $date; }
-				$line = '• ' . ( '' !== $detail ? "**{$detail}** — " : '' ) . $subj;
+				$line = '• ' . ( '' !== $detail ? "**{$detail}**: " : '' ) . $subj;
 				if ( $meta ) { $line .= ' · _' . implode( ' · ', $meta ) . '_'; }
 				$out[] = $line;
 				$shown++;
@@ -488,7 +521,7 @@ class ZIB_ZANA_Bridge {
 
 		$out[] = '';
 		$note  = '_Counted from order & shipment emails';
-		if ( 'sum_qty' === $metric ) { $note .= ' — duplicate confirmation/shipment/delivery notices for the same order aren’t double-counted'; }
+		if ( 'sum_qty' === $metric ) { $note .= '; duplicate confirmation/shipment/delivery notices for the same order aren’t double-counted'; }
 		$note .= '. Only your own indexed mail is used here, and only for you; anything outside the window above, or never emailed, isn’t included._';
 		$out[] = $note;
 		return rtrim( implode( "\n", $out ) );
@@ -563,11 +596,18 @@ class ZIB_ZANA_Bridge {
 				'ok'        => false,
 				'permitted' => false,
 				'count'     => 0,
-				'render'    => "I can't look at your email right now — it isn't set up for your account. Let me help another way.",
+				'render'    => "I can't look at your email right now: it isn't set up for your account. Let me help another way.",
 			);
 		}
 
 		$threads = ( isset( $res['threads'] ) && is_array( $res['threads'] ) ) ? $res['threads'] : array();
+		// "Who needs a reply from me?" numbers threads whose newest message came in, so "reply to #2" answers that
+		// message. The other kinds list mail the person sent: nothing to answer, so nothing is numbered.
+		if ( 'needs_reply' === (string) ( $res['kind'] ?? $kind ) ) {
+			self::remember_shown( $uid, $threads );
+		} else {
+			self::forget_shown( $uid );
+		}
 		// Validate the dates the SAME way the reader did, so the render's period phrase
 		// only ever states a range that was actually applied (a garbled date the reader
 		// dropped must not appear in the answer as though it filtered), and never echoes
@@ -865,7 +905,7 @@ class ZIB_ZANA_Bridge {
 			if ( ! empty( $meta['fuzzy'] ) ) {
 				// Exact search found nothing; these are approximate. Say so — never dress a
 				// fuzzy result up as an exact hit (honest output: an empty result stays empty).
-				$head = '📬 No exact match' . ( '' !== $q ? " for “{$q}”" : '' ) . ' — closest ' . ( 1 === $n ? 'match' : "{$n}" ) . ':';
+				$head = '📬 No exact match' . ( '' !== $q ? " for “{$q}”" : '' ) . '. Closest ' . ( 1 === $n ? 'match' : "{$n}" ) . ':';
 			}
 
 		$out = array( $head, '' );
@@ -897,6 +937,13 @@ class ZIB_ZANA_Bridge {
 			if ( $line ) { $out[] = '_' . implode( ' · ', $line ) . '_'; }
 			if ( '' !== $exc ) { $out[] = $exc; }
 			$out[] = '';
+		}
+		// Say how to answer one, when the list holds one the person received.
+		foreach ( $rows as $r ) {
+			if ( 'sent' !== ( $r['direction'] ?? '' ) ) {
+				$out[] = self::reply_hint( 'list' );
+				break;
+			}
 		}
 		$out[] = '_Only your own indexed mail is shown here, and only to you._';
 		return rtrim( implode( "\n", $out ) );
@@ -931,7 +978,7 @@ class ZIB_ZANA_Bridge {
 
 		if ( $fuzzy ) {
 				// No exact hit — lead honestly with "closest", not an implied exact match.
-				$lead = '📬 No exact match' . ( '' !== $q ? " for “{$q}”" : '' ) . ' — closest: ' . ltrim( str_replace( '📬 ', '', $lead ) );
+				$lead = '📬 No exact match' . ( '' !== $q ? " for “{$q}”" : '' ) . '. Closest: ' . ltrim( str_replace( '📬 ', '', $lead ) );
 			}
 			$out = array( $lead, '' );
 		$exc = self::neutralize( (string) ( $r0['excerpt'] ?? '' ) );
@@ -943,7 +990,10 @@ class ZIB_ZANA_Bridge {
 			$more  = $n - 1;
 			$whora = ( '' !== $sender ? $sender : 'that search' );
 			$out[] = '_There ' . ( 1 === $more ? 'is 1 more recent message' : "are {$more} more recent messages" )
-				. " from {$whora} in your indexed mail — ask to see them._";
+				. " from {$whora} in your indexed mail. Ask to see them._";
+		}
+		if ( ! $sent ) {
+			$out[] = self::reply_hint( 'one' ); // the one message this answer shows is #1
 		}
 		$out[] = '_Only your own indexed mail is shown here, and only to you._';
 		return rtrim( implode( "\n", $out ) );
@@ -957,8 +1007,8 @@ class ZIB_ZANA_Bridge {
 		$q   = self::neutralize( $query );
 		$out = array(
 			'' !== $q
-				? "📬 A few people in your mail match “{$q}” — which did you mean?"
-				: '📬 A few people match — which did you mean?',
+				? "📬 A few people in your mail match “{$q}”. Which did you mean?"
+				: '📬 A few people match. Which did you mean?',
 			'',
 		);
 		$i = 0;
@@ -973,7 +1023,7 @@ class ZIB_ZANA_Bridge {
 			if ( '' !== $addr && $addr !== $label ) { $bits[] = $addr; }
 			if ( $cnt > 0 ) { $bits[] = ( 1 === $cnt ? '1 message' : "{$cnt} messages" ); }
 			$out[] = "**{$i}. " . ( '' !== $label ? $label : ( '' !== $addr ? $addr : '(unknown)' ) ) . '**'
-				. ( $bits ? ' — _' . implode( ' · ', $bits ) . '_' : '' );
+				. ( $bits ? ' · _' . implode( ' · ', $bits ) . '_' : '' );
 		}
 		$out[] = '';
 		$out[] = '_Tell me which one (or paste the address) and I’ll pull their latest._';
@@ -1007,7 +1057,7 @@ class ZIB_ZANA_Bridge {
 			$period = self::period_phrase( (string) ( $meta['since'] ?? '' ), (string) ( $meta['until'] ?? '' ) );
 			if ( 0 === $count ) {
 				return '📬 I don’t see any sent mail' . ( '' !== $period ? " {$period}" : '' )
-					. ' in your index. (This counts messages in your indexed **Sent** mail — if Sent isn’t part of your indexing, it will read empty.)';
+					. ' in your index. (This counts messages in your indexed **Sent** mail; if Sent isn’t part of your indexing, it will read empty.)';
 			}
 			$noun = ( 1 === $count ? 'message' : 'messages' );
 			$head = "📬 You sent **{$count} {$noun}**" . ( '' !== $period ? " {$period}" : '' ) . '.';
@@ -1026,13 +1076,13 @@ class ZIB_ZANA_Bridge {
 		$waiting = ( 'awaiting_reply' === $kind );
 		if ( 0 === $shown ) {
 			if ( $waiting ) {
-				return '📬 Good news — I don’t see any threads where you’re waiting on a reply '
+				return '📬 Good news: I don’t see any threads where you’re waiting on a reply '
 					. '(conversations whose last message was one you sent). '
 					. '_This only works if your **Sent** mail is indexed; if it isn’t, this will read empty rather than “nothing outstanding.”_';
 			}
-			return '📬 You’re all caught up — I don’t see any messages waiting on your reply '
+			return '📬 You’re all caught up: I don’t see any messages waiting on your reply '
 				. '(threads whose last message came in to you, excluding newsletters and no-reply senders). '
-				. '_Best-guess from your mailbox — a thread may already be handled by phone._';
+				. '_Best-guess from your mailbox: a thread may already be handled by phone._';
 		}
 
 		// The digest is capped at MAX_FOLLOWUP threads. When we hit the cap there may be
@@ -1042,16 +1092,19 @@ class ZIB_ZANA_Bridge {
 		$atleast = $capped ? 'at least ' : '';
 		$noun = ( 1 === $shown ? 'thread' : 'threads' );
 		$head = $waiting
-			? "📬 You’re waiting to hear back on {$atleast}**{$shown} {$noun}** — your message was the last one, no reply yet:"
-			: ( $capped ? '📬 At least ' : '📬 ' ) . "**{$shown} {$noun}** look like they’re waiting on your reply — the last message in each came in to you, most overdue first:";
+			? "📬 You’re waiting to hear back on {$atleast}**{$shown} {$noun}** where your message was the last one, with no reply yet:"
+			: ( $capped ? '📬 At least ' : '📬 ' ) . "**{$shown} {$noun}** look like they’re waiting on your reply. The last message in each came in to you, most overdue first:";
 		$out = array( $head, '' );
 		$out = array_merge( $out, self::followup_lines( $threads, $kind, $now ) );
 		if ( $capped ) {
-			$out[] = "_Showing your {$shown} most recent — there may be more; ask about a specific person to look further back._";
+			$out[] = "_Showing your {$shown} most recent. There may be more; ask about a specific person to look further back._";
+		}
+		if ( ! $waiting ) {
+			$out[] = self::reply_hint( 'list' ); // each thread's newest message came in (followups() remembered them)
 		}
 
 		// Honest caveat (never imply certainty) + the send-doctrine closing.
-		$out[] = '_These are best-guesses from your mailbox — a thread may already be resolved by phone, or the reply came on another thread. Only your own indexed mail is used, and only shown to you._';
+		$out[] = '_These are best-guesses from your mailbox: a thread may already be resolved by phone, or the reply came on another thread. Only your own indexed mail is used, and only shown to you._';
 		return rtrim( implode( "\n", $out ) );
 	}
 
@@ -1283,9 +1336,15 @@ class ZIB_ZANA_Bridge {
 	 * newlines/controls — the visible words are otherwise preserved.
 	 */
 	public static function neutralize( string $s ): string {
+		// Invisible and deceptive Unicode goes first, so a scheme or a marker split by a zero-width character
+		// ("java<ZWSP>script:") is whole again before the defangs below run.
+		$s = self::strip_invisibles( $s );
 		// Bracketed marker syntax → parens, so [ZDZ_EMAIL_DRAFT]…/[ZDZ_EST_WIDGET]… etc.
 		// mailed in by an attacker can never be re-parsed as a real marker/card.
 		$s = str_replace( array( '[', ']' ), array( '(', ')' ), $s );
+		// A bracket may also arrive written as "%5B" or "&#91;" (a later step or another surface may draw those as
+		// "["): the same parenthesis.
+		$s = self::no_coded_brackets( $s );
 		// Code spans / fences and the spotlight brackets.
 		$s = str_replace( array( '`', '⟦', '⟧' ), array( "'", '(', ')' ), $s );
 		// Defang URL schemes. The bracket pass above already breaks a markdown image
@@ -1308,7 +1367,7 @@ class ZIB_ZANA_Bridge {
 			return '';
 		}
 		$ts = strtotime( $sql . ' UTC' );
-		return $ts ? gmdate( 'M j, Y', $ts ) : self::neutralize( $sql );
+		return $ts ? gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), $ts ) : self::neutralize( $sql );
 	}
 
 	/**
@@ -1445,13 +1504,14 @@ class ZIB_ZANA_Bridge {
 		$until  = (string) ( $window['until'] ?? '' );
 		$phrase = (string) ( $window['phrase'] ?? '' );
 
+		self::forget_shown( $uid ); // mail the person sent is not mail to answer: nothing is numbered
 		$res = ZIB_Gatekeeper::owner_told( $uid, $recipient, $since, $until, ZIB_Gatekeeper::MAX_CHAT_HITS, $aliases );
 		if ( empty( $res['ok'] ) ) {
 			return array(
 				'ok'        => false,
 				'permitted' => false,
 				'count'     => 0,
-				'render'    => "I can't look at your email right now — it isn't set up for your account. Let me help another way.",
+				'render'    => "I can't look at your email right now: it isn't set up for your account. Let me help another way.",
 			);
 		}
 		$items = ( isset( $res['results'] ) && is_array( $res['results'] ) ) ? $res['results'] : array();
@@ -1482,10 +1542,11 @@ class ZIB_ZANA_Bridge {
 				'ok'        => false,
 				'permitted' => false,
 				'count'     => 0,
-				'render'    => "I can't look at your email right now — it isn't set up for your account. Let me help another way.",
+				'render'    => "I can't look at your email right now: it isn't set up for your account. Let me help another way.",
 			);
 		}
 		$items = ( isset( $res['results'] ) && is_array( $res['results'] ) ) ? $res['results'] : array();
+		self::remember_shown( $uid, $items ); // the cards in the order shown, the top one #1
 		return array(
 			'ok'        => true,
 			'permitted' => true,
@@ -1513,7 +1574,7 @@ class ZIB_ZANA_Bridge {
 		$lead  = ( '' !== $who )
 			? "📬 Here's what you told **{$who}**{$w}"
 			: "📬 Here's what you sent{$w}";
-		$lead .= ( 1 === $n ? ':' : " — {$n} messages:" );
+		$lead .= ( 1 === $n ? ':' : ", {$n} messages:" );
 
 		$cards = array();
 		foreach ( $items as $it ) {
@@ -1559,7 +1620,7 @@ class ZIB_ZANA_Bridge {
 		$lead  = ( '' !== $who )
 			? "📬 Here's what **{$who}** sent you{$w}"
 			: "📬 Here's what you received{$w}";
-		$lead .= ( 1 === $n ? ':' : " — {$n} messages:" );
+		$lead .= ( 1 === $n ? ':' : ", {$n} messages:" );
 
 		$cards = array();
 		foreach ( $items as $it ) {
@@ -1577,7 +1638,9 @@ class ZIB_ZANA_Bridge {
 		if ( ! is_string( $json ) || '' === $json ) {
 			$json = '{"items":[]}';
 		}
-		return $lead . "\n\n[ZIB_MAIL]" . $json . "[/ZIB_MAIL]\n\n_Only your own indexed mail is shown here, and only to you._";
+		// The top card is #1, as heard() remembered them.
+		$hint = self::reply_hint( 1 === $n ? 'one' : 'cards' );
+		return $lead . "\n\n[ZIB_MAIL]" . $json . "[/ZIB_MAIL]\n\n" . $hint . "\n_Only your own indexed mail is shown here, and only to you._";
 	}
 
 	/**
@@ -1610,7 +1673,9 @@ class ZIB_ZANA_Bridge {
 		}
 		// Line / paragraph separators -> space (byte-exact, always safe: can't start a new block).
 		$s = str_replace( array( "\xE2\x80\xA8", "\xE2\x80\xA9" ), ' ', $s );
-		$re  = '/[\x{00AD}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{206F}\x{FEFF}\x{FFF9}-\x{FFFB}\x{E0000}-\x{E007F}]/u';
+		// Also the variation selectors (U+FE00-FE0F, U+E0100-E01EF: a run of them can carry hidden text), the
+		// Mongolian ones, U+034F and the Hangul and Khmer fillers, all of which draw as nothing.
+		$re  = '/[\x{00AD}\x{034F}\x{115F}\x{1160}\x{17B4}\x{17B5}\x{180B}-\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{206F}\x{3164}\x{FE00}-\x{FE0F}\x{FEFF}\x{FFA0}\x{FFF9}-\x{FFFB}\x{E0000}-\x{E007F}\x{E0100}-\x{E01EF}]/u';
 		$out = preg_replace( $re, '', $s );
 		if ( null === $out ) {
 			// Invalid UTF-8 makes the /u pass bail. Coerce to valid UTF-8 and retry once; never blank.
@@ -1637,11 +1702,311 @@ class ZIB_ZANA_Bridge {
 			return self::neutralize( $sql );
 		}
 		if ( function_exists( 'wp_date' ) ) {
-			$s = wp_date( 'M j, g:ia', $ts );
+			$s = wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:ia' ) : 'M j, g:ia' ), $ts );
 			if ( is_string( $s ) ) {
 				return $s;
 			}
 		}
-		return gmdate( 'M j, g:ia', $ts );
+		return gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:ia' ) : 'M j, g:ia' ), $ts );
+	}
+
+	// ── Answering ONE email from the chat ───────────────────────────
+
+	/** The command a list tells the person to say. The chat reads it back to know a list of mail is on screen. */
+	const REPLY_SAY = '“reply to #1”';
+
+	/** The line every list of the person's own mail ends with (the chat reads it back too). */
+	const OWN_MAIL_NOTE = 'Only your own indexed mail is shown here, and only to you.';
+
+	/**
+	 * The line under a list of mail the person received, saying how to answer one. $kind: 'list' (numbered lines),
+	 * 'one' (a single message) or 'cards' (expandable cards, the top one #1).
+	 */
+	public static function reply_hint( string $kind = 'list' ): string {
+		$say = self::REPLY_SAY;
+		if ( 'one' === $kind ) {
+			/* translators: %s: the words to say, in quotes */
+			$t = sprintf( __( 'To answer it, say %s.', 'zorderz' ), $say );
+		} elseif ( 'cards' === $kind ) {
+			/* translators: %s: the words to say, in quotes */
+			$t = sprintf( __( 'To answer one of these, say %s (the top one is #1).', 'zorderz' ), $say );
+		} else {
+			/* translators: %s: the words to say, in quotes */
+			$t = sprintf( __( 'To answer one of these, say %s (or its number).', 'zorderz' ), $say );
+		}
+		return '_' . $t . '_';
+	}
+
+	/** The marks by which the chat knows its newest answer is a list of the person's own mail. Pure. */
+	public static function list_signs(): array {
+		return array( self::REPLY_SAY, self::OWN_MAIL_NOTE );
+	}
+
+	/**
+	 * Which chat the next list belongs to. The chat app says so before a turn renders mail or reads a number, so a
+	 * list shown in one chat (or on another device) never numbers "reply to #1" in another. '' or '0' is no chat:
+	 * one list per person, as for any other caller.
+	 */
+	public static function set_chat( string $chat ): void {
+		$chat       = (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', $chat );
+		self::$chat = ( '' === $chat || '0' === $chat ) ? '' : substr( $chat, 0, 64 );
+	}
+
+	/** The transient that holds the numbered list: per person, and per chat when the chat said which. */
+	private static function shown_key( int $uid ): string {
+		return 'zib_shown_' . $uid . ( '' !== self::$chat ? '_' . substr( md5( self::$chat ), 0, 12 ) : '' );
+	}
+
+	/**
+	 * Remember which of the person's own messages the answer just shown numbered 1, 2, 3… (and the subject they
+	 * saw beside each number), so "reply to #2" means that message and nothing else. Per person and per chat, for
+	 * SHOWN_TTL; the newest list replaces the last. Ids and subject keys only: no body, no address. Only what the
+	 * answer shows: a "latest" answer shows one.
+	 *
+	 * @param array $rows rows in the order shown; each has 'id' and 'subject'.
+	 */
+	public static function remember_shown( int $uid, array $rows ): void {
+		if ( $uid <= 0 || ! function_exists( 'set_transient' ) ) {
+			return;
+		}
+		$ids  = array();
+		$keys = array();
+		foreach ( $rows as $r ) {
+			$id = (int) ( is_array( $r ) ? ( $r['id'] ?? 0 ) : 0 );
+			if ( $id <= 0 ) {
+				continue;
+			}
+			$subj    = trim( (string) ( $r['subject'] ?? '' ) );
+			$printed = self::neutralize( '' !== $subj ? $subj : '(no subject)' ); // as the list prints it
+			// The chat may show a subject with something taken out of it (an access code it never prints): the key is
+			// made from what the person will see, so the number still finds its message.
+			if ( function_exists( 'apply_filters' ) ) {
+				$shown = apply_filters( 'zib_chat_printed_subject', $printed, $uid );
+				if ( is_string( $shown ) && '' !== trim( $shown ) ) {
+					$printed = $shown;
+				}
+			}
+			$ids[]  = $id;
+			$keys[] = self::subject_key( $printed );
+			if ( count( $ids ) >= self::SHOWN_MAX ) {
+				break;
+			}
+		}
+		if ( empty( $ids ) ) {
+			self::forget_shown( $uid );
+			return;
+		}
+		set_transient( self::shown_key( $uid ), array( 'ids' => $ids, 'subjects' => $keys, 'at' => time() ), self::SHOWN_TTL );
+	}
+
+	/** Nothing numbered for "reply to #1" (the last answer listed sent mail, a colleague's mail or people). */
+	public static function forget_shown( int $uid ): void {
+		if ( $uid > 0 && function_exists( 'delete_transient' ) ) {
+			delete_transient( self::shown_key( $uid ) );
+		}
+	}
+
+	/** The last list remembered for this person in this chat: { ids:int[], subjects:string[] } (both empty when none). */
+	public static function shown_list( int $uid ): array {
+		$v = ( $uid > 0 && function_exists( 'get_transient' ) ) ? get_transient( self::shown_key( $uid ) ) : false;
+		if ( ! is_array( $v ) || empty( $v['ids'] ) || ! is_array( $v['ids'] ) ) {
+			return array( 'ids' => array(), 'subjects' => array() );
+		}
+		return array(
+			'ids'      => array_values( array_map( 'intval', $v['ids'] ) ),
+			'subjects' => array_values( array_map( 'strval', is_array( $v['subjects'] ?? null ) ? $v['subjects'] : array() ) ),
+		);
+	}
+
+	/**
+	 * A subject as a comparison key: what the person saw (a list line, a card) and what was remembered read the
+	 * same however it was escaped on the way. Letters and digits only, lower case. Pure.
+	 */
+	public static function subject_key( string $s ): string {
+		$s = str_replace( array( '&lt;', '&gt;', '&amp;', '&quot;', '&#39;' ), array( '<', '>', '&', '"', "'" ), $s );
+		$s = function_exists( 'mb_strtolower' ) ? mb_strtolower( $s ) : strtolower( $s );
+		$k = preg_replace( '/[^\p{L}\p{N}]+/u', '', $s );
+		$k = is_string( $k ) ? $k : '';
+		if ( '' === $k && '' !== trim( $s ) ) {
+			// A subject with no letter or digit ("???", an emoji): keyed by what it is, spaces aside.
+			$k = 'x' . substr( md5( (string) preg_replace( '/\s+/u', '', $s ) ), 0, 16 );
+		}
+		return $k;
+	}
+
+	/** "Name <addr>" / "addr" / "Name" (ZIB_Gatekeeper::fmt_addr) as { name, addr }; addr '' unless a plain one. Pure. */
+	public static function parse_from( string $from ): array {
+		$from = trim( $from );
+		$name = $from;
+		$addr = '';
+		if ( preg_match( '/^(.*?)\s*<([^<>\s]+@[^<>\s]+)>\s*$/', $from, $m ) ) {
+			$name = trim( $m[1], " \t\"'" );
+			$addr = trim( $m[2] );
+		} elseif ( false !== strpos( $from, '@' ) && false === strpos( $from, ' ' ) ) {
+			$name = '';
+			$addr = $from;
+		}
+		return array( 'name' => $name, 'addr' => self::plain_addr( $addr ) );
+	}
+
+	/**
+	 * The sender of a stored message as { name, addr }: the stored name and address columns when the row carries
+	 * them (an address is then never read out of the display name, which its writer chose), else the formatted
+	 * "Name <addr>". addr is '' unless it is a plain one.
+	 */
+	public static function sender_of( array $row ): array {
+		if ( array_key_exists( 'from_addr', $row ) ) {
+			return array(
+				'name' => trim( (string) ( $row['from_name'] ?? '' ), " \t\"'" ),
+				'addr' => self::plain_addr( (string) $row['from_addr'] ),
+			);
+		}
+		return self::parse_from( (string) ( $row['from'] ?? '' ) );
+	}
+
+	/**
+	 * An address as a plain lowercase one, or ''. Stricter than the standard on purpose: a quoted local part
+	 * ("\"them@example.com\"@example.net") is valid mail, but a mail program reads it as a different address, and
+	 * an apostrophe can end an address early where a draft is opened in a mail program, so the chat never
+	 * addresses either. Pure.
+	 */
+	public static function plain_addr( string $a ): string {
+		$a = strtolower( trim( $a ) );
+		if ( strlen( $a ) > 254 || false !== strpos( $a, '..' )
+			|| ! preg_match( "/^[a-z0-9_%+\\-](?:[a-z0-9._%+\\-]{0,62}[a-z0-9_%+\\-])?@[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?)*\\.[a-z]{2,24}$/", $a ) ) {
+			return '';
+		}
+		return $a;
+	}
+
+	/** A bracket written "%5B" / "&#91;" / "&lbrack;" (and its closing twin) as a parenthesis, like "[" and "]". Pure. */
+	public static function no_coded_brackets( string $s ): string {
+		$out = preg_replace( array( '/%5B|&#0*91;|&#x0*5b;|&lsqb;|&lbrack;/i', '/%5D|&#0*93;|&#x0*5d;|&rsqb;|&rbrack;/i' ), array( '(', ')' ), $s );
+		return is_string( $out ) ? $out : $s;
+	}
+
+	/**
+	 * The ONE email the person asked the chat to answer, cleaned for the chat's drafting model.
+	 *
+	 * Every other mail read in the chat renders straight to the person and the model never re-reads it (the
+	 * doctrine at the top of this file). Writing a reply cannot be done without reading the email, so this is the
+	 * one narrow exception, shaped so the email can only ever be MATERIAL:
+	 *   - ONE message the person picked: its number in the last list the chat showed them ($ref n, checked
+	 *     against the subject they saw beside that number, $ref subject), or the newest message received from a
+	 *     person they named ($ref from). $ref id is only for a caller continuing a turn it planned itself, never
+	 *     for words from a request.
+	 *   - The person's OWN mailbox only, through ZIB_Gatekeeper (subject forced == actor, the shared device
+	 *     refused, every open audited), for someone who has the Email app, and only mail they RECEIVED: a message
+	 *     they sent is nothing to answer.
+	 *   - Only the text a reader can see (ZIB_Gatekeeper::visible_html), and cleaned like the voice examples
+	 *     (style_clean): invisible Unicode out; marker, fence and code-span syntax defanged; every link, email
+	 *     address and phone number replaced by a tag; capped. The chat fences it as DATA and lets nothing but one
+	 *     email draft, to the sender, out of that turn.
+	 *
+	 * @param int   $viewer_id the chat's resolved caller (never anything from the request).
+	 * @param array $ref       { n:int, subject?:string } | { from:string } | { id:int }
+	 * @return array ok:true → id, from_name, from_addr, subject, received_at, class, text, truncated, has_attachments;
+	 *               ok:false → reason ∈ not_permitted | bad_ref | no_list | out_of_range | stale | not_found |
+	 *               ambiguous | sent_by_you | no_text | too_complex (+ count for a list, senders for ambiguous).
+	 */
+	public static function reply_source( int $viewer_id, array $ref ): array {
+		if ( $viewer_id <= 0 || ! self::is_available() || ! class_exists( 'ZIB_Gatekeeper' ) ) {
+			return array( 'ok' => false, 'reason' => 'not_permitted' );
+		}
+		if ( function_exists( 'zib_user_has_access' ) && ! zib_user_has_access( $viewer_id ) ) {
+			return array( 'ok' => false, 'reason' => 'not_permitted' ); // the Email app is not this person's
+		}
+		$id = 0;
+		if ( isset( $ref['n'] ) ) {
+			$n     = (int) $ref['n'];
+			$shown = self::shown_list( $viewer_id );
+			$ids   = $shown['ids'];
+			if ( empty( $ids ) ) {
+				return array( 'ok' => false, 'reason' => 'no_list' );
+			}
+			if ( $n < 1 || $n > count( $ids ) ) {
+				return array( 'ok' => false, 'reason' => 'out_of_range', 'count' => count( $ids ) );
+			}
+			$want = self::subject_key( (string) ( $ref['subject'] ?? '' ) );
+			$have = (string) ( $shown['subjects'][ $n - 1 ] ?? '' );
+			if ( '' === $want || $want !== $have ) {
+				// The list the person is looking at is not the one remembered (a newer one was shown since).
+				return array( 'ok' => false, 'reason' => 'stale', 'count' => count( $ids ) );
+			}
+			$id = (int) $ids[ $n - 1 ];
+		} elseif ( isset( $ref['from'] ) ) {
+			$from = ZIB_Gatekeeper::normalize_sender( trim( (string) $ref['from'] ) );
+			if ( '' === $from || ZIB_Gatekeeper::is_generic_recipient( $from ) ) {
+				return array( 'ok' => false, 'reason' => 'bad_ref' );
+			}
+			$res = ZIB_Gatekeeper::owner_received( $viewer_id, $from, '', '', ZIB_Gatekeeper::MAX_CHAT_HITS );
+			if ( empty( $res['ok'] ) ) {
+				return array( 'ok' => false, 'reason' => 'not_permitted' );
+			}
+			$hits = ( isset( $res['results'] ) && is_array( $res['results'] ) ) ? $res['results'] : array();
+			if ( empty( $hits ) ) {
+				return array( 'ok' => false, 'reason' => 'not_found' );
+			}
+			// Two senders are two addresses, even under one name: a name on an email is whatever its writer typed,
+			// and a first name can match two people. Ask, never pick one of them.
+			$senders = array();
+			foreach ( $hits as $h ) {
+				$p  = self::sender_of( (array) $h );
+				$sk = '' !== $p['addr'] ? $p['addr'] : 'name:' . self::subject_key( $p['name'] );
+				if ( 'name:' !== $sk && ! isset( $senders[ $sk ] ) ) {
+					$senders[ $sk ] = array(
+						'name' => str_replace( "\n", ' ', self::style_clean( $p['name'], 60 ) ),
+						'addr' => $p['addr'],
+					);
+				}
+			}
+			if ( count( $senders ) > 1 ) {
+				return array( 'ok' => false, 'reason' => 'ambiguous', 'senders' => array_slice( array_values( $senders ), 0, 5 ) );
+			}
+			$id = (int) ( $hits[0]['id'] ?? 0 );
+		} elseif ( isset( $ref['id'] ) ) {
+			$id = (int) $ref['id'];
+		}
+		if ( $id <= 0 ) {
+			return array( 'ok' => false, 'reason' => 'bad_ref' );
+		}
+		$got = ZIB_Gatekeeper::owner_get_message( $viewer_id, $id, true ); // only the text its reader can see
+		if ( empty( $got['ok'] ) || empty( $got['message'] ) || ! is_array( $got['message'] ) ) {
+			return array( 'ok' => false, 'reason' => 'not_found' );
+		}
+		$m = $got['message'];
+		if ( 'in' !== (string) ( $m['direction'] ?? '' ) ) {
+			return array( 'ok' => false, 'reason' => 'sent_by_you' ); // only mail that is known to have come in is answered
+		}
+		if ( ! empty( $m['body_unreadable'] ) ) {
+			return array( 'ok' => false, 'reason' => 'too_complex' ); // its hidden text could not be told from its visible text
+		}
+		$who = self::sender_of( $m );
+		$raw = trim( (string) ( $m['body_text'] ?? '' ) );
+		$own = trim( ZIB_Gatekeeper::strip_quoted( $raw ) );
+		// An answer typed INTO the quoted thread ("see my answers below") leaves almost nothing above the quote:
+		// then the whole text is the email.
+		$len  = function_exists( 'mb_strlen' ) ? 'mb_strlen' : 'strlen';
+		$text = ( $len( $own ) < 200 && $len( $raw ) > $len( $own ) ) ? $raw : $own;
+		if ( '' === trim( $text ) ) {
+			return array( 'ok' => false, 'reason' => 'no_text' ); // nothing its reader can see (all pictures, or all hidden)
+		}
+		// Cut by what the model gets, not by the raw text: links and addresses become short tags, so a long raw
+		// email can come to well under the limit (and must not be called cut). A huge one is read only in its first part.
+		$long = $len( $text ) > 60000;
+		$full = self::style_clean( $long ? ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, 60000 ) : substr( $text, 0, 60000 ) ) : $text, 1000000 );
+		$cut  = $long || $len( $full ) > self::REPLY_TEXT_MAX;
+		return array(
+			'ok'              => true,
+			'id'              => $id,
+			'from_name'       => str_replace( "\n", ' ', self::style_clean( $who['name'], 80 ) ),
+			'from_addr'       => $who['addr'],
+			'subject'         => str_replace( "\n", ' ', self::style_clean( (string) ( $m['subject'] ?? '' ), 160 ) ),
+			'received_at'     => (string) ( $m['received_at'] ?? '' ),
+			'class'           => (string) ( $m['class'] ?? '' ), // 'internal' = a colleague
+			'text'            => $cut ? self::style_clean( $full, self::REPLY_TEXT_MAX ) : $full,
+			'truncated'       => $cut,
+			'has_attachments' => (int) ( $m['has_attachments'] ?? 0 ),
+		);
 	}
 }

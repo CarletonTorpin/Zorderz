@@ -5,21 +5,17 @@
 > **Owner:** `ZDZ_Item_Engine` (`inc/class-zdz-item-engine.php`)
 > **Admin:** Zorderz → Item Engine (`ZDZ_Item_Engine_Admin`)
 > **Depends on:** `ZDZ_Business_Profile` (currency sign only), WordPress taxonomy engine
-> **Depended on by (as they port):** Commission, Analytics/Chat, Estimate Creator, Prep (cut queue), Receipts, Stock, Leads, Surveys, Jobs
+> **Depended on by:** Commission, Analytics/Chat, Estimate Creator, Prep (cut queue), Receipts, Stock, Leads, Surveys, Jobs
 
 ---
 
 ## Why this exists
 
-Before the Item Engine, "what this business sells" was hardcoded in **eight** places: a
-separate product taxonomy in every module, each drifting from the others. That taxonomy was
-also the **wire format** between modules: one app counted units into a fixed seven-bucket enum
-and taught every other app those seven English words. A business that did not sell those seven
-things got empty numbers.
-
-The Item Engine replaces all eight copies with one admin-defined catalog and makes the
-cross-app count vocabulary **catalog-driven**. There are **no hardcoded product names** anywhere
-in the engine.
+One shared catalog: every module reads "what this business sells" from one admin-defined catalog,
+never from a product list of its own. The catalog is also the **wire format** between modules:
+counts passed from one app to another use the catalog's own items and words, so a business's
+numbers come out in its own vocabulary whatever it sells. There are **no product names** in the
+engine.
 
 ## The model (fixed)
 

@@ -229,7 +229,7 @@
 }
 .zim-w-list li .zim-w-badge {
 	background: var(--sys-brand, #3B82F6);
-	color: #fff;
+	color: var(--sys-text-brand, #FFFFFF);
 	font-size: 11px;
 	font-weight: var(--sys-font-wt-sb, 600);
 	padding: 2px 7px;
@@ -405,7 +405,7 @@
 
 /* ── Avatar (received only) ── */
 /* v1.0.21: Increased from 30px/11px to 36px/13px for readability.
-   CT/GT initials were nearly illegible at 11px, especially in dark mode
+   Two-letter initials were nearly illegible at 11px, especially in dark mode
    and on mobile. 36px also improves touch-target compliance (WCAG 2.5.8). */
 .zim-w-msg-avatar {
 	width: 36px; height: 36px; flex-shrink: 0;
@@ -865,7 +865,7 @@
 	width: 44px; height: 44px;
 	border-radius: 50%;
 	background: var(--sys-brand, #3B82F6);
-	color: #fff;
+	color: var(--sys-text-brand, #FFFFFF);
 	font-size: 18px;
 	display: inline-flex;
 	align-items: center;
@@ -1111,7 +1111,7 @@
 	align-items: center;
 	gap: 6px;
 	padding: 10px 18px;
-	background: var(--sys-brand, #2C5F8A);
+	background: var(--sys-brand, #5150D6);
 	color: var(--sys-text-brand, #FFFFFF);
 	border-radius: var(--ref-radius-sm, 8px);
 	font-weight: 600;
@@ -1121,7 +1121,7 @@
 }
 .zim-w-overlay-body > p > a:hover,
 .zim-w-overlay-body > a:hover {
-	background: var(--sys-brand-hover, #1E3A5F);
+	background: var(--sys-brand-hover, #433FBD);
 	text-decoration: none;
 }
 .zim-w-field {
@@ -1176,7 +1176,7 @@
 .zim-w-field input[type="time"]::-webkit-datetime-edit-minute-field:focus,
 .zim-w-field input[type="time"]::-webkit-datetime-edit-ampm-field:focus {
 	background: var(--sys-brand, #3B82F6);
-	color: #FFFFFF;
+	color: var(--sys-text-brand, #FFFFFF);
 	border-radius: 3px;
 }
 .zim-w-field--row {
@@ -1191,7 +1191,7 @@
 }
 .zim-w-primary-btn {
 	background: var(--sys-brand, #3B82F6);
-	color: #fff;
+	color: var(--sys-text-brand, #FFFFFF);
 	padding: 10px 16px;
 	border-radius: var(--ref-radius-md, 8px);
 	font-weight: var(--sys-font-wt-md, 500);
@@ -1556,7 +1556,7 @@
 .zim-w-select-btn:active { opacity: 0.7; }
 .zim-w--select-mode .zim-w-select-btn {
 	background: var(--sys-brand, #3B82F6);
-	color: #fff;
+	color: var(--sys-text-brand, #FFFFFF);
 	border-color: var(--sys-brand, #3B82F6);
 }
 
@@ -1784,7 +1784,7 @@
 .zim-w-edit-row .zim-w-edit-save {
 	background: var(--sys-brand, #2563EB);
 	border-color: var(--sys-brand, #2563EB);
-	color: var(--sys-on-brand, #FFFFFF);
+	color: var(--sys-text-brand, #FFFFFF);
 }
 .zim-w-edit-row button:disabled { opacity: 0.6; cursor: default; }
 
@@ -1944,7 +1944,7 @@ body.zim-fullpage { font-family: 'Inter', system-ui, -apple-system, sans-serif; 
   padding: 0;
   border: 0;
   background: none;
-  color: var(--sys-brand, #2C5F8A);
+  color: var(--sys-brand, #5150D6);
   font: inherit;
   font-size: var(--zdz-type-meta, 16px);
   font-weight: var(--sys-font-wt-sb, 600);

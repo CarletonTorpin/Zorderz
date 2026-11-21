@@ -7,7 +7,8 @@
  *   Mailbox words            supplies this business buys by email; admin topics that live in its mail (one a line)
  *   Website pages            the page list the chat may open (JSON: primary_pages / tools / company_utility)
  *   Starter questions        per role, one a line; empty = Core's neutral questions
- *   Facts                    the business's own facts (add, edit, delete; CSV through the REST routes)
+ *   Facts                    the business's own facts (add, edit, delete; CSV through the REST routes); two blank
+ *                            entries to start from (ZANA_Fact_Starters: legal entities, who signs)
  *   Answer times             the last seven days by kind (ZANA_Turn_Timings)
  * Administrators only (manage_options); every option has its own sanitiser.
  *
@@ -139,17 +140,22 @@ class ZANA_Settings {
 			}
 			echo '</tbody></table>';
 		}
+		// A blank entry the administrator chose fills the form with its labels (ZANA_Fact_Starters); nothing is stored here.
+		$blank = class_exists( 'ZANA_Fact_Starters' ) ? ZANA_Fact_Starters::chosen() : null;
+		if ( class_exists( 'ZANA_Fact_Starters' ) ) {
+			echo ZANA_Fact_Starters::links_html( admin_url( 'admin.php?page=' . self::PAGE ) );   // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- links_html() escapes every address and label it writes
+		}
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="zana_fact_save" />';
 		wp_nonce_field( 'zana_fact_save' );
-		echo '<p><input name="id" placeholder="' . esc_attr__( 'id (e.g. opening_hours)', 'zorderz' ) . '" /> <select name="category">';
+		echo '<p><input name="id" value="' . esc_attr( $blank ? $blank['id'] : '' ) . '" placeholder="' . esc_attr__( 'id (e.g. opening_hours)', 'zorderz' ) . '" /> <select name="category">';
 		foreach ( ZANA_Company_Facts::CATEGORIES as $c ) {
-			echo '<option value="' . esc_attr( $c ) . '">' . esc_html( $c ) . '</option>';
+			echo '<option value="' . esc_attr( $c ) . '"' . selected( $blank ? $blank['category'] : '', $c, false ) . '>' . esc_html( $c ) . '</option>';
 		}
 		echo '</select> <select name="tier_limit">';
 		foreach ( ZANA_Company_Facts::TIER_LIMITS as $t ) {
-			echo '<option value="' . esc_attr( $t ) . '">' . esc_html( $t ) . '</option>';
+			echo '<option value="' . esc_attr( $t ) . '"' . selected( $blank ? $blank['tier_limit'] : '', $t, false ) . '>' . esc_html( $t ) . '</option>';
 		}
-		echo '</select> <input name="label" placeholder="' . esc_attr__( 'label', 'zorderz' ) . '" /></p><p><textarea name="value" rows="3" cols="80" placeholder="' . esc_attr__( 'the fact (saving an existing id replaces it)', 'zorderz' ) . '"></textarea></p>';
+		echo '</select> <input name="label" value="' . esc_attr( $blank ? $blank['label'] : '' ) . '" placeholder="' . esc_attr__( 'label', 'zorderz' ) . '" /></p><p><textarea name="value" rows="' . ( $blank ? 10 : 3 ) . '" cols="80" placeholder="' . esc_attr__( 'the fact (saving an existing id replaces it)', 'zorderz' ) . '">' . esc_textarea( $blank ? ZANA_Fact_Starters::template( $blank['id'] ) : '' ) . '</textarea></p>';
 		submit_button( __( 'Save fact', 'zorderz' ), 'secondary', 'submit', false );
 		echo '</form>';
 	}
@@ -159,13 +165,18 @@ class ZANA_Settings {
 			wp_die( esc_html__( 'Not allowed.', 'zorderz' ), 403 );
 		}
 		check_admin_referer( 'zana_fact_save' );
-		$r = ZANA_Company_Facts::save( array(
+		$fact = array(
 			'id'         => wp_unslash( (string) ( $_POST['id'] ?? '' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- ZANA_Company_Facts::save() sanitizes every field (allow-lists, wp_strip_all_tags) before it is stored
 			'category'   => wp_unslash( (string) ( $_POST['category'] ?? '' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- ZANA_Company_Facts::save() sanitizes every field (allow-lists, wp_strip_all_tags) before it is stored
 			'label'      => wp_unslash( (string) ( $_POST['label'] ?? '' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- ZANA_Company_Facts::save() sanitizes every field (allow-lists, wp_strip_all_tags) before it is stored
 			'value'      => wp_unslash( (string) ( $_POST['value'] ?? '' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- ZANA_Company_Facts::save() sanitizes every field (allow-lists, wp_strip_all_tags) before it is stored
 			'tier_limit' => wp_unslash( (string) ( $_POST['tier_limit'] ?? 'all' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- ZANA_Company_Facts::save() sanitizes every field (allow-lists, wp_strip_all_tags) before it is stored
-		) );
+		);
+		if ( class_exists( 'ZANA_Fact_Starters' ) ) {
+			// a blank entry's labels left as they came are not facts: they are dropped, and an entry with nothing typed is refused below
+			$fact['value'] = ZANA_Fact_Starters::filled( sanitize_key( $fact['id'] ), $fact['value'] );
+		}
+		$r = ZANA_Company_Facts::save( $fact );
 		if ( empty( $r['success'] ) ) {
 			wp_die( esc_html( (string) $r['error'] ), 400 );
 		}

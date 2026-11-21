@@ -67,7 +67,6 @@
  * and NEVER returns null.
  *
  * @package Zorderz\Leads
- * @since   2.3.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -186,7 +185,7 @@ class ZL_ZANA_Bridge {
 				}
 				$out = self::clarify(
 					$ctx,
-					sprintf( "I found a few possible matches for \"%s\" — which one did you mean?", $query )
+					sprintf( "I found a few possible matches for \"%s\". Which one did you mean?", $query )
 				);
 				$out['candidates'] = $cands;
 				return $out;
@@ -220,9 +219,9 @@ class ZL_ZANA_Bridge {
 
 			$name = trim( $best['first_name'] . ' ' . $best['last_name'] );
 			$msg  = $ctx['is_kiosk']
-				? sprintf( '%s — %d lead%s on file. (Contact details are hidden on the shared device.)',
+				? sprintf( '%s: %d lead%s on file. (Contact details are hidden on the shared device.)',
 					$name ?: 'This customer', count( $lead_views ), count( $lead_views ) === 1 ? '' : 's' )
-				: sprintf( '%s — %d lead%s on file%s.',
+				: sprintf( '%s: %d lead%s on file%s.',
 					$name ?: 'This customer', count( $lead_views ), count( $lead_views ) === 1 ? '' : 's',
 					$pipeline_stage ? ', current stage: ' . $pipeline_stage : '' );
 
@@ -389,7 +388,7 @@ class ZL_ZANA_Bridge {
 			'success'        => false,
 			'error'          => 'not_implemented',
 			'requires_confirm' => true,
-			'message'        => 'Lead creation from chat isn’t enabled yet — add it from the Leads app for now.',
+			'message'        => 'Lead creation from chat isn’t enabled yet; add it from the Leads app for now.',
 		) );
 	}
 
@@ -505,7 +504,7 @@ class ZL_ZANA_Bridge {
 					count( $assigned ), count( $assigned ) === 1 ? '' : 's', $ns_user_name,
 					empty( $failed ) ? '' : sprintf( ' (%d could not be updated)', count( $failed ) )
 				)
-				: 'None of the leads could be assigned — the Nutshell update was rejected.',
+				: 'None of the leads could be assigned: the Nutshell update was rejected.',
 		) );
 	}
 

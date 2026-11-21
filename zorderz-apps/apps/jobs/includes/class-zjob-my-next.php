@@ -26,6 +26,9 @@
  * WHICH KINDS OF WORK need an order or shop prep before anything exists to say so is the business's (option
  * zjob_step_rules {order: {kinds: []}, cut: {kinds: []}}, filter of the same name; Identity Pack flows.yml steps.*).
  * Core names none: without them a step opens only on a fact (an order not placed, a prep ledger not complete).
+ * A Project's kinds are the kinds of its jobs (kinds_of()). The order kinds are asked in two places with one test
+ * (kinds_need_order()): the "order" step here, and the opened Project's order panel, which shows its forms first only
+ * where the job calls for an order (ZJOB_Project_Orders::sold_needs_order()). So the two cannot disagree.
  *
  * "Done lately" is what this person did in the last PAST_DAYS days that closed a step: an order marked ordered, a job
  * they finished, a prep they marked cut. Nothing is claimed for anyone that the records do not say.
@@ -138,7 +141,7 @@ class ZJOB_My_Next {
 		$kinds = static function ( $v ): array {
 			$out = array();
 			foreach ( (array) $v as $k ) {
-				$k = strtolower( (string) preg_replace( '/[^a-z0-9_\-]/i', '', (string) $k ) );
+				$k = self::kind_key( $k );
 				if ( '' !== $k ) {
 					$out[] = $k;
 				}
@@ -149,6 +152,41 @@ class ZJOB_My_Next {
 			'order' => $kinds( $raw['order']['kinds'] ?? array() ),
 			'cut'   => $kinds( $raw['cut']['kinds'] ?? array() ),
 		);
+	}
+
+	/** One kind of work as it is compared: lower case; letters, digits, "_" and "-" only. PURE. */
+	private static function kind_key( $kind ): string {
+		return is_scalar( $kind ) ? strtolower( (string) preg_replace( '/[^a-z0-9_\-]/i', '', (string) $kind ) ) : '';
+	}
+
+	/**
+	 * The kinds of work on a Project: the kind of each of its jobs (a job row's `component`), each once, read the way
+	 * a step rule's kinds are. The steps here and the opened Project's order panel both read a Project's kinds through
+	 * this. PURE.
+	 *
+	 * @param array $jobs the Project's job rows
+	 * @return string[]
+	 */
+	public static function kinds_of( array $jobs ): array {
+		$out = array();
+		foreach ( $jobs as $j ) {
+			$k = self::kind_key( is_array( $j ) ? ( $j['component'] ?? '' ) : '' );
+			if ( '' !== $k && ! in_array( $k, $out, true ) ) {
+				$out[] = $k;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Is one of these kinds of work one the business orders materials for (step rules, order.kinds)? The one test the
+	 * "order" step and the opened Project's order panel both ask. PURE.
+	 *
+	 * @param string[] $kinds       a Project's kinds (kinds_of())
+	 * @param string[] $order_kinds step_rules()['order']
+	 */
+	public static function kinds_need_order( array $kinds, array $order_kinds ): bool {
+		return (bool) array_intersect( array_map( 'strval', $kinds ), array_map( 'strval', $order_kinds ) );
 	}
 
 	/* ── The rule (pure: no database, no WordPress) ─────────────────────────────────────────────────────── */
@@ -176,7 +214,7 @@ class ZJOB_My_Next {
 		if ( ! $inst ) {
 			$n   = (int) ( $p['orders']['n'] ?? 0 );
 			$ord = (int) ( $p['orders']['ordered'] ?? 0 );
-			$by_kind = (bool) array_intersect( $kinds, (array) ( $rules['order'] ?? array() ) );
+			$by_kind = self::kinds_need_order( $kinds, (array) ( $rules['order'] ?? array() ) );
 			if ( ( $n > 0 && $ord < $n ) || ( 0 === $n && $by_kind ) ) {
 				$out[] = array(
 					'step'   => 'order',
@@ -580,16 +618,11 @@ class ZJOB_My_Next {
 	/** The facts steps() reads, from one Project's rows. */
 	private static function project_facts( string $pid, array $row, array $jobs, array $data, array $held ): array {
 		$first   = $jobs[0] ?? array();
-		$kinds   = array();
 		$creator = (int) ( $data['creators'][ $pid ] ?? 0 );
 		$people  = $creator > 0 ? array( $creator ) : array();
 		$codes   = array();
 		$cands   = array();
 		foreach ( $jobs as $j ) {
-			$k = (string) ( $j['component'] ?? '' );
-			if ( '' !== $k ) {
-				$kinds[ $k ] = true;
-			}
 			foreach ( array( 'created_by', 'assigned_user_id' ) as $c ) {
 				if ( (int) ( $j[ $c ] ?? 0 ) > 0 ) {
 					$people[] = (int) $j[ $c ];
@@ -620,7 +653,7 @@ class ZJOB_My_Next {
 			'code'         => (string) ( $row['human_code'] ?? '' ),
 			'customer'     => (string) ( $first['customer_name'] ?? '' ),
 			'city'         => self::city_of( (string) ( $first['customer_address'] ?? '' ) ),
-			'kinds'        => array_keys( $kinds ),
+			'kinds'        => self::kinds_of( $jobs ),
 			'creator'      => $creator,
 			'participants' => array_values( array_unique( $people ) ),
 			'seller_ids'   => $creator > 0 ? array( $creator ) : array(),

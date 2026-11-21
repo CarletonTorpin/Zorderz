@@ -21,8 +21,10 @@ function lift(name) {
 }
 
 var names = ['zdzAskStock', 'zdzDetectCommissionInline', 'zdzDetectCommissionInlineLocal', 'zdzAskActionNormalize', 'zdzAskRe',
-  'zdzAskActionName', 'zdzAskActionNumber', 'zdzAskAction', 'zdzDetectAppLaunch', 'zdzDetectAppLaunchLocal', 'zdzHhmm', 'zdzWorkMode'];
-var body = 'var _zdzAskReCache = {};\n' + names.map(lift).join('\n') + '\nreturn {' + names.map(function (n) { return n + ':' + n; }).join(',') + '};';
+  'zdzAskActionName', 'zdzAskActionNumber', 'zdzAskAction', 'zdzDetectAppLaunch', 'zdzDetectAppLaunchLocal', 'zdzHhmm', 'zdzWorkMode',
+  'zdzGroupColor', 'zdzAppPlate', 'zdzInkOn'];
+// the rows' plate colours read the app groups; the parity checks compare words, so an empty group list is enough
+var body = 'var _zdzAskReCache = {};\nvar ZDZ_GROUPS = [];\n' + names.map(lift).join('\n') + '\nreturn {' + names.map(function (n) { return n + ':' + n; }).join(',') + '};';
 var visible = input.apps.map(function (id) { return { id: id, nm: id }; });
 var zdzData = { askPhrases: input.phrases, apps: visible };
 var api = new Function('zdzData', 'getVisibleApps', 'Haptics', 'openApp', body)(zdzData, function () { return visible; }, { tap: function () {} }, function () {});

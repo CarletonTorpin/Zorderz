@@ -138,7 +138,7 @@
 	function renderAlerts(items, catalogEmpty, uncounted) {
 		var box = root.querySelector('[data-list="alerts"]');
 		if (!box) { return; }
-		var note = uncounted ? '<p class="zstock-w-empty zstock-w-uncounted">' + uncounted + (uncounted === 1 ? ' item is' : ' items are') + ' not counted yet — Stock does not call those low.</p>' : '';
+		var note = uncounted ? '<p class="zstock-w-empty zstock-w-uncounted">' + uncounted + (uncounted === 1 ? ' item is' : ' items are') + ' not counted yet; Stock does not call those low.</p>' : '';
 		if (!items.length) {
 			box.innerHTML = '<p class="zstock-w-empty">' + (catalogEmpty ? 'No catalog items yet. Define items in the Item Engine.' : 'No low-stock alerts right now.') + '</p>' + note;
 			return;
@@ -165,7 +165,7 @@
 		var html = '';
 		for (var i = 0; i < orders.length; i++) {
 			var o = orders[i];
-			var total = o.total ? '$' + parseFloat(o.total).toFixed(2) : '';
+			var total = o.total ? ((window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.sign === 'function') ? window.ZDZ.ui.sign() : ((window.zdzData && window.zdzData.currencySign) || '$')) + parseFloat(o.total).toFixed(2) : '';
 			html += '<div class="zstock-w-row">'
 				+ '<span class="zstock-w-row-name">' + esc(o.supplier_name || 'Supplier') + '</span>'
 				+ '<span class="zstock-w-row-meta">' + total + ' <span class="zstock-w-badge zstock-w-badge--' + esc((o.status || 'draft')) + '">' + esc(o.status || 'draft') + '</span></span>'
@@ -220,7 +220,7 @@
 			var lines = '';
 			for (var j = 0; j < o.lines.length; j++) {
 				var l = o.lines[j];
-				lines += '<li>' + esc(l.description) + ' — ' + num(l.qty) + (l.unit ? ' ' + esc(l.unit) : '')
+				lines += '<li>' + esc(l.description) + ': ' + num(l.qty) + (l.unit ? ' ' + esc(l.unit) : '')
 					+ (l.received > 0 ? ' <span class="zstock-w-row-meta">(' + num(l.received) + ' came, ' + num(l.remaining) + ' to come)</span>' : '') + '</li>';
 			}
 			html += '<div class="zstock-w-order">'
@@ -243,7 +243,7 @@
 	function closePanel() { var p = panel(); if (p) { p.hidden = true; p.innerHTML = ''; } }
 
 	function itemOptions(selected) {
-		var html = '<option value="">— not a stock item —</option>';
+		var html = '<option value="">(not a stock item)</option>';
 		for (var i = 0; i < ITEMS.length; i++) {
 			html += '<option value="' + esc(ITEMS[i].id) + '"' + (String(ITEMS[i].id) === String(selected || '') ? ' selected' : '') + '>' + esc(ITEMS[i].name) + '</option>';
 		}
@@ -266,7 +266,7 @@
 				+ '<input class="zstock-w-rcv-qty" type="number" min="0" step="any" value="' + num(l.remaining) + '" aria-label="How many came">'
 				+ '</div>';
 		}
-		p.innerHTML = '<h4 class="zstock-w-section-title">Received — ' + esc(o.supplier) + (o.ref ? ' #' + esc(o.ref) : '') + '</h4>'
+		p.innerHTML = '<h4 class="zstock-w-section-title">Received: ' + esc(o.supplier) + (o.ref ? ' #' + esc(o.ref) : '') + '</h4>'
 			+ rows
 			+ '<div class="zstock-w-rcv-extra"></div>'
 			+ '<button class="zstock-w-btn" type="button" data-rcv="add">+ Another item that came</button>'
@@ -368,7 +368,7 @@
 				closePanel();
 				toast('Saved under Incoming.', 'success');
 				loadSummary();
-			}).catch(function () { busy = false; toast('No answer from the server. Try Save again — it will not make a second order.', 'error'); });
+			}).catch(function () { busy = false; toast('No answer from the server. Try Save again; it will not make a second order.', 'error'); });
 		});
 	}
 

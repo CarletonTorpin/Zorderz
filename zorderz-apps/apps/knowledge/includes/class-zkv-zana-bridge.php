@@ -176,9 +176,9 @@ class ZKV_ZANA_Bridge {
 		// Layer 2: Content chunk search (actual document text).
 		// Boost limit when the query looks pricing-related. The keyword list is
 		// CONFIGURABLE: generic pricing cues ship in Core, and the business-specific
-		// product/brand tokens that used to be hardcoded here come from the
-		// settings-driven zkv_pricing_keywords() (empty by default; fed by the
-		// Item Engine through the zkv_product_keywords filter when it lands).
+		// product/brand tokens come from the settings-driven zkv_pricing_keywords()
+		// (empty by default; fed by the Item Engine through the zkv_product_keywords
+		// filter when it lands).
 		$pricing_keywords = function_exists( 'zkv_pricing_keywords' )
 			? zkv_pricing_keywords()
 			: array( 'price', 'pricing', 'cost', 'charge', 'how much', 'msrp', 'retail', 'quote' );
