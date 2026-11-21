@@ -297,7 +297,7 @@ html.zdz-marks-bar-top #toast-container{top:auto;bottom:calc(env(safe-area-inset
   border:1px solid currentColor;background:transparent;color:inherit;font:inherit;font-size:var(--ref-font-xs,16px);cursor:pointer;opacity:.75}
 .zdz-marks-person[aria-pressed="true"]{opacity:1;box-shadow:0 0 0 2px currentColor inset;font-weight:var(--sys-font-wt-sb,600)}
 .zdz-marks-person-ini{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 4px;border-radius:8px;
-  background:var(--sys-brand,#2563EB);color:#fff;font-size:13px;font-weight:700}
+  background:var(--sys-brand,#2563EB);color:var(--sys-text-brand, #FFFFFF);font-size:13px;font-weight:700}
 .zdz-marks-share-empty{opacity:.8}
 .zdz-marks-card,.zdz-marks-panel{position:fixed;z-index:100095;width:min(340px,calc(100vw - 16px));max-height:min(70vh,560px);overflow:auto;
   box-sizing:border-box;padding:12px 14px;border-radius:var(--zdz-kit-radius);background:var(--sys-surface,#fff);color:var(--sys-text,#0f172a);

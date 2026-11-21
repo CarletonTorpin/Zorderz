@@ -205,8 +205,10 @@ class ZEST_Salesperson {
 			return false;
 		}
 		$is = user_can( $uid, 'manage_options' ) || (bool) array_intersect( array( 'administrator', 'zdz_owner', 'zdz_admin' ), self::roles( $uid ) );
-		if ( $is && class_exists( 'ZDZ_Data_Permissions' ) && method_exists( 'ZDZ_Data_Permissions', 'can_view_others_data' )
-			&& ! ZDZ_Data_Permissions::can_view_others_data( $uid ) ) {
+		// The platform's data permissions: someone who does not see other people's data has only their own estimates,
+		// whatever their role.
+		if ( $is && class_exists( 'ZDZ_Data_Permissions' ) && method_exists( 'ZDZ_Data_Permissions', 'can' )
+			&& ! ZDZ_Data_Permissions::can( $uid, 'view_others_data' ) ) {
 			return false;
 		}
 		return $is;

@@ -26,7 +26,7 @@
  * MEMBERSHIP HELPER:
  *   ZIM_Membership — lightweight companion class, kept in this file so the
  *   two always stay in sync. Used by AJAX gating in class-zim-dashboard.php
- *   and by the polling endpoint pattern required by the MEP spec.
+ *   and by the polling endpoint pattern this app keeps.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -467,7 +467,7 @@ class ZIM_Channels {
 	 * Optional audit log hook (no-op when theme's admin dashboard class is
 	 * absent — keeps the plugin theme-version tolerant).
 	 *
-	 * Theme contract (as of Zorderz 2.13.1):
+	 * Theme contract:
 	 *   ZDZ_Admin_Dashboard::log_action( $user_id, $action_type, $detail, $app_id, $meta )
 	 *   — class is in the GLOBAL namespace, not `\Zorderz\`.
 	 */

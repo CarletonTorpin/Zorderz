@@ -15,7 +15,7 @@
  *   wp_zim_doc_grants           one estimate or invoice shared, read only, with
  *                               the people in a conversation (ZIM_Doc_Shares)
  *
- * INDEX DISCIPLINE (Trap 8):
+ * INDEX DISCIPLINE (design rule 8):
  *   - Indexes are declared at CREATE TABLE, not "added later".
  *   - Hot query — "latest 50 messages in a conversation" — is covered by
  *     idx_conv_created on wp_zim_messages.
@@ -101,7 +101,7 @@ class ZIM_Migrate_1_0_0 {
 
 		// ── attachments ───────────────────────────────────────────
 		// attachment_post_id — the WP attachment post we created so uploads
-		// share the standard media pipeline (Trap 9).
+		// share the standard media pipeline (design rule 9).
 		dbDelta( "CREATE TABLE {$p}zim_attachments (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			message_id bigint(20) unsigned NOT NULL DEFAULT 0,
@@ -119,7 +119,7 @@ class ZIM_Migrate_1_0_0 {
 		) {$charset};" );
 
 		// ── mentions ──────────────────────────────────────────────
-		// Preserve on soft-delete (Trap 4). removed_at: set during edit
+		// Preserve on soft-delete (design rule 4). removed_at: set during edit
 		// reconciliation if user was un-mentioned. Never physically deleted.
 		dbDelta( "CREATE TABLE {$p}zim_mentions (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -159,7 +159,7 @@ class ZIM_Migrate_1_0_0 {
 		// kind: 'mention' | 'first_unread' | 'digest' | 'notice' (another app's
 		// notice, conversation_id 0: ZIM_Notices).
 		// release_at: when the cron may dispatch. During quiet hours this is
-		// shifted to the end-of-quiet-hours timestamp (Trap 7).
+		// shifted to the end-of-quiet-hours timestamp (design rule 7).
 		dbDelta( "CREATE TABLE {$p}zim_notification_queue (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			user_id bigint(20) unsigned NOT NULL,

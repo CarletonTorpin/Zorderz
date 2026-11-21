@@ -195,8 +195,15 @@ class ZSCH_Tzdata {
 				$parts[] = $zone . '=UNREADABLE';
 				continue;
 			}
+			$trs = $dtz->getTransitions( $from, $to );
+			if ( ! is_array( $trs ) ) {
+				/* A fixed offset ("+00:00", WordPress's "UTC+0") has no transitions to read:
+				 * getTransitions() answers false. Its one offset is the whole fact. */
+				$parts[] = $zone . '=FIXED:' . $dtz->getOffset( new DateTime( '@' . (int) $from ) );
+				continue;
+			}
 			$sig = array();
-			foreach ( $dtz->getTransitions( $from, $to ) as $t ) {
+			foreach ( $trs as $t ) {
 				$sig[] = $t['ts'] . ':' . $t['offset'] . ':' . ( empty( $t['isdst'] ) ? '0' : '1' );
 			}
 			$parts[] = $zone . '=' . implode( ',', $sig );
@@ -338,7 +345,7 @@ class ZSCH_Tzdata {
 			$checks[] = array(
 				'name'   => 'spring-forward gap uses the pre-gap offset',
 				'status' => 'n/a',
-				'detail' => sprintf( '%s has no offset-increasing transition in the window — nothing to resolve.', $zone ),
+				'detail' => sprintf( '%s has no offset-increasing transition in the window: nothing to resolve.', $zone ),
 			);
 		} else {
 			$half  = intdiv( $gap['after'] - $gap['before'], 2 );
@@ -365,7 +372,7 @@ class ZSCH_Tzdata {
 			$checks[] = array(
 				'name'   => 'fall-back overlap resolves to the first occurrence',
 				'status' => 'n/a',
-				'detail' => sprintf( '%s has no offset-decreasing transition in the window — nothing is ambiguous.', $zone ),
+				'detail' => sprintf( '%s has no offset-decreasing transition in the window: nothing is ambiguous.', $zone ),
 			);
 		} else {
 			$half  = intdiv( $ovl['before'] - $ovl['after'], 2 );

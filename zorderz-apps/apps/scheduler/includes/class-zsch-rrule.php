@@ -147,7 +147,7 @@ class ZSCH_RRule {
 		if ( $out['count'] > 0 && '' !== $out['until_utc'] ) {
 			return self::err(
 				'count_and_until',
-				'COUNT and UNTIL cannot both be set (RFC 5545 section 3.3.10) — a rule carrying both does not say where the series ends.'
+				'COUNT and UNTIL cannot both be set (RFC 5545 section 3.3.10): a rule carrying both does not say where the series ends.'
 			);
 		}
 

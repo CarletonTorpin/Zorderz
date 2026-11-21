@@ -154,7 +154,7 @@ add_action(
 						'nm'          => __( 'Agreements', 'zorderz' ),
 						'icon'        => 'file-signature',
 						'cat'         => 'sales',
-						'cc'          => '#0072B2',
+						'cc'          => '#E69F00',
 						'desc'        => __( 'Online agreements, signatures, cancellations and paper signings.', 'zorderz' ),
 						'roles'       => (array) apply_filters( 'zagr_app_roles', array( 'administrator', 'zdz_owner', 'zdz_admin' ) ),
 						'bridge_type' => 'redirect',

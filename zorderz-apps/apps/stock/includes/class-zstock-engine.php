@@ -519,7 +519,7 @@ class ZSTOCK_Engine {
 			. "1. Extract EVERY line item — do not skip any.\n"
 			. "2. Include a SKU when visible, otherwise \"\".\n"
 			. "3. Quantities and prices must be numeric (decimal, the site currency assumed).\n"
-			. "4. Unit should be one of: each, box, roll, ft, sqft, lb, gal — or the unit shown.\n"
+			. "4. Unit should be one of: each, box, roll, ft, sqft, lb, gal, m, sqm, kg, l — or the unit shown.\n"
 			. "5. If the invoice is partly illegible, include what you can read.\n"
 			. "6. Do NOT include shipping/freight as a line item.\n";
 	}
@@ -572,8 +572,8 @@ class ZSTOCK_Engine {
 
 		$response = $poe->query( $messages, 0.2, array(), zstock_assistant() );
 
-		// Strip the answer sentinel (current constant + the deprecated legacy token).
-		foreach ( array( ZSTOCK_ASSISTANT_SENTINEL, ZSTOCK_ASSISTANT_SENTINEL_LEGACY ) as $sentinel ) {
+		// Strip the answer sentinel.
+		foreach ( array( ZSTOCK_ASSISTANT_SENTINEL ) as $sentinel ) {
 			$pos = strpos( $response, $sentinel );
 			if ( false !== $pos ) {
 				$response = trim( substr( $response, $pos + strlen( $sentinel ) ) );

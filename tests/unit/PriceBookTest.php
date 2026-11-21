@@ -138,7 +138,7 @@ final class PriceBookTest extends TestCase {
 					'skip'          => array( 'included at no charge' ),
 					'flags'         => array( 'upcharge' => array( 'custom colour' ) ),
 					'vetoes'        => array( array( 'field' => 'name', 'words' => array( 'repair', 'service' ), 'reason' => 'Not a door: priced by hand.' ) ),
-					'not_in_book'   => array( 'motorised' ),
+					'not_in_book'   => array( 'insulated' ),
 					'kinds'         => array( array( 'when' => array( 'work' => 'refit' ), 'kind' => 'refit' ), array( 'when' => array(), 'kind' => 'unit' ) ),
 					'selectors'     => array(
 						array( 'key' => 'work', 'options' => array( 'refit' => array( 'refit' ) ), 'default' => 'new' ),
@@ -351,7 +351,7 @@ final class PriceBookTest extends TestCase {
 		$this->assertSame( 'other', $r['kind'] );
 		$this->assertNull( $r['price'] );
 		$this->assertSame( 'Not a door: priced by hand.', $r['reason'] );
-		$n = self::line( 'Example motorised door', '', '36x80' );
+		$n = self::line( 'Example insulated door', '', '36x80' );
 		$this->assertTrue( $n['matched'] );
 		$this->assertNull( $n['price'] );
 		$f = self::line( 'Example refit', '', '36x80' );
@@ -373,7 +373,7 @@ final class PriceBookTest extends TestCase {
 
 	public function test_notes_are_never_read(): void {
 		$this->load_book();
-		$m = ZDZ_Price_Book::match_line( 'example_doors', array( 'description' => 'Example door', 'dimensions' => '36x80', 'notes' => 'pair, motorised, repair' ) );
+		$m = ZDZ_Price_Book::match_line( 'example_doors', array( 'description' => 'Example door', 'dimensions' => '36x80', 'notes' => 'pair, insulated, repair' ) );
 		$this->assertSame( 100.0, $m['price'] );
 		$this->assertFalse( $m['double'] );
 	}

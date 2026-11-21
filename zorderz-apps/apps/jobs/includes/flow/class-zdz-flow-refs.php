@@ -149,7 +149,7 @@ if ( ! class_exists( 'Zdz_Flow_Refs' ) ) {
 			if ( ! self::is_registered( $system, $entity ) ) {
 				// Fail-loud: an unregistered namespace is a wiring bug, not a silent drop.
 				throw new \InvalidArgumentException(
-					sprintf( 'Unregistered ref namespace "%s/%s" — declare it via the zdz_work_item_ref_namespaces filter.', $system, $entity )
+					sprintf( 'Unregistered ref namespace "%s/%s": declare it via the zdz_work_item_ref_namespaces filter.', $system, $entity ) // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- a wiring error for developers; both values went through sanitize_key() above, so they hold only a-z, 0-9, _ and -.
 				);
 			}
 			$external_id = (string) $external_id;

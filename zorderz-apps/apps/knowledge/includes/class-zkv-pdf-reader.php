@@ -6,7 +6,7 @@
  * full-page images with NO text layer. This class extracts those images
  * so they can be sent to AI vision models for reading.
  *
- * @package TSKnowledgeVault
+ * @package Zorderz
  * @since   1.1.0
  */
 

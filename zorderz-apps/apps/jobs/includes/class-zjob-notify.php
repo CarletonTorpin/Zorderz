@@ -216,7 +216,7 @@ class ZJOB_Notify {
 			if ( '' !== $tz ) {
 				$dt->setTimezone( new DateTimeZone( $tz ) );
 			}
-			return $dt->format( 'D M j, g:i A' );
+			return $dt->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D M j, g:i A' ) : 'D M j, g:i A' ) );
 		} catch ( \Throwable $e ) {
 			return '';
 		}

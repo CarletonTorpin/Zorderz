@@ -1,8 +1,15 @@
-/* Zorderz Jobs - the Projects hub. Theme tokens only; phone first. */
+/* Zorderz Jobs - the Projects hub. Theme tokens only; phone first.
+
+   INK. Text takes an ink made for text: --sys-text, --sys-text-sec, or --sys-brand for an accent. --sys-text-brand is
+   the ink ON a brand fill (white, or the darkest brand step in dark mode) and is used only there. A chip or a status box takes one of the
+   theme's tint pairs, background and ink together (--sys-tint-*-bg / -fg, with --sys-tint-border for sunlight), never
+   a status colour as ink on a plain surface. That is what keeps every line at 4.5:1 or better in light, dark, system
+   and sunlight.
+   SIZE. No px size under 14, as a value or as the fallback of a token. */
 .zprj { display: flex; flex-direction: column; gap: var(--ref-space-3, 12px); color: var(--sys-text); }
 .zprj-bar { display: flex; flex-wrap: wrap; gap: var(--ref-space-2, 8px); align-items: center; }
 .zprj-tab { border: 1px solid var(--sys-border); background: var(--sys-bg); color: var(--sys-text-sec); border-radius: var(--ref-radius-sm, 6px); padding: 6px 12px; font-size: var(--ref-font-sm, 14px); font-weight: var(--sys-font-wt-sb, 600); cursor: pointer; }
-.zprj-tab.is-active { background: var(--sys-brand); border-color: var(--sys-brand); color: var(--sys-on-brand, #fff); }
+.zprj-tab.is-active { background: var(--sys-brand); border-color: var(--sys-brand); color: var(--sys-text-brand, #fff); }
 .zprj-search { flex: 1 1 180px; min-width: 0; border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px); padding: 7px 10px; font-size: 16px; background: var(--sys-bg); color: var(--sys-text); }
 .zprj-list { display: flex; flex-direction: column; gap: var(--ref-space-2, 8px); }
 .zprj-empty { color: var(--sys-text-sec); padding: var(--ref-space-3, 12px); text-align: center; }
@@ -10,42 +17,90 @@
 .zprj-card:hover, .zprj-card:focus-visible { border-color: var(--sys-brand); }
 .zprj-card-top, .zprj-order-top, .zprj-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .zprj-card-foot, .zprj-head-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
-.zprj-addr, .zprj-meta, .zprj-code { color: var(--sys-text-sec); font-size: var(--ref-font-xs, 12px); }
-.zprj-status { font-size: var(--ref-font-xs, 12px); color: var(--sys-text-brand); font-weight: var(--sys-font-wt-sb, 600); }
-.zprj-chip { display: inline-flex; align-items: center; gap: 4px; font-size: var(--ref-font-xs, 12px); border-radius: var(--ref-radius-full, 999px); padding: 2px 8px; background: var(--sys-bg-alt); color: var(--sys-text-sec); }
+.zprj-addr, .zprj-meta, .zprj-code { color: var(--sys-text-sec); font-size: var(--ref-font-xs, 14px); }
+.zprj-status { font-size: var(--ref-font-xs, 14px); color: var(--sys-brand); font-weight: var(--sys-font-wt-sb, 600); }
+.zprj-chip { display: inline-flex; align-items: center; gap: 4px; font-size: var(--ref-font-xs, 14px); border: 1px solid var(--sys-tint-border, transparent); border-radius: var(--ref-radius-full, 999px); padding: 2px 8px; background: var(--sys-tint-neutral-bg, var(--sys-bg-alt)); color: var(--sys-tint-neutral-fg, var(--sys-text-sec)); }
 .zprj-chip svg, .zprj-chip i { width: 12px; height: 12px; }
-.zprj-chip-scheduled { color: var(--sys-text-brand); }
-.zprj-chip-unscheduled { color: var(--sys-warning); }
-.zprj-back { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--sys-text-brand); font-weight: var(--sys-font-wt-sb, 600); padding: 4px 0; cursor: pointer; }
+.zprj-chip-scheduled { background: var(--sys-tint-info-bg, var(--sys-bg-alt)); color: var(--sys-tint-info-fg, var(--sys-text)); }
+.zprj-chip-unscheduled { background: var(--sys-tint-warning-bg, var(--sys-bg-alt)); color: var(--sys-tint-warning-fg, var(--sys-text)); }
+.zprj-back { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--sys-brand); font-weight: var(--sys-font-wt-sb, 600); padding: 4px 0; cursor: pointer; }
 .zprj-head h3 { margin: 4px 0 2px; font-size: 1.15rem; }
-.zprj-gate { border-radius: var(--ref-radius-sm, 6px); padding: 8px 10px; font-size: var(--ref-font-sm, 14px); }
-.zprj-gate.is-ok { background: var(--sys-bg-alt); color: var(--sys-text-brand); }
-.zprj-gate.is-wait { background: var(--sys-bg-alt); color: var(--sys-warning); }
+.zprj-gate { border: 1px solid var(--sys-tint-border, transparent); border-radius: var(--ref-radius-sm, 6px); padding: 8px 10px; font-size: var(--ref-font-sm, 14px); }
+.zprj-gate.is-ok { background: var(--sys-tint-success-bg, var(--sys-bg-alt)); color: var(--sys-tint-success-fg, var(--sys-text)); }
+.zprj-gate.is-wait { background: var(--sys-tint-warning-bg, var(--sys-bg-alt)); color: var(--sys-tint-warning-fg, var(--sys-text)); }
 .zprj-sec { border-top: 1px solid var(--sys-border); padding-top: var(--ref-space-2, 8px); display: flex; flex-direction: column; gap: 6px; }
 .zprj-sec h4 { margin: 0; font-size: var(--ref-font-sm, 14px); color: var(--sys-text-sec); text-transform: uppercase; letter-spacing: .04em; }
 .zprj-order { border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-.zprj-steps { display: flex; gap: 6px; font-size: var(--ref-font-xs, 12px); }
+.zprj-steps { display: flex; gap: 6px; font-size: var(--ref-font-xs, 14px); }
 .zprj-steps span { padding: 2px 8px; border-radius: var(--ref-radius-full, 999px); background: var(--sys-bg-alt); color: var(--sys-text-ter, var(--sys-text-sec)); }
-.zprj-steps span.is-done { color: var(--sys-text-brand); font-weight: var(--sys-font-wt-sb, 600); }
+.zprj-steps span.is-done { color: var(--sys-brand); font-weight: var(--sys-font-wt-sb, 600); }
 .zprj-units { margin: 0; padding-left: 18px; font-size: var(--ref-font-sm, 14px); }
-.zprj-why { font-size: var(--ref-font-xs, 12px); color: var(--sys-warning); }
+.zprj-why { font-size: var(--ref-font-xs, 14px); color: var(--sys-tint-warning-fg, var(--sys-text)); }
 .zprj-actions, .zprj-start { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .zprj-btn { border: 1px solid var(--sys-border); background: var(--sys-bg); color: var(--sys-text); border-radius: var(--ref-radius-sm, 6px); padding: 6px 10px; font-size: var(--ref-font-sm, 14px); cursor: pointer; }
-.zprj-btn-primary { background: var(--sys-brand); border-color: var(--sys-brand); color: var(--sys-on-brand, #fff); }
+.zprj-btn-primary { background: var(--sys-brand); border-color: var(--sys-brand); color: var(--sys-text-brand, #fff); }
 .zprj-btn-ghost { color: var(--sys-text-sec); }
 .zprj-via, .zprj-form, .zprj-kind { border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px); padding: 5px 8px; font-size: 16px; background: var(--sys-bg); color: var(--sys-text); max-width: 100%; }
-.zprj-msg { color: var(--sys-error); font-size: var(--ref-font-sm, 14px); }
-.zprj-problems { margin: 6px 0 0; padding-left: 18px; color: var(--sys-warning-text, #92400E); font-size: var(--ref-font-xs, 12px); }
+.zprj-msg { color: var(--sys-tint-error-fg, var(--sys-error)); font-size: var(--ref-font-sm, 14px); }
+.zprj-problems { margin: 6px 0 0; padding-left: 18px; color: var(--sys-tint-warning-fg, var(--sys-text)); font-size: var(--ref-font-xs, 14px); }
 .zprj-in, .zprj-reason { border: 1px solid var(--sys-border); border-radius: var(--ref-radius-sm, 6px); padding: 5px 8px; font-size: 16px; background: var(--sys-bg); color: var(--sys-text); min-width: 0; max-width: 100%; }
 .zprj-editor { display: flex; flex-direction: column; gap: 8px; }
 .zprj-ed-list { display: flex; flex-direction: column; gap: 6px; }
-.zprj-ed-h { font-size: var(--ref-font-xs, 12px); color: var(--sys-text-sec); font-weight: var(--sys-font-wt-sb, 600); }
+.zprj-ed-h { font-size: var(--ref-font-xs, 14px); color: var(--sys-text-sec); font-weight: var(--sys-font-wt-sb, 600); }
 .zprj-ed-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 6px; border-bottom: 1px dashed var(--sys-border); }
 .zprj-ed-row .zprj-in { flex: 1 1 110px; }
-.zprj-ed-notes { display: flex; flex-direction: column; gap: 4px; font-size: var(--ref-font-xs, 12px); color: var(--sys-text-sec); }
+.zprj-ed-notes { display: flex; flex-direction: column; gap: 4px; font-size: var(--ref-font-xs, 14px); color: var(--sys-text-sec); }
 .zprj-desk { display: flex; flex-direction: column; gap: var(--ref-space-3, 12px); }
 .zprj-co-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
 .zprj-co-cols > div { display: flex; flex-direction: column; gap: 4px; }
 .zprj-pick { display: inline-flex; align-items: center; gap: 4px; margin: 2px 10px 2px 0; font-size: var(--ref-font-sm, 14px); }
 .zprj-inv li.is-flagged { color: var(--sys-text); }
 .zprj-desk-msg { color: var(--sys-text-sec); }
+
+/* A panel taken off the screen stays off it: each of these has a display of its own, which would otherwise win over
+   the hidden attribute (an opened Project would sit under the whole list, and the desk under both). */
+.zprj-bar[hidden], .zprj-list[hidden], .zprj-detail[hidden], .zprj-desk[hidden], .zprj-search[hidden] { display: none; }
+
+/* THE LIST AT THE THEME'S TYPE ROLES. The theme names what a piece of text IS (its stylesheet's TYPE ROLES), and each
+   role follows the phone, the desktop and Larger text by itself. So every piece of text on the list (the buttons that
+   pick which Projects, the search box, the cards) asks for a role:
+       the customer's name on a card, and the line that says nothing is here    --zdz-type-body       (phone 20px)
+       Mine / All I can see / Materials desk                                    --zdz-type-secondary  (phone 18px)
+       everything else on a card: where it stands, the address, the install
+       chip, the project code, the small lines                                  --zdz-type-meta       (phone 16px)
+   The name stays the largest line on a card. The px after each role is for a theme without the roles (then the
+   scale's own tier, then a px size): never under 14.
+   Scoped to the list on purpose: an opened Project keeps its own sizes. */
+.zprj-bar, .zprj-list {
+	--zprj-lt-name: var(--zdz-type-body, var(--ref-font-base, 17px));
+	--zprj-lt-sub:  var(--zdz-type-secondary, var(--ref-font-sm, 15px));
+	--zprj-lt-meta: var(--zdz-type-meta, var(--ref-font-xs, 14px));
+}
+.zprj-list .zprj-card strong, .zprj-list .zprj-empty { font-size: var(--zprj-lt-name); }
+.zprj-bar .zprj-tab { font-size: var(--zprj-lt-sub); }
+.zprj-list :is(.zprj-status, .zprj-addr, .zprj-chip, .zprj-code, .zprj-meta) { font-size: var(--zprj-lt-meta); }
+/* The search box is never under 16px (a phone zooms the page in on a smaller field) and follows Larger text above it. */
+.zprj-bar .zprj-search { font-size: max( 16px, var(--zprj-lt-meta) ); }
+/* A long name beside where the Project stands: the top row of a card may take two lines instead of pushing the status
+   off the side, and a name, an address or a small line with no space in it wraps inside its card. */
+.zprj-list .zprj-card-top { flex-wrap: wrap; row-gap: 2px; }
+.zprj-list .zprj-card strong { min-width: 0; }
+.zprj-list :is(.zprj-card strong, .zprj-addr, .zprj-code, .zprj-meta) { overflow-wrap: anywhere; }
+
+/* "Order something for this job": the one line an opened Project shows where the row that starts an order would be,
+   on a job with nothing to order from a supplier (projects.js: formsTucked(), ordersQuiet()). A quiet link: 44px to
+   press, the theme's smallest text role, secondary ink (4.5:1 or better in all four display modes). */
+.zprj-ord-more { margin: 0; }
+.zprj-ord-morebtn {
+	display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; margin: 0;
+	border: 0; background: none; color: var(--sys-text-sec); font: inherit; font-size: var(--zdz-type-meta, 14px); font-weight: var(--sys-font-wt-sb, 600);
+	text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.zprj-ord-morebtn:focus-visible { outline: 3px solid var(--sys-brand); outline-offset: 2px; }
+
+/* What the estimate says in words, whole (its notes, and what the salesperson wrote or said). Line breaks are kept,
+   and a long run with no space in it (a pasted link, a row of dashes) wraps instead of pushing the opened Project off
+   the side. Nothing here cuts it short: no height, no line clamp. */
+.zprj-said-part { display: flex; flex-direction: column; gap: 2px; }
+.zprj-said-h { margin: 0; font-size: var(--zdz-type-meta, 14px); font-weight: var(--sys-font-wt-sb, 600); color: var(--sys-text-sec); }
+.zprj-said p { margin: 0; font-size: var(--zdz-type-meta, 14px); line-height: var(--zdz-type-lh-body, 1.45); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--sys-text); }

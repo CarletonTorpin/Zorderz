@@ -83,7 +83,7 @@ class ZSM_Report {
 			foreach ( $top as $f ) {
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- every argument is escaped
 				printf(
-					'<li style="margin:.15em 0">%s <strong>%s</strong> — %s%s</li>',
+					'<li style="margin:.15em 0">%s <strong>%s</strong>: %s%s</li>',
 					esc_html( strtoupper( (string) $f['severity'] ) ),
 					esc_html( (string) ( $f['name'] ? $f['name'] : $f['slug'] ) ),
 					esc_html( self::trim_words( (string) $f['title'], 14 ) ),

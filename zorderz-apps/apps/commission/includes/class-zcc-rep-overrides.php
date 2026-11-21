@@ -92,7 +92,7 @@ class ZCC_Rep_Overrides {
 			return [ 'ok' => false, 'error' => "No compensation plan is configured for rep code '{$code}'." ];
 		}
 		if ( ! self::table_ready() ) {
-			return [ 'ok' => false, 'error' => 'Override table not installed — run the DB upgrade.' ];
+			return [ 'ok' => false, 'error' => 'Override table not installed. Run the DB upgrade.' ];
 		}
 
 		global $wpdb;

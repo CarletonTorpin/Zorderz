@@ -77,7 +77,7 @@
 			return fetch(D.ajaxUrl, { method:'POST', body:fd, credentials:'same-origin' }).then(function(r){return r.json();});
 		}
 		function esc(s) { if(!s)return''; var d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
-		function fmtDate(s) { if(!s)return''; var d=new Date(s.replace(' ','T')); var m=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return m[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear(); }
+		function fmtDate(s) { if(!s)return''; var d=new Date(s.replace(' ','T')); if(isNaN(d.getTime()))return String(s); var loc=(window.ZDZ&&window.ZDZ.ui&&typeof window.ZDZ.ui.locale==='function')?window.ZDZ.ui.locale():'en-US'; try{return d.toLocaleDateString(loc,{year:'numeric',month:'short',day:'numeric'});}catch(e){return d.toDateString();} } // the business's way (Locale)
 		function fmtSize(b) { b=parseInt(b)||0; if(b<1024)return b+' B'; if(b<1048576)return Math.round(b/1024)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
 		function mimeIcon(m) { if(!m)return'file-text'; if(m.indexOf('pdf')!==-1)return'file-type'; if(m.indexOf('image')!==-1)return'image'; if(m.indexOf('sheet')!==-1||m.indexOf('excel')!==-1)return'table'; return'file-text'; }
 		function icons() { if(typeof window.refreshIcons==='function'){window.refreshIcons();}else if(window.lucide&&typeof window.lucide.createIcons==='function'){window.lucide.createIcons();} }
@@ -241,7 +241,7 @@
 				}
 				// Hidden edit form
 				ctxHtml += '<div id="zkv-detail-ctx-edit" style="display:none;margin:12px 0;">'
-					+ '<textarea id="zkv-ctx-edit-input" rows="3" style="width:100%;padding:8px;border:1px dashed var(--sys-brand,#2C5F8A);border-radius:6px;background:rgba(44,95,138,.04);font-size:13px;resize:vertical;">' + esc(d.user_context || '') + '</textarea>'
+					+ '<textarea id="zkv-ctx-edit-input" rows="3" style="width:100%;padding:8px;border:1px dashed var(--sys-brand,#5150D6);border-radius:6px;background:rgba(81,80,214,.04);font-size:13px;resize:vertical;">' + esc(d.user_context || '') + '</textarea>'
 					+ '<div style="display:flex;gap:8px;margin-top:6px;">'
 					+ '<button class="zkv-btn zkv-btn-primary" id="zkv-ctx-save-btn" style="font-size:12px;padding:6px 14px;">Save Context</button>'
 					+ '<button class="zkv-btn-text" id="zkv-ctx-cancel-btn" style="font-size:12px;">Cancel</button>'
@@ -549,7 +549,7 @@
 					if (res.success) {
 						var status = document.getElementById('zkv-key-status');
 						if (res.data.test_result && res.data.test_result.indexOf('Error') === -1) {
-							status.textContent = 'Saved & verified — AI is working.'; status.style.color = '#059669';
+							status.textContent = 'Saved & verified: AI is working.'; status.style.color = '#059669';
 						} else {
 							status.textContent = 'Saved, but test failed: ' + (res.data.test_result || 'No response'); status.style.color = '#DC2626';
 						}
@@ -939,7 +939,7 @@
 		function renderTranscriptDetail(d) {
 			var banner;
 			if (d.viewer_is_party) {
-				banner = '<div class="zkv-transcript-banner zkv-tb-party"><i data-lucide="lock"></i> <div><strong>Private transcript.</strong> Only its named speakers can see it — you\'re a party'
+				banner = '<div class="zkv-transcript-banner zkv-tb-party"><i data-lucide="lock"></i> <div><strong>Private transcript.</strong> Only its named speakers can see it; you\'re a party'
 					+ (d.my_label ? ' as &ldquo;'+esc(d.my_label)+'&rdquo;' : '') + '.'
 					+ (d.parties && d.parties.length ? '<br><span class="zkv-tb-parties">Parties: '
 						+ d.parties.map(function(p){ return esc(p.name)+(p.speaker_label?' ('+esc(p.speaker_label)+')':''); }).join(' · ')
@@ -1015,7 +1015,7 @@
 				+ '<div class="zkv-form-group"><label>Mode</label><div class="zkv-radio-group">'
 				+ '<label><input type="radio" name="zkv-share-mode" value="select" checked /> Share ONLY these lines</label>'
 				+ '<label><input type="radio" name="zkv-share-mode" value="redact" /> Share everything EXCEPT these lines</label></div></div>'
-				+ '<div class="zkv-form-group"><label>Line ranges <span class="zkv-label-hint">— e.g. 12-40, 55, 60-70</span></label>'
+				+ '<div class="zkv-form-group"><label>Line ranges <span class="zkv-label-hint">e.g. 12-40, 55, 60-70</span></label>'
 				+ '<input type="text" id="zkv-share-ranges" placeholder="12-40, 55" />'
 				+ '<button class="zkv-btn-text" id="zkv-share-showlines">Show numbered lines</button></div>'
 				+ '<div id="zkv-share-lines" class="zkv-share-lines" style="display:none;"></div>'
@@ -1100,7 +1100,7 @@
 					});
 					box.innerHTML = kept.length
 						? lineHtml(kept) + '<div class="zkv-share-empty">'+(rows.length-kept.length)+' line(s) will NOT exist in their copy.</div>'
-						: 'Nothing would be shared — adjust the ranges.';
+						: 'Nothing would be shared. Adjust the ranges.';
 				});
 			});
 			var shareCancel = document.getElementById('zkv-share-cancel');
@@ -1174,7 +1174,7 @@
 				var userOpts = '<option value="">Bind to…</option>' + users.map(function(u){
 					return '<option value="'+u.id+'">'+esc(u.name)+'</option>';
 				}).join('');
-				var html = '<p class="zkv-hint" style="display:block;margin-bottom:10px;">Suggested = the AI thinks this is a transcript; it stays a normal visible document until you confirm. Latent = private, but no speakers matched a staff account — bind the confirmed person to give them (and only them) access. You never see the transcript body here.</p>';
+				var html = '<p class="zkv-hint" style="display:block;margin-bottom:10px;">Suggested = the AI thinks this is a transcript; it stays a normal visible document until you confirm. Latent = private, but no speakers matched a staff account: bind the confirmed person to give them (and only them) access. You never see the transcript body here.</p>';
 				items.forEach(function(it){
 					var name = it.is_private ? it.original_name : (it.title || it.original_name);
 					var chip = it.status==='suggested'
@@ -1186,7 +1186,7 @@
 						+ (it.is_private ? '<span>'+it.parties+' parties</span>' : '') + '</div></div>';
 					if (it.status==='suggested') {
 						html += '<div class="zkv-tq-actions">'
-							+ '<button class="zkv-btn zkv-btn-primary zkv-tq-confirm" data-id="'+it.id+'">Confirm — make private</button>'
+							+ '<button class="zkv-btn zkv-btn-primary zkv-tq-confirm" data-id="'+it.id+'">Confirm and make private</button>'
 							+ '<button class="zkv-btn zkv-btn-secondary zkv-tq-reject" data-id="'+it.id+'">Not a transcript</button></div>';
 					} else {
 						if (it.unmatched_labels && it.unmatched_labels.length) {
@@ -1199,7 +1199,7 @@
 									+ '<div class="zkv-tq-ctxbox" style="display:none;"></div></div>';
 							});
 						} else {
-							html += '<div class="zkv-share-empty">No speaker labels detected — bind manually below.</div>'
+							html += '<div class="zkv-share-empty">No speaker labels detected; bind manually below.</div>'
 								+ '<div class="zkv-tq-bind" data-id="'+it.id+'" data-label="">'
 								+ '<span class="zkv-tq-label">(no label)</span>'
 								+ '<select class="zkv-tq-user">'+userOpts+'</select>'
@@ -1385,7 +1385,7 @@
 		function checkAndExtract(docId, statusEl) {
 			ajax('zkv_check_chunks', {document_id: docId}).then(function(res) {
 				if (res.success && res.data.needs_browser_extract) {
-					if (statusEl) statusEl.textContent = 'No text chunks — starting browser extraction...';
+					if (statusEl) statusEl.textContent = 'No text chunks; starting browser extraction...';
 					ensurePdfJs(function() {
 						browserExtractChunks(docId, statusEl);
 					});

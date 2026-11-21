@@ -314,7 +314,7 @@ final class JobsProjectsTest extends TestCase {
 	}
 
 	public function test_shop_stock_needs_a_yes_for_the_order_as_it_stands(): void {
-		$body  = array( 'units' => array( array( 'k' => 'u1', 'item' => 'Mesh roll', 'qty' => '2' ) ), 'parts' => array(), 'notes' => 'Restock' );
+		$body  = array( 'units' => array( array( 'k' => 'u1', 'item' => 'Copper pipe', 'qty' => '2' ) ), 'parts' => array(), 'notes' => 'Restock' );
 		$order = array( 'id' => 57, 'project_id' => 'stock', 'form' => 'materials', 'status' => 'open', 'body' => $body, 'approval' => array( 'state' => 'asked' ) );
 		$this->assertSame( 'asked', ZJOB_Project_Orders::stock_state( $order ) );
 		$this->assertSame( '', ZJOB_Project_Orders::stock_po( $order ), 'no PO before the yes' );

@@ -4,7 +4,7 @@
  *
  * File attachment handling. Images + PDFs only. 5 MB cap.
  *
- * SECURITY CONTRACT (Trap 9 / acceptance #8):
+ * SECURITY CONTRACT (design rule 9):
  *   - ALL uploads route through wp_handle_upload() so we inherit WordPress's
  *     MIME sniffing, filename sanitization, and directory-traversal
  *     protection. We NEVER call move_uploaded_file() directly.
@@ -13,7 +13,7 @@
  *     renamed .exe → .png.
  *   - Size check BEFORE wp_handle_upload so we fail fast on oversize.
  *
- * HEIC HANDLING (acceptance #9):
+ * HEIC HANDLING:
  *   iPhones upload HEIC. Browsers generally can't render it. We try:
  *     1. Call ZRCPT_HEIC::to_jpeg() if present (the Receipts app
  *        provides this — avoids duplicating the ImageMagick/ffmpeg plumbing).
@@ -21,7 +21,7 @@
  *     3. If neither works, reject with a clear error — better than storing an
  *        unviewable file.
  *
- * 30-DAY PURGE (Trap 4 / acceptance #7):
+ * 30-DAY PURGE (design rule 4):
  *   When a message is soft-deleted, its attachments stay on disk for 30 days
  *   (audit / admin undelete). Daily cron purges files whose parent message's
  *   deleted_at is older than 30 days, stamping purged_at on the row.
@@ -88,7 +88,7 @@ class ZIM_Attachments {
 			$needs_heic_convert = true;
 		}
 
-		// Route through wp_handle_upload — Trap 9.
+		// Route through wp_handle_upload — design rule 9.
 		// v1.0.27 (security): store NEW uploads under an unguessable random basename so
 		// the underlying file can't be enumerated even as a backstop -- the browser only
 		// ever receives the membership-gated proxy URL below, never this path. The user's

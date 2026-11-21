@@ -423,7 +423,7 @@ class ZEST_Access_Requests {
 			$name  = ( $asker && ! empty( $asker->display_name ) ) ? $asker->display_name : sprintf( __( 'User %d', 'zorderz' ), (int) $req['uid'] );
 			$mine  = class_exists( 'ZEST_Salesperson' ) ? ZEST_Salesperson::initials_of( (int) $req['uid'] ) : '';
 			$by    = ! empty( $req['by'] ) ? get_userdata( (int) $req['by'] ) : null;
-			$when  = static function ( $t ) { return function_exists( 'wp_date' ) ? wp_date( 'M j, g:i A', (int) $t ) : gmdate( 'M j, H:i', (int) $t ); };
+			$when  = static function ( $t ) { return function_exists( 'wp_date' ) ? wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:i A' ) : 'M j, g:i A' ), (int) $t ) : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, H:i' ) : 'M j, H:i' ), (int) $t ); };
 			$words = array(
 				'pending'  => __( 'Waiting for an answer', 'zorderz' ),
 				'approved' => __( 'Approved', 'zorderz' ),

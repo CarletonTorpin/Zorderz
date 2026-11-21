@@ -8,7 +8,7 @@
  *   If a push would fire during a user's quiet hours, we store it in
  *   wp_zim_notification_queue with release_at = end-of-quiet-hours. The
  *   per-minute cron picks it up at that time. Multiple queued items collapse
- *   into a single digest push at release time (acceptance #6).
+ *   into a single digest push at release time.
  *
  * TRAP 6 — FIRE POLICY:
  *   Pushes fire ONLY on:
@@ -16,11 +16,11 @@
  *     (b) the first unread message in an otherwise-read conversation.
  *   Not on every incoming message. Queue-level dedup keeps it quiet.
  *
- * EMAIL FALLBACK (acceptance #5):
+ * EMAIL FALLBACK:
  *   Users who declined Web Push (zero subscription rows) receive an email
  *   digest instead. Throttled to once per 30 minutes per (user, conversation).
  *
- * SOFT-DELETE CANCELLATION (Trap 4):
+ * SOFT-DELETE CANCELLATION (design rule 4):
  *   When a message is soft-deleted, its queued-but-not-yet-fired notifications
  *   are cancelled (cancelled_at set). Pushes we already fired can't be
  *   recalled — that's fine; the user clicks through and sees the placeholder.
@@ -385,9 +385,9 @@ class ZIM_Notifications {
 		$subject = '[' . $brand . '] New message from ' . $author_name;
 
 		$body  = 'You have a new message from ' . $author_name . ' on ' . $brand . ":\n\n";
-		$body .= "————————————————————\n";
+		$body .= "--------------------\n";
 		$body .= $message_lines . "\n";
-		$body .= "————————————————————\n\n";
+		$body .= "--------------------\n\n";
 		if ( $can_reply ) {
 			$body .= "Reply to this email and your response will be sent back to " . $author_name . " as a direct message.\n\n";
 		}

@@ -47,8 +47,6 @@
  * Degrades gracefully: if the theme's ZDZ_User_Media class is not present (older
  * theme), every method returns an empty result and the caller falls back to the
  * manual upload path. Nothing here is required for the legacy flow to work.
- *
- * @since 3.1.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
@@ -600,7 +598,7 @@ class ZRCPT_Media {
 	/** Format an epoch as "May 27, 2026". */
 	private static function format_date( int $ts ): string {
 		// Use the site's date format if it's set to something friendly; otherwise default.
-		return gmdate( 'M j, Y', $ts );
+		return gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), $ts );
 	}
 
 	/**

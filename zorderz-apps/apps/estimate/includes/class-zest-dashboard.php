@@ -53,9 +53,17 @@ class ZEST_Dashboard {
 
 	/* ---- guards ---- */
 
-	private static function guard(): int {
+	/**
+	 * Nonce and a signed-in person, else 403. An account in Privacy View gets nothing here but the two lists ($look),
+	 * and those only once an administrator opened Estimates to it and the platform lists the app for it
+	 * (ZEST_Privacy_View).
+	 */
+	private static function guard( bool $look = false ): int {
 		if ( ! check_ajax_referer( ZEST_NONCE, 'nonce', false ) || ! is_user_logged_in() ) {
 			wp_send_json_error( array( 'message' => 'Not allowed.' ), 403 );
+		}
+		if ( class_exists( 'ZEST_Privacy_View' ) && ZEST_Privacy_View::on() && ! ( $look && ZEST_Privacy_View::may_look( (int) get_current_user_id() ) ) ) {
+			wp_send_json_error( ZEST_Privacy_View::refusal(), 403 );
 		}
 		return get_current_user_id();
 	}
@@ -65,18 +73,17 @@ class ZEST_Dashboard {
 		return class_exists( 'ZDZ_Hierarchy' ) && ZDZ_Hierarchy::is_kiosk( $uid );
 	}
 
+	/**
+	 * The admin tier, by ZEST_Salesperson's rule: an administrator role, unless the platform's data permissions say
+	 * this person does not see other people's data (then only their own estimates, like anyone else).
+	 */
 	private static function is_admin_tier( int $uid ): bool {
-		if ( user_can( $uid, 'manage_options' ) ) {
-			if ( class_exists( 'ZDZ_Data_Permissions' ) && method_exists( 'ZDZ_Data_Permissions', 'can_view_others_data' )
-				&& ! ZDZ_Data_Permissions::can_view_others_data( $uid ) ) {
-				error_log( sprintf( 'Zorderz Estimates: admin uid %d collapsed to own-scope by data-permission override.', $uid ) );
-				return false;
-			}
-			return true;
+		if ( class_exists( 'ZEST_Salesperson' ) ) {
+			return ZEST_Salesperson::is_admin_tier( $uid );
 		}
-		$u = get_userdata( $uid );
+		$u     = get_userdata( $uid );
 		$roles = $u ? (array) $u->roles : array();
-		return (bool) array_intersect( array( 'zdz_owner', 'zdz_admin' ), $roles );
+		return user_can( $uid, 'manage_options' ) || (bool) array_intersect( array( 'zdz_owner', 'zdz_admin' ), $roles );
 	}
 
 	/**
@@ -163,7 +170,15 @@ class ZEST_Dashboard {
 		if ( $uid <= 0 || self::is_kiosk_session( $uid ) ) {
 			return array( 'ok' => false, 'error' => 'This action is not available on the shared device.' );
 		}
+		// The address is cleaned once, here, so the billing system, the CRM lead and this app's row all get the same one
+		// (a dictated address without its sentence's full stop), or none.
 		$email = ZEST_FreshBooks::clean_email( $raw['customer_email'] ?? ( $raw['customer']['email'] ?? '' ) );
+		if ( array_key_exists( 'customer_email', $raw ) ) {
+			$raw['customer_email'] = $email;
+		}
+		if ( isset( $raw['customer'] ) && is_array( $raw['customer'] ) && array_key_exists( 'email', $raw['customer'] ) ) {
+			$raw['customer']['email'] = $email;
+		}
 		$is_operator = user_can( $uid, 'zest_create_zero_estimates' ) && ! self::is_admin_tier( $uid );
 
 		// A priced (non-operator) estimate requires a valid email to reach the customer.
@@ -285,15 +300,18 @@ class ZEST_Dashboard {
 		wp_send_json_success( $res );
 	}
 
-	/** Open estimates: admin sees all (unless collapsed), a rep sees their own. */
+	/**
+	 * Open estimates: the admin tier sees all, anyone else their own and those sent to them to follow up. Each row
+	 * carries its follow-up (ZEST_Lists).
+	 */
 	public static function ajax_list_open(): void {
-		$uid = self::guard();
-		wp_send_json_success( array( 'rows' => self::rows_for( $uid, "status IN ('created','stub','open')" ) ) );
+		$uid = self::guard( true );
+		wp_send_json_success( ZEST_Lists::reply( $uid, 'open' ) );
 	}
 
 	public static function ajax_history(): void {
-		$uid = self::guard();
-		wp_send_json_success( array( 'rows' => self::rows_for( $uid, '1=1', 200 ) ) );
+		$uid = self::guard( true );
+		wp_send_json_success( ZEST_Lists::reply( $uid, 'history' ) );
 	}
 
 	/**
@@ -693,7 +711,7 @@ class ZEST_Dashboard {
 		$forgotten_price = $matched_but_zero && ! $is_operator; // a forgotten price, not a stub
 		if ( $priced > 0 || $forgotten_price ) {
 			$msg = $forgotten_price
-				? 'A line matched a catalog item but resolved to $0 — that is a missing price, not a stub. Add its price before saving.'
+				? 'A line matched a catalog item but resolved to $0: that is a missing price, not a stub. Add its price before saving.'
 				: 'This estimate mixes priced lines with $0 lines. Price every line, or make it a full $0 stub.';
 			return array( 'allow' => false, 'kind' => 'mixed', 'refuse_message' => $msg );
 		}
@@ -703,7 +721,7 @@ class ZEST_Dashboard {
 		return array(
 			'allow'          => $allow,
 			'kind'           => 'stub',
-			'refuse_message' => $allow ? '' : 'A $0 estimate stub can only be created by an owner, admin or operator.',
+			'refuse_message' => $allow ? '' : 'An empty estimate stub can only be created by an owner, admin or operator.',
 		);
 	}
 
@@ -1071,40 +1089,6 @@ class ZEST_Dashboard {
 	}
 
 	/* ---- helpers ---- */
-
-	private static function rows_for( int $uid, string $where, int $limit = 100 ): array {
-		global $wpdb;
-		$table = ZEST_DB::estimates_table();
-		if ( self::is_admin_tier( $uid ) ) {
-			$sql = $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where} ORDER BY created_at DESC LIMIT %d", $limit );
-		} elseif ( class_exists( 'ZEST_Salesperson' ) ) {
-			// "mine" = created, named on it (salesperson column: a routed stub is its routed person's), or granted
-			list( $mine, $args ) = ZEST_Salesperson::mine_sql( $uid );
-			$args[] = $limit;
-			$sql    = $wpdb->prepare( "SELECT * FROM {$table} WHERE ({$where}) AND {$mine} ORDER BY created_at DESC LIMIT %d", $args ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is ZEST_DB::estimates_table(); $where is a fixed clause from this class's callers; $mine is ZEST_Salesperson::mine_sql()'s fragment of placeholders and int-cast ids
-		} else {
-			// "mine" = created_by OR provenance-initials — always runs (the no-code fix).
-			$code = self::user_code( $uid );
-			$like = '%' . $wpdb->esc_like( 'Submitted by:' ) . '%' . $wpdb->esc_like( $code ) . '%';
-			$sql  = $wpdb->prepare(
-				"SELECT * FROM {$table} WHERE ({$where}) AND (created_by = %d" . ( '' !== $code ? ' OR notes LIKE %s' : '' ) . ") ORDER BY created_at DESC LIMIT %d",
-				'' !== $code ? array( $uid, $like, $limit ) : array( $uid, $limit )
-			);
-		}
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
-		return array_map( array( __CLASS__, 'public_row' ), (array) $rows );
-	}
-
-	private static function public_row( array $row ): array {
-		return array(
-			'id'       => (int) $row['id'],
-			'customer' => (string) $row['customer_name'],
-			'number'   => (string) $row['billing_doc_num'],
-			'status'   => (string) $row['status'],
-			'created'  => (string) $row['created_at'],
-			'items'    => (int) $row['item_count'],
-		);
-	}
 
 	/** Sequential local estimate number for the no-billing fallback (EST-0001, EST-0002, ...). */
 	private static function next_local_number(): string {

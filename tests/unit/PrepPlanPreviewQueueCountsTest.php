@@ -74,7 +74,7 @@ final class PrepPlanPreviewQueueCountsTest extends TestCase {
 
 	public function test_old_rows_are_pruned(): void {
 		$m = ZPREP_Plan_Preview::put( array(), 'Sam Lee', '', array( 'pieces' => 1 ), 'A', '', 0, 1000 );
-		$m = ZPREP_Plan_Preview::put( $m, 'Casey Lee', '', array( 'pieces' => 1 ), 'B', '', 0, 1000 + ZPREP_Plan_Preview::TTL + 10 );
+		$m = ZPREP_Plan_Preview::put( $m, 'Casey Example', '', array( 'pieces' => 1 ), 'B', '', 0, 1000 + ZPREP_Plan_Preview::TTL + 10 );
 		$this->assertCount( 1, $m );
 	}
 

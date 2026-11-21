@@ -1,11 +1,11 @@
 # Towns, regions and ZIP names of the example region (fictional places and fictional ZIP codes).
 charts:
-  areas: [Northtown, Southport, Eastvale, Westbrook, Midvale]
+  areas: [Northtown, Southport, Eastvale, Westvale, Midvale]
   places:
     Northtown: [40.150, -100.100]
     Southport: [40.030, -100.100]
     Eastvale: [40.090, -100.030]
-    Westbrook: [40.090, -100.170]
+    Westvale: [40.090, -100.170]
     Midvale: [40.090, -100.100]
   aliases:
     Northtown: [N Town, Northtwn]
@@ -13,7 +13,7 @@ charts:
   regions:
     North: [Northtown]
     South: [Southport]
-    Central: [Midvale, Eastvale, Westbrook]
+    Central: [Midvale, Eastvale, Westvale]
   region_words:
     the north side: [North]
     downtown: [Midvale]
@@ -21,7 +21,7 @@ charts:
     "00011": Northtown
     "00012": Southport
     "00013": Eastvale
-    "00014": Westbrook
+    "00014": Westvale
     "00015": Midvale
   territory_splits: [safety_site, safety_council]
   place_splits: [tax_area, coast_band]

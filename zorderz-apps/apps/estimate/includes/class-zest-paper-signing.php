@@ -57,7 +57,7 @@ final class ZEST_Paper_Signing {
 			return '';
 		}
 		$t = strtotime( $ymd . ' 12:00:00 UTC' );
-		return false === $t ? '' : gmdate( 'D, M j', $t );
+		return false === $t ? '' : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D, M j' ) : 'D, M j' ), $t );
 	}
 
 	/** The line the estimate shows once a paper signing is recorded. */
@@ -171,7 +171,7 @@ final class ZEST_Paper_Signing {
 			'id'     => (int) $m['id'],
 			'thumb'  => (string) ( $m['thumbnail_url'] ?? '' ),
 			'thumb2' => (string) ( $m['thumbnail_2x_url'] ?? ( $m['thumbnail_url'] ?? '' ) ),
-			'when'   => $t ? gmdate( 'g:i a', $t ) : '',
+			'when'   => $t ? gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i a' ) : 'g:i a' ), $t ) : '',
 		);
 	}
 

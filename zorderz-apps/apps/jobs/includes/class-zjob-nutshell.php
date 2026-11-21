@@ -52,7 +52,7 @@ class ZJOB_Nutshell {
 	/**
 	 * The pipeline/stage a component's child lead should enter.
 	 *
-	 * NO pipeline name is hardcoded (those are tenant/business data). The mapping is
+	 * Pipeline names are the business's data. The mapping is
 	 * supplied entirely by the `zdz_job_child_stage_name` filter — a site (or the
 	 * future Item Engine / Flow service) maps a component to a pipeline or stage name.
 	 * The neutral default is '' (empty), which means "do not move the stage": the
@@ -155,7 +155,7 @@ class ZJOB_Nutshell {
 		if ( $brand !== '' )     { $note_lines[] = 'Brand: ' . $brand; }
 		if ( $parent_lead > 0 )  { $note_lines[] = 'Split from parent lead #' . $parent_lead . '.'; }
 		if ( $notes !== '' )     { $note_lines[] = 'Notes: ' . $notes; }
-		$note_lines[] = 'Internal work split — not reflected on the customer\'s billing document.';
+		$note_lines[] = 'Internal work split, not reflected on the customer\'s billing document.';
 		$noted = $ns->add_note( [
 			'entity' => [ 'entityType' => 'Leads', 'id' => $child_lead_id ],
 			'note'   => '* ' . implode( "\n", $note_lines ),

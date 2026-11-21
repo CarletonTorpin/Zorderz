@@ -125,7 +125,7 @@ class ZDH_Nutshell {
 		delete_transient( 'zdh_nutshell_users' );
 		delete_transient( 'zdh_nutshell_fields' );
 		global $wpdb;
-		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_zdh\\_nutshell\\_idx\\_%' OR option_name LIKE '\\_transient\\_timeout\\_tsdh\\_nutshell\\_idx\\_%'" );
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_zdh\\_nutshell\\_idx\\_%' OR option_name LIKE '\\_transient\\_timeout\\_zdh\\_nutshell\\_idx\\_%'" );
 	}
 
 	/* ----------------------------------------------------------- transport */
@@ -176,7 +176,7 @@ class ZDH_Nutshell {
 					usleep( (int) ( 1000000 * min( 4, max( 1, $wait > 0 ? $wait : 1.5 * $tries ) ) ) );
 					continue;
 				}
-				return new WP_Error( 'nutshell_busy', 429 === $code ? 'Nutshell is rate-limiting us — wait a minute and try again.' : 'Nutshell returned a server error (' . $code . ') — try again in a minute.' );
+				return new WP_Error( 'nutshell_busy', 429 === $code ? 'Nutshell is rate-limiting us. Wait a minute and try again.' : 'Nutshell returned a server error (' . $code . '). Try again in a minute.' );
 			}
 			if ( 401 === $code || 403 === $code ) {
 				return new WP_Error( 'nutshell_auth', 'Nutshell rejected the login (' . $code . '). Check the Nutshell email and API key: the email must be the one that created the key, unless the key allows user impersonation.' );
@@ -1034,7 +1034,7 @@ class ZDH_Nutshell {
 			$out['index_ms']     = $idx['ms'];
 			$out['address_fields'] = $idx['shape'] ?? null;
 			if ( ! $idx['counts']['addresses'] ) {
-				$out['warning_addresses'] = 'No street addresses could be read from these records — the cross-check matches on the address field of People and Companies in Nutshell. address_fields shows what Nutshell sent (key names only).';
+				$out['warning_addresses'] = 'No street addresses could be read from these records. The cross-check matches on the address field of People and Companies in Nutshell. address_fields shows what Nutshell sent (key names only).';
 			}
 		}
 		$out['batches_on_file'] = (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . ZDH_DB::t_drops() . " WHERE status = 'done'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name from ZDH_DB::t_drops() ($wpdb->prefix and a fixed name); the query takes no values

@@ -37,7 +37,7 @@
 	background: var(--sys-surface, #fff); color: inherit;
 }
 .zib-btn.zib-primary {
-	background: var(--sys-primary, #4796F7);
+	background: var(--sys-primary, #7D87FB);
 	color: var(--sys-tint-accent-fg, #fff);
 	border-color: transparent;
 }
@@ -64,7 +64,7 @@
 	background: var(--sys-surface, #fff); color: inherit; font: inherit;
 	border: 1px solid var(--sys-outline-variant, #d7dbe3); border-radius: 10px; padding: 9px 12px;
 }
-.zib-hit:hover { border-color: var(--sys-primary, #4796F7); }
+.zib-hit:hover { border-color: var(--sys-primary, #7D87FB); }
 .zib-hit-top { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; opacity: .8; }
 .zib-hit-from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zib-hit-date { white-space: nowrap; }
@@ -76,8 +76,8 @@
    reads as a faint accent wash on BOTH light and dark themes. (An opaque light tint made the light
    dark-mode text invisible — caught in the first live QA on the dark theme.) */
 .zib-hit.zib-unread {
-	background: color-mix(in srgb, var(--sys-primary, #4796F7) 10%, var(--sys-surface, #fff));
-	box-shadow: inset 3px 0 0 0 var(--sys-primary, #4796F7);
+	background: color-mix(in srgb, var(--sys-primary, #7D87FB) 10%, var(--sys-surface, #fff));
+	box-shadow: inset 3px 0 0 0 var(--sys-primary, #7D87FB);
 }
 .zib-hit.zib-unread .zib-hit-top { opacity: 1; }
 .zib-hit.zib-unread .zib-hit-from { font-weight: 800; }
@@ -85,7 +85,7 @@
 .zib-hit.zib-unread .zib-hit-snip { opacity: .9; }
 .zib-hit.zib-unread .zib-hit-from::before {
 	content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px;
-	border-radius: 50%; background: var(--sys-primary, #4796F7); vertical-align: middle;
+	border-radius: 50%; background: var(--sys-primary, #7D87FB); vertical-align: middle;
 }
 .zib-reader { margin-top: 10px; }
 .zib-back { margin-bottom: 10px; }
@@ -115,7 +115,7 @@
 	cursor: pointer; font: inherit; color: inherit; background: var(--sys-surface, #fff);
 	border: 1px solid var(--sys-outline-variant, #d7dbe3); border-radius: 10px; padding: 10px 12px;
 }
-.zib-folder:hover { border-color: var(--sys-primary, #4796F7); }
+.zib-folder:hover { border-color: var(--sys-primary, #7D87FB); }
 .zib-folder-nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zib-folder-ct { font-size: 12px; opacity: .6; font-variant-numeric: tabular-nums; }
 
@@ -219,7 +219,7 @@
 	background: var(--sys-surface, #fff); color: inherit;
 }
 .zib-tb-compose {
-	background: var(--sys-primary, #4796F7); color: var(--sys-tint-accent-fg, #fff); border-color: transparent;
+	background: var(--sys-primary, #7D87FB); color: var(--sys-tint-accent-fg, #fff); border-color: transparent;
 }
 .zib-tb-fold { display: inline-flex; align-items: center; gap: 8px; }
 .zib-tb-lbl { font-size: 12px; opacity: .65; }
@@ -238,7 +238,7 @@
 	border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff); }
 .zib-seg button { appearance: none; cursor: pointer; font: inherit; font-size: 15px; line-height: 1;
 	padding: 6px 10px; border: 0; border-radius: 7px; background: transparent; color: inherit; opacity: .6; }
-.zib-seg button[aria-pressed="true"] { background: var(--sys-primary, #4796F7); color: var(--sys-tint-accent-fg, #fff); opacity: 1; }
+.zib-seg button[aria-pressed="true"] { background: var(--sys-primary, #7D87FB); color: var(--sys-tint-accent-fg, #fff); opacity: 1; }
 
 /* ── shared monogram avatar ──────────────────────────────────────────────── */
 .zib-av { display: inline-grid; place-items: center; flex: none; color: #fff; font-weight: 800;
@@ -266,9 +266,9 @@
 .zib-hit .zib-hit-subj { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zib-hit .zib-hit-snip { font-size: 13px; opacity: .62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: var(--zib-snip, block); }
 /* unread channel — a dot + a left rail + heavier weight (NOT the selection look) */
-.zib-hit.zib-unread { background: color-mix(in srgb, var(--sys-primary,#4796F7) 9%, var(--sys-surface,#fff)); }
-.zib-hit.zib-unread::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3.5px; border-radius: 0 4px 4px 0; background: var(--sys-primary, #4796F7); }
-.zib-hit.zib-unread .zib-udot { background: var(--sys-primary, #4796F7); box-shadow: 0 0 8px rgba(71,150,247,.7); }
+.zib-hit.zib-unread { background: color-mix(in srgb, var(--sys-primary,#7D87FB) 9%, var(--sys-surface,#fff)); }
+.zib-hit.zib-unread::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3.5px; border-radius: 0 4px 4px 0; background: var(--sys-primary, #7D87FB); }
+.zib-hit.zib-unread .zib-udot { background: var(--sys-primary, #7D87FB); box-shadow: 0 0 8px rgba(125,135,251,.7); }
 .zib-hit.zib-unread .zib-hit-from { opacity: 1; font-weight: 800; }
 .zib-hit.zib-unread .zib-hit-subj { font-weight: 800; }
 .zib-hit.zib-unread .zib-hit-snip { opacity: .85; }
@@ -327,7 +327,7 @@
 .zib-sp-msg b { font-variant-numeric: tabular-nums; }
 .zib-linkbtn { border: 1px solid var(--sys-outline-variant, #d7dbe3); background: var(--sys-surface, #fff);
 	padding: 7px 14px; font-weight: 700; border-radius: var(--ref-radius-md, 12px); }
-.zib-linkbtn:first-of-type { color: var(--sys-primary, #4796F7); border-color: currentColor; }
+.zib-linkbtn:first-of-type { color: var(--sys-primary, #7D87FB); border-color: currentColor; }
 /* the private .zib-spin spinner is gone; the panel shows the kit's loader (.zdz-loading). */
 .zib-sent { font-size: 17px; font-weight: 800; color: var(--zib-success-text); margin: 8px 0 14px; }
 
@@ -340,21 +340,21 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    v0.14.1 — VISUAL POLISH, matched to the app: FLAT fills, the app's own
-   blue accent (--sys-primary, #4796F7), neutral depth. No gradients, no purple.
+   blue accent (--sys-primary, #7D87FB), neutral depth. No gradients, no purple.
    Layered last over the v0.14.0 block; large fonts still inherit the theme.
    ═══════════════════════════════════════════════════════════════════════════ */
 .zib-toolbar { gap: 12px; padding: 2px 0 14px; }
 .zib-tb-compose { padding: 11px 22px; font-weight: 800; }
 .zib-folsel { padding: 10px 12px; border-radius: 12px; }
 .zib-tb-search { padding: 10px 15px; border-radius: var(--ref-radius-md, 12px); transition: border-color .15s, box-shadow .15s; }
-.zib-tb-search:focus-within { border-color: var(--sys-primary, #4796F7); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-primary, #4796F7) 22%, transparent); }
+.zib-tb-search:focus-within { border-color: var(--sys-primary, #7D87FB); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-primary, #7D87FB) 22%, transparent); }
 .zib-seg { padding: 4px; border-radius: 12px; }
 .zib-seg button { padding: 7px 11px; font-size: 16px; }
 
 .zib-nav .zib-results { gap: 6px; padding: 2px 2px 8px; }
 .zib-hit { padding: 14px; border-radius: 14px; background: var(--sys-surface, #fff); transition: transform .12s ease, box-shadow .12s ease, background .12s ease; }
 .zib-hit:hover { background: var(--sys-surface-raised, rgba(127,127,127,.10)); transform: translateY(-1px); box-shadow: 0 8px 20px -14px rgba(0,0,0,.6); }
-.zib-hit[aria-selected="true"] { background: var(--sys-surface-raised, rgba(127,127,127,.12)); border-color: transparent; box-shadow: inset 0 0 0 1.5px var(--sys-primary, #4796F7); }
+.zib-hit[aria-selected="true"] { background: var(--sys-surface-raised, rgba(127,127,127,.12)); border-color: transparent; box-shadow: inset 0 0 0 1.5px var(--sys-primary, #7D87FB); }
 .zib-av { border-radius: 12px; font-weight: 800; box-shadow: 0 2px 8px -4px rgba(0,0,0,.5); }
 .zib-hit .zib-hit-subj { font-weight: 700; }
 .zib-hit.zib-unread::before { width: 4px; top: 12px; bottom: 12px; }
@@ -409,18 +409,18 @@
 	border: 2px solid transparent; background-clip: padding-box; }
 .zib-card .zib-results::-webkit-scrollbar-thumb:hover,
 .zib-card .zib-r-framewrap::-webkit-scrollbar-thumb:hover {
-	background: color-mix(in srgb, var(--sys-primary, #4796F7) 42%, var(--sys-surface-raised, #334155)); }
+	background: color-mix(in srgb, var(--sys-primary, #7D87FB) 42%, var(--sys-surface-raised, #334155)); }
 .zib-card .zib-results::-webkit-scrollbar-track,
 .zib-card .zib-r-framewrap::-webkit-scrollbar-track,
 .zib-card .zib-movepick::-webkit-scrollbar-track { background: transparent; }
 
 /* (3) buttons feel right: consistent hover / active / keyboard-focus feedback. */
 .zib-card button { transition: background .12s ease, filter .12s ease, opacity .12s ease, box-shadow .12s ease; }
-.zib-card button:focus-visible { outline: 2px solid var(--sys-primary, #4796F7); outline-offset: 2px; }
+.zib-card button:focus-visible { outline: 2px solid var(--sys-primary, #7D87FB); outline-offset: 2px; }
 .zib-btn:hover, .zib-tb-btn:hover { background: var(--sys-surface-raised, rgba(127,127,127,.10)); }
 .zib-btn:active, .zib-tb-btn:active, .zib-seg button:active { transform: translateY(1px); }
 .zib-btn.zib-primary:hover, .zib-tb-compose:hover { filter: brightness(1.07); }
-.zib-tb-compose:hover { background: var(--sys-primary, #4796F7); }
+.zib-tb-compose:hover { background: var(--sys-primary, #7D87FB); }
 /* reader action row: equal, self-evident buttons (Reply labelled; reply-all / forward square icons) */
 .zib-rd-actions .zib-rbtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; }
 .zib-rd-actions .zib-rbtn[data-act="replyall"], .zib-rd-actions .zib-rbtn[data-act="forward"] { min-width: 48px; font-size: 17px; }
@@ -429,7 +429,7 @@
 .zib-seg button { min-width: 40px; display: inline-flex; align-items: center; justify-content: center; }
 .zib-seg button:not([aria-pressed="true"]) { opacity: .74; }
 .zib-seg button:not([aria-pressed="true"]):hover {
-	background: color-mix(in srgb, var(--sys-primary, #4796F7) 15%, transparent); opacity: 1; }
+	background: color-mix(in srgb, var(--sys-primary, #7D87FB) 15%, transparent); opacity: 1; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    v0.17.0 — KEYBOARD-DRIVEN, REVERSIBLE TRIAGE + field/accessibility polish
@@ -487,9 +487,9 @@
 	max-height: 60vh; overflow-y: auto; padding-right: 6px; }
 .zib-r-p { margin: 0 0 14px; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 .zib-r-p:last-child { margin-bottom: 0; }
-/* v0.20.3: a lighter tint of the brand blue — the #4796F7 brand blue is only 3.44:1 as small text on the
+/* v0.20.3: a lighter tint of the brand blue — the #7D87FB brand blue is only 3.44:1 as small text on the
    dark reader (fails WCAG AA); #74B4FA clears AA (4.76:1) while staying in the same blue family. Buttons,
-   which use #4796F7 as a background with white text, are unchanged. */
+   which use #7D87FB as a background with white text, are unchanged. */
 .zib-r-link { color: #74B4FA; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
 /* quoted reply history: a "•••" toggle, then a dimmed, left-bordered block */
 .zib-quote-toggle { appearance: none; cursor: pointer; font: inherit; font-weight: 800; letter-spacing: .1em;
@@ -512,12 +512,12 @@
 .zib-chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
 	padding: 6px 8px; border-radius: 10px; cursor: text; transition: border-color .15s, box-shadow .15s;
 	border: 1px solid var(--sys-outline-variant, #334155); background: var(--sys-surface, #1E293B); }
-.zib-chips:focus-within { border-color: var(--sys-primary, #4796F7);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-primary, #4796F7) 22%, transparent); }
+.zib-chips:focus-within { border-color: var(--sys-primary, #7D87FB);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-primary, #7D87FB) 22%, transparent); }
 .zib-chip-input { flex: 1; min-width: 130px; border: 0; background: none; color: inherit; font: inherit; outline: none; padding: 3px 0; }
 .zib-chip-tag { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
 	padding: 3px 6px 3px 11px; border-radius: var(--ref-radius-sm, 8px); font-size: 13.5px; border: 1px solid transparent;
-	background: color-mix(in srgb, var(--sys-primary, #4796F7) 16%, var(--sys-surface-raised, #334155));
+	background: color-mix(in srgb, var(--sys-primary, #7D87FB) 16%, var(--sys-surface-raised, #334155));
 	color: var(--sys-text, #F1F5F9); }
 .zib-chip-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zib-chip-x { appearance: none; cursor: pointer; border: 0; background: none; color: inherit; font: inherit;

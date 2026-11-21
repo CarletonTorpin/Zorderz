@@ -18,7 +18,6 @@
  *     save so downstream callers can invalidate cleanly.
  *
  * @package Zorderz
- * @since   2.13.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

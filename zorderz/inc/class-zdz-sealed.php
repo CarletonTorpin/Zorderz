@@ -69,7 +69,7 @@
  *     (a door or product word, price, estimate) -- "Keypad on the left, 1006", "…the gate code on the invoice? It's 6011";
  *   - the same code again in its sentence, or alone in a later line within 300 bytes ("yeah that's what she said, 0007");
  *   - never a code (not_a_code(), every rule): a door size ("patio door #3080", "French door no. 6080", "3068 LH"),
- *     a fraction ("46 1/4"), a unit or money after or before it ("1450 sq ft", "$1,240", "36x80", "220v"), a time
+ *     a fraction ("46 1/4"), a unit or money after or before it ("1450 sq ft", "$1,240", "12x24", "220v"), a time
  *     ("meet at the gate 0930", "what time…" / "1015"), "not a code", the unit's own number, and in the weaker readings
  *     a document, unit, model, phone, card, store, year, postcode, material or street ("estimate #6523", "model 1750",
  *     "304 stainless", "1450 balance due", "ending 4417", "for 2214 Maple", "Gate 1450 Elm Grove").
@@ -664,7 +664,7 @@ class ZDZ_Sealed {
 	const MODEL_WORDS_OPT = 'zdz_sealed_model_words';
 
 	/**
-	 * Option: the trade's words for things ("awning", "skylight"), shared with the ask bar (ZDZ_Ask_Phrases::TRADE_OPT,
+	 * Option: the trade's words for things ("gutter guard", "chimney cap"), shared with the ask bar (ZDZ_Ask_Phrases::TRADE_OPT,
 	 * written from the catalog pack's vocabulary.things), with the zdz_sealed_trade_words filter on top. A number beside
 	 * one of them is a size, a count or a price, as it is beside "door" or "window". Core: none.
 	 */
@@ -677,8 +677,15 @@ class ZDZ_Sealed {
 	 */
 	const STREET_FIRST_OPT = 'zdz_street_first_words';
 
-	/** Street words that come before the name and are common across the United States ("1450 Via de la Valle"). */
+	/** Street words that come before the name and are common across the United States ("1450 Via Example"). */
 	const STREET_FIRST = array( 'via', 'vía', 'calle', 'camino', 'paseo', 'avenida', 'plaza' );
+
+	/**
+	 * Option: the words a region's street names END with ("Close", "Crescent", "Mews"), on top of the common ones each
+	 * address reader knows, with the zdz_street_end_words filter. Written from the knowledge pack's
+	 * addresses.street_end_words; read by street_end_words().
+	 */
+	const STREET_END_OPT = 'zdz_street_end_words';
 
 	/**
 	 * Option: the region's postcode, which a weak reading never takes for a code:
@@ -784,12 +791,36 @@ class ZDZ_Sealed {
 		return array_map( 'strval', array_keys( $out ) );
 	}
 
+	/**
+	 * The words a region's street names end with, beyond the common ones each address reader knows: the option
+	 * STREET_END_OPT and the zdz_street_end_words filter, each one word of 2 to 20 letters (accented letters too), once
+	 * whatever its case. Pure apart from the option and filter.
+	 *
+	 * @return string[]
+	 */
+	public static function street_end_words() {
+		$list = function_exists( 'get_option' ) ? get_option( self::STREET_END_OPT, array() ) : array();
+		$list = is_array( $list ) ? $list : array();
+		$list = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_street_end_words', $list ) : $list;
+		$out  = array();
+		foreach ( is_array( $list ) ? $list : array() as $w ) {
+			$w = is_string( $w ) ? trim( $w ) : '';
+			if ( preg_match( '/^\p{L}{2,20}$/u', $w ) ) {
+				$k = function_exists( 'mb_strtolower' ) ? mb_strtolower( $w, 'UTF-8' ) : strtolower( $w );
+				if ( ! isset( $out[ $k ] ) ) {
+					$out[ $k ] = $w;
+				}
+			}
+		}
+		return array_values( $out );
+	}
+
 	/** '' or "|word|word": the trade's words for things (each with its plural), joined onto an alternation. */
 	private static function trade_alt() {
 		return self::lists()['trade'];
 	}
 
-	/** Does one of the trade's words follow a number ("2 awnings", "1450 skylight")? Never with no trade words. */
+	/** Does one of the trade's words follow a number ("2 chimney caps", "1450 gutter guards")? Never with no trade words. */
 	private static function trade_after( $after ) {
 		$t = self::trade_alt();
 		return '' !== $t && (bool) preg_match( '/^\s*-?\s*(?:' . substr( $t, 1 ) . ')\b/i', (string) $after );
@@ -1027,13 +1058,13 @@ class ZDZ_Sealed {
 	/** A written code right after a house number's place ("Gate 1450 Oak St"): an address, not a code. */
 	private static function looks_like_address( $text, $end, $street_only = false ) {
 		// a street, not any capital word ("Gate: 3005 Door: 3006 Alarm: 3007" are three codes): a capital word after the
-		// number is a street or a place ("Gate 1450 Elm Grove", "1450 Via de la Valle") -- except a label with its own
+		// number is a street or a place ("Gate 1450 Elm Grove", "1450 Via Example") -- except a label with its own
 		// colon ("Gate: 3005 Door: 3006") and a few words. The words a street's name may start with are the region's
 		// (street_first_words()) and a few articles.
 		$tail  = substr( (string) $text, (int) $end, 120 );
 		$first = self::lists()['first'];
 		if ( preg_match( '/^[ \t]+(?:[NSEW]\.?\s+)?(?:\d+(?:st|nd|rd|th)\b|(?:' . ( '' !== $first ? $first . '|' : '' ) . 'Del|El|La|Las|Los|Mount|Mt\.?)\s+(?:(?:de|del|de\s+la|de\s+las|de\s+los)\s+)?[A-Za-z]|(?:[A-Z][A-Za-z\'\-]*\s+){1,3}' . self::STREET . ')/', $tail ) ) {
-			return true; // "1357 Gate View Dr", "1450 Via de la Valle"
+			return true; // "1357 Gate View Dr", "1450 Via Example"
 		}
 		return ! $street_only && (bool) preg_match( '/^[ \t]+(?:[NSEW]\.?\s+)?(?:(?!(?:Door|Gate|Alarm|Lock\w*|Key\w*|Pool|Garage|Codes?|Pin|PIN|Combo|Call|Then|And|Or|Thanks|Thx|Please|Pls|Pound|Star|Hash|OFF|ON|Enter|Press|Use|Front|Back|Side|Alm|GC|LB|Wifi|WiFi|Garage|Note|Also|Use|Just|If|The|For|At|On|In|To|Is|It|Its|Not|NOT|New|Old|Was|Thank|Text|Ring|Park|Turf|Re|Bring|Dog|Dogs|Beware|Leave|See|Ask|Customer|Cust|HOA|Gated|Gave|Got|I|We|She|He|They|Ok|OK|Okay|Yes|No|Lockbox|Keypad|Alarm|Gate)\b)[A-Z][A-Za-z\'\-]*\b(?!\s*[:=]))/', $tail );
 	}
@@ -1127,7 +1158,7 @@ class ZDZ_Sealed {
 		$quoted = (bool) preg_match( '/["\'\x{201C}\x{2018}]\s*$/u', $before ) // "4821" is quoted, not 48 inches
 			|| 1 === preg_match_all( '/(?<![\w\'])\'(?=\w)/', $sb ) % 2 || 1 === preg_match_all( '/(?<!\w)["\x{201C}](?=\w)/u', $sb ) % 2; // 'its 7 7 3 1'
 		if ( preg_match( '/\$\s*$/', $before ) || ( ! $quoted && ( preg_match( self::UNIT_AFTER, $after ) || self::trade_after( $after ) ) ) || preg_match( '/^\s*:\d\d/', $after ) ) {
-			return true; // "$1450", "1450 sq ft", "36x80", "96.5", "1,240", "1700 hours", "7:30", "2 awnings" (a trade word)
+			return true; // "$1450", "1450 sq ft", "12x24", "96.5", "1,240", "1700 hours", "7:30", "2 chimney caps" (a trade word)
 		}
 		if ( preg_match( '/^[A-Za-z]/', $after ) && preg_match( '/\d$/', substr( (string) $text, $start, $end - $start ) ) ) {
 			return true; // "220v", "4821abc": the number is part of a word

@@ -32,7 +32,6 @@
  *  • DECOUPLED from Nutshell. Everything here reads the app's own tables; no CRM call.
  *
  * @package Zorderz\Leads
- * @since   2.5.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -207,7 +206,7 @@ class ZL_Dashboard_Tile {
 			'count'   => $open,
 			'app_id'  => 'leads', // matches zdz_register_apps id
 			'icon'    => 'user-check',
-			'color'   => '#22C55E',
+			'color'   => '#E69F00', // the Sales group's colour
 			'urgency' => $urgency,
 		);
 

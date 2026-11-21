@@ -238,7 +238,7 @@ class ZL_Lead_Generator {
 	 * Called after the first 429 response. Floor is 1 (not 0 — we still
 	 * need to make progress, just slower).
 	 *
-	 * Trap 3 from speed prompt — NOT permanent; cleared in clear_batch_caches().
+	 * NOT permanent: cleared in clear_batch_caches().
 	 *
 	 * @since 1.8.0
 	 * @return int The new cap.
@@ -1981,7 +1981,7 @@ class ZL_Lead_Generator {
 			}
 
 			// If any chunk was rate-limited, halve our cap for remaining
-			// AI work in this batch (Trap 3 — NOT forever; clear_batch_caches resets).
+			// AI work in this batch (NOT forever; clear_batch_caches resets it).
 			$saw_429 = false;
 			foreach ( $results as $r ) {
 				if ( ! empty( $r['was_429'] ) ) { $saw_429 = true; break; }
@@ -2855,7 +2855,7 @@ class ZL_Lead_Generator {
 				$line .= " (x{$qty})";
 			}
 			if ( $amt > 0 ) {
-				$line .= ' — $' . number_format( $amt, 2 );
+				$line .= ', ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $amt, 2 ) : '$' . number_format( $amt, 2 ) );
 			}
 
 			$lines[] = $line;
@@ -2876,7 +2876,7 @@ class ZL_Lead_Generator {
 		}
 
 		if ( $total_value > 0 ) {
-			$lines[] = 'Total Spend: $' . number_format( $total_value, 2 );
+			$lines[] = 'Total Spend: ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $total_value, 2 ) : '$' . number_format( $total_value, 2 ) );
 		}
 
 		if ( ! empty( $most_recent ) && $most_recent !== '2000-01-01' ) {
@@ -3043,7 +3043,7 @@ class ZL_Lead_Generator {
 			$total_spend = (float) $lead_data['total_value'];
 		}
 
-		$note .= 'Total Customer Spend: $' . number_format( $total_spend, 2 ) . "\n";
+		$note .= 'Total Customer Spend: ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $total_spend, 2 ) : '$' . number_format( $total_spend, 2 ) ) . "\n";
 		$note .= 'Lead Score: ' . $score . "/100\n";
 
 		// ── Estimated Product Counts ──

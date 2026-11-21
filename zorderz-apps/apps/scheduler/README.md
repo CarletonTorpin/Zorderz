@@ -23,7 +23,7 @@ filter on `after_setup_theme`, and declines cleanly when the theme is absent.
 Each user connects **their own** Google and/or Microsoft (Exchange) account via
 per-user *delegated* OAuth and picks which of their calendars count as busy time.
 This needs no org-wide admin and works for any provider mix; it is the mode a
-fresh tenant should use. Only the user sees their event details; teammates see
+fresh install should use. Only the user sees their event details; teammates see
 only busy/free.
 
 **Admin setup** (Settings → Scheduler → *Connected Calendars*):
@@ -122,7 +122,7 @@ sent anywhere else.
 
 Appointment and availability state values (`confirmed`/`tentative`/`cancelled`,
 `open`/`busy`) are the app's own for now. When the Core **Flow** service lands,
-they bind to a tenant-declared state machine via a documented Flow hook; until
+they bind to a business-declared state machine via a documented Flow hook; until
 then they stay in-app and no competing taxonomy is invented.
 
 ## Tables

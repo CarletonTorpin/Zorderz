@@ -238,7 +238,7 @@ class ZIB_Vault {
 					}
 				}
 			}
-			return new WP_Error( 'zib_vault_busy', 'Mailbox account is busy refreshing — try again.' );
+			return new WP_Error( 'zib_vault_busy', 'Mailbox account is busy refreshing. Try again.' );
 		}
 
 		try {

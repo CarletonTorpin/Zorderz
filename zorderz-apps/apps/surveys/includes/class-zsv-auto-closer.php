@@ -68,7 +68,7 @@ class ZSV_Auto_Closer {
 		}
 		$m = self::build_manager();
 		if ( ! $m ) {
-			wp_send_json_error( 'CRM not configured — cannot sweep.' );
+			wp_send_json_error( 'CRM not configured: cannot sweep.' );
 		}
 		$dry = ! empty( $_POST['dry_run'] );
 		wp_send_json_success( $m->auto_close_stale_leads( (bool) $dry ) );

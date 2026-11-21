@@ -739,16 +739,16 @@ class ZDZ_Contacts {
 			case 'in_person':
 				return 'Talked in person';
 			case 'voicemail':
-				return 'Called — left a voicemail';
+				return 'Called, left a voicemail';
 			case 'email':
-				return $reached ? 'E-mailed — they replied' : 'E-mailed';
+				return $reached ? 'E-mailed, they replied' : 'E-mailed';
 			case 'text':
-				return $reached ? 'Texted — they replied' : 'Texted';
+				return $reached ? 'Texted, they replied' : 'Texted';
 			default:
 				if ( $reached ) {
-					return 'replied' === $row['result'] ? 'Called — they called back' : 'Called — talked with them';
+					return 'replied' === $row['result'] ? 'Called, they called back' : 'Called, talked with them';
 				}
-				return 'no_answer' === $row['result'] ? 'Called — no answer' : 'Called';
+				return 'no_answer' === $row['result'] ? 'Called, no answer' : 'Called';
 		}
 	}
 
@@ -767,7 +767,7 @@ class ZDZ_Contacts {
 
 	private static function local_time( $utc ) {
 		$t = strtotime( $utc . ' UTC' ) ?: time();
-		return ( new DateTimeImmutable( '@' . $t ) )->setTimezone( wp_timezone() )->format( 'M j, Y \a\t g:i A T' );
+		return ( new DateTimeImmutable( '@' . $t ) )->setTimezone( wp_timezone() )->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y \a\t g:i A T' ) : 'M j, Y \a\t g:i A T' ) );
 	}
 
 	/** The client to post with: the theme's shared CRM client. A filter lets the tests stand one in. */

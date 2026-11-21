@@ -64,13 +64,13 @@
 			html += '<tr data-id="' + r.id + '" data-status="' + esc(r.status) + '">';
 			html += '<td>' + (canSelect ? '<input type="checkbox" class="zprep-lo-cb" data-id="' + r.id + '">' : '') + '</td>';
 			html += '<td>' + esc(r.created_at) + '</td>';
-			html += '<td><code>' + esc(r.source_job || '—') + '</code></td>';
+			html += '<td><code>' + esc(r.source_job || '–') + '</code></td>';
 			html += '<td>' + esc(r.material) + '</td>';
 			html += '<td>' + esc(r.roll_width_in) + '"</td>';
 			html += '<td>' + fmtIn(r.width_in) + ' × ' + fmtIn(r.length_in) + '</td>';
 			html += '<td><input type="text" class="zprep-lo-bin" data-id="' + r.id + '" value="' + esc(r.bin_location || '') + '" style="width:80px;" maxlength="32"></td>';
 			html += '<td><span class="zprep-lo-badge zprep-lo-badge-' + esc(r.status) + '">' + esc(r.status) + '</span></td>';
-			html += '<td>' + esc(r.used_in_job || '—') + '</td>';
+			html += '<td>' + esc(r.used_in_job || '–') + '</td>';
 			html += '</tr>';
 		});
 		tbody.innerHTML = html;

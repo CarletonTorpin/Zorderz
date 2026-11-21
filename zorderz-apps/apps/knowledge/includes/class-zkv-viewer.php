@@ -265,10 +265,10 @@ class ZKV_Viewer {
 <title><?php echo esc_html( $title ); ?></title>
 <script<?php echo $n; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- nonce attribute built with esc_attr() above. ?>>(function(){try{var t=localStorage.getItem("zdz_theme");if(t){document.documentElement.setAttribute("data-theme",t);}}catch(e){}try{if(window.self!==window.top){document.documentElement.className+=" is-framed";}}catch(e){document.documentElement.className+=" is-framed";}})();</script>
 <style>
-	:root{--bg:#eef0f3;--surface:#fff;--text:#111827;--muted:#4b5563;--border:#d1d5db;--brand:<?php echo esc_html( self::brand( '600', '#1e3a5f' ) ); ?>;--page-shadow:0 1px 4px rgba(0,0,0,.18)}
-	[data-theme="dark"]{--bg:#0b1220;--surface:#111827;--text:#e5e7eb;--muted:#9ca3af;--border:#374151;--brand:<?php echo esc_html( self::brand( '300', '#7ab3ff' ) ); ?>;--page-shadow:0 1px 6px rgba(0,0,0,.6)}
+	:root{--bg:#eef0f3;--surface:#fff;--text:#111827;--muted:#4b5563;--border:#d1d5db;--brand:<?php echo esc_html( self::brand( '600', '#433fbd' ) ); ?>;--page-shadow:0 1px 4px rgba(0,0,0,.18)}
+	[data-theme="dark"]{--bg:#0b1220;--surface:#111827;--text:#e5e7eb;--muted:#9ca3af;--border:#374151;--brand:<?php echo esc_html( self::brand( '300', '#b1bcff' ) ); ?>;--page-shadow:0 1px 6px rgba(0,0,0,.6)}
 	@media (prefers-color-scheme: dark){
-		:root:not([data-theme="light"]):not([data-theme="sunlight"]){--bg:#0b1220;--surface:#111827;--text:#e5e7eb;--muted:#9ca3af;--border:#374151;--brand:<?php echo esc_html( self::brand( '300', '#7ab3ff' ) ); ?>;--page-shadow:0 1px 6px rgba(0,0,0,.6)}
+		:root:not([data-theme="light"]):not([data-theme="sunlight"]){--bg:#0b1220;--surface:#111827;--text:#e5e7eb;--muted:#9ca3af;--border:#374151;--brand:<?php echo esc_html( self::brand( '300', '#b1bcff' ) ); ?>;--page-shadow:0 1px 6px rgba(0,0,0,.6)}
 	}
 	[data-theme="sunlight"]{--bg:#fff;--surface:#fff;--text:#000;--muted:#000;--border:#000;--brand:#0033cc;--page-shadow:0 0 0 2px #000}
 	*{box-sizing:border-box}

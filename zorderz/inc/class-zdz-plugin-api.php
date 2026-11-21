@@ -194,7 +194,7 @@ class ZDZ_Plugin_API {
 					'<div class="notice notice-error"><p><strong>Zorderz:</strong> %s</p></div>',
 					esc_html( sprintf(
 						/* translators: 1: app label, 2: missing class name(s) */
-						__( 'The %1$s app is partially installed — %2$s is missing — and has been disabled to protect the site.', 'zorderz' ),
+						__( 'The %1$s app is partially installed (%2$s is missing) and has been disabled to protect the site.', 'zorderz' ),
 						$label,
 						implode( ', ', $missing )
 					) )
@@ -204,26 +204,22 @@ class ZDZ_Plugin_API {
 	}
 
 	/**
-	 * Get app configs filtered by user permissions.
+	 * The ids of the apps this person's Home Screen shows, in the launcher's order. The same list
+	 * get_user_app_configs() draws, without drawing anything, so other parts of the theme (the guided tour) can ask
+	 * which apps a person has.
 	 *
-	 * For apps with bridge_type 'inline_widget' that implement
-	 * Widget_App_Interface, the widget HTML is pre-rendered and
-	 * included in the config array so the SPA can inject it
-	 * without an extra REST call.
-	 *
-	 * @param int $user_id
-	 * @return array
-	 */
-	/**
 	 * Permission order:
 	 *   1. Safe Mode ON = user sees NO apps
 	 *   2. Denied apps are ALWAYS blocked (even for admins/owners)
 	 *   3. Admin/owner roles see all non-denied apps
 	 *   4. Other roles only see explicitly allowed apps
+	 * While an administrator previews a role or a person (ZDZ_View_As), the previewed list.
+	 *
+	 * @param int $user_id
+	 * @return string[]
 	 */
-	public function get_user_app_configs( int $user_id ): array {
+	public function get_user_app_ids( int $user_id ): array {
 		$all_apps = $this->get_all_apps();
-		$configs = [];
 
 		$user = get_userdata( $user_id );
 		if ( ! $user ) {
@@ -288,63 +284,99 @@ class ZDZ_Plugin_API {
 		// An account in Privacy View sees only the apps made safe for it, whatever else it may do.
 		$privacy = class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on( $user_id );
 
+		$ids = [];
 		foreach ( $all_apps as $app_id => $app ) {
 			// Denied apps are ALWAYS blocked — even for admins/owners
 			if ( in_array( $app_id, $denied_apps, true ) ) {
 				continue;
 			}
-			if ( $privacy && ! in_array( (string) $app_id, ZDZ_Privacy_View::ALLOWED_APPS, true ) ) {
+			if ( $privacy && ! ZDZ_Privacy_View::app_allowed( (string) $app_id ) ) {   // Core's list, and an app that declares itself safe for it
 				continue;
 			}
-
 			if ( $is_admin || in_array( $app_id, $allowed_apps, true ) ) {
-				$config = $app->get_config();
-
-				// Normalize config keys — some plugins use compact keys
-				// (nm, cat, cc) and some use full keys (name, category, color).
-				// The frontend JS reads compact keys, so map full → compact.
-				if ( ! isset( $config['nm'] ) && isset( $config['name'] ) ) {
-					$config['nm'] = $config['name'];
-				}
-				if ( ! isset( $config['cat'] ) && isset( $config['category'] ) ) {
-					$config['cat'] = $config['category'];
-				}
-				if ( ! isset( $config['cc'] ) && isset( $config['color'] ) ) {
-					$config['cc'] = $config['color'];
-				}
-				if ( ! isset( $config['desc'] ) && isset( $config['description'] ) ) {
-					$config['desc'] = $config['description'];
-				}
-
-				// Display name overrides — shorter names for mobile dock/bar
-				$name_overrides = [
-					'prep'                  => 'Prep',
-					'receipts'              => 'Receipts',
-					// "Commissions" wraps to two lines on phones at
-					// --ref-font-lg, inflating its dock tile. The shorter
-					// "Commission" reads cleanly on one line next to the
-					// calculator icon. (Plugin registers as 'commission-calculator',
-					// matching the no-zdz-prefix convention of the keys above.)
-					'commission-calculator' => 'Commission',
-				];
-				if ( isset( $name_overrides[ $app_id ] ) ) {
-					$config['nm'] = $name_overrides[ $app_id ];
-				}
-
-				// The short name and the group (colour, label, ink) the launcher draws.
-				$config = self::launcher_fields( $config, (string) $app_id );
-
-				// Pre-render widget HTML for inline_widget apps
-				if (
-					isset( $config['bridge_type'] ) &&
-					'inline_widget' === $config['bridge_type'] &&
-					$app instanceof \Zorderz\Widget_App_Interface
-				) {
-					$config['widget_html'] = $app->render_dashboard_widget( $user_id );
-				}
-
-				$configs[] = $config;
+				$ids[] = (string) $app_id;
 			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * One app's config as the launcher gets it, without its widget: compact keys, the shorter display names, the short
+	 * name and the group.
+	 *
+	 * @param object $app    A registered app (has get_config()).
+	 * @param string $app_id
+	 * @return array
+	 */
+	public static function display_config( $app, string $app_id ): array {
+		$config = (array) $app->get_config();
+
+		// Normalize config keys — some plugins use compact keys
+		// (nm, cat, cc) and some use full keys (name, category, color).
+		// The frontend JS reads compact keys, so map full → compact.
+		if ( ! isset( $config['nm'] ) && isset( $config['name'] ) ) {
+			$config['nm'] = $config['name'];
+		}
+		if ( ! isset( $config['cat'] ) && isset( $config['category'] ) ) {
+			$config['cat'] = $config['category'];
+		}
+		if ( ! isset( $config['cc'] ) && isset( $config['color'] ) ) {
+			$config['cc'] = $config['color'];
+		}
+		if ( ! isset( $config['desc'] ) && isset( $config['description'] ) ) {
+			$config['desc'] = $config['description'];
+		}
+
+		// Display name overrides — shorter names for mobile dock/bar
+		$name_overrides = [
+			'prep'                  => 'Prep',
+			'receipts'              => 'Receipts',
+			// "Commissions" wraps to two lines on phones at
+			// --ref-font-lg, inflating its dock tile. The shorter
+			// "Commission" reads cleanly on one line next to the
+			// calculator icon. (Plugin registers as 'commission-calculator',
+			// matching the no-zdz-prefix convention of the keys above.)
+			'commission-calculator' => 'Commission',
+		];
+		if ( isset( $name_overrides[ $app_id ] ) ) {
+			$config['nm'] = $name_overrides[ $app_id ];
+		}
+
+		// The short name and the group (colour, label, ink) the launcher draws.
+		return self::launcher_fields( $config, $app_id );
+	}
+
+	/**
+	 * Get app configs filtered by user permissions: one config for each id get_user_app_ids() gives, in that order.
+	 *
+	 * For apps with bridge_type 'inline_widget' that implement
+	 * Widget_App_Interface, the widget HTML is pre-rendered and
+	 * included in the config array so the SPA can inject it
+	 * without an extra REST call.
+	 *
+	 * @param int $user_id
+	 * @return array
+	 */
+	public function get_user_app_configs( int $user_id ): array {
+		$all_apps = $this->get_all_apps();
+		$configs  = [];
+		foreach ( $this->get_user_app_ids( $user_id ) as $app_id ) {
+			$app = $all_apps[ $app_id ] ?? null;
+			if ( ! $app ) {
+				continue;
+			}
+			$config = self::display_config( $app, (string) $app_id );
+
+			// Pre-render widget HTML for inline_widget apps
+			if (
+				isset( $config['bridge_type'] ) &&
+				'inline_widget' === $config['bridge_type'] &&
+				$app instanceof \Zorderz\Widget_App_Interface
+			) {
+				$config['widget_html'] = $app->render_dashboard_widget( $user_id );
+			}
+
+			$configs[] = $config;
 		}
 
 		return $configs;
@@ -358,7 +390,7 @@ class ZDZ_Plugin_API {
 	 * user sees, plus the role-default fallback the per-plugin gates carried:
 	 *
 	 *   1. no user / logged out            → false
-	 *   1b. Privacy View account           → only ZDZ_Privacy_View::ALLOWED_APPS
+	 *   1b. Privacy View account           → only ZDZ_Privacy_View::app_allowed()
 	 *   2. WP super-admin (manage_options) → true
 	 *   3. Safe Mode on                    → false (user sees NO apps)
 	 *   4. app in zdz_denied_apps           → false (ALWAYS blocked, even admins)
@@ -388,7 +420,7 @@ class ZDZ_Plugin_API {
 
 		// 1b. Privacy View reaches only the apps made safe for it, whatever else the account may do.
 		if ( class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on( $user_id ) ) {
-			return in_array( $app_id, ZDZ_Privacy_View::ALLOWED_APPS, true );
+			return ZDZ_Privacy_View::app_allowed( $app_id );
 		}
 
 		// 2. WP super-admins / manage-the-whole-site.

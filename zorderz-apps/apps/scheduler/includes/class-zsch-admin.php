@@ -143,13 +143,13 @@ class ZSCH_Admin {
 		$sync_managed = ZSCH_Settings::cred_managed( 'ms_calendar_sync' );
 		?>
 		<div class="wrap">
-			<h1>Scheduler — Mode A: Org-wide Microsoft 365 Sync (optional)</h1>
+			<h1>Scheduler · Mode A: Org-wide Microsoft 365 Sync (optional)</h1>
 			<?php settings_errors( 'zsch' ); ?>
 
 			<p style="max-width:740px">
 				<strong>Most teams don't need this.</strong> The primary way to sync calendars is
 				<em>Connected Calendars</em> (below), where each user connects their own Google or
-				Microsoft account — no org-wide admin required.
+				Microsoft account; no org-wide admin required.
 			</p>
 			<p style="max-width:740px">
 				<strong>Mode A</strong> is an optional convenience for a team whose members are all in a
@@ -163,7 +163,7 @@ class ZSCH_Admin {
 				<strong>Status:</strong>
 				<?php echo $active
 					? '✅ Sync is configured and ON.'
-					: ( $has_secret ? '⚙️ Credentials present — switch "Enable sync" on to activate.' : '⛔ Not configured (running local-only).' ); ?>
+					: ( $has_secret ? '⚙️ Credentials present: switch "Enable sync" on to activate.' : '⛔ Not configured (running local-only).' ); ?>
 			</div>
 
 			<form method="post">
@@ -266,7 +266,7 @@ class ZSCH_Admin {
 	 */
 	private static function render_managed_note( $svc ) {
 		?>
-		<p>Managed in <a href="<?php echo esc_url( ZSCH_Settings::credentials_url() ); ?>">Zorderz → Credentials</a> — one set for every app.</p>
+		<p>Managed in <a href="<?php echo esc_url( ZSCH_Settings::credentials_url() ); ?>">Zorderz → Credentials</a>, one set for every app.</p>
 		<input type="hidden" name="zdz_cred_managed[<?php echo esc_attr( $svc ); ?>]" value="1">
 		<?php
 	}
@@ -288,7 +288,7 @@ class ZSCH_Admin {
 		<h2>Connected Calendars (per-user, Google + Microsoft)</h2>
 		<p style="max-width:740px">
 			Lets each team member connect their <em>own</em> outside calendars (personal Google
-			Calendar, another Microsoft 365 account) as <strong>conflict calendars</strong> — the
+			Calendar, another Microsoft 365 account) as <strong>conflict calendars</strong>: the
 			scheduler will see their busy times and warn before double-booking. This is separate
 			from the company-tenant sync above: two different app registrations, and the user
 			signs in themselves. Configure both apps per the console setup guide.
@@ -298,7 +298,7 @@ class ZSCH_Admin {
 			<strong>Status:</strong>
 			<?php
 			if ( $enabled ) {
-				echo '✅ Feature is ON — users can connect calendars from the Schedule widget.';
+				echo '✅ Feature is ON: users can connect calendars from the Schedule widget.';
 			} elseif ( $flag_on ) {
 				echo '⚙️ Flag is on but no provider is fully configured (client ID + secret needed).';
 			} else {
@@ -353,7 +353,7 @@ class ZSCH_Admin {
 					<th scope="row"><label for="cc_ms_client_id">Microsoft Application (client) ID</label></th>
 					<td>
 						<input name="cc_ms_client_id" id="cc_ms_client_id" type="text" class="regular-text" value="<?php echo esc_attr( $cc['ms_client_id'] ); ?>" placeholder="00000000-0000-0000-0000-000000000000">
-						<p class="description">The <em>multitenant delegated</em> app registration — NOT the sync app above.</p>
+						<p class="description">The <em>multitenant delegated</em> app registration, NOT the sync app above.</p>
 					</td>
 				</tr>
 				<tr>
@@ -382,7 +382,7 @@ class ZSCH_Admin {
 						<p class="description">
 							Connected accounts on these domains are treated as <strong>work</strong> calendars: on the
 							team grid a colleague sees <em>what</em> the person is busy with, not just that they are.
-							Every other connected account &mdash; a personal Google or Microsoft account &mdash; stays
+							Every other connected account (a personal Google or Microsoft account) stays
 							<strong>busy-only</strong>.<br>
 							Comma separated. Matched as a whole domain, so <code>sub.example.com</code> and
 							<code>notexample.com</code> do <em>not</em> match <code>example.com</code>.
@@ -486,7 +486,7 @@ class ZSCH_Admin {
 				wp_send_json_success( array( 'message' => 'Client ID + secret accepted by ' . ( 'google' === $provider ? 'Google' : 'Microsoft' ) . '.' ) );
 			}
 			if ( 'invalid_client' === $code ) {
-				wp_send_json_error( array( 'message' => 'Client ID or secret rejected — re-check both.' ) );
+				wp_send_json_error( array( 'message' => 'Client ID or secret rejected: re-check both.' ) );
 			}
 			wp_send_json_error( array( 'message' => $res->get_error_message() ) );
 		}

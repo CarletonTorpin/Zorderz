@@ -76,7 +76,6 @@ class ZDZ_Core_Nutshell {
 	/**
 	 * Find leads with optional query filters.
 	 *
-	 * @since 2.9.0 (KPI metrics)
 	 * @param array $query Query parameters (status, limit, orderBy, etc.)
 	 * @return array|null Array of lead stubs or null on error.
 	 */
@@ -87,7 +86,6 @@ class ZDZ_Core_Nutshell {
 	/**
 	 * Get a single lead by ID.
 	 *
-	 * @since 2.9.0
 	 * @param int $lead_id Nutshell lead ID.
 	 * @param string $rev Lead revision ('REV_NEWEST' typically).
 	 * @return array|null Lead data or null on error.
@@ -262,7 +260,6 @@ class ZDZ_Core_Nutshell {
 	/**
 	 * Check whether Nutshell credentials are configured.
 	 *
-	 * @since 2.9.0
 	 * @return bool
 	 */
 	public function is_configured(): bool {

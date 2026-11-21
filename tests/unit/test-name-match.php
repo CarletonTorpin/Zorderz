@@ -82,7 +82,7 @@ function has($n,$arr){ return in_array( strtolower($n), array_map('strtolower',$
 
 /* ── class present + version ── */
 ok( 'ZDZ_Name_Match class loaded', class_exists('ZDZ_Name_Match') );
-ok( 'VERSION 1.1.0', ZDZ_Name_Match::VERSION === '1.1.0' );
+ok( 'VERSION 1.2.0', ZDZ_Name_Match::VERSION === '1.2.0' );
 
 /* ── the map comes from the private option, and the zdz_name_homophones_map FILTER ran ── */
 $map = ZDZ_Name_Match::load_homophone_map();
@@ -171,6 +171,26 @@ ok( 'migrate: ...and is not tried again for an hour (not on every request)', ZDZ
 ok( 'is_map: needs surname groups with spellings', ZDZ_Name_Match::is_map( $GLOBALS['__zdz_nm_fixture'] ) && ! ZDZ_Name_Match::is_map( array( 'surnames' => array( array( 'sound' => 'x' ) ) ) ) );
 ok( 'merge_maps: the same group in another order is not added twice',
 	ZDZ_Name_Match::group_count( ZDZ_Name_Match::merge_maps( array( 'surnames' => array( array( 'spellings' => array( 'Kwin', 'Quinn' ) ) ) ), array( 'surnames' => array( array( 'spellings' => array( 'quinn', 'kwin' ) ) ) ) ) ) === 1 );
+
+/* ── One name inside another sounds alike only when it is 4+ letters AND two-thirds of the longer ──
+ * Synthetic strings. Each pair is chosen so name_close() and the sound key both say no: only containment decides. */
+ok( 'containment guard: xqand / xqanderworth are not name_close and do not share a key', nc('xqand','xqanderworth') === false && key_('xqand') !== key_('xqanderworth') );
+ok( 'a short name inside a long one is NOT "sounds like" (5 of 12 letters)', sl('xqand','xqanderworth') === false );
+ok( '...either way round', sl('xqanderworth','xqand') === false );
+ok( '...and earns no sound-alike points against the searched surname', hp('','Xqand','','xqanderworth') === 0 && sc('','Xqand','','xqanderworth') === 0 );
+ok( 'three letters never count, even as most of the name', nc('xqz','xqzvw') === false && key_('xqz') !== key_('xqzvw') && sl('xqz','xqzvw') === false );
+ok( 'half is not enough (4 of 8)', nc('xqzk','xqzkvwjm') === false && sl('xqzk','xqzkvwjm') === false );
+ok( 'just under two-thirds is not enough (6 of 10)', nc('xqkarl','xqkarlovwq') === false && key_('xqkarl') !== key_('xqkarlovwq') && sl('xqkarl','xqkarlovwq') === false );
+ok( 'exactly two-thirds is a near-match (6 of 9)', nc('xqkarl','xqkarlovw') === false && key_('xqkarl') !== key_('xqkarlovw') && sl('xqkarl','xqkarlovw') === true );
+ok( 'a suffix or middle of five letters is not enough', ! sl('xqzix','vowoxqzix') && ! sl('xqzix','eroxqzixon') && ! sl('xqzix','frexqzix') && ! sl('xqzix','eroxqzixtad') );
+ok( 'a true near-match still is (8 of 11)', nc('xqkarlov','xqkarlovski') === false && key_('xqkarlov') !== key_('xqkarlovski') && sl('xqkarlov','xqkarlovski') === true );
+ok( '...and still earns its 4 points', hp('','Xqkarlov','','xqkarlovski') === 4 );
+ok( 'letters are counted, not marks (6 of 13 with an apostrophe)', sl("o'xqand","o'xqanderworth") === false );
+ok( 'a whole part of a double-barrelled surname is alike (hyphenated and spaced, both ways round)', sl('xqsmith','xqsmith-xqjones') === true && sl('xqsmith-xqjones','xqsmith') === true && sl('xqsmith','xqsmith xqjones') === true );
+ok( '...but not a part that is only a piece of a word', sl('xqsmi','xqsmith-xqjones') === false );
+ok( 'a nickname and its full name still sound alike (chris / christopher; bob / robert)', sl('chris','christopher') === true && sl('christopher','chris') === true && sl('bob','robert') === true );
+ok( 'letters in any alphabet count once (6 of 9 letters, though only 3 are a-z)', nc('xqññoñ','xqññoñvwj') === false && sl('xqññoñ','xqññoñvwj') === true );
+ok( 'contained_alike is public and symmetric', ZDZ_Name_Match::contained_alike('xqkarlov','xqkarlovski') === true && ZDZ_Name_Match::contained_alike('xqkarlovski','xqkarlov') === true && ZDZ_Name_Match::contained_alike('','x') === false );
 
 $fn = file_get_contents( __DIR__ . '/../../zorderz/functions.php' );
 ok( 'functions.php runs the move on init, only while the old file exists', strpos( $fn, 'migrate_legacy_file' ) !== false && strpos( $fn, "ZDZ_Name_Match::LEGACY_FILE" ) !== false && strpos( $fn, 'is_file(' ) !== false );

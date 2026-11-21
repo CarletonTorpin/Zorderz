@@ -4,8 +4,10 @@
  *
  *   zdz_jobs_projects_list    the Projects a person may see (the Projects scope, in SQL), each with its install chip
  *                             (ZJOB_Install_Date, gated per row), whether it is theirs, and its orders in brief.
- *   zdz_jobs_project_detail   one Project: where it stands, the install date, its jobs, its people, its material
- *                             orders (ZJOB_Project_Orders) and the go sign for ordering (ZJOB_Order_Gate).
+ *   zdz_jobs_project_detail   one Project: where it stands, the install date, its jobs, its people, what its
+ *                             estimates say in words (their notes, and what the salesperson wrote or said: whole,
+ *                             with every amount taken out), its material orders (ZJOB_Project_Orders) and the go
+ *                             sign for ordering (ZJOB_Order_Gate).
  *
  * Both: signed in, nonce, never the shared device, the Projects app on the person's account; the detail also passes
  * the Projects visibility rule, and a missing Project and a forbidden one get the same answer. A Privacy View account
@@ -177,6 +179,22 @@ class ZJOB_Projects_Ajax {
 		wp_send_json_success( $out );
 	}
 
+	/**
+	 * What the Project's estimates say in words: their notes, and what the salesperson wrote or said to make them
+	 * (Zjob_Project_Resolver::src_said: whole, no amounts, no access codes). null when there is nothing to show.
+	 */
+	private static function said( array $project ): ?array {
+		if ( ! class_exists( 'Zjob_Project_Resolver' ) || ! method_exists( 'Zjob_Project_Resolver', 'src_said' ) ) {
+			return null;
+		}
+		try {
+			$r = Zjob_Project_Resolver::src_said( 0, $project, false );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		return ( Zjob_Project_Resolver::STATE_OK === ( $r['state'] ?? '' ) && is_array( $r['data'] ?? null ) ) ? $r['data'] : null;
+	}
+
 	/** The opened Project for a person, or null when it is missing or not theirs to see. */
 	public static function detail_reply( int $uid, string $pid ): ?array {
 		$p = ( '' !== $pid && class_exists( 'Zjob_Project' ) ) ? Zjob_Project::get( $pid ) : null;
@@ -217,6 +235,7 @@ class ZJOB_Projects_Ajax {
 			'install' => self::install_chip( $pid, $uid ),
 			'jobs'    => $job_rows,
 			'people'  => $people,
+			'said'    => self::said( $p ),
 			'orders'  => class_exists( 'ZJOB_Project_Orders' ) && ZJOB_Project_Orders::ready() ? ZJOB_Project_Orders::view( $p, $jobs, $uid ) : null,
 			'gate'    => class_exists( 'ZJOB_Order_Gate' ) ? ZJOB_Order_Gate::view( $p, $jobs ) : null,
 			'home'    => class_exists( 'ZJOB_Project_Homes' ) && ! ZJOB_Privacy_View::on() ? ZJOB_Project_Homes::view( $p, $jobs, $uid ) : null,

@@ -52,7 +52,7 @@ if ( ! class_exists( 'ZCH_App' ) ) {
 				'nm'          => __( 'Charts', 'zorderz' ),
 				'icon'        => 'pie-chart',
 				'cat'         => 'Sales',
-				'cc'          => '#0F766E',
+				'cc'          => '#E69F00',
 				'desc'        => __( 'Ask about sales and get a chart.', 'zorderz' ),
 				'roles'       => array(),     // visibility: the platform's app grant, then Charts access.
 				'bridge_type' => 'inline_widget',

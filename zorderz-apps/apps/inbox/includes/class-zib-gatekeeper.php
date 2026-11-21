@@ -45,7 +45,7 @@ class ZIB_Gatekeeper {
 	 *  the age term of the pressure score can't be dominated by one ancient thread. ~6 weeks. */
 	const NEEDS_MAX_AGE_DAYS = 45;
 
-	/** owner_aggregate (P6c) — how many source messages a computed answer cites for grounding. */
+	/** owner_aggregate — how many source messages a computed answer cites for grounding. */
 	const MAX_AGG_SOURCES = 12;
 
 	private static function t_msg(): string { global $wpdb; return $wpdb->prefix . 'zib_messages'; }
@@ -454,7 +454,7 @@ class ZIB_Gatekeeper {
 	 * The addressee comes from the parties table, NEVER the body (same doctrine as
 	 * sent_to_recipient) so recipient identity can never be steered by mailed-in content.
 	 *
-	 * @return string  e.g. "Casey Lee <casey@example.com>", with " +2 more" appended for a
+	 * @return string  e.g. "Casey Example <casey@example.com>", with " +2 more" appended for a
 	 *                 multi-recipient send; '' when no addressee was stored.
 	 */
 	private static function recipient_label( int $actor, int $message_id ): string {
@@ -609,11 +609,12 @@ class ZIB_Gatekeeper {
 	 * up in chat, attachments and all. direction='in'; the sender is matched on the message's OWN from_*
 	 * columns (sender_match), never the body; received_at is filtered to a site-local day window. Owner-
 	 * forced, kiosk-denied, capped, recency-first, deduped exactly like owner_told. The card item carries
-	 * 'from' (the sender via fmt_addr) where the sent card carries 'to'.
+	 * 'from' (the sender via fmt_addr) where the sent card carries 'to'; from_name and from_addr are the stored
+	 * columns as they are, for a caller that must know the address without reading it out of a display string.
 	 *
 	 * @param string $sender  sender name/addr; '' matches anyone (a pure "what did I receive today").
 	 * @param string $since,$until  YYYY-MM-DD site-local dates; '' = unbounded.
-	 * @return array { ok, results:[ { id, subject, received_at, from, composed, has_attachments } ], sender, since, until }
+	 * @return array { ok, results:[ { id, subject, received_at, from, from_name, from_addr, composed, has_attachments } ], sender, since, until }
 	 */
 	public static function owner_received( int $actor, string $sender, string $since = '', string $until = '', int $limit = self::MAX_CHAT_HITS, array $aliases = array() ): array {
 		if ( ! self::gate_owner( $actor ) ) {
@@ -665,6 +666,8 @@ class ZIB_Gatekeeper {
 				'subject'         => (string) $r->subject,
 				'received_at'     => $r->received_at ? (string) $r->received_at : '',
 				'from'            => self::fmt_addr( (string) $r->from_name, (string) $r->from_addr ),
+				'from_name'       => (string) $r->from_name,
+				'from_addr'       => (string) $r->from_addr,
 				'composed'        => $composed,
 				'has_attachments' => (int) ( $r->has_attachments ?? 0 ),
 			);
@@ -763,9 +766,17 @@ class ZIB_Gatekeeper {
 	/**
 	 * Open one of the actor's own messages. Returns a SAFE text body.
 	 *
+	 * With $visible_only, an HTML email's body_text is only what its reader sees (visible_html()). That is
+	 * the text the chat's drafting model reads when the person asks it to answer this one email, and an
+	 * instruction hidden from the person's mail program must never reach a model. body_unreadable is then
+	 * true when the email was too big or too tangled to tell hidden text from visible text (body_text is
+	 * empty; the caller says so and never guesses). 'direction' says whether the message was received ('in')
+	 * or sent ('out'); from_name and from_addr are the stored sender columns as they are, so a caller that
+	 * addresses a reply never reads an address out of a display string its writer chose.
+	 *
 	 * @return array { ok:bool, message?:array }
 	 */
-	public static function owner_get_message( int $actor, int $message_id ): array {
+	public static function owner_get_message( int $actor, int $message_id, bool $visible_only = false ): array {
 		if ( ! self::gate_owner( $actor ) ) {
 			self::log( $actor, $actor, 'owner_search', 'deny', 'open not permitted', '', 0 );
 			return array( 'ok' => false );
@@ -798,19 +809,35 @@ class ZIB_Gatekeeper {
 		$san     = $is_html ? self::sanitize_email_html( $body ) : array( 'html' => '', 'has_remote_images' => false, 'has_inline_images' => false );
 		self::log( $actor, $actor, 'owner_search', 'allow', 'open:' . (int) $message_id, '', 1 );
 
+		// The text: all of it for the reading pane's caller; only what a reader sees when a model will read it.
+		$unreadable = false;
+		if ( $visible_only && $is_html ) {
+			$body_text  = self::body_to_text( self::visible_html( $body ), 'html' );
+			$unreadable = (bool) self::$vis_gave_up;
+			if ( $unreadable ) {
+				$body_text = ''; // never part of an email whose hidden text could not be told apart
+			}
+		} else {
+			$body_text = self::body_to_text( $body, (string) $row->body_format );
+		}
+
 		return array(
 			'ok'      => true,
 			'message' => array(
 				'id'                => (int) $row->id,
 				'subject'           => (string) $row->subject,
 				'from'              => self::fmt_addr( (string) $row->from_name, (string) $row->from_addr ),
+				'from_name'         => (string) ( $row->from_name ?? '' ),
+				'from_addr'         => (string) ( $row->from_addr ?? '' ),
 				'to'                => $to,
 				'cc'                => $cc,
 				'received_at'       => $row->received_at ? (string) $row->received_at : '',
+				'direction'         => (string) ( $row->direction ?? '' ),
 				'class'             => (string) $row->class,
 				'folder'            => (string) $row->folder,
 				'has_attachments'   => (int) $row->has_attachments,
-				'body_text'         => self::body_to_text( $body, (string) $row->body_format ),
+				'body_text'         => $body_text,
+				'body_unreadable'   => $unreadable,
 				'body_html'         => (string) $san['html'],
 				'has_remote_images' => (bool) $san['has_remote_images'],
 				'has_inline_images' => (bool) ( $san['has_inline_images'] ?? false ),
@@ -1917,12 +1944,20 @@ class ZIB_Gatekeeper {
 	 * over the same columns as owner_chat); topped up with the most recent such emails when fewer match.
 	 * Read-only; logged with a hash of the topic, never the topic.
 	 *
+	 * With $to (a reply to one email), only mail the caller sent to that one address: what rides along with an
+	 * email from outside is only what its sender has already had from the caller. '' (no usable address) returns
+	 * no rows, never mail sent to anyone else.
+	 *
 	 * @return array { ok:bool, related:bool, rows:array[] } rows: { id, subject, body, received_at }
 	 */
-	public static function sent_style_examples( int $actor, string $topic, int $limit = 3 ): array {
+	public static function sent_style_examples( int $actor, string $topic, int $limit = 3, ?string $to = null ): array {
 		if ( ! self::gate_owner( $actor ) ) {
 			self::log( $actor, $actor, 'style_examples', 'deny', 'not permitted', '', 0 );
 			return array( 'ok' => false, 'related' => false, 'rows' => array() );
+		}
+		if ( null !== $to && '' === trim( $to ) ) {
+			self::log( $actor, $actor, 'style_examples', 'allow', 'no recipient', '', 0 );
+			return array( 'ok' => true, 'related' => false, 'rows' => array() );
 		}
 		global $wpdb;
 		$limit = max( 1, min( 5, $limit ) );
@@ -1930,6 +1965,12 @@ class ZIB_Gatekeeper {
 		$cols  = 'id, subject, body_clean_text, received_at';
 		$where = "owner_user_id = %d AND direction = 'out' AND class = 'external'
 			AND body_clean_text IS NOT NULL AND CHAR_LENGTH(body_clean_text) BETWEEN 60 AND 1500";
+		$wargs = array( $actor );
+		if ( null !== $to ) {
+			$where  .= ' AND id IN ( SELECT message_id FROM ' . self::t_party() . " WHERE owner_user_id = %d AND role = 'to' AND LOWER(addr) = %s )";
+			$wargs[] = $actor;
+			$wargs[] = strtolower( trim( $to ) );
+		}
 		$keep  = function ( $rows, array $seen, int $want ) {
 			$out = array();
 			foreach ( (array) $rows as $r ) {
@@ -1963,7 +2004,7 @@ class ZIB_Gatekeeper {
 				'SELECT ' . $cols . ', MATCH(subject, snippet, parties_text, gist, body_clean_text) AGAINST (%s IN BOOLEAN MODE) AS score
 				 FROM ' . self::t_msg() . ' WHERE ' . $where . ' AND MATCH(subject, snippet, parties_text, gist, body_clean_text) AGAINST (%s IN BOOLEAN MODE)
 				 ORDER BY score DESC, received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				$bool, $actor, $bool, 4 * $limit
+				array_merge( array( $bool ), $wargs, array( $bool, 4 * $limit ) )
 			) );
 			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 			if ( '' === (string) $wpdb->last_error ) {
@@ -1976,7 +2017,7 @@ class ZIB_Gatekeeper {
 			$recent = $wpdb->get_results( $wpdb->prepare(
 				'SELECT ' . $cols . ' FROM ' . self::t_msg() . ' WHERE ' . $where . ' AND CHAR_LENGTH(body_clean_text) <= 900
 				 ORDER BY received_at DESC LIMIT %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				$actor, 6 * $limit
+				array_merge( $wargs, array( 6 * $limit ) )
 			) );
 			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 			$rows = $rows + $keep( $recent, $rows, $limit - count( $rows ) );
@@ -2373,7 +2414,7 @@ class ZIB_Gatekeeper {
 		return array( 'ok' => true, 'kind' => $kind, 'count' => count( $threads ), 'threads' => $threads );
 	}
 
-	// ── owner_aggregate (P6c — COMPUTE a mailbox answer) ─────────────
+	// ── owner_aggregate (COMPUTE a mailbox answer) ─────────────────────
 
 	/**
 	 * COMPUTE a mailbox answer over the P6 enrichment extracts — "how many units of a given product
@@ -2580,6 +2621,7 @@ class ZIB_Gatekeeper {
 				? (string) ( $recips[ (int) $r->id ] ?? '' )
 				: self::fmt_addr( (string) $r->from_name, (string) $r->from_addr );
 			$out[] = array(
+				'id'             => (int) $r->id, // the thread's newest message: the one "reply to #2" answers
 				'conversation'   => (string) $r->ms_conversation_id,
 				'last_at'        => $r->received_at ? (string) $r->received_at : '',
 				'last_direction' => ( 'out' === $r->direction ? 'sent' : 'received' ),
@@ -2759,8 +2801,8 @@ class ZIB_Gatekeeper {
 			|| preg_match( '/^(?:re:\s*)?(?:out of office|automatic reply|auto-?reply)\b/', $s )         // vacation / auto-responder
 			|| preg_match( '/\b(?:delivery status notification|undeliverable|mail delivery (?:failed|subsystem))\b/', $s )
 			// SaaS notifications / receipts / reports / reviews that name no reply owed either
-			// way — the live "pressing email" noise (a mapping service, WP Engine, Google, Ricoh, Thrive).
-			|| preg_match( '/\bplugins?\s+(?:was|were)\s+updated\b/', $s )                               // WP Engine Smart Plugin Manager
+			// way: software and service notices that otherwise rank as "pressing".
+			|| preg_match( '/\bplugins?\s+(?:was|were)\s+updated\b/', $s )                               // a host's plugin-update notice
 			|| preg_match( '/\bleft (?:a|another) review\b/', $s )                                       // Google Business Profile review notice
 			|| preg_match( '/\byour receipt\b/', $s )                                                    // receipts
 			|| preg_match( '/\bupload report\b/', $s )                                                   // a mapping service's upload report
@@ -2768,9 +2810,9 @@ class ZIB_Gatekeeper {
 			|| preg_match( '/\bshipment confirmation\b/', $s )                                           // shipping confirmation
 			|| preg_match( '/^welcome to\b/', $s )                                                       // onboarding / early-access
 			|| preg_match( '/\bworking for you\??\s*$/', $s )                                            // "how is the new X working for you?"
-			// One-way LOGISTICS notices — a delivered/shipped/tracking FYI is not a reply you owe (live
-			// 1100: "A shipment from order #4196 has been delivered" from a vendor's sales@ address
-			// ranked #1 "pressing"). Kept TIGHT so a real complaint ("wrong item delivered", "screen
+			// One-way LOGISTICS notices — a delivered/shipped/tracking FYI is not a reply you owe (a
+			// supplier's "A shipment from order #1001 has been delivered" would otherwise rank as
+			// "pressing"). Kept TIGHT so a real complaint ("wrong item delivered", "part
 			// arrived damaged") — which carries a substantive subject — is NOT swallowed: "delivered"
 			// only counts when anchored to a shipment/order/package noun, as a carrier notice reads.
 			|| preg_match( '/\bshipment\b[^.!?]*\bdeliver(?:ed|y)\b/', $s )                              // "a shipment … has been delivered"
@@ -2786,12 +2828,12 @@ class ZIB_Gatekeeper {
 	}
 
 	/**
-	 * v0.9.12 Convert a SITE-LOCAL calendar date (YYYY-MM-DD) to the UTC datetime for that day's
+	 * Convert a SITE-LOCAL calendar date (YYYY-MM-DD) to the UTC datetime for that day's
 	 * START (00:00:00) or END (23:59:59) in the site's timezone. received_at is stored in UTC, but a
-	 * user's "today" / "this week" means their LOCAL day — so a Pacific day boundary must be expressed
+	 * user's "today" / "this week" means their LOCAL day — so a local day boundary must be expressed
 	 * as the matching UTC instant before it is compared. When the site timezone IS UTC this is a no-op,
-	 * so the filter is unchanged until a real zone (e.g. America/Los_Angeles) is set. Fail-soft: on a
-	 * malformed date or any error, returns the plain literal (old behaviour).
+	 * so the filter is unchanged until a real zone (e.g. Europe/Berlin) is set. Fail-soft: on a
+	 * malformed date or any error, returns the plain literal.
 	 */
 	private static function local_date_to_utc( string $ymd, bool $end ): string {
 		$suffix = $end ? ' 23:59:59' : ' 00:00:00';
@@ -3242,6 +3284,1834 @@ class ZIB_Gatekeeper {
 		return trim( is_string( $collapsed ) ? $collapsed : $text );
 	}
 
+	/**
+	 * An HTML email with what its reader never sees taken out, its text left as it was. For the one email the
+	 * chat's drafting model reads (ZIB_ZANA_Bridge::reply_source): hidden text is how an instruction the mailbox's
+	 * owner cannot see would be slipped to a model. Not the reading pane's sanitiser (sanitize_email_html), which
+	 * draws for a person. Pure. What it reads is below; past its limits, or without the DOM extension, it gives up
+	 * and says so ($vis_gave_up: the result is '' and the chat asks for the text instead), never guesses.
+	 *
+	 * Read the way a mail program on a desktop screen draws the email (1024 px wide, light mode):
+	 *   - comments go as the reading pane takes them out ("<!--" to the next "-->"), so an Outlook-only block
+	 *     (<!--[if mso]>…<![endif]-->) goes and the copy every other program shows (<!--[if !mso]><!-->…) stays;
+	 *     <style> is read as CSS wherever it is (an unclosed one to the end), a comment inside it included;
+	 *   - the email's CSS: its rules in order, nested rules, @media read for that screen (@media all / screen, and a
+	 *     width that includes it, apply; print, dark mode and a phone's width do not); inside @supports, @layer,
+	 *     @container, @scope and @document only what hides is taken, as for a selector it reads only roughly;
+	 *     selectors with tag, #id, .class, [attr] with every operator, the four combinators, the structural
+	 *     pseudo-classes, :not() / :is() / :where(), CSS escapes; a pseudo-class a mail at rest never has (:hover,
+	 *     :focus …) matches nothing; one it does not read (:has(), :lang() …) is read as matching, for what hides
+	 *     only. The cascade: !important, the style attribute, specificity, order;
+	 *   - gone with everything inside: display:none, the hidden attribute, mso-hide:all, content-visibility:hidden,
+	 *     an opacity (with every parent's, and filter:opacity()) under 0.2, zoom or a scale under 0.1, a transform
+	 *     or offset (left, top, right, bottom, a margin, text-indent) of 1,000px out or 500px back, clipped to
+	 *     nothing, a box of 2px or less with overflow hidden, an SVG of no size or a part of one never drawn
+	 *     (defs, desc …), the body of a closed <details>, a closed <dialog>, and what is never drawn (head,
+	 *     title, style, script, template, noscript, comments);
+	 *   - text hidden where it sits, until a child says otherwise: visibility:hidden, a font size under 3px (a
+	 *     template's font-size:0 wrapper around columns that size their own text is not hidden), and text whose
+	 *     colour is too close to what is under it (contrast under 1.25: white on white, #000 on #000, #fefefe,
+	 *     transparent; a link is blue unless styled; a picture under it is not known, so its text is kept).
+	 * Limits: 128 KB of CSS, 1,500 rules, 5,000 elements, 300,000 selector steps, 200 levels deep (deeper is not
+	 * drawn and goes).
+	 */
+	public static $vis_gave_up = false;
+
+	const VIS_MAX_CSS      = 131072;
+	const VIS_MAX_RULES    = 1500;
+	const VIS_MAX_ELEMENTS = 5000;
+	const VIS_MAX_STEPS    = 300000;
+
+	/** visible_html(): the properties that can show or hide text (after shorthands are read into these). */
+	const VIS_PROPS = '/^(?:display|visibility|font-size|opacity|filter|color|-webkit-text-fill-color|fill|fill-opacity|transform|scale|translate|clip-path|clip|mso-hide|content-visibility|zoom|height|max-height|width|max-width|overflow|overflow-x|overflow-y|left|top|right|bottom|margin-left|margin-top|margin-right|text-indent|background-color|background-image|position|float|--[a-z0-9_-]+)$/';
+
+	/** visible_html(): elements laid out inline unless something makes them a box (width and height do nothing to them). */
+	const VIS_INLINE = array( 'a', 'abbr', 'b', 'bdi', 'bdo', 'big', 'cite', 'code', 'data', 'dfn', 'em', 'font', 'i', 'kbd', 'label', 'mark', 'q', 's', 'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'time', 'tt', 'u', 'var' );
+
+	/** visible_html(): the CSS colour names, name:rrggbb. */
+	const VIS_NAMED =
+		'aliceblue:f0f8ff antiquewhite:faebd7 aqua:00ffff aquamarine:7fffd4 azure:f0ffff beige:f5f5dc'
+		. ' bisque:ffe4c4 black:000000 blanchedalmond:ffebcd blue:0000ff blueviolet:8a2be2 brown:a52a2a'
+		. ' burlywood:deb887 cadetblue:5f9ea0 chartreuse:7fff00 chocolate:d2691e coral:ff7f50 cornflowerblue:6495ed'
+		. ' cornsilk:fff8dc crimson:dc143c cyan:00ffff darkblue:00008b darkcyan:008b8b darkgoldenrod:b8860b'
+		. ' darkgray:a9a9a9 darkgreen:006400 darkgrey:a9a9a9 darkkhaki:bdb76b darkmagenta:8b008b'
+		. ' darkolivegreen:556b2f darkorange:ff8c00 darkorchid:9932cc darkred:8b0000 darksalmon:e9967a'
+		. ' darkseagreen:8fbc8f darkslateblue:483d8b darkslategray:2f4f4f darkslategrey:2f4f4f darkturquoise:00ced1'
+		. ' darkviolet:9400d3 deeppink:ff1493 deepskyblue:00bfff dimgray:696969 dimgrey:696969 dodgerblue:1e90ff'
+		. ' firebrick:b22222 floralwhite:fffaf0 forestgreen:228b22 fuchsia:ff00ff gainsboro:dcdcdc ghostwhite:f8f8ff'
+		. ' gold:ffd700 goldenrod:daa520 gray:808080 green:008000 greenyellow:adff2f grey:808080 honeydew:f0fff0'
+		. ' hotpink:ff69b4 indianred:cd5c5c indigo:4b0082 ivory:fffff0 khaki:f0e68c lavender:e6e6fa'
+		. ' lavenderblush:fff0f5 lawngreen:7cfc00 lemonchiffon:fffacd lightblue:add8e6 lightcoral:f08080'
+		. ' lightcyan:e0ffff lightgoldenrodyellow:fafad2 lightgray:d3d3d3 lightgreen:90ee90 lightgrey:d3d3d3'
+		. ' lightpink:ffb6c1 lightsalmon:ffa07a lightseagreen:20b2aa lightskyblue:87cefa lightslategray:778899'
+		. ' lightslategrey:778899 lightsteelblue:b0c4de lightyellow:ffffe0 lime:00ff00 limegreen:32cd32 linen:faf0e6'
+		. ' magenta:ff00ff maroon:800000 mediumaquamarine:66cdaa mediumblue:0000cd mediumorchid:ba55d3'
+		. ' mediumpurple:9370db mediumseagreen:3cb371 mediumslateblue:7b68ee mediumspringgreen:00fa9a'
+		. ' mediumturquoise:48d1cc mediumvioletred:c71585 midnightblue:191970 mintcream:f5fffa mistyrose:ffe4e1'
+		. ' moccasin:ffe4b5 navajowhite:ffdead navy:000080 oldlace:fdf5e6 olive:808000 olivedrab:6b8e23'
+		. ' orange:ffa500 orangered:ff4500 orchid:da70d6 palegoldenrod:eee8aa palegreen:98fb98 paleturquoise:afeeee'
+		. ' palevioletred:db7093 papayawhip:ffefd5 peachpuff:ffdab9 peru:cd853f pink:ffc0cb plum:dda0dd'
+		. ' powderblue:b0e0e6 purple:800080 rebeccapurple:663399 red:ff0000 rosybrown:bc8f8f royalblue:4169e1'
+		. ' saddlebrown:8b4513 salmon:fa8072 sandybrown:f4a460 seagreen:2e8b57 seashell:fff5ee sienna:a0522d'
+		. ' silver:c0c0c0 skyblue:87ceeb slateblue:6a5acd slategray:708090 slategrey:708090 snow:fffafa'
+		. ' springgreen:00ff7f steelblue:4682b4 tan:d2b48c teal:008080 thistle:d8bfd8 tomato:ff6347 turquoise:40e0d0'
+		. ' violet:ee82ee wheat:f5deb3 white:ffffff whitesmoke:f5f5f5 yellow:ffff00 yellowgreen:9acd32';
+
+	public static function visible_html( string $html ): string {
+		self::$vis_gave_up = false;
+		list( $html, $css ) = self::vis_split( $html );
+		$html  = (string) preg_replace( '#<(head|title|template|noscript|xml)\b[^>]*>.*?</\1\s*>#is', ' ', $html );
+		$rules = self::vis_css_rules( $css );
+		if ( self::$vis_gave_up ) {
+			return '';
+		}
+		if ( ! class_exists( 'DOMDocument' ) ) {
+			// Without the DOM extension the email's rules cannot be applied to its elements, so hidden text cannot
+			// be told from visible text: it gives up, as for an email past its limits.
+			self::$vis_gave_up = true;
+			return '';
+		}
+		$prev = libxml_use_internal_errors( true );
+		$doc  = new DOMDocument();
+		$ok   = '' !== trim( $html ) && $doc->loadHTML( '<?xml encoding="UTF-8"?>' . $html, LIBXML_NONET );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+		if ( ! $ok ) {
+			return '';
+		}
+		$body = $doc->getElementsByTagName( 'body' )->item( 0 );
+		$top  = $doc->documentElement;
+		if ( ! $top ) {
+			return '';
+		}
+		$ctx = self::vis_context( $rules );
+		$st  = self::vis_start();
+		$ctx['keep'][] = $top;
+		$st  = self::vis_state( $top, $st, $ctx );
+		if ( null !== $st && $body && ! $body->isSameNode( $top ) ) {
+			$ctx['keep'][] = $body;
+			$st = self::vis_state( $body, $st, $ctx );
+		}
+		if ( null === $st ) {
+			return '';
+		}
+		self::vis_walk( $body ? $body : $top, $st, $ctx, 0 );
+		if ( self::$vis_gave_up ) {
+			return '';
+		}
+		// Decided on the email as it came, then cut: a sibling or :empty rule reads the tree before anything goes.
+		foreach ( $ctx['blank'] as $t ) {
+			$t->nodeValue = '';
+		}
+		foreach ( $ctx['drop'] as $n ) {
+			if ( $n->parentNode ) {
+				$n->parentNode->removeChild( $n );
+			}
+		}
+		$out = '';
+		foreach ( ( $body ? $body->childNodes : $doc->childNodes ) as $node ) {
+			$out .= $doc->saveHTML( $node );
+		}
+		return $out;
+	}
+
+	/**
+	 * visible_html(): the email without its comments, <style> and <script> (a mail program never draws them), and the
+	 * CSS of its <style> blocks. Read in one pass, as a browser reads it: "<!--" outside a <style> starts a comment
+	 * that runs to the next "-->" (or the end); inside a <style> it is only CSS; a <style> left open runs to the end.
+	 */
+	private static function vis_split( string $html ): array {
+		$out = '';
+		$css = '';
+		$at  = 0;
+		$len = strlen( $html );
+		while ( $at < $len && preg_match( '/<!--|<(style|script)(?=[\s>\/])/i', $html, $m, PREG_OFFSET_CAPTURE, $at ) ) {
+			$i    = (int) $m[0][1];
+			$out .= substr( $html, $at, $i - $at ) . ' ';
+			if ( '<!--' === $m[0][0] ) {
+				$e  = strpos( $html, '-->', $i + 4 );
+				$at = false === $e ? $len : $e + 3;
+				continue;
+			}
+			$tag = strtolower( (string) $m[1][0] );
+			$gt  = strpos( $html, '>', $i );
+			if ( false === $gt ) {
+				return array( $out, $css );
+			}
+			$end  = preg_match( '#</' . $tag . '\b[^>]*>#i', $html, $cm, PREG_OFFSET_CAPTURE, $gt + 1 ) ? (int) $cm[0][1] : -1;
+			$text = $end < 0 ? substr( $html, $gt + 1 ) : substr( $html, $gt + 1, $end - $gt - 1 );
+			if ( 'style' === $tag ) {
+				$css .= "\n" . $text;
+				if ( strlen( $css ) > self::VIS_MAX_CSS ) {
+					self::$vis_gave_up = true;
+					return array( $out, '' );
+				}
+			}
+			$at = $end < 0 ? $len : $end + strlen( (string) $cm[0][0] );
+		}
+		return array( $out . substr( $html, $at ), $css );
+	}
+
+	/** visible_html(): the state at the top of the page: seen, 16px, black on white, fully opaque, not in an SVG. */
+	private static function vis_start(): array {
+		return array( 'vis' => true, 'px' => 16.0, 'fg' => array( 0, 0, 0, 1.0 ), 'tf' => null, 'fill' => array( 0, 0, 0, 1.0 ), 'bg' => array( array( 255, 255, 255 ) ), 'op' => 1.0, 'svg' => false, 'vars' => array() );
+	}
+
+	/** visible_html(): the rules indexed by what their last step needs (an id, a class, a tag, or anything). */
+	private static function vis_context( array $rules ): array {
+		$idx = array( 'id' => array(), 'cls' => array(), 'tag' => array(), 'any' => array() );
+		foreach ( $rules as $ri => $r ) {
+			$c = $r['sel'][ count( $r['sel'] ) - 1 ];
+			if ( '' !== $c['id'] ) {
+				$idx['id'][ $c['id'] ][] = $ri;
+			} elseif ( $c['cls'] ) {
+				$idx['cls'][ $c['cls'][0] ][] = $ri;
+			} elseif ( '' !== $c['tag'] ) {
+				$idx['tag'][ $c['tag'] ][] = $ri;
+			} else {
+				$idx['any'][] = $ri;
+			}
+		}
+		return array( 'rules' => $rules, 'idx' => $idx, 'memo' => array(), 'cls' => array(), 'pos' => array(), 'keep' => array(), 'steps' => 0, 'els' => 0, 'blank' => array(), 'drop' => array() );
+	}
+
+	/** visible_html(): a node's children decided (hidden ones to go, text hidden where it sits to be blanked). */
+	private static function vis_walk( DOMNode $node, array $st, array &$ctx, int $depth ): void {
+		if ( $depth > 200 ) {
+			foreach ( $node->childNodes as $child ) {
+				$ctx['drop'][] = $child; // deeper than any layout a mail program draws: not read, so not kept
+			}
+			return;
+		}
+		$closed = ( $node instanceof DOMElement && 'details' === strtolower( $node->nodeName ) && ! $node->hasAttribute( 'open' ) );
+		$seen   = $st['vis'] && $st['px'] >= 3.0 && self::vis_seen( $st );
+		foreach ( $node->childNodes as $child ) {
+			if ( $child instanceof DOMText ) {
+				if ( $closed || ! $seen ) {
+					$ctx['blank'][] = $child;
+				}
+				continue;
+			}
+			if ( ! $child instanceof DOMElement ) {
+				$ctx['drop'][] = $child; // a comment or the like: never drawn
+				continue;
+			}
+			$ctx['keep'][] = $child;
+			if ( $closed && 'summary' !== strtolower( $child->nodeName ) ) {
+				$ctx['drop'][] = $child; // a closed <details> shows its summary only
+				continue;
+			}
+			if ( ++$ctx['els'] > self::VIS_MAX_ELEMENTS || $ctx['steps'] > self::VIS_MAX_STEPS ) {
+				self::$vis_gave_up = true;
+				return;
+			}
+			$cs = self::vis_state( $child, $st, $ctx );
+			if ( null === $cs ) {
+				$ctx['drop'][] = $child; // hidden with everything inside it
+				continue;
+			}
+			self::vis_walk( $child, $cs, $ctx, $depth + 1 );
+			if ( self::$vis_gave_up ) {
+				return;
+			}
+		}
+	}
+
+	/**
+	 * visible_html(): the state under $el (vis: visibility; px: font size; fg / tf / fill: the text's colour; bg: the
+	 * colours under it, null for a picture; op: opacity with its parents'; svg: inside an SVG), or null when $el is
+	 * hidden with everything inside it.
+	 */
+	private static function vis_state( DOMElement $el, array $st, array &$ctx ) {
+		$tag = strtolower( $el->nodeName );
+		if ( $el->hasAttribute( 'hidden' ) || in_array( $tag, array( 'datalist', 'rp' ), true ) || ( 'dialog' === $tag && ! $el->hasAttribute( 'open' ) ) ) {
+			return null;
+		}
+		if ( 'svg' === $tag ) {
+			if ( preg_match( '/^\s*0(?:\.0*)?(?:px)?\s*$/', (string) $el->getAttribute( 'width' ) ) || preg_match( '/^\s*0(?:\.0*)?(?:px)?\s*$/', (string) $el->getAttribute( 'height' ) ) ) {
+				return null;
+			}
+			$st['svg'] = true;
+		} elseif ( $st['svg'] && in_array( $tag, array( 'defs', 'desc', 'metadata', 'symbol', 'clippath', 'mask', 'pattern', 'marker', 'lineargradient', 'radialgradient', 'filter' ), true ) ) {
+			return null; // parts of an SVG that are never drawn as they stand
+		}
+		$d = self::vis_cascade( $el, $ctx );
+		if ( $st['svg'] ) {
+			foreach ( array( 'display', 'visibility', 'opacity', 'fill', 'fill-opacity', 'font-size', 'transform' ) as $a ) {
+				if ( ! isset( $d[ $a ] ) && $el->hasAttribute( $a ) ) {
+					$d[ $a ] = strtolower( trim( (string) $el->getAttribute( $a ) ) );
+				}
+			}
+		}
+		if ( ! isset( $d['color'] ) && ( 'font' === $tag || 'body' === $tag ) && $el->hasAttribute( 'font' === $tag ? 'color' : 'text' ) ) {
+			$d['color'] = strtolower( trim( (string) $el->getAttribute( 'font' === $tag ? 'color' : 'text' ) ) );
+		}
+		if ( ! isset( $d['color'] ) && 'a' === $tag && $el->hasAttribute( 'href' ) ) {
+			$d['color'] = 'rgb(0,0,238)'; // a link is blue unless something styles it (the browser's own default)
+		}
+		if ( ! isset( $d['background-color'] ) && $el->hasAttribute( 'bgcolor' ) ) {
+			$d['background-color'] = strtolower( trim( (string) $el->getAttribute( 'bgcolor' ) ) );
+		}
+		if ( ! isset( $d['background-image'] ) && '' !== trim( (string) $el->getAttribute( 'background' ) ) ) {
+			$d['background-image'] = 'url(x)';
+		}
+		// Custom properties are inherited, and var() is read in every value that reaches the element.
+		foreach ( $d as $p => $v ) {
+			if ( 0 === strpos( $p, '--' ) ) {
+				$st['vars'][ $p ] = $v;
+				unset( $d[ $p ] );
+			}
+		}
+		foreach ( $d as $p => $v ) {
+			if ( false !== strpos( $v, 'var(' ) ) {
+				$d[ $p ] = self::vis_var( $v, $st['vars'], 0 ); // a fallback counts with no variable set
+			}
+		}
+		$pos  = (string) ( $d['position'] ?? '' );
+		$boxy = (bool) preg_match( '/^(?:absolute|fixed)$/', $pos ) || (bool) preg_match( '/^(?:left|right)$/', (string) ( $d['float'] ?? '' ) );
+		$box  = array(
+			'inline'     => ! $boxy && ( isset( $d['display'] ) ? (bool) preg_match( '/^(?:inline|contents)$/', $d['display'] ) : in_array( $tag, self::VIS_INLINE, true ) ),
+			'positioned' => (bool) preg_match( '/^(?:relative|absolute|fixed|sticky)$/', $pos ),
+			'abs'        => (bool) preg_match( '/^(?:absolute|fixed)$/', $pos ),
+		);
+		if ( self::vis_gone( $d, $box ) ) {
+			return null;
+		}
+		$op = 1.0;
+		if ( isset( $d['opacity'] ) && null !== ( $o = self::vis_ratio( $d['opacity'] ) ) ) {
+			$op *= max( 0.0, min( 1.0, $o ) );
+		}
+		if ( isset( $d['filter'] ) && preg_match_all( '/\bopacity\(\s*([^)]*)\)|\balpha\(\s*opacity\s*=\s*([\d.]+)/', $d['filter'], $fm, PREG_SET_ORDER ) ) {
+			foreach ( $fm as $f ) {
+				$o   = '' !== (string) ( $f[2] ?? '' ) ? (float) $f[2] / 100 : self::vis_ratio( (string) $f[1] );
+				$op *= null === $o ? 1.0 : max( 0.0, min( 1.0, $o ) );
+			}
+		}
+		$st['op'] *= $op;
+		if ( $st['op'] < 0.2 ) {
+			return null;
+		}
+		if ( isset( $d['visibility'] ) ) {
+			if ( preg_match( '/^(?:hidden|collapse)\b/', $d['visibility'] ) ) {
+				$st['vis'] = false;
+			} elseif ( preg_match( '/^(?:visible|initial)\b/', $d['visibility'] ) ) {
+				$st['vis'] = true;
+			}
+		}
+		if ( isset( $d['font-size'] ) ) {
+			$st['px'] = self::vis_font_px( $d['font-size'], $st['px'] );
+		}
+		// What is under the text: a colour, the stops of a gradient, or a picture (not known).
+		$img = (string) ( $d['background-image'] ?? '' );
+		$bgc = isset( $d['background-color'] ) ? self::vis_color( $d['background-color'], null ) : null;
+		if ( '' !== $img && ! preg_match( '/^(?:none|initial|unset|inherit|revert)$/', $img ) ) {
+			$stops = preg_match( '/gradient\(/', $img ) && ! preg_match( '/\burl\(|image-set\(|element\(|paint\(/', $img ) ? self::vis_colors_in( $img ) : array();
+			if ( $stops ) {
+				$under = ( is_array( $bgc ) && $bgc[3] >= 0.999 ) ? array( array( $bgc[0], $bgc[1], $bgc[2] ) ) : $st['bg'];
+				$st['bg'] = null === $under ? null : self::vis_over( $stops, $under );
+			} else {
+				$st['bg'] = null;
+			}
+		} elseif ( is_array( $bgc ) && $bgc[3] > 0.0 ) {
+			$st['bg'] = $bgc[3] >= 0.999 ? array( array( $bgc[0], $bgc[1], $bgc[2] ) ) : ( null === $st['bg'] ? null : self::vis_over( array( $bgc ), $st['bg'] ) );
+		}
+		if ( isset( $d['color'] ) ) {
+			$st['fg'] = self::vis_color( $d['color'], $st['fg'] );
+		}
+		if ( isset( $d['-webkit-text-fill-color'] ) ) {
+			$st['tf'] = preg_match( '/^(?:currentcolor|inherit|unset|initial)$/', $d['-webkit-text-fill-color'] ) ? null : self::vis_color( $d['-webkit-text-fill-color'], null );
+			if ( null === $st['tf'] && ! preg_match( '/^(?:currentcolor|inherit|unset|initial)$/', $d['-webkit-text-fill-color'] ) ) {
+				$st['tf'] = 'unknown';
+			}
+		}
+		if ( $st['svg'] ) {
+			if ( isset( $d['fill'] ) ) {
+				$st['fill'] = preg_match( '/^currentcolor$/', $d['fill'] ) ? $st['fg'] : ( 'none' === $d['fill'] ? array( 0, 0, 0, 0.0 ) : self::vis_color( $d['fill'], $st['fill'] ) );
+			}
+			if ( isset( $d['fill-opacity'] ) && is_array( $st['fill'] ) && null !== ( $fo = self::vis_ratio( $d['fill-opacity'] ) ) ) {
+				$st['fill'][3] *= max( 0.0, min( 1.0, $fo ) );
+			}
+		}
+		return $st;
+	}
+
+	/** visible_html(): can text in this state be told from what is under it? Not known (a picture, a colour not read): yes. */
+	private static function vis_seen( array $st ): bool {
+		$fg = $st['svg'] ? $st['fill'] : ( null !== $st['tf'] ? $st['tf'] : $st['fg'] );
+		if ( ! is_array( $fg ) || null === $st['bg'] ) {
+			return true;
+		}
+		if ( $fg[3] <= 0.05 ) {
+			return false;
+		}
+		foreach ( $st['bg'] as $b ) {
+			$c = array( $fg[0] * $fg[3] + $b[0] * ( 1 - $fg[3] ), $fg[1] * $fg[3] + $b[1] * ( 1 - $fg[3] ), $fg[2] * $fg[3] + $b[2] * ( 1 - $fg[3] ) );
+			$x = self::vis_lum( $c );
+			$y = self::vis_lum( $b );
+			if ( ( max( $x, $y ) + 0.05 ) / ( min( $x, $y ) + 0.05 ) >= 1.25 ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** visible_html(): relative luminance of an sRGB colour. */
+	private static function vis_lum( array $c ): float {
+		$f = function ( $x ) {
+			$x = max( 0.0, min( 255.0, (float) $x ) ) / 255;
+			return $x <= 0.03928 ? $x / 12.92 : pow( ( $x + 0.055 ) / 1.055, 2.4 );
+		};
+		return 0.2126 * $f( $c[0] ) + 0.7152 * $f( $c[1] ) + 0.0722 * $f( $c[2] );
+	}
+
+	/** visible_html(): each colour of $top laid over each of $under (opaque results). */
+	private static function vis_over( array $top, array $under ): array {
+		$out = array();
+		foreach ( $top as $t ) {
+			$a = isset( $t[3] ) ? (float) $t[3] : 1.0;
+			foreach ( $under as $u ) {
+				$out[] = array( $t[0] * $a + $u[0] * ( 1 - $a ), $t[1] * $a + $u[1] * ( 1 - $a ), $t[2] * $a + $u[2] * ( 1 - $a ) );
+				if ( $a >= 0.999 ) {
+					break;
+				}
+			}
+		}
+		return array_slice( $out, 0, 24 );
+	}
+
+	/**
+	 * visible_html(): do these declarations hide the element with everything inside it? $box says how it is laid out
+	 * (inline: width, height and text-indent do nothing to it; positioned: left / top move it; abs: clip applies);
+	 * left out, whatever could hide is taken to.
+	 */
+	private static function vis_gone( array $d, array $box = array( 'inline' => false, 'positioned' => true, 'abs' => true ) ): bool {
+		$get = function ( string $p ) use ( $d ): string {
+			return isset( $d[ $p ] ) ? (string) $d[ $p ] : '';
+		};
+		if ( preg_match( '/^none\b/', $get( 'display' ) ) || preg_match( '/^all\b/', $get( 'mso-hide' ) ) || preg_match( '/^hidden\b/', $get( 'content-visibility' ) ) ) {
+			return true;
+		}
+		if ( '' !== $get( 'zoom' ) && null !== ( $z = self::vis_ratio( $get( 'zoom' ) ) ) && $z < 0.1 ) {
+			return true;
+		}
+		if ( self::vis_transform_hides( $get( 'transform' ) ) ) {
+			return true;
+		}
+		if ( '' !== $get( 'scale' ) ) {
+			$sv = preg_split( '/\s+/', trim( $get( 'scale' ) ) );
+			foreach ( array_slice( $sv, 0, 2 ) as $v ) {
+				$r = self::vis_ratio( $v );
+				if ( null !== $r && abs( $r ) < 0.1 ) {
+					return true;
+				}
+			}
+		}
+		if ( '' !== $get( 'translate' ) ) {
+			foreach ( array_slice( preg_split( '/\s+/', trim( $get( 'translate' ) ) ), 0, 2 ) as $v ) {
+				$px = self::vis_px( $v, 16.0, null );
+				if ( null !== $px && abs( $px ) >= 1000.0 ) {
+					return true;
+				}
+			}
+		}
+		if ( preg_match( '/\binset\(\s*(?:5\d|[6-9]\d|100)(?:\.\d+)?%|\bcircle\(\s*0(?:px|%)?\s*[ )a]|\bpolygon\(\s*(?:0[a-z%]*\s+0[a-z%]*\s*,?\s*)+\)/', $get( 'clip-path' ) ) ) {
+			return true;
+		}
+		if ( preg_match( '/\bblur\(\s*([^)]*)\)/', $get( 'filter' ), $bm ) && null !== ( $bl = self::vis_px( $bm[1], 16.0, null ) ) && $bl >= 4.0 ) {
+			return true; // blurred past reading
+		}
+		if ( ! empty( $box['abs'] ) && preg_match( '/^rect\(([^)]*)\)/', $get( 'clip' ), $cm ) ) {
+			$e = array_map( function ( $x ) {
+				return 'auto' === $x ? null : self::vis_px( $x, 16.0, null );
+			}, self::vis_args( $cm[1] ) );
+			if ( 4 === count( $e ) && ( ( null !== $e[1] && null !== $e[3] && $e[1] - $e[3] <= 2.0 ) || ( null !== $e[0] && null !== $e[2] && $e[2] - $e[0] <= 2.0 ) ) ) {
+				return true; // clip: rect( top right bottom left ) of 2px or less across or down
+			}
+		}
+		$moves = array( 'margin-left', 'margin-right' );
+		if ( ! empty( $box['positioned'] ) ) {
+			array_push( $moves, 'left', 'top', 'right', 'bottom' );
+		}
+		if ( empty( $box['inline'] ) ) {
+			array_push( $moves, 'margin-top', 'text-indent' );
+		}
+		foreach ( $moves as $p ) {
+			$px = '' !== $get( $p ) ? self::vis_px( $get( $p ), 16.0, null ) : null;
+			if ( null !== $px && ( $px <= -500.0 || $px >= 1000.0 ) ) {
+				return true;
+			}
+		}
+		$clipped = (bool) preg_match( '/\b(?:hidden|clip)\b/', $get( 'overflow' ) . ' ' . $get( 'overflow-x' ) . ' ' . $get( 'overflow-y' ) );
+		if ( $clipped && empty( $box['inline'] ) && preg_match( '/^(\d+(?:\.\d+)?)%$/', trim( $get( 'text-indent' ) ), $tm ) && (float) $tm[1] >= 100.0 ) {
+			return true; // text-indent:100% with overflow hidden: the words start past the box's right edge
+		}
+		if ( $clipped && empty( $box['inline'] ) ) {
+			foreach ( array( 'height', 'max-height', 'width', 'max-width' ) as $p ) {
+				$px = '' !== $get( $p ) ? self::vis_px( $get( $p ), 16.0, null ) : null;
+				if ( null !== $px && $px <= 2.0 ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** visible_html(): does a transform scale the element to (almost) nothing, turn it edge-on, or move it off the page? */
+	private static function vis_transform_hides( string $t ): bool {
+		if ( '' === $t || 'none' === $t ) {
+			return false;
+		}
+		foreach ( self::vis_funcs( $t ) as $f ) {
+			$args = self::vis_args( $f[1] );
+			switch ( $f[0] ) {
+				case 'scale':
+				case 'scalex':
+				case 'scaley':
+				case 'scale3d':
+					foreach ( array_slice( $args, 0, 'scale3d' === $f[0] ? 2 : 2 ) as $a ) {
+						$r = self::vis_ratio( $a );
+						if ( null !== $r && abs( $r ) < 0.1 ) {
+							return true;
+						}
+					}
+					break;
+				case 'translate':
+				case 'translatex':
+				case 'translatey':
+				case 'translate3d':
+					foreach ( array_slice( $args, 0, 2 ) as $a ) {
+						$px = self::vis_px( $a, 16.0, null );
+						if ( null !== $px && abs( $px ) >= 1000.0 ) {
+							return true;
+						}
+					}
+					break;
+				case 'matrix':
+				case 'matrix3d':
+					$n = array_map( 'floatval', $args );
+					if ( 'matrix' === $f[0] && 6 === count( $n ) && ( abs( $n[0] * $n[3] - $n[1] * $n[2] ) < 0.01 || abs( $n[4] ) >= 1000 || abs( $n[5] ) >= 1000 ) ) {
+						return true;
+					}
+					if ( 'matrix3d' === $f[0] && 16 === count( $n ) && ( abs( $n[0] * $n[5] - $n[1] * $n[4] ) < 0.01 || abs( $n[12] ) >= 1000 || abs( $n[13] ) >= 1000 ) ) {
+						return true;
+					}
+					break;
+				case 'skew':
+				case 'skewx':
+				case 'skewy':
+				case 'rotatex':
+				case 'rotatey':
+					foreach ( array_slice( $args, 0, 2 ) as $a ) {
+						if ( preg_match( '/^(-?[\d.]+)(deg|turn|rad|grad)?$/', (string) $a, $am ) ) {
+							$deg = (float) $am[1] * ( 'turn' === ( $am[2] ?? '' ) ? 360 : ( 'rad' === ( $am[2] ?? '' ) ? 57.2958 : ( 'grad' === ( $am[2] ?? '' ) ? 0.9 : 1 ) ) );
+							$deg = fmod( abs( $deg ), 180.0 );
+							if ( abs( $deg - 90.0 ) < 3.0 ) {
+								return true; // edge-on, or skewed to nothing
+							}
+						}
+					}
+					break;
+			}
+		}
+		return false;
+	}
+
+	/** visible_html(): the functions in a value, as [ name (lower case), what is between its parentheses ]. */
+	private static function vis_funcs( string $v ): array {
+		$out = array();
+		$len = strlen( $v );
+		for ( $i = 0; $i < $len; $i++ ) {
+			if ( ! preg_match( '/\G([a-z][a-z0-9-]*)\(/i', $v, $m, 0, $i ) ) {
+				continue;
+			}
+			$j     = $i + strlen( $m[0] );
+			$depth = 1;
+			$k     = $j;
+			for ( ; $k < $len && $depth > 0; $k++ ) {
+				if ( '(' === $v[ $k ] ) {
+					$depth++;
+				} elseif ( ')' === $v[ $k ] ) {
+					$depth--;
+				}
+			}
+			$out[] = array( strtolower( $m[1] ), substr( $v, $j, max( 0, $k - $j - 1 ) ) );
+			$i     = $k - 1;
+			if ( count( $out ) >= 20 ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/** visible_html(): a function's arguments, split at top-level commas (or spaces when there is no comma). */
+	private static function vis_args( string $a ): array {
+		$parts = self::vis_split_top( $a, ',' );
+		if ( 1 === count( $parts ) ) {
+			$parts = preg_split( '/\s+(?![^(]*\))/', trim( $a ) );
+		}
+		return array_values( array_filter( array_map( 'trim', $parts ), 'strlen' ) );
+	}
+
+	/** visible_html(): $s split at $sep where it is not inside parentheses or quotes. */
+	private static function vis_split_top( string $s, string $sep ): array {
+		$out   = array();
+		$cur   = '';
+		$depth = 0;
+		$q     = '';
+		$len   = strlen( $s );
+		for ( $i = 0; $i < $len; $i++ ) {
+			$c = $s[ $i ];
+			if ( '' !== $q ) {
+				$cur .= $c;
+				if ( '\\' === $c && $i + 1 < $len ) {
+					$cur .= $s[ ++$i ];
+				} elseif ( $c === $q ) {
+					$q = '';
+				}
+				continue;
+			}
+			if ( '"' === $c || "'" === $c ) {
+				$q = $c;
+			} elseif ( '(' === $c || '[' === $c ) {
+				$depth++;
+			} elseif ( ( ')' === $c || ']' === $c ) && $depth > 0 ) {
+				$depth--;
+			} elseif ( $c === $sep && 0 === $depth ) {
+				$out[] = $cur;
+				$cur   = '';
+				continue;
+			}
+			$cur .= $c;
+		}
+		$out[] = $cur;
+		return $out;
+	}
+
+	/** visible_html(): "0.5" or "50%" as 0.5; null when it is not a number. */
+	private static function vis_ratio( string $v ): ?float {
+		if ( ! preg_match( '/^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(%?)\s*$/i', $v, $m ) ) {
+			return null;
+		}
+		return '%' === $m[2] ? (float) $m[1] / 100 : (float) $m[1];
+	}
+
+	/** visible_html(): a font size in px, from its parent's ($parent px). */
+	private static function vis_font_px( string $v, float $parent ): float {
+		$k = array( 'xx-small' => 9, 'x-small' => 10, 'small' => 13, 'medium' => 16, 'large' => 18, 'x-large' => 24, 'xx-large' => 32, 'xxx-large' => 48 );
+		$v = trim( $v );
+		if ( isset( $k[ $v ] ) ) {
+			return (float) $k[ $v ];
+		}
+		if ( 'smaller' === $v ) {
+			return $parent / 1.2;
+		}
+		if ( 'larger' === $v ) {
+			return $parent * 1.2;
+		}
+		if ( preg_match( '/^(?:inherit|unset|revert)$/', $v ) ) {
+			return $parent;
+		}
+		if ( 'initial' === $v ) {
+			return 16.0;
+		}
+		$px = self::vis_px( $v, $parent, $parent );
+		return null === $px ? $parent : max( 0.0, $px );
+	}
+
+	/**
+	 * visible_html(): a length in px, or null when it cannot be read. em is $em px, % is of $pct px (null: % not read);
+	 * a plain number is px (as quirks mode, where most mail is drawn, reads it). calc(), min(), max() and clamp() are
+	 * worked out.
+	 */
+	private static function vis_px( string $v, float $em, ?float $pct ): ?float {
+		$v = trim( strtolower( $v ) );
+		if ( '' === $v ) {
+			return null;
+		}
+		$pos = 0;
+		$r   = self::vis_expr( $v, $pos, $em, $pct, 0 );
+		return ( null !== $r && $pos >= strlen( $v ) ) ? $r : null;
+	}
+
+	/** visible_html(): one calc() sum from $v at $pos (terms and factors), in px; null when it is not read. */
+	private static function vis_expr( string $v, int &$pos, float $em, ?float $pct, int $depth ): ?float {
+		if ( $depth > 8 ) {
+			return null;
+		}
+		$sum = self::vis_term( $v, $pos, $em, $pct, $depth );
+		while ( null !== $sum && preg_match( '/\G\s+([+-])\s+/', $v, $m, 0, $pos ) ) {
+			$pos += strlen( $m[0] );
+			$t    = self::vis_term( $v, $pos, $em, $pct, $depth );
+			if ( null === $t ) {
+				return null;
+			}
+			$sum = '+' === $m[1] ? $sum + $t : $sum - $t;
+		}
+		return $sum;
+	}
+
+	private static function vis_term( string $v, int &$pos, float $em, ?float $pct, int $depth ): ?float {
+		$x = self::vis_factor( $v, $pos, $em, $pct, $depth );
+		while ( null !== $x && preg_match( '/\G\s*([*\/])\s*/', $v, $m, 0, $pos ) ) {
+			$pos += strlen( $m[0] );
+			$y    = self::vis_factor( $v, $pos, $em, $pct, $depth );
+			if ( null === $y || ( '/' === $m[1] && 0.0 === $y ) ) {
+				return null;
+			}
+			$x = '*' === $m[1] ? $x * $y : $x / $y;
+		}
+		return $x;
+	}
+
+	private static function vis_factor( string $v, int &$pos, float $em, ?float $pct, int $depth ): ?float {
+		if ( preg_match( '/\G\s*(calc|min|max|clamp)?\(\s*/', $v, $m, 0, $pos ) ) {
+			$pos += strlen( $m[0] );
+			$fn   = (string) ( $m[1] ?? '' );
+			$vals = array();
+			do {
+				$x = self::vis_expr( $v, $pos, $em, $pct, $depth + 1 );
+				if ( null === $x ) {
+					return null;
+				}
+				$vals[] = $x;
+			} while ( preg_match( '/\G\s*,\s*/', $v, $c, 0, $pos ) && ( $pos += strlen( $c[0] ) ) );
+			if ( ! preg_match( '/\G\s*\)/', $v, $c, 0, $pos ) ) {
+				return null;
+			}
+			$pos += strlen( $c[0] );
+			if ( 'min' === $fn ) {
+				return min( $vals );
+			}
+			if ( 'max' === $fn ) {
+				return max( $vals );
+			}
+			if ( 'clamp' === $fn ) {
+				return 3 === count( $vals ) ? max( $vals[0], min( $vals[1], $vals[2] ) ) : null;
+			}
+			return 1 === count( $vals ) ? $vals[0] : null;
+		}
+		if ( ! preg_match( '/\G\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(px|pt|pc|in|cm|mm|q|em|rem|ex|ch|%|vw|vh|vmin|vmax)?/', $v, $m, 0, $pos ) ) {
+			return null;
+		}
+		$pos += strlen( $m[0] );
+		$n    = (float) $m[1];
+		switch ( $m[2] ?? '' ) {
+			case 'pt':
+				return $n * 4 / 3;
+			case 'pc':
+				return $n * 16;
+			case 'in':
+				return $n * 96;
+			case 'cm':
+				return $n * 37.8;
+			case 'mm':
+				return $n * 3.78;
+			case 'q':
+				return $n * 0.945;
+			case 'em':
+				return $n * $em;
+			case 'rem':
+				return $n * 16;
+			case 'ex':
+			case 'ch':
+				return $n * $em / 2;
+			case '%':
+				return null === $pct ? null : $n * $pct / 100;
+			case 'vw':
+				return $n * 10.24;
+			case 'vh':
+				return $n * 7.68;
+			case 'vmin':
+				return $n * 7.68;
+			case 'vmax':
+				return $n * 10.24;
+		}
+		return $n;
+	}
+
+	/** visible_html(): a CSS colour as [ r, g, b, alpha ]; $cur for currentcolor / inherit; null when it is not read. */
+	private static function vis_color( string $v, $cur ) {
+		$v = strtolower( trim( $v ) );
+		if ( '' === $v || preg_match( '/^(?:inherit|unset|currentcolor|revert|revert-layer)$/', $v ) ) {
+			return $cur;
+		}
+		if ( 'initial' === $v ) {
+			return array( 0, 0, 0, 1.0 );
+		}
+		if ( 'transparent' === $v ) {
+			return array( 0, 0, 0, 0.0 );
+		}
+		if ( preg_match( '/^#([0-9a-f]+)$/', $v, $m ) ) {
+			$h = $m[1];
+			if ( 3 === strlen( $h ) || 4 === strlen( $h ) ) {
+				$h = preg_replace( '/(.)/', '$1$1', $h );
+			}
+			if ( 6 !== strlen( $h ) && 8 !== strlen( $h ) ) {
+				return null;
+			}
+			return array( hexdec( substr( $h, 0, 2 ) ), hexdec( substr( $h, 2, 2 ) ), hexdec( substr( $h, 4, 2 ) ), 8 === strlen( $h ) ? hexdec( substr( $h, 6, 2 ) ) / 255 : 1.0 );
+		}
+		if ( preg_match( '/^(rgba?|hsla?)\(\s*(.*?)\s*\)$/s', $v, $m ) ) {
+			$p = preg_split( '/\s*[,\/]\s*|\s+/', $m[2] );
+			if ( count( $p ) < 3 ) {
+				return null;
+			}
+			$a = isset( $p[3] ) ? self::vis_ratio( $p[3] ) : 1.0;
+			if ( null === $a ) {
+				return null;
+			}
+			if ( 'r' === $m[1][0] ) {
+				$c = array();
+				for ( $k = 0; $k < 3; $k++ ) {
+					$x = self::vis_ratio( $p[ $k ] );
+					if ( null === $x ) {
+						return null;
+					}
+					$c[] = false !== strpos( $p[ $k ], '%' ) ? $x * 255 : $x;
+				}
+				return array( $c[0], $c[1], $c[2], max( 0.0, min( 1.0, $a ) ) );
+			}
+			$h = (float) $p[0];
+			$s = self::vis_ratio( $p[1] );
+			$l = self::vis_ratio( $p[2] );
+			if ( null === $s || null === $l ) {
+				return null;
+			}
+			$s = false !== strpos( $p[1], '%' ) ? $s : $s / 100;
+			$l = false !== strpos( $p[2], '%' ) ? $l : $l / 100;
+			$f = function ( $n ) use ( $h, $s, $l ) {
+				$k = fmod( $n + $h / 30, 12 );
+				return 255 * ( $l - $s * min( $l, 1 - $l ) * max( -1, min( $k - 3, 9 - $k, 1 ) ) );
+			};
+			return array( $f( 0 ), $f( 8 ), $f( 4 ), max( 0.0, min( 1.0, $a ) ) );
+		}
+		if ( preg_match( '/(?:^| )' . preg_quote( $v, '/' ) . ':([0-9a-f]{6})\b/', self::VIS_NAMED, $m ) ) {
+			return array( hexdec( substr( $m[1], 0, 2 ) ), hexdec( substr( $m[1], 2, 2 ) ), hexdec( substr( $m[1], 4, 2 ) ), 1.0 );
+		}
+		return null;
+	}
+
+	/** visible_html(): every colour named in a value (a gradient's stops), each [ r, g, b, alpha ]. */
+	private static function vis_colors_in( string $v ): array {
+		$out = array();
+		if ( preg_match_all( '/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?)\([^)]*\)|\b[a-z]+\b/', strtolower( $v ), $m ) ) {
+			foreach ( $m[0] as $t ) {
+				$c = self::vis_color( $t, null );
+				if ( is_array( $c ) ) {
+					$out[] = $c;
+				}
+				if ( count( $out ) >= 12 ) {
+					break;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** visible_html(): the declarations that reach $el, by the cascade: !important, the style attribute, specificity, order. */
+	private static function vis_cascade( DOMElement $el, array &$ctx ): array {
+		$idx  = $ctx['idx'];
+		$cand = $idx['any'];
+		$id   = strtolower( (string) $el->getAttribute( 'id' ) );
+		if ( '' !== $id && isset( $idx['id'][ $id ] ) ) {
+			$cand = array_merge( $cand, $idx['id'][ $id ] );
+		}
+		foreach ( array_keys( self::vis_classes( $el, $ctx ) ) as $c ) {
+			if ( isset( $idx['cls'][ $c ] ) ) {
+				$cand = array_merge( $cand, $idx['cls'][ $c ] );
+			}
+		}
+		$tag = strtolower( $el->nodeName );
+		if ( isset( $idx['tag'][ $tag ] ) ) {
+			$cand = array_merge( $cand, $idx['tag'][ $tag ] );
+		}
+		$win = array();
+		foreach ( array_unique( $cand ) as $ri ) {
+			$r = $ctx['rules'][ $ri ];
+			if ( ! self::vis_matches( $el, $r['sel'], count( $r['sel'] ) - 1, $ctx, (int) $ri ) ) {
+				continue;
+			}
+			foreach ( $r['decl'] as $p => $v ) {
+				$key = array( $v[1] ? 1 : 0, 0, $r['spec'][0], $r['spec'][1], $r['spec'][2], $r['order'] );
+				if ( ! isset( $win[ $p ] ) || $key > $win[ $p ][1] ) {
+					$win[ $p ] = array( $v[0], $key );
+				}
+			}
+		}
+		foreach ( self::vis_decls( (string) $el->getAttribute( 'style' ) ) as $p => $v ) {
+			$key = array( $v[1] ? 1 : 0, 1, 0, 0, 0, 0 );
+			if ( ! isset( $win[ $p ] ) || $key > $win[ $p ][1] ) {
+				$win[ $p ] = array( $v[0], $key );
+			}
+		}
+		$d = array();
+		foreach ( $win as $p => $w ) {
+			$d[ $p ] = $w[0];
+		}
+		return $d;
+	}
+
+	/** visible_html(): "prop: value; …" as prop => [ value (lower case, CSS escapes decoded), important ], shorthands read. Pure. */
+	private static function vis_decls( string $style ): array {
+		$out = array();
+		if ( '' === trim( $style ) ) {
+			return $out;
+		}
+		foreach ( self::vis_split_top( $style, ';' ) as $decl ) {
+			$c = strpos( $decl, ':' );
+			if ( false === $c ) {
+				continue;
+			}
+			$prop = strtolower( trim( self::vis_unescape( substr( $decl, 0, $c ) ) ) );
+			if ( ! preg_match( '/^(?:-?[a-z][a-z0-9-]*|--[a-z0-9_-]+)$/', $prop ) ) {
+				continue;
+			}
+			$val = strtolower( trim( self::vis_unescape( substr( $decl, $c + 1 ) ) ) );
+			$imp = (bool) preg_match( '/!\s*important\s*$/', $val );
+			$val = trim( (string) preg_replace( '/!\s*important\s*$/', '', $val ) );
+			foreach ( self::vis_expand( $prop, $val ) as $p => $v ) {
+				if ( ! isset( $out[ $p ] ) || ! $out[ $p ][1] || $imp ) {
+					$out[ $p ] = array( $v, $imp );
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** visible_html(): a shorthand read into the properties it sets (background, font, inset, margin, overflow). */
+	private static function vis_expand( string $p, string $v ): array {
+		switch ( $p ) {
+			case 'background':
+				$col = 'transparent';
+				$img = 'none';
+				foreach ( self::vis_args( str_replace( ',', ' , ', $v ) ) as $t ) {
+					if ( preg_match( '/^(?:url|image-set|element|paint|cross-fade|[a-z-]*gradient)\(/', $t ) ) {
+						$img = 'none' === $img ? $t : $img . ' ' . $t;
+					} elseif ( is_array( self::vis_color( $t, null ) ) ) {
+						$col = $t;
+					}
+				}
+				return array( 'background-color' => $col, 'background-image' => $img );
+			case 'font':
+				// [style variant weight stretch] size[/line-height] family: the size is the first length or size word
+				foreach ( preg_split( '/\s+/', trim( (string) preg_replace( '/\s*\/\s*/', '/', $v ) ) ) as $t ) {
+					$t = explode( '/', $t )[0];
+					if ( preg_match( '/^(?:[\d.]+(?:[a-z%]+)?|xx-small|x-small|small|medium|large|x-large|xx-large|xxx-large|smaller|larger|calc\(.*|min\(.*|max\(.*|clamp\(.*)$/', $t ) && ! preg_match( '/^\d{3}$/', $t ) ) {
+						return array( 'font-size' => $t );
+					}
+				}
+				return array();
+			case 'inset':
+			case 'margin':
+				$t = self::vis_args( $v );
+				$n = count( $t );
+				if ( $n < 1 || $n > 4 ) {
+					return array();
+				}
+				$top    = $t[0];
+				$right  = $t[ $n > 1 ? 1 : 0 ];
+				$bottom = $t[ $n > 2 ? 2 : 0 ];
+				$left   = $t[ 4 === $n ? 3 : ( $n > 1 ? 1 : 0 ) ];
+				return 'inset' === $p
+					? array( 'top' => $top, 'right' => $right, 'bottom' => $bottom, 'left' => $left )
+					: array( 'margin-top' => $top, 'margin-right' => $right, 'margin-left' => $left );
+			case 'overflow':
+				$t = preg_split( '/\s+/', trim( $v ) );
+				return array( 'overflow-x' => $t[0], 'overflow-y' => $t[1] ?? $t[0] );
+		}
+		return array( $p => $v );
+	}
+
+	/** visible_html(): CSS escapes ("n\6f ne", "u\rl") read as the characters they stand for. Pure. */
+	private static function vis_unescape( string $s ): string {
+		if ( false === strpos( $s, '\\' ) ) {
+			return $s;
+		}
+		return (string) preg_replace_callback( '/\\\\(?:([0-9a-f]{1,6})\s?|(.))/is', function ( $m ) {
+			if ( '' !== (string) ( $m[1] ?? '' ) ) {
+				$cp = hexdec( $m[1] );
+				return ( $cp > 0 && $cp < 0x110000 && function_exists( 'mb_chr' ) ) ? (string) mb_chr( (int) $cp, 'UTF-8' ) : '';
+			}
+			return (string) ( $m[2] ?? '' );
+		}, $s );
+	}
+
+	/** visible_html(): var(--name, fallback) in a value read from the custom properties in force (five deep at most). */
+	private static function vis_var( string $v, array $vars, int $depth ): string {
+		if ( $depth > 5 ) {
+			return $v;
+		}
+		$out = preg_replace_callback( '/var\(\s*(--[a-z0-9_-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)/', function ( $m ) use ( $vars, $depth ) {
+			if ( isset( $vars[ $m[1] ] ) ) {
+				return self::vis_var( (string) $vars[ $m[1] ], $vars, $depth + 1 );
+			}
+			return isset( $m[2] ) ? self::vis_var( trim( (string) $m[2] ), $vars, $depth + 1 ) : $m[0];
+		}, $v );
+		return is_string( $out ) ? $out : $v;
+	}
+
+	/**
+	 * visible_html(): the email's own CSS read into rules, each { sel: compounds, spec, order, decl } with only the
+	 * properties that can show or hide text. One pass over the text (no rescans), nested blocks to six deep.
+	 */
+	private static function vis_css_rules( string $css ): array {
+		if ( '' === trim( $css ) ) {
+			return array();
+		}
+		$css   = (string) preg_replace( '#/\*.*?(?:\*/|$)#s', ' ', $css );
+		$css   = str_replace( array( '<!--', '-->' ), ' ', $css );
+		$rules = array();
+		$order = 0;
+		$i     = 0;
+		while ( $i < strlen( $css ) && ! self::$vis_gave_up ) {
+			self::vis_css_block( $css, $i, array(), false, $rules, $order, 0 );
+		}
+		return $rules;
+	}
+
+	/**
+	 * visible_html(): one block of CSS from $i to the "}" that closes it (or the end). $outer: the selectors of the
+	 * style rule it belongs to (its own declarations, and CSS nesting); $rough: only what hides is taken from it.
+	 */
+	private static function vis_css_block( string $css, int &$i, array $outer, bool $rough, array &$rules, int &$order, int $depth ): void {
+		$len  = strlen( $css );
+		$own  = $order++;
+		$text = '';
+		$decl = '';
+		while ( $i < $len ) {
+			$ch = $css[ $i ];
+			if ( '"' === $ch || "'" === $ch ) {
+				$k = $i + 1;
+				while ( $k < $len && $css[ $k ] !== $ch ) {
+					$k += ( '\\' === $css[ $k ] ) ? 2 : 1;
+				}
+				$text .= substr( $css, $i, $k + 1 - $i );
+				$i     = $k + 1;
+				continue;
+			}
+			if ( '\\' === $ch ) {
+				$text .= substr( $css, $i, 2 );
+				$i    += 2;
+				continue;
+			}
+			if ( '(' === $ch ) {
+				$k     = $i;
+				$depth2 = 0;
+				do {
+					if ( '(' === $css[ $k ] ) {
+						$depth2++;
+					} elseif ( ')' === $css[ $k ] ) {
+						$depth2--;
+					}
+					$k++;
+				} while ( $k < $len && $depth2 > 0 && '{' !== $css[ $k ] && '}' !== $css[ $k ] );
+				$text .= substr( $css, $i, $k - $i );
+				$i     = $k;
+				continue;
+			}
+			if ( ';' === $ch ) {
+				$decl .= $text . ';';
+				$text  = '';
+				$i++;
+				continue;
+			}
+			if ( '}' === $ch ) {
+				$i++;
+				break;
+			}
+			if ( '{' === $ch ) {
+				$i++;
+				$pre  = trim( $text );
+				$text = '';
+				if ( $depth >= 6 ) {
+					self::vis_css_skip( $css, $i );
+					continue;
+				}
+				if ( '' !== $pre && '@' === $pre[0] ) {
+					$how = self::vis_at( $pre );
+					if ( 'skip' === $how ) {
+						self::vis_css_skip( $css, $i );
+					} else {
+						self::vis_css_block( $css, $i, $outer, $rough || 'rough' === $how, $rules, $order, $depth + 1 );
+					}
+					continue;
+				}
+				$sels = self::vis_nest( $pre, $outer );
+				if ( $sels ) {
+					self::vis_css_block( $css, $i, $sels, $rough, $rules, $order, $depth + 1 );
+				} else {
+					self::vis_css_skip( $css, $i );
+				}
+				continue;
+			}
+			$text .= $ch;
+			$i++;
+		}
+		if ( $outer ) {
+			self::vis_add_rule( $outer, $decl . $text, $rough, $own, $rules );
+		}
+	}
+
+	/** visible_html(): past a block whose rules are not read, its braces matched. */
+	private static function vis_css_skip( string $css, int &$i ): void {
+		$len   = strlen( $css );
+		$depth = 1;
+		while ( $i < $len && $depth > 0 ) {
+			$ch = $css[ $i ];
+			if ( '"' === $ch || "'" === $ch ) {
+				$k = $i + 1;
+				while ( $k < $len && $css[ $k ] !== $ch ) {
+					$k += ( '\\' === $css[ $k ] ) ? 2 : 1;
+				}
+				$i = $k + 1;
+				continue;
+			}
+			if ( '\\' === $ch ) {
+				$i += 2;
+				continue;
+			}
+			if ( '{' === $ch ) {
+				$depth++;
+			} elseif ( '}' === $ch ) {
+				$depth--;
+			}
+			$i++;
+		}
+	}
+
+	/** visible_html(): an at-rule's block: 'read' (it applies as written), 'rough' (only what hides), or 'skip'. */
+	private static function vis_at( string $pre ): string {
+		if ( ! preg_match( '/^@([a-z-]+)\s*(.*)$/is', $pre, $m ) ) {
+			return 'skip';
+		}
+		$name = strtolower( $m[1] );
+		if ( 'media' === $name ) {
+			return self::vis_media( (string) $m[2] ) ? 'read' : 'skip';
+		}
+		return in_array( $name, array( 'supports', 'layer', 'container', 'scope', 'document', '-moz-document' ), true ) ? 'rough' : 'skip';
+	}
+
+	/** visible_html(): does a media query list apply to a desktop screen (1024 x 768, light, a mouse)? */
+	private static function vis_media( string $q ): bool {
+		foreach ( self::vis_split_top( strtolower( $q ), ',' ) as $one ) {
+			$one = trim( $one );
+			$neg = false;
+			if ( preg_match( '/^not\s+/', $one ) ) {
+				$neg = true;
+				$one = trim( substr( $one, 3 ) );
+			}
+			$one = (string) preg_replace( '/^only\s+/', '', $one );
+			$ok  = true;
+			if ( preg_match( '/^([a-z-]+)/', $one, $tm ) && 'and' !== $tm[1] ) {
+				$ok = in_array( $tm[1], array( 'all', 'screen' ), true );
+			}
+			if ( $ok && preg_match_all( '/\(([^()]*)\)/', $one, $fm ) ) {
+				foreach ( $fm[1] as $f ) {
+					if ( ! self::vis_media_feature( trim( $f ) ) ) {
+						$ok = false;
+						break;
+					}
+				}
+			}
+			if ( $ok !== $neg ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static function vis_media_feature( string $f ): bool {
+		$dim = array( 'width' => 1024.0, 'height' => 768.0 );
+		if ( preg_match( '/^(min|max)-(?:device-)?(width|height)\s*:\s*(.+)$/', $f, $m ) ) {
+			$px = self::vis_px( $m[3], 16.0, null );
+			return null === $px || ( 'min' === $m[1] ? $dim[ $m[2] ] >= $px : $dim[ $m[2] ] <= $px );
+		}
+		if ( preg_match( '/^(?:device-)?(width|height)\s*:\s*(.+)$/', $f, $m ) ) {
+			$px = self::vis_px( $m[2], 16.0, null );
+			return null === $px || abs( $dim[ $m[1] ] - $px ) < 1;
+		}
+		if ( preg_match( '/^(?:(.+?)\s*(<=|>=|<|>|=)\s*)?(?:device-)?(width|height)(?:\s*(<=|>=|<|>|=)\s*(.+))?$/', $f, $m ) && ( '' !== ( $m[1] ?? '' ) || '' !== ( $m[4] ?? '' ) ) ) {
+			$v = $dim[ $m[3] ];
+			if ( '' !== ( $m[1] ?? '' ) && null !== ( $a = self::vis_px( $m[1], 16.0, null ) ) && ! self::vis_cmp( $a, $m[2], $v ) ) {
+				return false;
+			}
+			if ( '' !== ( $m[4] ?? '' ) && null !== ( $b = self::vis_px( (string) $m[5], 16.0, null ) ) && ! self::vis_cmp( $v, $m[4], $b ) ) {
+				return false;
+			}
+			return true;
+		}
+		if ( preg_match( '/^prefers-color-scheme\s*:\s*([a-z]+)/', $f, $m ) ) {
+			return 'dark' !== $m[1];
+		}
+		if ( preg_match( '/^orientation\s*:\s*([a-z]+)/', $f, $m ) ) {
+			return 'portrait' !== $m[1];
+		}
+		if ( preg_match( '/^(?:any-)?hover\s*:\s*none|^(?:any-)?pointer\s*:\s*(?:none|coarse)|^prefers-reduced-transparency|^forced-colors\s*:\s*active|^inverted-colors\s*:\s*inverted/', $f ) ) {
+			return false;
+		}
+		return true; // anything else a desktop screen has
+	}
+
+	private static function vis_cmp( float $a, string $op, float $b ): bool {
+		switch ( $op ) {
+			case '<':
+				return $a < $b;
+			case '<=':
+				return $a <= $b;
+			case '>':
+				return $a > $b;
+			case '>=':
+				return $a >= $b;
+		}
+		return abs( $a - $b ) < 1;
+	}
+
+	/** visible_html(): a rule's selector list, each joined to the rule it is nested in ("&", or a descendant). */
+	private static function vis_nest( string $pre, array $outer ): array {
+		$out = array();
+		foreach ( self::vis_split_top( $pre, ',' ) as $sel ) {
+			$sel = trim( $sel );
+			if ( '' === $sel ) {
+				continue;
+			}
+			if ( ! $outer ) {
+				$out[] = $sel;
+				continue;
+			}
+			foreach ( $outer as $o ) {
+				$out[] = false !== strpos( $sel, '&' ) ? str_replace( '&', $o, $sel ) : $o . ' ' . $sel;
+				if ( count( $out ) >= 50 ) {
+					return $out;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** visible_html(): one style rule's declarations added for each of its selectors that is read. */
+	private static function vis_add_rule( array $sels, string $decls, bool $rough, int $order, array &$rules ): void {
+		$d = array_filter( self::vis_decls( $decls ), function ( $k ) {
+			return (bool) preg_match( self::VIS_PROPS, $k );
+		}, ARRAY_FILTER_USE_KEY );
+		if ( ! $d ) {
+			return;
+		}
+		foreach ( $sels as $sel ) {
+			$p = self::vis_selector( $sel );
+			if ( null === $p ) {
+				continue;
+			}
+			$use = ( $rough || $p['approx'] ) ? array_filter( $d, function ( $v, $k ) {
+				return self::vis_hides( $k, $v[0] );
+			}, ARRAY_FILTER_USE_BOTH ) : $d;
+			if ( ! $use ) {
+				continue;
+			}
+			if ( count( $rules ) >= self::VIS_MAX_RULES ) {
+				self::$vis_gave_up = true;
+				return;
+			}
+			$rules[] = array( 'sel' => $p['chain'], 'spec' => $p['spec'], 'order' => $order, 'decl' => $use );
+		}
+	}
+
+	/** visible_html(): would this one declaration hide text by itself (for a rule read only roughly)? */
+	private static function vis_hides( string $p, string $v ): bool {
+		if ( 'visibility' === $p ) {
+			return (bool) preg_match( '/^(?:hidden|collapse)\b/', $v );
+		}
+		if ( 'font-size' === $p ) {
+			return self::vis_font_px( $v, 16.0 ) < 3.0;
+		}
+		if ( 'opacity' === $p || 'fill-opacity' === $p ) {
+			$r = self::vis_ratio( $v );
+			return null !== $r && $r < 0.2;
+		}
+		if ( 'color' === $p || '-webkit-text-fill-color' === $p || 'fill' === $p ) {
+			$c = self::vis_color( $v, null );
+			return is_array( $c ) && ( $c[3] < 0.2 || self::vis_lum( $c ) > 0.8 );
+		}
+		if ( in_array( $p, array( 'overflow', 'overflow-x', 'overflow-y' ), true ) ) {
+			return (bool) preg_match( '/\b(?:hidden|clip)\b/', $v ); // a box of nothing with overflow hidden takes two
+		}
+		if ( in_array( $p, array( 'height', 'max-height', 'width', 'max-width' ), true ) ) {
+			$px = self::vis_px( $v, 16.0, null );
+			return null !== $px && $px <= 2.0;
+		}
+		if ( 'filter' === $p ) {
+			$op = 1.0;
+			foreach ( self::vis_funcs( $v ) as $f ) {
+				$r   = 'opacity' === $f[0] ? self::vis_ratio( $f[1] ) : null;
+				$op *= null === $r ? 1.0 : max( 0.0, min( 1.0, $r ) );
+			}
+			return $op < 0.2 || (bool) preg_match( '/alpha\(\s*opacity\s*=\s*1?\d(?:\.\d+)?\s*\)/', $v ) || self::vis_gone( array( 'filter' => $v ) );
+		}
+		if ( in_array( $p, array( 'background-color', 'background-image' ), true ) ) {
+			return false;
+		}
+		return self::vis_gone( array( $p => $v ) );
+	}
+
+	/**
+	 * visible_html(): a selector read into compounds, left to right, each with the combinator before it, its
+	 * specificity, and whether it is read only roughly ('approx': a pseudo-class it does not read). Null when it is
+	 * not a selector it reads, or one that matches nothing in a mail at rest.
+	 */
+	private static function vis_selector( string $sel ) {
+		$s     = trim( $sel );
+		$n     = strlen( $s );
+		$i     = 0;
+		$chain = array();
+		$spec  = array( 0, 0, 0 );
+		$apx   = false;
+		$comb  = ' ';
+		while ( $i < $n ) {
+			$c = self::vis_compound_parse( $s, $i, $spec, $apx );
+			if ( null === $c ) {
+				return null;
+			}
+			$c['comb'] = $comb;
+			$chain[]   = $c;
+			if ( count( $chain ) > 8 ) {
+				return null;
+			}
+			$ws = false;
+			while ( $i < $n && ctype_space( $s[ $i ] ) ) {
+				$i++;
+				$ws = true;
+			}
+			if ( $i >= $n ) {
+				break;
+			}
+			if ( '>' === $s[ $i ] || '+' === $s[ $i ] || '~' === $s[ $i ] ) {
+				$comb = $s[ $i ];
+				$i++;
+				while ( $i < $n && ctype_space( $s[ $i ] ) ) {
+					$i++;
+				}
+			} elseif ( $ws ) {
+				$comb = ' ';
+			} else {
+				return null;
+			}
+		}
+		return $chain ? array( 'chain' => $chain, 'spec' => $spec, 'approx' => $apx ) : null;
+	}
+
+	/** visible_html(): one compound selector ("div.a#b[x]:first-child") from $s at $i, or null. */
+	private static function vis_compound_parse( string $s, int &$i, array &$spec, bool &$apx ) {
+		$n   = strlen( $s );
+		$c   = array( 'tag' => '', 'id' => '', 'ids' => array(), 'cls' => array(), 'attr' => array(), 'ps' => array() );
+		$any = false;
+		if ( $i < $n && '*' === $s[ $i ] ) {
+			$i++;
+			$any = true;
+		} elseif ( $i < $n && self::vis_ident_start( $s, $i ) ) {
+			$c['tag'] = strtolower( self::vis_ident( $s, $i ) );
+			$spec[2]++;
+			$any = true;
+		}
+		while ( $i < $n ) {
+			$ch = $s[ $i ];
+			if ( '#' === $ch ) {
+				$i++;
+				$v = strtolower( self::vis_ident( $s, $i ) );
+				if ( '' === $v ) {
+					return null;
+				}
+				$c['ids'][] = $v;
+				$c['id']    = $v;
+				$spec[0]++;
+			} elseif ( '.' === $ch ) {
+				$i++;
+				$v = strtolower( self::vis_ident( $s, $i ) );
+				if ( '' === $v ) {
+					return null;
+				}
+				$c['cls'][] = $v;
+				$spec[1]++;
+			} elseif ( '[' === $ch ) {
+				$a = self::vis_attr_parse( $s, $i );
+				if ( null === $a ) {
+					return null;
+				}
+				$c['attr'][] = $a;
+				$spec[1]++;
+			} elseif ( ':' === $ch ) {
+				$p = self::vis_pseudo_parse( $s, $i, $spec, $apx );
+				if ( null === $p ) {
+					return null;
+				}
+				if ( false !== $p ) {
+					$c['ps'][] = $p;
+				}
+			} else {
+				break;
+			}
+			$any = true;
+		}
+		return $any ? $c : null;
+	}
+
+	private static function vis_ident_start( string $s, int $i ): bool {
+		$c = $s[ $i ];
+		return ctype_alpha( $c ) || '_' === $c || '\\' === $c || ord( $c ) >= 0x80 || ( '-' === $c && $i + 1 < strlen( $s ) && ( ctype_alpha( $s[ $i + 1 ] ) || '-' === $s[ $i + 1 ] || '_' === $s[ $i + 1 ] || '\\' === $s[ $i + 1 ] ) );
+	}
+
+	/** visible_html(): a CSS name from $s at $i, its escapes read ("md\:hidden" is the class "md:hidden"). */
+	private static function vis_ident( string $s, int &$i ): string {
+		$n   = strlen( $s );
+		$out = '';
+		while ( $i < $n ) {
+			$c = $s[ $i ];
+			if ( '\\' === $c && $i + 1 < $n ) {
+				if ( preg_match( '/\G\\\\([0-9a-f]{1,6})\s?/i', $s, $m, 0, $i ) ) {
+					$cp   = hexdec( $m[1] );
+					$out .= ( $cp > 0 && $cp < 0x110000 && function_exists( 'mb_chr' ) ) ? (string) mb_chr( (int) $cp, 'UTF-8' ) : '';
+					$i   += strlen( $m[0] );
+				} else {
+					$out .= $s[ $i + 1 ];
+					$i   += 2;
+				}
+				continue;
+			}
+			if ( ctype_alnum( $c ) || '-' === $c || '_' === $c || ord( $c ) >= 0x80 ) {
+				$out .= $c;
+				$i++;
+				continue;
+			}
+			break;
+		}
+		return $out;
+	}
+
+	/** visible_html(): "[name]", "[name op value i]" from $s at $i as [ name, op, value ], or null. */
+	private static function vis_attr_parse( string $s, int &$i ) {
+		$n = strlen( $s );
+		$i++;
+		while ( $i < $n && ctype_space( $s[ $i ] ) ) {
+			$i++;
+		}
+		$name = strtolower( self::vis_ident( $s, $i ) );
+		while ( $i < $n && ctype_space( $s[ $i ] ) ) {
+			$i++;
+		}
+		if ( '' === $name || $i >= $n ) {
+			return null;
+		}
+		if ( ']' === $s[ $i ] ) {
+			$i++;
+			return array( $name, '', null );
+		}
+		if ( '=' === $s[ $i ] ) {
+			$op = '=';
+			$i++;
+		} elseif ( $i + 1 < $n && '=' === $s[ $i + 1 ] && false !== strpos( '~|^$*', $s[ $i ] ) ) {
+			$op = $s[ $i ] . '=';
+			$i += 2;
+		} else {
+			return null;
+		}
+		while ( $i < $n && ctype_space( $s[ $i ] ) ) {
+			$i++;
+		}
+		if ( $i < $n && ( '"' === $s[ $i ] || "'" === $s[ $i ] ) ) {
+			$q = $s[ $i ];
+			$k = $i + 1;
+			$v = '';
+			while ( $k < $n && $s[ $k ] !== $q ) {
+				if ( '\\' === $s[ $k ] && $k + 1 < $n ) {
+					$v .= $s[ $k + 1 ];
+					$k += 2;
+					continue;
+				}
+				$v .= $s[ $k ];
+				$k++;
+			}
+			$i = $k + 1;
+		} else {
+			$v = self::vis_ident( $s, $i );
+		}
+		while ( $i < $n && ctype_space( $s[ $i ] ) ) {
+			$i++;
+		}
+		if ( $i < $n && ( 'i' === strtolower( $s[ $i ] ) || 's' === strtolower( $s[ $i ] ) ) ) {
+			$i++;
+			while ( $i < $n && ctype_space( $s[ $i ] ) ) {
+				$i++;
+			}
+		}
+		if ( $i >= $n || ']' !== $s[ $i ] ) {
+			return null;
+		}
+		$i++;
+		return array( $name, $op, strtolower( $v ) );
+	}
+
+	/**
+	 * visible_html(): a pseudo-class from $s at $i: a check [ name, argument ], false (nothing to check), or null (not
+	 * a selector it reads, or one that matches nothing in a mail at rest).
+	 */
+	private static function vis_pseudo_parse( string $s, int &$i, array &$spec, bool &$apx ) {
+		$n = strlen( $s );
+		$i++;
+		$two = false;
+		if ( $i < $n && ':' === $s[ $i ] ) {
+			$i++;
+			$two = true;
+		}
+		$name = strtolower( self::vis_ident( $s, $i ) );
+		if ( '' === $name ) {
+			return null;
+		}
+		$arg = null;
+		if ( $i < $n && '(' === $s[ $i ] ) {
+			$depth = 0;
+			$k     = $i;
+			for ( ; $k < $n; $k++ ) {
+				if ( '(' === $s[ $k ] ) {
+					$depth++;
+				} elseif ( ')' === $s[ $k ] && 0 === --$depth ) {
+					break;
+				}
+			}
+			if ( $k >= $n ) {
+				return null;
+			}
+			$arg = substr( $s, $i + 1, $k - $i - 1 );
+			$i   = $k + 1;
+		}
+		if ( in_array( $name, array( 'first-line', 'first-letter' ), true ) ) {
+			$spec[2]++;
+			$apx = true;
+			return false; // the element's own first line or letter: read as the element, for what hides
+		}
+		if ( $two || in_array( $name, array( 'before', 'after' ), true ) ) {
+			return null; // ::before, ::marker …: drawn text not in the email's own words
+		}
+		switch ( $name ) {
+			case 'first-child':
+			case 'last-child':
+			case 'only-child':
+			case 'first-of-type':
+			case 'last-of-type':
+			case 'only-of-type':
+			case 'empty':
+			case 'root':
+				$spec[1]++;
+				return array( $name, null );
+			case 'link':
+			case 'any-link':
+				$spec[1]++;
+				return array( 'link', null );
+			case 'nth-child':
+			case 'nth-last-child':
+			case 'nth-of-type':
+			case 'nth-last-of-type':
+				$spec[1]++;
+				$ab = self::vis_nth( (string) $arg );
+				if ( null === $ab ) {
+					if ( preg_match( '/\bof\b/i', (string) $arg ) ) {
+						$apx = true;
+						return false;
+					}
+					return null;
+				}
+				return array( $name, $ab );
+			case 'not':
+			case 'is':
+			case 'where':
+			case 'matches':
+			case '-webkit-any':
+			case '-moz-any':
+				if ( 'where' !== $name ) {
+					$spec[1]++;
+				}
+				$list = array();
+				foreach ( self::vis_split_top( (string) $arg, ',' ) as $part ) {
+					$part = trim( $part );
+					$j    = 0;
+					$sp   = array( 0, 0, 0 );
+					$ap   = false;
+					$cc   = '' === $part ? null : self::vis_compound_parse( $part, $j, $sp, $ap );
+					if ( null === $cc || $j < strlen( $part ) || $ap ) {
+						$apx = true; // a combinator or something not read inside: roughly, for what hides
+						return false;
+					}
+					$list[] = $cc;
+				}
+				return array( 'not' === $name ? 'not' : 'is', $list );
+			case 'defined':
+			case 'read-only':
+				return false; // every element of a mail is
+			case 'has':
+			case 'lang':
+			case 'dir':
+			case 'scope':
+			case 'host':
+			case 'host-context':
+			case 'nth-col':
+			case 'nth-last-col':
+			case 'state':
+			case 'local-link':
+			case 'blank':
+				$spec[1]++;
+				$apx = true;
+				return false;
+		}
+		return null; // :hover, :focus, :checked … never so in a mail at rest; an unknown one: browsers drop the rule
+	}
+
+	/** visible_html(): "2n+1", "odd", "even", "-n+3", "5" as [ a, b ], or null. */
+	private static function vis_nth( string $a ) {
+		$a = strtolower( str_replace( ' ', '', trim( $a ) ) );
+		if ( 'odd' === $a ) {
+			return array( 2, 1 );
+		}
+		if ( 'even' === $a ) {
+			return array( 2, 0 );
+		}
+		if ( preg_match( '/^[+-]?\d+$/', $a ) ) {
+			return array( 0, (int) $a );
+		}
+		if ( preg_match( '/^([+-]?\d*)n([+-]\d+)?$/', $a, $m ) ) {
+			$k = '' === $m[1] || '+' === $m[1] ? 1 : ( '-' === $m[1] ? -1 : (int) $m[1] );
+			return array( $k, (int) ( $m[2] ?? 0 ) );
+		}
+		return null;
+	}
+
+	/** visible_html(): does $el, with what is around it, match $chain up to compound $i? Memoized per element. */
+	private static function vis_matches( DOMElement $el, array $chain, int $i, array &$ctx, int $ri ): bool {
+		if ( ! self::vis_compound( $el, $chain[ $i ], $ctx ) ) {
+			return false;
+		}
+		if ( 0 === $i ) {
+			return true;
+		}
+		$k = $ri . '.' . $i . '.' . spl_object_id( $el );
+		if ( isset( $ctx['memo'][ $k ] ) ) {
+			return $ctx['memo'][ $k ];
+		}
+		$ctx['keep'][] = $el;
+		if ( ++$ctx['steps'] > self::VIS_MAX_STEPS ) {
+			self::$vis_gave_up = true;
+			return $ctx['memo'][ $k ] = false;
+		}
+		switch ( $chain[ $i ]['comb'] ) {
+			case '>':
+				$p  = $el->parentNode;
+				$ok = $p instanceof DOMElement && self::vis_matches( $p, $chain, $i - 1, $ctx, $ri );
+				break;
+			case '+':
+				$p  = self::vis_prev( $el );
+				$ok = null !== $p && self::vis_matches( $p, $chain, $i - 1, $ctx, $ri );
+				break;
+			case '~':
+				$ok = self::vis_any( $el, $chain, $i - 1, $ctx, $ri, false );
+				break;
+			default:
+				$ok = self::vis_any( $el, $chain, $i - 1, $ctx, $ri, true );
+		}
+		return $ctx['memo'][ $k ] = $ok;
+	}
+
+	/** visible_html(): does an ancestor ($up) or an earlier sibling of $el match $chain up to $i? Memoized per element. */
+	private static function vis_any( DOMElement $el, array $chain, int $i, array &$ctx, int $ri, bool $up ): bool {
+		$p = $up ? $el->parentNode : self::vis_prev( $el );
+		if ( ! $p instanceof DOMElement ) {
+			return false;
+		}
+		$k = ( $up ? 'u' : 's' ) . $ri . '.' . $i . '.' . spl_object_id( $p );
+		if ( isset( $ctx['memo'][ $k ] ) ) {
+			return $ctx['memo'][ $k ];
+		}
+		$ctx['keep'][] = $p;
+		if ( ++$ctx['steps'] > self::VIS_MAX_STEPS ) {
+			self::$vis_gave_up = true;
+			return $ctx['memo'][ $k ] = false;
+		}
+		return $ctx['memo'][ $k ] = ( self::vis_matches( $p, $chain, $i, $ctx, $ri ) || self::vis_any( $p, $chain, $i, $ctx, $ri, $up ) );
+	}
+
+	/** visible_html(): the element before $el among its parent's elements, or null. */
+	private static function vis_prev( DOMElement $el ) {
+		for ( $p = $el->previousSibling; null !== $p; $p = $p->previousSibling ) {
+			if ( $p instanceof DOMElement ) {
+				return $p;
+			}
+		}
+		return null;
+	}
+
+	/** visible_html(): does $el itself match one compound (tag, ids, classes, attributes, pseudo-classes)? */
+	private static function vis_compound( DOMElement $el, array $c, array &$ctx ): bool {
+		if ( '' !== $c['tag'] && strtolower( $el->nodeName ) !== $c['tag'] ) {
+			return false;
+		}
+		foreach ( $c['ids'] as $id ) {
+			if ( strtolower( (string) $el->getAttribute( 'id' ) ) !== $id ) {
+				return false;
+			}
+		}
+		if ( $c['cls'] ) {
+			$have = self::vis_classes( $el, $ctx );
+			foreach ( $c['cls'] as $w ) {
+				if ( ! isset( $have[ $w ] ) ) {
+					return false;
+				}
+			}
+		}
+		foreach ( $c['attr'] as $a ) {
+			if ( ! $el->hasAttribute( $a[0] ) ) {
+				return false;
+			}
+			if ( '' === $a[1] ) {
+				continue;
+			}
+			$have = strtolower( (string) $el->getAttribute( $a[0] ) );
+			$want = (string) $a[2];
+			switch ( $a[1] ) {
+				case '=':
+					$ok = $have === $want;
+					break;
+				case '~=':
+					$ok = '' !== $want && in_array( $want, preg_split( '/\s+/', trim( $have ) ), true );
+					break;
+				case '|=':
+					$ok = $have === $want || 0 === strpos( $have, $want . '-' );
+					break;
+				case '^=':
+					$ok = '' !== $want && 0 === strpos( $have, $want );
+					break;
+				case '$=':
+					$ok = '' !== $want && substr( $have, -strlen( $want ) ) === $want;
+					break;
+				default:
+					$ok = '' !== $want && false !== strpos( $have, $want );
+			}
+			if ( ! $ok ) {
+				return false;
+			}
+		}
+		foreach ( $c['ps'] as $p ) {
+			if ( ! self::vis_pseudo_ok( $el, $p, $ctx ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** visible_html(): $el's classes, lower case, as a set (kept for the call). */
+	private static function vis_classes( DOMElement $el, array &$ctx ): array {
+		$k = spl_object_id( $el );
+		if ( ! isset( $ctx['cls'][ $k ] ) ) {
+			$ctx['keep'][]    = $el;
+			$raw              = trim( strtolower( (string) $el->getAttribute( 'class' ) ) );
+			$ctx['cls'][ $k ] = '' === $raw ? array() : array_flip( preg_split( '/\s+/', $raw ) );
+		}
+		return $ctx['cls'][ $k ];
+	}
+
+	private static function vis_pseudo_ok( DOMElement $el, array $p, array &$ctx ): bool {
+		switch ( $p[0] ) {
+			case 'is':
+				foreach ( $p[1] as $c ) {
+					if ( self::vis_compound( $el, $c, $ctx ) ) {
+						return true;
+					}
+				}
+				return false;
+			case 'not':
+				foreach ( $p[1] as $c ) {
+					if ( self::vis_compound( $el, $c, $ctx ) ) {
+						return false;
+					}
+				}
+				return true;
+			case 'root':
+				return null !== $el->ownerDocument && null !== $el->ownerDocument->documentElement && $el->isSameNode( $el->ownerDocument->documentElement );
+			case 'empty':
+				foreach ( $el->childNodes as $c ) {
+					if ( $c instanceof DOMElement || ( $c instanceof DOMText && '' !== $c->nodeValue ) ) {
+						return false;
+					}
+				}
+				return true;
+			case 'link':
+				return in_array( strtolower( $el->nodeName ), array( 'a', 'area' ), true ) && $el->hasAttribute( 'href' );
+		}
+		$q = self::vis_pos( $el, $ctx ); // [ index, count, index of its type, count of its type ]
+		switch ( $p[0] ) {
+			case 'first-child':
+				return 1 === $q[0];
+			case 'last-child':
+				return $q[0] === $q[1];
+			case 'only-child':
+				return 1 === $q[1];
+			case 'first-of-type':
+				return 1 === $q[2];
+			case 'last-of-type':
+				return $q[2] === $q[3];
+			case 'only-of-type':
+				return 1 === $q[3];
+			case 'nth-child':
+				return self::vis_nth_ok( $q[0], $p[1] );
+			case 'nth-last-child':
+				return self::vis_nth_ok( $q[1] - $q[0] + 1, $p[1] );
+			case 'nth-of-type':
+				return self::vis_nth_ok( $q[2], $p[1] );
+			case 'nth-last-of-type':
+				return self::vis_nth_ok( $q[3] - $q[2] + 1, $p[1] );
+		}
+		return true;
+	}
+
+	private static function vis_nth_ok( int $pos, array $ab ): bool {
+		list( $a, $b ) = $ab;
+		if ( 0 === $a ) {
+			return $pos === $b;
+		}
+		$k = ( $pos - $b ) / $a;
+		return $k >= 0 && abs( $k - round( $k ) ) < 1e-9;
+	}
+
+	/** visible_html(): where $el is among its parent's elements: [ index, count, index of its type, count of its type ]. */
+	private static function vis_pos( DOMElement $el, array &$ctx ): array {
+		$k = spl_object_id( $el );
+		if ( isset( $ctx['pos'][ $k ] ) ) {
+			return $ctx['pos'][ $k ];
+		}
+		$par  = $el->parentNode;
+		$sibs = array();
+		if ( $par ) {
+			foreach ( $par->childNodes as $c ) {
+				if ( $c instanceof DOMElement ) {
+					$sibs[] = $c;
+				}
+			}
+		} else {
+			$sibs[] = $el;
+		}
+		$types = array();
+		foreach ( $sibs as $c ) {
+			$t           = strtolower( $c->nodeName );
+			$types[ $t ] = ( $types[ $t ] ?? 0 ) + 1;
+		}
+		$seen = array();
+		foreach ( $sibs as $ix => $c ) {
+			$t                                       = strtolower( $c->nodeName );
+			$seen[ $t ]                              = ( $seen[ $t ] ?? 0 ) + 1;
+			$ctx['keep'][]                           = $c;
+			$ctx['pos'][ spl_object_id( $c ) ]       = array( $ix + 1, count( $sibs ), $seen[ $t ], $types[ $t ] );
+			if ( ++$ctx['steps'] > self::VIS_MAX_STEPS ) {
+				self::$vis_gave_up = true;
+				break;
+			}
+		}
+		return $ctx['pos'][ $k ] ?? array( 1, 1, 1, 1 );
+	}
+
 	public static function body_to_text( string $body, string $format ): string {
 		if ( 'html' === strtolower( $format ) ) {
 			$body = preg_replace( '#<(script|style|head)[^>]*>.*?</\1>#is', ' ', $body );
@@ -3255,7 +5125,7 @@ class ZIB_Gatekeeper {
 		return trim( (string) $body );
 	}
 
-	// ── access-log reads (P4c — accountability: admin viewer + dot-plot) ────
+	// ── access-log reads (accountability: admin viewer + dot-plot) ─────────
 	//
 	// The audit trail is WRITTEN by log() below and, until now, never read back in code.
 	// These readers surface it two ways — a manage_options admin table (access_log_recent)
@@ -3291,21 +5161,26 @@ class ZIB_Gatekeeper {
 
 	/** A user's display label for the log/plot, or a stable placeholder. */
 	private static function user_label_public( int $uid ): string {
-		if ( $uid <= 0 ) { return '—'; }
+		if ( $uid <= 0 ) { return '–'; }
 		$u = get_userdata( $uid );
 		return $u ? (string) $u->display_name : ( 'user #' . $uid );
 	}
 
-	/** UTC 'Y-m-d H:i:s' → site-local (Pacific) stamp for the admin table. */
+	/** UTC 'Y-m-d H:i:s' → site-local stamp for the admin table. */
 	private static function local_stamp( string $sql_utc ): string {
 		if ( '' === $sql_utc ) { return ''; }
 		$ts = strtotime( $sql_utc . ' UTC' );
-		return $ts ? wp_date( 'M j, Y g:ia', $ts ) : $sql_utc;
+		if ( ! $ts ) {
+			return $sql_utc;
+		}
+		$df = trim( (string) get_option( 'date_format', '' ) );
+		$tf = trim( (string) get_option( 'time_format', '' ) );
+		return wp_date( ( '' !== $df ? $df : 'M j, Y' ) . ' ' . ( '' !== $tf ? $tf : 'g:ia' ), $ts );
 	}
 
 	/**
 	 * Recent audit rows for the manage_options admin viewer. Names resolved, event categorised,
-	 * time in Pacific. `cross_only` narrows to cross-user (admin_search, actor≠subject) — the
+	 * time in the site's zone. `cross_only` narrows to cross-user (admin_search, actor≠subject) — the
 	 * sensitive events. Content-free by construction (the log never holds mail).
 	 *
 	 * @return array { ok:bool, rows:array }

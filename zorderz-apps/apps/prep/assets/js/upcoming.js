@@ -68,7 +68,7 @@
 			'body{font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;margin:24px;color:#111}h1{font-size:20px;margin:0 0 4px}' +
 			'.m{color:#444;margin-bottom:12px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:6px;text-align:left;vertical-align:top}' +
 			'ol{padding-left:20px}.sig{margin-top:24px;display:flex;gap:32px}</style></head><body>' +
-			'<h1>' + esc((cfg().letterhead ? cfg().letterhead + ' — ' : '') + s.label) + '</h1>' +
+			'<h1>' + esc((cfg().letterhead ? cfg().letterhead + ' · ' : '') + s.label) + '</h1>' +
 			'<div class="m">' + esc(it.number ? 'Estimate #' + it.number : '') + (it.city ? ' · ' + esc(it.city) : '') +
 			(it.install_day ? ' · Install ' + esc(day(it.install_day)) : '') + (it.prep_by ? ' · Ready by ' + esc(day(it.prep_by)) : '') + '</div>' +
 			'<h2>What was sold</h2><table><thead><tr><th>Qty</th><th>Item</th><th>Details</th></tr></thead><tbody>' +

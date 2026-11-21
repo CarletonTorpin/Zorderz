@@ -104,7 +104,7 @@ class ZIM_REST {
 	 * sidebar also says "5", the user isn't left wondering which is stale.
 	 */
 	public static function get_unread_total( WP_REST_Request $req ) {
-		// Customer-facing hard-block (Trap 5). Same 404-not-403 behavior as
+		// Customer-facing hard-block (design rule 5). Same 404-not-403 behavior as
 		// the admin-ajax gates: never leak existence to a screen a customer
 		// might be watching.
 		if ( ! ZIM_Widget::should_render() ) {

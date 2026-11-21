@@ -3,9 +3,14 @@
  *
  * Mine first, then everything the person may see; each card with its install chip (the date the install-date
  * resolver prints, or "Unscheduled" / "Unknown" - never a raw date). Tapping a card opens the Project: where it
- * stands, its jobs, its people and its material orders, with only the buttons the server said this person may use
+ * stands, its jobs, its people, what its estimates say in words (their notes and what the salesperson wrote or said,
+ * whole) and its material orders, with only the buttons the server said this person may use
  * (it checks every action again). /?zprj=<id>[&at=orders] opens a Project straight away. The list refreshes when the
  * app comes back to the front, so an appointment moved in the Scheduler shows its new day on the chip.
+ *
+ * The row that starts an order shows straight away only where what was sold calls for a supplier's order (the server
+ * says: orders.sold_needs). On any other job the order panel is one line, "Order something for this job", and a press
+ * opens exactly what was there. Hidden, never removed; nothing the server checks depends on it.
  *
  * @package Zorderz\Jobs
  */
@@ -30,6 +35,12 @@
 			.catch(function () { return { success: false, data: { message: 'No connection. Try again.' } }; });
 	}
 
+	/* A word the server sent in the person's language (zjobProjects.words), else the plain English one. */
+	function word(key, plain) {
+		var w = cfg().words || {};
+		return typeof w[key] === 'string' && w[key] !== '' ? w[key] : plain;
+	}
+
 	function drawIcons() {
 		if (window.lucide && typeof window.lucide.createIcons === 'function') {
 			try { window.lucide.createIcons(); } catch (e) { /* non-fatal */ }
@@ -47,7 +58,7 @@
 	}
 
 	/* ---- list ------------------------------------------------------------ */
-	var state = { view: 'mine', rows: [], open: '' };
+	var state = { view: 'mine', rows: [], open: '', startOpen: '' };
 
 	function loadList(root, quiet) {
 		var list = root.querySelector('.zprj-list');
@@ -126,6 +137,8 @@
 		var p = d.project || {};
 		var det = root.querySelector('.zprj-detail');
 		var ro = !!cfg().readOnly;
+		// "Order something for this job" was pressed on one Project: another Project opens with the line again.
+		if (state.startOpen !== String(p.id)) { state.startOpen = ''; }
 		var html = backBtn() +
 			'<div class="zprj-head"><h3>' + esc(p.customer_name || p.customer_business || p.code) + '</h3>' +
 			(p.customer_address ? '<div class="zprj-addr">' + esc(p.customer_address) + '</div>' : '') +
@@ -152,6 +165,7 @@
 			}).join('') + '</div></section>';
 		}
 		if (d.home && d.home.billing) { html += billingHtml(d.home.billing); }
+		html += saidHtml(d.said);
 		html += ordersHtml(d.orders, ro, p.id);
 		det.innerHTML = html;
 		det._data = d;
@@ -161,6 +175,24 @@
 			sec._done = function (v) { det._data.orders = v; };
 		}
 		drawIcons();
+	}
+
+	/* ---- what the estimate says in words ----------------------------------------------------------------------
+	   Its notes, and what the salesperson wrote or said to make it: what whoever orders or installs the work reads
+	   first. Whole: the server sends up to 60,000 characters of each and, past that, ends with a sentence saying
+	   where the rest is. Amounts are left out on the server. Line breaks are kept (the stylesheet). */
+	function saidHtml(s) {
+		var list = (s && s.estimates) || [];
+		if (!list.length) { return ''; }
+		var more = parseInt(s.more, 10) || 0;
+		var many = list.length > 1 || more > 0;
+		return '<section class="zprj-sec zprj-said"><h4>' + esc(word('saidTitle', 'From the estimate')) + '</h4>' + list.map(function (e) {
+			return (many && e.estimate_num ? '<div class="zprj-meta">' + esc(word('estimate', 'Estimate')) + ' ' + esc(e.estimate_num) + '</div>' : '') +
+				(e.notes ? '<div class="zprj-said-part"><h5 class="zprj-said-h">' + esc(word('estimateNotes', 'Estimate notes')) + '</h5><p>' + esc(e.notes) + '</p></div>' : '') +
+				(e.said ? '<div class="zprj-said-part"><h5 class="zprj-said-h">' + esc(word('saidWords', 'What the salesperson wrote or said')) + '</h5><p>' + esc(e.said) + '</p></div>' : '');
+		}).join('') +
+			(more > 0 ? '<div class="zprj-meta">' + esc(word('moreEstimates', 'This project has more estimates. Their notes are on the estimates themselves.')) + '</div>' : '') +
+			'<div class="zprj-meta">' + esc(word('noAmounts', 'Amounts are left out here.')) + '</div></section>';
 	}
 
 	/* ---- material orders (a Project's, or the shop's own stock on the desk) ------------------------------------
@@ -228,9 +260,29 @@
 			'<button type="button" class="zprj-btn zprj-btn-ghost" data-act="ed-cancel" data-order="' + o.id + '">Cancel</button></div></div>';
 	}
 
+	/* ---- order forms only where there is something to order ------------------------------------------------------
+	   needsOrder(): what was sold calls for a supplier's order. The server decides (the kinds of work the business
+	   orders materials for, the one test My next's "order" step asks too); only an explicit false hides anything, so an
+	   older reply with no such field, a Project whose kinds are not known and the shop's own stock all show the start
+	   row as before.
+	   formsTucked(): the start row is behind the line - this person could start an order, the job does not call for one
+	   and nobody has pressed the line on this Project.
+	   ordersQuiet(): the WHOLE panel is that one line - there is no order on the job to show either. */
+	function needsOrder(v) { return !!v.stock || v.sold_needs !== false; }
+	function canStart(v, ro) { return !ro && !!v.can_start && (v.forms || []).length > 0; }
+	function formsTucked(v, ro, pid) { return canStart(v, ro) && !needsOrder(v) && state.startOpen !== String(pid); }
+	function ordersQuiet(v, ro, pid) { return formsTucked(v, ro, pid) && !(v.orders || []).length; }
+	function moreLine() {
+		return '<p class="zprj-ord-more"><button type="button" class="zprj-ord-morebtn" data-act="more" aria-expanded="false">' +
+			esc(word('orderMore', 'Order something for this job')) + '</button></p>';
+	}
+
 	function ordersHtml(v, ro, pid) {
 		if (!v) { return ''; }
-		var html = '<section class="zprj-sec zprj-orders" data-project="' + esc(pid) + '"><h4>' + (v.stock ? 'Shop stock orders' : 'Material orders') + '</h4>';
+		var quiet = ordersQuiet(v, ro, pid);
+		var html = '<section class="zprj-sec zprj-orders' + (quiet ? ' is-quiet' : '') + '" data-project="' + esc(pid) + '">';
+		if (quiet) { return html + moreLine() + '<div class="zprj-msg" aria-live="polite"></div></section>'; }
+		html += '<h4>' + (v.stock ? 'Shop stock orders' : 'Material orders') + '</h4>';
 		if (v.po) { html += '<div class="zprj-meta">This job\'s PO: <strong>' + esc(v.po) + '</strong></div>'; }
 		html += (v.orders || []).map(function (o) {
 			var rows = (o.body && o.body.units ? o.body.units : []).map(function (u) {
@@ -265,7 +317,9 @@
 				(o.diff_words ? '<div class="zprj-why">The two confirmations differ: ' + esc(o.diff_words) + '</div>' : '') +
 				why + (btns ? '<div class="zprj-actions">' + btns + '</div>' : '') + '</div>';
 		}).join('');
-		if (!ro && v.can_start && (v.forms || []).length) {
+		if (formsTucked(v, ro, pid)) {
+			html += moreLine(); // a job with nothing to order keeps the start row one press away
+		} else if (canStart(v, ro)) {
 			html += '<div class="zprj-start"><select class="zprj-form">' + v.forms.map(function (f) {
 				return '<option value="' + esc(f.key) + '">' + esc(f.label) + '</option>';
 			}).join('') + '</select>' + (v.stock ? '<input type="text" class="zprj-reason" maxlength="300" placeholder="Why the shop needs it">'
@@ -340,6 +394,15 @@
 		var id = el.getAttribute('data-order') || '';
 		var o = orderById(sec, id);
 		if (act === 'pdf') { makePdf(sec, el); return; }
+		if (act === 'more') {
+			// Show what this panel always showed, here, and put the keyboard on the start row. Nothing is asked of the
+			// server: starting an order is still the start row's own button.
+			state.startOpen = String(sec.getAttribute('data-project') || '');
+			var again = redrawOrders(sec, sec._v);
+			var first = again.querySelector('.zprj-start select, .zprj-start input, .zprj-start button');
+			if (first && typeof first.focus === 'function') { try { first.focus(); } catch (e) { /* not focusable here */ } }
+			return;
+		}
 		if (act === 'edit' && o) {
 			edits[id] = JSON.parse(JSON.stringify({ units: (o.body && o.body.units) || [], parts: (o.body && o.body.parts) || [], notes: (o.body && o.body.notes) || '', kind: (o.body && o.body.kind) || 'new' }));
 			redrawOrders(sec, sec._v);

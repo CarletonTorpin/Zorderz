@@ -4,7 +4,7 @@
  *
  * Everyone's place to see the work that is theirs: Mine first (what they made, are on, or were confirmed for), then
  * everything the Projects scope lets them see; each card with its install chip; an opened Project with where it stands,
- * its jobs, its people and its material orders. A link of the form /?zprj=<project id>[&at=next|orders] opens a
+ * its jobs, its people, its estimates' notes and its material orders. A link of the form /?zprj=<project id>[&at=next|orders] opens a
  * Project straight away. Never on the shared device.
  *
  * @package Zorderz\Jobs
@@ -24,7 +24,7 @@ class ZJOB_Projects_App implements \Zorderz\Widget_App_Interface {
 			'nm'          => __( 'Projects', 'zorderz' ),
 			'icon'        => 'folder-kanban',
 			'cat'         => 'Field',
-			'cc'          => '#3E6FD8',
+			'cc'          => '#009E73',
 			'desc'        => __( 'Every project you are part of: where it stands, when it is installed, who is on it, and its material orders.', 'zorderz' ),
 			'roles'       => (array) apply_filters( 'zjob_projects_roles', array( 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech' ) ),
 			'bridge_type' => 'inline_widget',
@@ -60,6 +60,15 @@ class ZJOB_Projects_App implements \Zorderz\Widget_App_Interface {
 				'phone'   => __( 'by phone', 'zorderz' ),
 				'email'   => __( 'by email', 'zorderz' ),
 				'form'    => __( 'on the order form', 'zorderz' ),
+			),
+			'words'       => array(
+				'orderMore'     => __( 'Order something for this job', 'zorderz' ),
+				'saidTitle'     => __( 'From the estimate', 'zorderz' ),
+				'estimate'      => __( 'Estimate', 'zorderz' ),
+				'estimateNotes' => __( 'Estimate notes', 'zorderz' ),
+				'saidWords'     => __( 'What the salesperson wrote or said', 'zorderz' ),
+				'moreEstimates' => __( 'This project has more estimates. Their notes are on the estimates themselves.', 'zorderz' ),
+				'noAmounts'     => __( 'Amounts are left out here.', 'zorderz' ),
 			),
 		) );
 		ob_start();

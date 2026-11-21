@@ -42,7 +42,7 @@
 	   via the Item Engine filter. */
 	function guessComponent(text) {
 		var t = (text || '').toLowerCase();
-		if (/repair|service|rescreen|re-screen|fix/.test(t)) { return 'service'; }
+		if (/repair|service|\bfix\b/.test(t)) { return 'service'; }
 		return 'other';
 	}
 

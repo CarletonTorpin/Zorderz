@@ -18,7 +18,7 @@
 }
 
 .zrcpt-lookup-title {
-	color: #1e4d6e;
+	color: var(--sys-brand, #5150D6);
 	font-size: 1.1rem;
 	font-weight: 700;
 	margin: 0 0 .4rem;
@@ -43,19 +43,19 @@
 }
 .zrcpt-lookup-row input[type=text]:focus {
 	outline: none;
-	border-color: #1e4d6e;
+	border-color: var(--sys-brand, #5150D6);
 }
 .zrcpt-lookup-row button {
 	padding: .55rem 1.2rem;
-	background: #1e4d6e;
-	color: #fff;
+	background: var(--sys-brand, #5150D6);
+	color: var(--sys-text-brand, #FFFFFF);
 	font-size: .9rem;
 	font-weight: 600;
 	border: none;
 	border-radius: 6px;
 	cursor: pointer;
 }
-.zrcpt-lookup-row button:hover { background: #163d58; }
+.zrcpt-lookup-row button:hover { background: var(--sys-brand-hover, #433FBD); }
 
 .zrcpt-lookup-status {
 	margin-top: .6rem;
@@ -79,7 +79,7 @@
 	margin: .8rem 0;
 	padding: .6rem .9rem;
 	background: #fff4e0;
-	border-left: 3px solid #d4881c;
+	border-left: 3px solid var(--sys-brand, #5150D6);
 	color: #5a3d0a;
 	font-size: .85rem;
 	border-radius: 4px;
@@ -104,10 +104,10 @@
 	align-items: center;
 	margin-bottom: .3rem;
 }
-.zrcpt-lookup-card-head strong { color: #1e4d6e; }
+.zrcpt-lookup-card-head strong { color: var(--sys-brand, #5150D6); }
 .zrcpt-lookup-badge {
-	background: #1e4d6e;
-	color: #fff;
+	background: var(--sys-brand, #5150D6);
+	color: var(--sys-text-brand, #FFFFFF);
 	font-size: .7rem;
 	padding: 2px 8px;
 	border-radius: 10px;
@@ -129,15 +129,15 @@
 .zrcpt-lookup-use {
 	display: inline-block;
 	padding: .4rem .9rem;
-	background: #1e4d6e;
-	color: #fff;
+	background: var(--sys-brand, #5150D6);
+	color: var(--sys-text-brand, #FFFFFF);
 	font-size: .85rem;
 	font-weight: 600;
 	border: none;
 	border-radius: 20px;
 	cursor: pointer;
 }
-.zrcpt-lookup-use:hover { background: #163d58; }
+.zrcpt-lookup-use:hover { background: var(--sys-brand-hover, #433FBD); }
 
 .zrcpt-lookup-confirmed {
 	display: none;
@@ -152,7 +152,7 @@
 .zrcpt-lookup-linkbtn {
 	background: none;
 	border: none;
-	color: #1e4d6e;
+	color: var(--sys-brand, #5150D6);
 	cursor: pointer;
 	text-decoration: underline;
 	margin-left: .5rem;

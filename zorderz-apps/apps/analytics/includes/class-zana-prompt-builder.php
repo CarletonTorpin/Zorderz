@@ -4,7 +4,8 @@
  *
  * The instructions are GENERATED at runtime from the Core services, each section built on its own and testable:
  *
- *   fixed (the same for everyone, every turn)      identity → voice → formatting
+ *   fixed (the same for everyone, every turn)      identity → voice → formatting → answer rules →
+ *                                                  records that do not answer
  *   level (the same for everyone at one level)     catalog → roster
  *   this person, this turn                         permissions → conventions → prices → app actions → rules
  *
@@ -29,7 +30,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ZANA_Prompt_Builder {
 
 	/** Bumped when the assembly changes; folded into cache keys downstream. */
-	const VERSION = '1.2.0';
+	const VERSION = '1.3.0';
 
 	/** The voice option a voice pack writes: { name: string, lines: string[] }. */
 	const VOICE_OPT = 'zana_voice';
@@ -50,6 +51,8 @@ class ZANA_Prompt_Builder {
 			self::identity_block(),
 			self::voice_block(),
 			self::formatting_block(),
+			class_exists( 'ZANA_Answer_Rules' ) ? ZANA_Answer_Rules::block() : '',   // documents that state facts; qualify and cite; audience and tone
+			class_exists( 'ZANA_Records' ) ? ZANA_Records::thin_records_rule() : '',   // when the records do not answer the question
 		) );
 		$level = self::join( array(
 			self::catalog_block(),
@@ -150,8 +153,9 @@ class ZANA_Prompt_Builder {
 
 	/** How an answer is written: the chat shows plain text and simple lists, not LaTeX. */
 	public static function formatting_block(): string {
+		$s = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$'; // the business's money sign
 		return "FORMATTING:\n"
-			. "- Write math as plain text a person would write: 12 × 4 = 48, $1,200 ÷ 30 = $40, a ≤ b. Never LaTeX, never \$…\$ or \\(…\\).\n"
+			. "- Write math as plain text a person would write: 12 × 4 = 48, " . $s . "1,200 ÷ 30 = " . $s . "40, a ≤ b. Never LaTeX, never \$…\$ or \\(…\\).\n"
 			. "- Lead with the answer to exactly what was asked, then the detail that supports it; no more than the question needs.\n"
 			. "- If a figure is not in the data you were given, say so plainly. Never invent one.";
 	}

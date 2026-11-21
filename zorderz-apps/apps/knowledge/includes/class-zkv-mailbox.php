@@ -337,7 +337,7 @@ class ZKV_Mailbox {
 			'$orderby' => 'receivedDateTime asc',
 			// toRecipients/ccRecipients (v1.4.1) let a consumer see the delivery
 			// address — needed for plus-addressed routing (e.g. the messaging
-			// plugin's app+dm-<token>@ DM-reply bridge).
+			// plugin's <mailbox>+dm-<token>@ DM-reply bridge).
 			'$select'  => 'id,subject,from,sender,toRecipients,ccRecipients,receivedDateTime,internetMessageId,hasAttachments,body',
 		) );
 		$r = self::request( 'GET', $path );
@@ -586,20 +586,20 @@ class ZKV_Mailbox {
 	/** Token + Inbox reachability check for the settings screen. */
 	public static function test_connection() {
 		if ( ! self::is_configured() ) {
-			return array( 'ok' => false, 'message' => 'Not configured — enter the mailbox address plus tenant ID, client ID and secret (or configure the Scheduler\'s Microsoft connection).' );
+			return array( 'ok' => false, 'message' => 'Not configured: enter the mailbox address plus tenant ID, client ID and secret (or configure the Scheduler\'s Microsoft connection).' );
 		}
 		$r = self::request( 'GET', '/mailFolders/inbox?' . http_build_query( array( '$select' => 'displayName,totalItemCount,unreadItemCount' ) ) );
 		if ( ! $r['ok'] ) {
 			$hint = '';
 			if ( in_array( $r['code'], array( 403, 404 ), true ) ) {
-				$hint = ' — check that the Azure app has the APPLICATION permission Mail.Read with admin consent, and that the mailbox address is right.';
+				$hint = '. Check that the Azure app has the APPLICATION permission Mail.Read with admin consent, and that the mailbox address is right.';
 			}
 			return array( 'ok' => false, 'message' => 'Connection failed: ' . $r['error'] . $hint );
 		}
 		$creds = self::effective_credentials();
 		return array(
 			'ok'      => true,
-			'message' => 'Connected to ' . self::get_config()['mailbox'] . ' — Inbox has '
+			'message' => 'Connected to ' . self::get_config()['mailbox'] . '. Inbox has '
 				. (int) ( $r['data']['unreadItemCount'] ?? 0 ) . ' unread of '
 				. (int) ( $r['data']['totalItemCount'] ?? 0 ) . ' messages'
 				. ( 'scheduler' === $creds['source'] ? ' (using the Scheduler\'s Microsoft credentials)' : '' ) . '.',

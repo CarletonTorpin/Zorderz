@@ -62,7 +62,7 @@ def clean_counts(counts):
             raise StoreError("bad invoice number")
         if isinstance(v, bool) or not isinstance(v, int) or not 0 < v <= MAX_COUNT:
             raise StoreError("bad count")
-        k = k.lstrip("0") or "0"          # "0015558" is invoice 15558
+        k = k.lstrip("0") or "0"          # "0001042" is invoice 1042
         out[k] = max(v, out.get(k, 0))
     return out
 

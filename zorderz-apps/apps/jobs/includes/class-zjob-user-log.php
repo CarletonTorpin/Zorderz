@@ -187,7 +187,7 @@ class ZJOB_User_Log {
 
 		echo '<div class="wrap">';
 		echo '<h1>Activity Log</h1>';
-		echo '<p>Who is actually using the app — engagement across apps (not security; the audit log covers accountability).</p>';
+		echo '<p>Who is actually using the app: engagement across apps (not security; the audit log covers accountability).</p>';
 
 		echo '<h2>Active users (last 30 days)</h2>';
 		echo '<table class="widefat striped"><thead><tr><th>User</th><th>Actions</th><th>Last active</th></tr></thead><tbody>';

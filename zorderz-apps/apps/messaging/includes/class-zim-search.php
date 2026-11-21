@@ -6,10 +6,10 @@
  * fallback for hosts where FULLTEXT isn't available (engines or builds that
  * reject the migration's ALTER TABLE).
  *
- * MEP SCOPE:
+ * SCOPE:
  *   - Per-conversation only. Cross-conversation search is explicitly in the
- *     "Not in this release" list — do not add it here without a v1.1 re-plan.
- *   - Soft-deleted messages are NEVER returned (Things NOT to do rule).
+ *     "Not in this release" list — do not add it here without a plan of its own.
+ *   - Soft-deleted messages are NEVER returned (a design rule).
  *
  * BOOLEAN-MODE HYGIENE:
  *   MATCH…AGAINST (… IN BOOLEAN MODE) honours operators (+ - > < ( ) ~ * ").
@@ -21,7 +21,7 @@
  * INDEX USE:
  *   Acceptance #15: EXPLAIN on a scroll query must show index use, not a
  *   full table scan. That query is covered by idx_conv_created. Search
- *   adds FULLTEXT on body. Both declared at table creation (Trap 8).
+ *   adds FULLTEXT on body. Both declared at table creation (design rule 8).
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

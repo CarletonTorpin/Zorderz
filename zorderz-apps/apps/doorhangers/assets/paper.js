@@ -461,7 +461,7 @@
 			}
 			if (lines.indexOf(s) < 0) { lines.push(s); }
 		});
-		Object.keys(runs).forEach(function (k) { var r = runs[k]; lines[r.at] = 'ZIP ' + r.from + ' had no match' + (r.n > 1 ? ' for ' + r.n + ' streets' : '') + ' — used ' + r.to + '.'; });
+		Object.keys(runs).forEach(function (k) { var r = runs[k]; lines[r.at] = 'ZIP ' + r.from + ' had no match' + (r.n > 1 ? ' for ' + r.n + ' streets' : '') + '; used ' + r.to + '.'; });
 		return lines.filter(Boolean);
 	}
 
@@ -471,13 +471,13 @@
 	function sheetFlags(s) {
 		var out = [];
 		if (s.status !== 'ready') { return out; }
-		if (!s.houses) { out.push({ level: 'block', text: 'No houses picked — tap Fix.' }); }
+		if (!s.houses) { out.push({ level: 'block', text: 'No houses picked. Tap Fix.' }); }
 		if (!s.date) { out.push({ level: 'block', text: 'When was it walked? Add the date.' }); }
-		if (s.alignFailed) { out.push({ level: 'check', text: 'Placed by the street names only (the picture could not be lined up: ' + s.alignFailed + ') — check the houses.' }); }
-		else if (!s.aligned && s.paper) { out.push({ level: 'check', text: 'Placed by the street names only — check the houses.' }); }
-		else if (s.loose) { out.push({ level: 'check', text: 'Lined up loosely' + (s.loose.rms != null ? ' (±' + Math.round(s.loose.rms) + ' m on ' + s.loose.used + ' intersections)' : '') + ' — check the houses.' }); }
+		if (s.alignFailed) { out.push({ level: 'check', text: 'Placed by the street names only (the picture could not be lined up: ' + s.alignFailed + '). Check the houses.' }); }
+		else if (!s.aligned && s.paper) { out.push({ level: 'check', text: 'Placed by the street names only. Check the houses.' }); }
+		else if (s.loose) { out.push({ level: 'check', text: 'Lined up loosely' + (s.loose.rms != null ? ' (±' + Math.round(s.loose.rms) + ' m on ' + s.loose.used + ' intersections)' : '') + '. Check the houses.' }); }
 		if (s.confidence === 'low') { out.push({ level: 'check', text: 'The reader was unsure about this sheet.' }); }
-		if (s.houses > 600) { out.push({ level: 'check', text: s.houses + ' houses is a lot for one sheet — check it.' }); }
+		if (s.houses > 600) { out.push({ level: 'check', text: s.houses + ' houses is a lot for one sheet. Check it.' }); }
 		if (s.zipNote) { out.push({ level: 'info', text: s.zipNote + '.' }); }
 		if (s.dateFromSheet) { out.push({ level: 'info', text: 'Date read off the sheet.' }); }
 		return out;

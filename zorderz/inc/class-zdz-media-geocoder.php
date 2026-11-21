@@ -26,7 +26,6 @@
  *     'resolved_at'  => '2026-05-29 20:41:00',  // provenance (UTC, mysql fmt)
  *   ]
  *
- * @since   2.21.0
  * @package Zorderz
  */
 

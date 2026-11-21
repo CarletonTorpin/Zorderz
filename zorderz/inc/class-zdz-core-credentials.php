@@ -1723,12 +1723,12 @@ class ZDZ_Core_Credentials {
 
 	/** Display form of a non-secret value: enough to recognise it, not the whole thing. */
 	private static function show_id( string $v ): string {
-		return '' === $v ? '—' : ( strlen( $v ) > 12 ? substr( $v, 0, 8 ) . '…' : substr( $v, 0, max( 1, (int) floor( strlen( $v ) / 2 ) ) ) . '…' );
+		return '' === $v ? '–' : ( strlen( $v ) > 12 ? substr( $v, 0, 8 ) . '…' : substr( $v, 0, max( 1, (int) floor( strlen( $v ) / 2 ) ) ) . '…' );
 	}
 
 	private static function mask_email( string $e ): string {
 		$at = strrpos( $e, '@' );
-		return '' === $e ? '—' : ( false === $at ? $e[0] . '…' : $e[0] . '…' . substr( $e, $at ) );
+		return '' === $e ? '–' : ( false === $at ? $e[0] . '…' : $e[0] . '…' . substr( $e, $at ) );
 	}
 
 	private static function when( int $ts ): string {
@@ -1856,7 +1856,7 @@ class ZDZ_Core_Credentials {
 				$stored  = self::db_get( $name );
 				$cp      = self::stored_plain( $stored, $meta );
 				$fmt     = '' === $cp ? '' : self::stored_format( $stored, $meta );
-				$lbl     = '<code>' . esc_html( $name . ( isset( $meta['field'] ) ? '[' . $meta['field'] . ']' : '' ) ) . '</code>' . ( '' !== $fmt ? ' (' . esc_html( $fmt ) . ')' : '' ) . ' — ' . esc_html( $meta[1] );
+				$lbl     = '<code>' . esc_html( $name . ( isset( $meta['field'] ) ? '[' . $meta['field'] . ']' : '' ) ) . '</code>' . ( '' !== $fmt ? ' (' . esc_html( $fmt ) . ')' : '' ) . ': ' . esc_html( $meta[1] );
 				$where[] = $lbl . ': ' . ( '' === $cp ? esc_html__( 'empty', 'zorderz' ) : ( $cp === $v ? esc_html__( 'same', 'zorderz' ) : '<strong>' . esc_html__( 'different', 'zorderz' ) . '</strong>' ) );
 			}
 			echo '<tr><td>' . esc_html( $fm[0] ) . '</td><td>' . $show . '</td><td>' . implode( '<br>', $where ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput -- every part escaped above
@@ -1965,7 +1965,7 @@ class ZDZ_Core_Credentials {
 			foreach ( $inv as $fp => $k ) {
 				$where = array();
 				foreach ( $k['rows'] as $name => $fmt ) {
-					$where[] = '<code>' . esc_html( $name ) . '</code> (' . esc_html( $fmt ) . ') — ' . esc_html( $copies[ $name ][1] ?? '' );
+					$where[] = '<code>' . esc_html( $name ) . '</code> (' . esc_html( $fmt ) . '): ' . esc_html( $copies[ $name ][1] ?? '' );
 				}
 				/* translators: %d: number of characters */
 				echo '<tr><td><strong>' . esc_html( $k['label'] ) . '</strong> <code>' . esc_html( $fp ) . '</code><br><small>' . esc_html( sprintf( __( '%d characters', 'zorderz' ), (int) $k['len'] ) )

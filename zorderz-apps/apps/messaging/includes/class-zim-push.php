@@ -7,7 +7,7 @@
  *
  * DESIGN:
  *   - Self-contained. We do NOT depend on the Minishlink/WebPush library or
- *     any other vendor (Trap 2 — no reusing the ecosystem's external API
+ *     any other vendor (design rule 2 — no reusing the ecosystem's external API
  *     clients). WordPress core + openssl is enough.
  *   - RFC 8291 aes128gcm encryption scheme — the modern Web Push format.
  *     All modern browsers (Chrome, Firefox, Safari, Edge) support it.
@@ -15,12 +15,12 @@
  *
  * KEYS:
  *   VAPID keypair is generated lazily (via rotate_keys_if_due) and stored
- *   in options as openssl PEM. We rotate every 90 days (Trap 6). Old
+ *   in options as openssl PEM. We rotate every 90 days (design rule 6). Old
  *   subscriptions invalidate gracefully: on 410 Gone from the push service,
  *   we delete the sub. User re-authorizes on next visit — new sub gets the
  *   new key. Rotations are transparent.
  *
- * LOGOUT (Trap 6 / acceptance #13), scoped to the device:
+ * LOGOUT (design rule 6), scoped to the device:
  *   clear_auth_cookie fires on logout. Each subscription records a hash of the
  *   WordPress session that made it (session_hash = sha256 of
  *   wp_get_session_token(), the same verifier WordPress keeps in usermeta), and
@@ -243,7 +243,7 @@ class ZIM_Push {
 	}
 
 	/**
-	 * Logout handler (Trap 6 / acceptance #13): removes the subscription(s) of the session signing out - this device -
+	 * Logout handler (design rule 6): removes the subscription(s) of the session signing out - this device -
 	 * and nothing else, never every device of the person. No session token, no session column, or no rows of that
 	 * session: nothing is deleted. Rows made before the session column existed (no hash) are left alone.
 	 */

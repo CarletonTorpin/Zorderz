@@ -4,12 +4,12 @@
  *
  * Turns a free-form CRM measurement note into structured cut records. The AI call goes
  * through the shared ZDZ_Core_Poe client, and the system prompt is ASSEMBLED AT RUNTIME
- * from the Item Engine vocabulary (the tenant's own piece "kinds"/aliases, scoped to the
- * configured queue subtype), the configured roll colours, and neutral measurement
- * conventions. No product taxonomy is hardcoded; an EMPTY catalog degrades to "emit a
- * short descriptive token" and the engine humanises it.
+ * from the Item Engine vocabulary (the business's own piece "kinds"/aliases, scoped to the
+ * configured queue subtype), the configured roll colours, and general measurement
+ * conventions. An EMPTY catalog means "emit a short descriptive token" and the engine
+ * humanises it.
  *
- * The output-framing sentinel is a neutral constant (replaces the legacy YABADABA token).
+ * The output-framing sentinel is one constant.
  *
  * @package Zorderz\Prep
  */
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ZPREP_Parser {
 
-	/** Neutral output sentinel (was the YABADABA marker). One constant, referenced twice. */
+	/** The output sentinel. One constant, referenced twice. */
 	const SENTINEL = 'ZDZ-BEGIN-JSON';
 
 	/** @var object|null Shared AI client (ZDZ_Core_Poe) or null when unavailable. */
@@ -165,7 +165,8 @@ class ZPREP_Parser {
 		$s .= "}\n\n";
 
 		$s .= "CRITICAL PRICING RULE:\n";
-		$s .= "Do NOT include any price, dollar amount, unit cost, or subtotal anywhere in your output. When copying source_line, strip every \"@ \$NN.NN\" and \"= \$NN.NN\" fragment. Pricing is unreliable and must never surface.\n\n";
+		$sg = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$'; // the business's money sign
+		$s .= "Do NOT include any price, money amount, unit cost, or subtotal anywhere in your output. When copying source_line, strip every \"@ " . $sg . "NN.NN\" and \"= " . $sg . "NN.NN\" fragment. Pricing is unreliable and must never surface.\n\n";
 
 		$s .= "PIECE KINDS:\n";
 		$s .= "*** Read the note text; do not guess from dimensions. *** The piece type name is written in the line, before the em-dash (—). Extract it literally.\n";
@@ -178,8 +179,10 @@ class ZPREP_Parser {
 		$s .= "SHAPE:\n";
 		$s .= "Use \"half_circle\" ONLY when the line explicitly says the piece is a half-round / half-dome / cut-in-half piece. Use \"circle\" for a round piece that is installed as-is (a pre-made round unit). Everything else is \"rectangle\".\n\n";
 
-		$s .= "SIDE DETECTION (a neutral site-orientation convention):\n";
-		$s .= "Side 1 is the front-entrance side; sides are numbered 1→2→3→4 going counter-clockwise. Extract the numeric side when clearly indicated; leave \"\" if ambiguous.\n\n";
+		// How the business numbers a building's sides: its own (Prep settings, or rules.yml prep.side_convention), else Core's.
+		$sides = ZPREP_Settings::side_convention();
+		$s    .= "SIDE DETECTION:\n";
+		$s    .= $sides . " Extract the numeric side when clearly indicated; leave \"\" if ambiguous.\n\n";
 
 		$s .= "COLOR RULES — read every line; do not default too eagerly:\n";
 		$s .= "The color is usually on the same line, but a section heading's color applies to the lines beneath it unless a line overrides it. Recognise the configured colors: " . implode( ', ', array_map( 'strval', $colors ) ) . ". Only when NO color cue appears on the line AND none is inherited → default to \"{$color_a}\". A job may mix colors; emit each entry with its own color.\n\n";

@@ -177,7 +177,7 @@ class ZCC_ZANA_Bridge {
 		$result['unclassified_lines']  = (int) ( $counted['unclassified_lines'] ?? 0 );
 		$result['unclassified_amount'] = round( (float) ( $counted['unclassified_amount'] ?? 0 ), 2 );
 		$result['success']             = true;
-		$tail = $result['unclassified_lines'] > 0 ? sprintf( ' (%d line(s) need manual review — not estimated)', $result['unclassified_lines'] ) : '';
+		$tail = $result['unclassified_lines'] > 0 ? sprintf( ' (%d line(s) need manual review, not estimated)', $result['unclassified_lines'] ) : '';
 		$result['message'] = sprintf( '%d unit(s) across %d job(s) in %s%s.', $result['units_total'], $result['job_count'], $window['label'], $tail );
 		return $result;
 	}
@@ -308,7 +308,7 @@ class ZCC_ZANA_Bridge {
 
 	private static function money( $n ): string {
 		$sign = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '$' ) : '$';
-		return $sign . number_format( (float) $n, 2 );
+		return $sign . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) $n, 2 ) : number_format( (float) $n, 2 ) );
 	}
 
 	/* ── Format specs the orchestrator/bot reads to learn the verbs ── */

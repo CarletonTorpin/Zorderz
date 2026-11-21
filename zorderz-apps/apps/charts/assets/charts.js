@@ -47,11 +47,17 @@
   var PAYMENT_LABEL = { paid: 'Paid invoices only', unpaid: 'Unpaid invoices only' };
   // a job's size is its whole invoice. job_min counts from (inclusive), job_max up to (not
   // including); a max a cent above a round amount ("at most $500") reads "$500 or less", as the hub says it.
-  var JOB_SIZES = [['min:1000', '$1,000 or more'], ['min:2500', '$2,500 or more'], ['min:5000', '$5,000 or more'],
-                   ['min:10000', '$10,000 or more'], ['max:500', 'Under $500'], ['max:1000', 'Under $1,000']];
+  // [ value, amount ]: "min:1000" reads "$1,000 or more" ("£1,000 or more"), "max:500" "Under $500"
+  var JOB_SIZES = [['min:1000', 1000], ['min:2500', 2500], ['min:5000', 5000], ['min:10000', 10000], ['max:500', 500], ['max:1000', 1000]];
+  function jobSizeText(o) { return o[0].indexOf('max:') === 0 ? 'Under ' + money0(o[1]) : money0(o[1]) + ' or more'; }
+  // Sums, numbers and the word for a postal code follow the business's Locale (the kit's helpers; US when it is absent).
+  function kitUi() { return (window.ZDZ && window.ZDZ.ui) || null; }
+  function lang() { var k = kitUi(); return k && k.locale ? k.locale() : 'en-US'; }
+  function postcodeWord() { var k = kitUi(); return k && k.postcodeLabel ? k.postcodeLabel() : 'ZIP'; }
   function money0(v) {
     v = Number(v);
-    return '$' + (Math.round(v) === v ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    var k = kitUi(), sign = k && k.sign ? k.sign() : '$';
+    return sign + (Math.round(v) === v ? v.toLocaleString(lang()) : v.toLocaleString(lang(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   }
   // "2024 vs 2025", for the chip and the chat's snapshot
   function compareLabel(spec) {
@@ -150,7 +156,7 @@
   }
 
   function fmt(v, measure, short) {
-    if (v === null || v === undefined) return '—';           // blank = unknown, never 0
+    if (v === null || v === undefined) return '–';           // blank = unknown, never 0
     var money = measure === 'revenue' || measure === 'avg_job';
     var n = Number(v);
     if (money) {
@@ -590,9 +596,12 @@
   // customer) the same layout is drawn from Charts' own copy, with personal details removed and a
   // note saying so. Text nodes only: nothing from an invoice is ever read as HTML.
   function cash2(v) {
-    return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Number(v).toLocaleString(lang(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+  // a document's date the business's way (the kit's ymd: "11/19/2026", "19/11/2026"); month first without the kit
   function usDate(d) {
+    var k = kitUi();
+    if (k && k.ymd) { return k.ymd(d); }
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
     return m ? m[2] + '/' + m[3] + '/' + m[1] : String(d || '');
   }
@@ -840,7 +849,7 @@
     var facts = el('div', { class: 'zch-card-facts' });
     if (card.town) facts.appendChild(el('span', null, ['Town ', tap(card.town, 'Questions about ' + card.town, P.area)]));
     if (card.salesperson) facts.appendChild(el('span', null, ['Rep ', tap(card.salesperson, 'Questions about ' + card.salesperson, P.rep)]));
-    var srcText = card.partner ? (card.lead_source || 'Referral') + ' — ' + card.partner : (card.lead_source || '');
+    var srcText = card.partner ? (card.lead_source || 'Referral') + ': ' + card.partner : (card.lead_source || '');
     if (srcText) facts.appendChild(el('span', null, ['Source ', tap(srcText, 'Questions about ' + srcText, P.source)]));
     if (card.original_source && card.original_source !== card.lead_source) {
       facts.appendChild(el('span', { class: 'zch-muted', text: 'First found us: ' + card.original_source }));
@@ -1000,7 +1009,7 @@
           shape, true, canList ? function (seg) { jobs(seg, seg + (where ? ', ' + where : ''), spec); } : null, { noLegend: true });
         if (i === 0 && info.thin && info.thin.text) {
           chartBox.appendChild(el('p', { class: 'zch-drill-thin', text: String(info.thin.text) +
-            (info.bars.some(function (b) { return b && b.kind === 'widened'; }) ? ' — a wider window is shown below.' : '.') }));
+            (info.bars.some(function (b) { return b && b.kind === 'widened'; }) ? '; a wider window is shown below.' : '.') }));
         }
       });
       hint.textContent = leaf ? 'Tap a ' + word + ' in any bar to see its jobs for that bar’s dates.' : '';
@@ -1048,7 +1057,7 @@
         // ignores `period` and answers for the whole chart: say so, never
         // let it pass for the tapped bar.
         var where = info.title ? (info.period_label || info.range_label || '') : '';
-        header(info.title || (group + ' — by ' + word + (period ? ' (all dates in this chart)' : '')));
+        header(info.title || (group + ' by ' + word + (period ? ' (all dates in this chart)' : '')));
         var leaf = info.jobs && !!child;
         draw(chartBox, d.result, Object.assign({}, d.spec || {}, { labels: 'value_percent' }), 'percent_bar', false,
           leaf ? function (seg) { jobs(seg, seg + (where ? ', ' + where : '')); } : null);
@@ -1542,7 +1551,7 @@
         : kind.value === 'payment' ? ['paid', 'unpaid'] : (placeFilter(kind.value) ? placeValues(kind.value) : (v[kind.value] || []));
       valueSel.appendChild(el('option', { value: '', text: 'Choose…' }));
       if (kind.value === 'job_size') {
-        JOB_SIZES.forEach(function (o) { valueSel.appendChild(el('option', { value: o[0], text: o[1] })); });
+        JOB_SIZES.forEach(function (o) { valueSel.appendChild(el('option', { value: o[0], text: jobSizeText(o) })); });
         valueSel.hidden = false;
         return;
       }
@@ -2436,7 +2445,7 @@
   function wxNum(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
   function wxFmt(v, w) {
     v = wxNum(v);
-    if (v === null) return '\u2014';
+    if (v === null) return '\u2013';
     if (w.unit === 'in') return v.toFixed(2) + ' in';
     if (w.unit === 'days') return (Math.round(v * 10) / 10).toLocaleString() + (v === 1 ? ' day' : ' days');
     return Math.round(v) + '\u00b0F';
@@ -2597,7 +2606,7 @@
   function zfOk(res) { var z = res && res.zipfacts; return !!(z && z.status === 'ok'); }
   function zfDots(res) { return zfOk(res) && res.zipfacts.view === 'dots' && (res.zipfacts.dots || []).length >= 3; }
   function zfFmt(v, unit, short) {
-    if (typeof v !== 'number' || !isFinite(v)) return '\u2014';
+    if (typeof v !== 'number' || !isFinite(v)) return '\u2013';
     if (unit === 'money') return short && Math.abs(v) >= 10000 ? '$' + Math.round(v / 1000).toLocaleString() + 'k' : '$' + Math.round(v).toLocaleString();
     if (unit === 'pct') return (Math.abs(v) >= 10 || v === 0 ? Math.round(v) : Math.round(v * 10) / 10) + '%';
     if (unit === 'year') return String(Math.round(v));
@@ -3121,7 +3130,7 @@
                 if (item.dataset._weather) return wx.label + (item.dataset._wxGroup ? ' \u00b7 ' + item.dataset._wxGroup : '') + ': ' + wxFmt(item.raw, wx);
                 var info = item.dataset._info && item.dataset._info[item.dataIndex];
                 var name = byGroup ? catLabels[item.dataIndex] : item.dataset.label;
-                if (!info) return name + ': —';
+                if (!info) return name + ': –';
                 var r = byGroup ? cell[periods[0] + '\u0000' + name] : cell[periods[item.dataIndex] + '\u0000' + name];
                 var extra = r && measure !== 'jobs' ? ' · ' + jobsText(r[3]) : '';
                 var share = info.p !== null && info.p !== undefined && !byGroup ? ' (' + pctText(info.p) + ')' : '';
@@ -3343,7 +3352,7 @@
     var missing = el('p', { class: 'zch-notes zch-map-missing' });
     box.appendChild(el('div', { class: 'zch-map-wrap' }, [bar, tools, mapEl, legend, key, missing]));
     var byZip = !!(res.zips && Object.keys(res.zips).length);
-    var AREA = res.area_word || 'ZIP', AREA_A = (/^[aeiouAEIOU]/.test(AREA) ? 'an ' : 'a ') + AREA;
+    var AREA = res.area_word || postcodeWord(), AREA_A = (/^[aeiouAEIOU]/.test(AREA) ? 'an ' : 'a ') + AREA;
     // what darker means can be picked
     // (the measure, jobs, or the average job), and one scale is kept for every period, so a ZIP darker
     // in 2013 than in 2026 really had more, and Play compares like with like. "All" has its own scale.
@@ -3960,7 +3969,7 @@
    *  the last row is the rated ZIPs together (the hub's numbers). */
   function rateTable(res, measure) {
     var rt = res.zipfacts.rate, raw = rt.raw || {};
-    var head = el('tr', null, [el('th', { text: 'ZIP' }), el('th', { text: (MEASURE_LABEL[measure] || measure) + ' per ' + rt.words }),
+    var head = el('tr', null, [el('th', { text: postcodeWord() }), el('th', { text: (MEASURE_LABEL[measure] || measure) + ' per ' + rt.words }),
       el('th', { text: MEASURE_LABEL[measure] || measure }), el('th', { text: 'Jobs' })]);
     var body = el('tbody'), sum = 0;
     (res.group_totals || []).forEach(function (t) {

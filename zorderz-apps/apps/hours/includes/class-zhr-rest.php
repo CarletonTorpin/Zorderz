@@ -1172,7 +1172,7 @@ class ZHR_REST {
 				}
 			}
 		}
-		$day = ( new DateTimeImmutable( $p['date'] . ' 12:00:00', ZHR_Time::tz() ) )->format( 'D M j' );
+		$day = ( new DateTimeImmutable( $p['date'] . ' 12:00:00', ZHR_Time::tz() ) )->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D M j' ) : 'D M j' ) );
 		$at  = ZHR_Time::time_words( (int) ZHR_Time::ts( $p['date'] . ' ' . $p['end'] . ':00' ) );
 		if ( ! $hit ) {
 			/* translators: 1: a time, 2: a day */

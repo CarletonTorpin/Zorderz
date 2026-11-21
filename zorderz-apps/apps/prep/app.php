@@ -4,12 +4,12 @@
  * Description: Mobile-first fabrication PREP tool for the Zorderz dashboard. Pulls a job
  *   from the configured CRM (or billing provider), parses its measurement notes with the
  *   Core AI service, and produces a colour-accurate SVG nesting layout with printable cut
- *   sheets for the tenant's roll stock. The "cut queue" is generic prep work: the product
+ *   sheets for the business's roll stock. The "cut queue" is generic prep work: the product
  *   line it filters on is a configurable QUEUE TAG bound to an admin-chosen Item Engine
- *   subtype/tag — nothing is hardcoded to one trade. What counts as a cut piece, the piece
- *   vocabulary, default sizes and the roll/material model all come from the Item Engine and
- *   tenant configuration; supplier costs SHIP EMPTY.
- * Version:     2.6.0
+ *   subtype/tag. What counts as a cut piece, the piece vocabulary, default sizes and the
+ *   roll/material model all come from the Item Engine and the business's settings; supplier
+ *   costs SHIP EMPTY.
+ * Version:     2.7.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -53,7 +53,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZPREP_VERSION', '2.6.0' );
+define( 'ZPREP_VERSION', '2.7.0' );
 define( 'ZPREP_FILE', __FILE__ );
 define( 'ZPREP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZPREP_URL', plugin_dir_url( __FILE__ ) );
@@ -169,6 +169,7 @@ require_once ZPREP_DIR . 'includes/class-zprep-assignments.php';
 require_once ZPREP_DIR . 'includes/class-zprep-remakes.php';
 require_once ZPREP_DIR . 'includes/class-zprep-plan-preview.php';
 require_once ZPREP_DIR . 'includes/class-zprep-queue-counts.php';
+require_once ZPREP_DIR . 'includes/class-zprep-internal-report.php';
 
 /**
  * The job tables (cut state, assignments, remakes). Created on activation and again whenever
@@ -193,6 +194,10 @@ function zprep_activate() {
 		add_option( 'zprep_settings', ZPREP_Settings::defaults() );
 	}
 	$migrate = ZPREP_DIR . 'db/migrate-2.3.0.php';
+	if ( file_exists( $migrate ) ) {
+		require_once $migrate;
+	}
+	$migrate = ZPREP_DIR . 'db/migrate-internal-orders.php';
 	if ( file_exists( $migrate ) ) {
 		require_once $migrate;
 	}
@@ -232,6 +237,8 @@ add_action(
 		if ( get_option( 'zprep_jobs_schema_version' ) !== ZPREP_VERSION ) {
 			zprep_migrate_job_tables();
 		}
+		// The remakes table gains the columns an internal order keeps, on the first request after an update.
+		ZPREP_Remakes::maybe_upgrade();
 
 		ZPREP_Dashboard::init();
 		ZPREP_Assignments::register_hooks();     // Prep access for a person holding a job assignment
@@ -240,6 +247,7 @@ add_action(
 
 		if ( is_admin() ) {
 			ZPREP_Admin::init();
+			ZPREP_Internal_Report::init(); // Prep → Internal orders: the year-end page and its spreadsheet
 		}
 
 		if ( ! wp_next_scheduled( ZPREP_Leftovers::CRON_HOOK ) ) {

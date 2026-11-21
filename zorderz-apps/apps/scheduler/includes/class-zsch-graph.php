@@ -734,17 +734,43 @@ class ZSCH_Graph {
 	}
 
 	/**
-	 * Graph sometimes returns Windows time-zone names ("Pacific Standard
-	 * Time"). We requested UTC, so the common case is fine; map the few we
-	 * might still see, else fall back to UTC.
+	 * Graph sometimes returns Windows time-zone names ("GMT Standard Time").
+	 * We requested UTC, so the common case is fine; a Windows name is turned
+	 * into its IANA zone (intl's own table, else the common ones below), else
+	 * fall back to UTC.
 	 */
 	private static function normalise_tz( $tz ) {
+		$tz = (string) $tz;
+		if ( 'UTC' !== $tz && class_exists( 'IntlTimeZone' ) && method_exists( 'IntlTimeZone', 'getIDForWindowsID' ) ) {
+			$id = IntlTimeZone::getIDForWindowsID( $tz );
+			if ( is_string( $id ) && '' !== $id ) {
+				return $id;
+			}
+		}
 		$map = array(
-			'UTC'                   => 'UTC',
-			'Pacific Standard Time' => 'America/Los_Angeles',
-			'Mountain Standard Time'=> 'America/Denver',
-			'Central Standard Time' => 'America/Chicago',
-			'Eastern Standard Time' => 'America/New_York',
+			'UTC'                            => 'UTC',
+			'Pacific Standard Time'          => 'America/Los_Angeles',
+			'Mountain Standard Time'         => 'America/Denver',
+			'US Mountain Standard Time'      => 'America/Phoenix',
+			'Central Standard Time'          => 'America/Chicago',
+			'Eastern Standard Time'          => 'America/New_York',
+			'Atlantic Standard Time'         => 'America/Halifax',
+			'Newfoundland Standard Time'     => 'America/St_Johns',
+			'Alaskan Standard Time'          => 'America/Anchorage',
+			'Hawaiian Standard Time'         => 'Pacific/Honolulu',
+			'GMT Standard Time'              => 'Europe/London',
+			'W. Europe Standard Time'        => 'Europe/Berlin',
+			'Romance Standard Time'          => 'Europe/Paris',
+			'Central Europe Standard Time'   => 'Europe/Budapest',
+			'E. Europe Standard Time'        => 'Europe/Chisinau',
+			'South Africa Standard Time'     => 'Africa/Johannesburg',
+			'India Standard Time'            => 'Asia/Kolkata',
+			'Singapore Standard Time'        => 'Asia/Singapore',
+			'Tokyo Standard Time'            => 'Asia/Tokyo',
+			'AUS Eastern Standard Time'      => 'Australia/Sydney',
+			'E. Australia Standard Time'     => 'Australia/Brisbane',
+			'W. Australia Standard Time'     => 'Australia/Perth',
+			'New Zealand Standard Time'      => 'Pacific/Auckland',
 		);
 		if ( isset( $map[ $tz ] ) ) {
 			return $map[ $tz ];

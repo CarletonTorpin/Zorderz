@@ -125,7 +125,7 @@ class ZSCH_Health {
 		if ( $tbl !== $srv ) {
 			return array(
 				'level' => 'warn',
-				'text'  => $tbl . ' row format on a ' . $srv . ' server — this table has drifted from the '
+				'text'  => $tbl . ' row format on a ' . $srv . ' server: this table has drifted from the '
 					. 'default and will not behave like a freshly created one. Per-column index limit '
 					. $limit . ' bytes.',
 			);
@@ -135,7 +135,7 @@ class ZSCH_Health {
 		return array(
 			'level' => 'ok',
 			'text'  => $tbl . ' row format: 3072 bytes for one indexed column and 3072 for a whole '
-				. 'multi-column key — the two limits coincide here, so index width is not a constraint.',
+				. 'multi-column key: the two limits coincide here, so index width is not a constraint.',
 		);
 	}
 
@@ -187,7 +187,7 @@ class ZSCH_Health {
 					'OVERDUE. It was due %s and has not run. %s',
 					self::human_delta( $delta ),
 					$cron_disabled
-						? 'WP-Cron is disabled here, so a real system cron must be calling wp-cron.php — check that it still is.'
+						? 'WP-Cron is disabled here, so a real system cron must be calling wp-cron.php. Check that it still is.'
 						: 'WP-Cron only fires on a page load, so a site with no traffic simply stalls. A real system cron plus DISABLE_WP_CRON fixes that for good.'
 				),
 			);
@@ -195,7 +195,7 @@ class ZSCH_Health {
 		if ( $delta < 0 ) {
 			return array(
 				'level' => 'warn',
-				'text'  => sprintf( 'Due %s — inside the grace window, waiting on the next page load.', self::human_delta( $delta ) ),
+				'text'  => sprintf( 'Due %s, inside the grace window, waiting on the next page load.', self::human_delta( $delta ) ),
 			);
 		}
 		return array(
@@ -225,7 +225,7 @@ class ZSCH_Health {
 			return array(
 				'level' => 'warn',
 				'text'  => sprintf(
-					'The code is %s but the schema is recorded at %s. The migration runs on the next page load — reload once and re-check.',
+					'The code is %s but the schema is recorded at %s. The migration runs on the next page load; reload once and re-check.',
 					$running, $db
 				),
 			);
@@ -283,7 +283,7 @@ class ZSCH_Health {
 			 * nothing else in the system would ever notice. */
 			return array(
 				'level' => 'bad',
-				'text'  => 'The zone database no longer resolves DST the way the recurrence engine assumes. Recurring appointments across a transition cannot be trusted until this is understood — see the checks below.',
+				'text'  => 'The zone database no longer resolves DST the way the recurrence engine assumes. Recurring appointments across a transition cannot be trusted until this is understood. See the checks below.',
 			);
 		}
 
@@ -305,7 +305,7 @@ class ZSCH_Health {
 			return array(
 				'level' => 'warn',
 				'text'  => sprintf(
-					'The zone rules changed underneath this install (%s → %s). The DST checks below still pass, so nothing is known to be wrong — but a recurring appointment booked before the change may now fall at a different instant, and recurring appointments that cross a clock change are worth checking.',
+					'The zone rules changed underneath this install (%s → %s). The DST checks below still pass, so nothing is known to be wrong, but a recurring appointment booked before the change may now fall at a different instant, and recurring appointments that cross a clock change are worth checking.',
 					$recorded, $fingerprint
 				),
 			);
@@ -326,7 +326,7 @@ class ZSCH_Health {
 				return array(
 					'level' => 'ok',
 					'text'  => sprintf(
-						'The pinned zone database (%s) is no longer present — PHP is back on the operating system\'s copy, so there is no version left to compare. Nothing this install depends on moved: the fingerprint is unchanged at %s and DST still resolves the way the engine expects.',
+						'The pinned zone database (%s) is no longer present: PHP is back on the operating system\'s copy, so there is no version left to compare. Nothing this install depends on moved: the fingerprint is unchanged at %s and DST still resolves the way the engine expects.',
 						$was, $fingerprint
 					),
 				);
@@ -335,7 +335,7 @@ class ZSCH_Health {
 				return array(
 					'level' => 'ok',
 					'text'  => sprintf(
-						'The zone database is now pinned at %s (it was the operating system\'s copy before, which carried no version). Nothing this install depends on moved — the fingerprint is unchanged at %s.',
+						'The zone database is now pinned at %s (it was the operating system\'s copy before, which carried no version). Nothing this install depends on moved: the fingerprint is unchanged at %s.',
 						$version, $fingerprint
 					),
 				);
@@ -343,7 +343,7 @@ class ZSCH_Health {
 			return array(
 				'level' => 'ok',
 				'text'  => sprintf(
-					'The zone database was updated (%s → %s) and none of the rules this install depends on moved — the fingerprint is unchanged at %s, and DST still resolves the way the engine expects.',
+					'The zone database was updated (%s → %s) and none of the rules this install depends on moved: the fingerprint is unchanged at %s, and DST still resolves the way the engine expects.',
 					$was, $version, $fingerprint
 				),
 			);
@@ -355,7 +355,7 @@ class ZSCH_Health {
 				'Zone rules unchanged (%s) and DST resolves the way the engine expects.%s',
 				$fingerprint,
 				( '0.system' === $version )
-					? ' The database is the operating system\'s, so it carries no version of its own — the fingerprint is what is being watched.'
+					? ' The database is the operating system\'s, so it carries no version of its own; the fingerprint is what is being watched.'
 					: ''
 			),
 		);
@@ -394,7 +394,7 @@ class ZSCH_Health {
 			return array(
 				'level' => 'warn',
 				'text'  => sprintf(
-					'%s %d appointment(s) carry no duration. These were LEFT ALONE deliberately — '
+					'%s %d appointment(s) carry no duration. These were LEFT ALONE deliberately: '
 					. 'an exact duration did not reproduce the end instant already stored on the row, and filling '
 					. 'one anyway would have moved somebody\'s appointment. This is the safety gate working, not a fault.',
 					$done ? 'Complete, but' : 'Nothing left to process, but',
@@ -707,7 +707,7 @@ class ZSCH_Health {
 
 			self::row( 'Five-minute tick', $h['cron'],
 				$h['cron_disabled']
-					? 'WP-Cron is <strong>disabled</strong> in wp-config &mdash; a system cron is expected to call <code>wp-cron.php</code>.'
+					? 'WP-Cron is <strong>disabled</strong> in wp-config: a system cron is expected to call <code>wp-cron.php</code>.'
 					: 'WP-Cron is enabled, so ticks fire on page loads and inherit the host&rsquo;s ~60s request wall.' );
 
 			self::row( 'Schema columns', $h['schema'] );
@@ -725,7 +725,7 @@ class ZSCH_Health {
 					'Server <code>' . esc_html( (string) $h['db_server'] ) . '</code>, default row format '
 					. '<code>' . esc_html( (string) $h['db_row_format_default'] ) . '</code>. '
 					. 'The 767-byte figure quoted in the migrations is a limit on ONE indexed column, '
-					. 'not on a whole index &mdash; a multi-column key may total 3072 bytes whatever the '
+					. 'not on a whole index: a multi-column key may total 3072 bytes whatever the '
 					. 'row format.' );
 			}
 
@@ -755,7 +755,7 @@ class ZSCH_Health {
 					 * and a row that merges them answers neither. */
 					$tz_detail .= '<div style="margin-top:6px;color:#9a3412">Appointments exist in '
 						. esc_html( implode( ', ', $h['tz_undeclared'] ) )
-						. ' &mdash; not in the declared list, so changes to those rules are not being watched. '
+						. ', not in the declared list, so changes to those rules are not being watched. '
 						. 'Add them via the <code>zsch_tzdata_zones</code> filter.</div>';
 				}
 				self::row( 'Zone database', $h['tz'], $tz_detail );
@@ -769,7 +769,7 @@ class ZSCH_Health {
 				) ) );
 			} else {
 				self::row( 'Duration backfill',
-					array( 'level' => 'warn', 'text' => 'Not available — the backfill class or the appointments table is not loaded.' ) );
+					array( 'level' => 'warn', 'text' => 'Not available: the backfill class or the appointments table is not loaded.' ) );
 			}
 			?>
 		</table>
@@ -802,7 +802,7 @@ class ZSCH_Health {
 				(int) $v['checked'], (int) $v['ok'], (int) $bad,
 				$bad
 					? ' Appointment id(s): <code>' . esc_html( implode( ', ', array_map( 'intval', (array) $v['bad_ids'] ) ) ) . '</code>'
-						. ' — each of these has a duration that no longer derives its stored end. Nothing has moved; the disagreement is the warning.'
+						. ': each of these has a duration that no longer derives its stored end. Nothing has moved; the disagreement is the warning.'
 					: ' Every stored duration reproduces the end instant on its row.'
 			);
 		}

@@ -12,7 +12,7 @@
  * Dependencies (lazy-loaded from CDN):
  * - jsPDF (multi-page PDF generation)
  *
- * @package TSKnowledgeVault
+ * @package Zorderz
  * @since   1.2.0
  */
 (function () {
@@ -558,7 +558,7 @@
 				closeScanner(blob);
 			}).catch(function (err) {
 				console.error('ZKV Scanner PDF error:', err);
-				alert('PDF generation failed: ' + err.message + '\n\nTry again — the library may still be loading.');
+				alert('PDF generation failed: ' + err.message + '\n\nTry again; the library may still be loading.');
 				btn.disabled = false;
 				btn.textContent = 'Create PDF';
 			});

@@ -100,7 +100,7 @@ class ZSM_Code {
 			'installed_version' => '',
 			'fixed_version'     => '',
 			'cve'               => '',
-			'title'             => trim( $msg ) . ' — ' . $path . ( $line ? ':' . $line : '' ) . ' [' . $rule . ']',
+			'title'             => trim( $msg ) . ' in ' . $path . ( $line ? ':' . $line : '' ) . ' [' . $rule . ']',
 			'severity'          => $sev,
 			'cvss_score'        => null,
 			'context_note'      => __( 'Code finding from an imported review report, not from any public feed.', 'zorderz' ),

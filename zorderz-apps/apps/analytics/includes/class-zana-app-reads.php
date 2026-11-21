@@ -593,7 +593,7 @@ class ZANA_App_Reads {
 	/**
 	 * The forms a word may take (conservative, so "Sam" is not "same" and "trail" is not "trailer"): the word,
 	 * its singular ("doors", "stories", "spaces"), and the base of an -ing / -ation / -ized form ("installing",
-	 * "installation", "estimating" -> estimate, "cutting" -> cut, "motorized" -> motor). Anything else is Team Roles' to vouch for.
+	 * "installation", "estimating" -> estimate, "cutting" -> cut, "winterized" -> winter). Anything else is Team Roles' to vouch for.
 	 */
 	public static function forms( $w ) {
 		$w = strtolower( (string) $w );

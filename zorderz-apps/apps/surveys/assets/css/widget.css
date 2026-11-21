@@ -10,7 +10,7 @@
 	display: flex; flex-direction: column; align-items: center; justify-content: center;
 	padding: 10px 6px; border-radius: 10px;
 	background: var(--sys-surface-raised, #f4f6f9);
-	color: var(--sys-on-surface, #1a1a1a);
+	color: var(--sys-text, #1a1a1a);
 }
 .zsv-stat-val { font-size: 20px; font-weight: 700; line-height: 1.1; }
 .zsv-stat-label { font-size: 11px; opacity: 0.7; margin-top: 2px; text-align: center; }
@@ -20,8 +20,9 @@
 	appearance: none; border: 0; cursor: pointer; border-radius: 8px;
 	padding: 10px 14px; font-size: 14px; font-weight: 600; min-height: 44px;
 }
-.zsv-btn-primary { background: var(--sys-primary, #2C5F8A); color: var(--sys-on-primary, #fff); }
-.zsv-btn-secondary { background: var(--sys-surface-variant, #e7ebf0); color: var(--sys-on-surface, #1a1a1a); }
+.zsv-btn-primary { background: var(--sys-brand, #5150D6); color: var(--sys-text-inv, #fff); }
+.zsv-btn-secondary { background: var(--sys-bg-alt, #e7ebf0); color: var(--sys-text, #1a1a1a); border: 1px solid var(--sys-border, transparent); }
+.zsv-btn-sm { min-height: 36px; padding: 6px 10px; font-size: 13px; }
 .zsv-btn[disabled] { opacity: 0.6; cursor: default; }
 
 .zsv-w-list { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; }
@@ -35,7 +36,7 @@
 
 .zsv-chip {
 	font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
-	background: var(--sys-surface-variant, #e7ebf0); color: var(--sys-on-surface, #1a1a1a);
+	background: var(--sys-bg-alt, #e7ebf0); color: var(--sys-text, #1a1a1a);
 	text-transform: capitalize; white-space: nowrap;
 }
 .zsv-chip-satisfied { background: #d7f5e3; color: #0b6b3a; }
@@ -44,12 +45,41 @@
 .zsv-chip-left_vm { background: #fde0e0; color: #8a1f1f; }
 .zsv-chip-excluded { background: #e7e7e7; color: #555; }
 
+/* "Check reviews" beside the sync button, for the people the site lets run it (the markup adds
+   .zsv-w-actions-trio and wraps the two in .zsv-w-actions-pair only for them). The row follows its OWN
+   width, not the screen's: the same widget is drawn as an app's page, as a narrower card on the home
+   screen and beside a sidebar, and the theme sets the type in this widget from the page's base size, so
+   no screen-width rule can know how much room a label has. Instead:
+     - the row wraps: "Run batch" and the pair share one line where all three labels fit on a line each
+       (6.6em + 20.6em of the base size), otherwise "Run batch" keeps its own line and the pair the next;
+     - the pair is a size container: when it is too narrow for its two labels it tightens their padding,
+       then sets their type at 85%. Both steps are in em of the base size, so a larger text setting moves
+       them with it. Measured: the two labels need 20.4em at rest, 19.2em with the tighter padding and
+       15.9em at 85%; each step sits just above the need it answers. Narrower still, a label takes two
+       lines inside its own button. It is never cut off. */
+.zsv-w-actions.zsv-w-actions-trio > #zsv-run-batch { flex: 1 1 6.6em; }
+.zsv-w-actions-trio > .zsv-w-actions-pair {
+	flex: 2 1 20.6em; display: flex; gap: inherit; min-width: 0;
+	container-type: inline-size;
+}
+.zsv-w-actions-pair > .zsv-btn { flex: 1 1 auto; min-width: 0; }
+@container (max-width: 20.6em) {
+	.zsv-w-actions-pair > .zsv-btn { padding-left: 8px; padding-right: 8px; }
+}
+@container (max-width: 19.4em) {
+	.zsv-w-actions-pair > .zsv-btn { font-size: 0.85em; padding-left: 4px; padding-right: 4px; }
+}
+
+/* The last review check's result, under the buttons that started it, until the next check. */
+.zsv-review-status { font-size: 13px; line-height: 1.35; color: var(--sys-text, #1a1a1a); }
+.zsv-more .zsv-review-status { margin-top: 6px; }
+
 /* The progress slot sits right under the main buttons; it reserves one line on a wide card so the
    layout does not jump when a message appears, two on a narrow one. */
-.zsv-progress { min-height: 2.6em; font-size: 13px; line-height: 1.3; color: var(--sys-on-surface, #1a1a1a); }
+.zsv-progress { min-height: 2.6em; font-size: 13px; line-height: 1.3; color: var(--sys-text, #1a1a1a); }
 @media (min-width: 640px) { .zsv-progress { min-height: 1.3em; } }
 .zsv-send { align-self: flex-start; }
-.zsv-more summary { cursor: pointer; font-size: 13px; padding: 6px 0; color: var(--sys-on-surface, #1a1a1a); }
+.zsv-more summary { cursor: pointer; font-size: 13px; padding: 6px 0; color: var(--sys-text, #1a1a1a); }
 .zsv-more[open] summary { margin-bottom: 6px; }
 @media (max-width: 480px) {
 	.zsv-row { padding: 10px 0; background: none; border-radius: 0; } /* a phone row reads top to bottom with no inner box */
@@ -59,8 +89,40 @@
 .zsv-empty { padding: 16px; text-align: center; font-size: 13px; opacity: 0.7; }
 .zsv-loading { opacity: 0.5; }
 
-.zsv-link { font-size: 13px; text-decoration: none; color: var(--sys-primary, #2C5F8A); align-self: flex-start; }
+.zsv-link { font-size: 13px; text-decoration: none; color: var(--sys-brand, #5150D6); align-self: flex-start; }
 
 @media (max-width: 480px) {
 	.zsv-w-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* A customer's panel: the call notes and the job details. Closed until the hint is tapped, except for a
+   customer nobody has handled (.zsv-notes-first), whose panel is laid out with ONLY its notes showing, so
+   an open card adds nothing to press and loads nothing; .zsv-expanded (the tap) shows the whole panel. */
+.zsv-row-hint {
+	appearance: none; background: none; border: 0; padding: 4px 0 0; margin: 0; cursor: pointer;
+	font: inherit; font-size: 12px; text-align: left; color: var(--sys-text-sec, #475569);
+	min-height: 28px;
+}
+.zsv-row-hint:focus-visible { outline: 2px solid var(--sys-focus, #5150D6); outline-offset: 2px; }
+.zsv-row-panel { display: none; margin-top: 4px; font-size: 13px; line-height: 1.4; color: var(--sys-text, #1a1a1a); }
+.zsv-row-panel.zsv-expanded, .zsv-row-panel.zsv-notes-first { display: block; }
+.zsv-row-panel.zsv-notes-first:not(.zsv-expanded) > :not(.zsv-row-notes) { display: none; }
+.zsv-row-details { font-size: 12px; color: var(--sys-text-sec, #475569); margin-bottom: 4px; overflow-wrap: anywhere; }
+.zsv-row-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow-y: auto; }
+/* A long note drawn open is shown whole: its own scroll box would be a third scroll inside the list's
+   inside the page's. The tapped-open panel keeps its box. */
+.zsv-row-panel.zsv-notes-first:not(.zsv-expanded) > .zsv-row-notes { max-height: none; overflow: visible; }
+
+/* Google reviews panel (hidden until the site is connected to Google). */
+.zsv-greviews { padding: 12px; border: 1px solid var(--sys-border, #E2E8F0); border-radius: 10px; background: var(--sys-surface, #fff); color: var(--sys-text, #1a1a1a); }
+.zsv-gr-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 8px; font-size: 14px; }
+.zsv-gr-mode, .zsv-gr-last, .zsv-gr-date { font-size: 12px; color: var(--sys-text-sec, #475569); }
+.zsv-gr-row { padding: 8px 0; border-top: 1px solid var(--sys-border, #E2E8F0); font-size: 14px; }
+.zsv-gr-head + .zsv-gr-row { border-top: 0; }
+.zsv-gr-stars { color: var(--sys-tint-warning-fg, #92400E); letter-spacing: 1px; }
+.zsv-gr-snip { font-size: 13px; color: var(--sys-text-sec, #475569); margin: 2px 0 4px; overflow-wrap: anywhere; }
+.zsv-gr-what { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.zsv-gr-q { font-weight: 600; }
+.zsv-gr-done { color: var(--sys-tint-success-fg, #166534); font-weight: 600; }
+.zsv-gr-none { color: var(--sys-text-sec, #475569); font-size: 13px; margin: 0; }
+.zsv-gr-admin { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }

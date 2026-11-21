@@ -299,11 +299,11 @@
 		cols.forEach(function (c) {
 			if (c.item) {
 				if (c.first) {
-					h += '<th scope="colgroup" colspan="' + c.span + '" class="zro-item' + (c.group !== prev ? ' zro-gstart' : ' zro-istart') + '" title="' + esc(c.item.label + (c.item.type_label ? ' — ' + c.item.type_label : '')) + '">'
+					h += '<th scope="colgroup" colspan="' + c.span + '" class="zro-item' + (c.group !== prev ? ' zro-gstart' : ' zro-istart') + '" title="' + esc(c.item.label + (c.item.type_label ? ': ' + c.item.type_label : '')) + '">'
 						+ esc(c.item.label) + (c.item.addon ? ' <span class="zro-addon">add-on</span>' : '') + '</th>';
 				}
 			} else {
-				h += '<th scope="col"' + (items ? ' rowspan="2"' : '') + ' class="' + (c.group !== prev ? 'zro-gstart' : '') + '" title="' + esc(c.a.label + (c.a.type_label ? ' — ' + c.a.type_label : '')) + '">' + esc(c.a.label) + '</th>';
+				h += '<th scope="col"' + (items ? ' rowspan="2"' : '') + ' class="' + (c.group !== prev ? 'zro-gstart' : '') + '" title="' + esc(c.a.label + (c.a.type_label ? ': ' + c.a.type_label : '')) + '">' + esc(c.a.label) + '</th>';
 			}
 			prev = c.group;
 		});
@@ -586,7 +586,7 @@
 			draw();
 			var a = colOf(key);
 			if (r.changed) {
-				var msg = p.name + ' — ' + (a ? a.label : key) + ': ' + WORD[r.cell ? r.cell.level : '']
+				var msg = p.name + ' · ' + (a ? a.label : key) + ': ' + WORD[r.cell ? r.cell.level : '']
 					// cleared: the row goes with its note and date; Undo brings them back
 					+ (!r.cell && before && (before.note || before.since) ? ' (its note and date were removed too)' : '');
 				say(msg, undoable ? { action: 'Undo', onAction: function () {
@@ -798,7 +798,7 @@
 	function histLine(r) {
 		var when = '<time>' + esc(r.at) + ' · ' + esc(r.by) + '</time>';
 		if (r.source === 'ability') { return when + esc(r.detail); }
-		var h = when + (r.person ? '<strong>' + esc(r.person) + '</strong> — ' : '') + esc(r.ability) + ': ' + mark(r.from) + ' → ' + mark(r.to);
+		var h = when + (r.person ? '<strong>' + esc(r.person) + '</strong> · ' : '') + esc(r.ability) + ': ' + mark(r.from) + ' → ' + mark(r.to);
 		var bits = [];
 		if (r.toSince !== r.fromSince) { bits.push(r.toSince ? 'since ' + r.toSince : 'since date cleared'); }
 		if (r.toNote !== r.fromNote) { bits.push(r.toNote ? 'note: “' + r.toNote + '”' : 'note cleared'); }
@@ -812,7 +812,7 @@
 		var p = pid ? personOf(pid) : null;
 		var body = document.createElement('div');
 		body.innerHTML = loadingHtml('Loading history…');
-		k.sheet({ title: p ? 'History — ' + p.name : 'History', body: body, actions: [{ label: 'Close' }] });
+		k.sheet({ title: p ? 'History: ' + p.name : 'History', body: body, actions: [{ label: 'Close' }] });
 		var rows = [];
 		function page(before) {
 			return api('history?limit=50' + (p ? '&user=' + p.id : '') + (before ? '&before=' + before : '')).then(function (r) {

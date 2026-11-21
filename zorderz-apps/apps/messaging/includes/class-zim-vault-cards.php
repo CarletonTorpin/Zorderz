@@ -152,7 +152,7 @@ class ZIM_Vault_Cards {
 			'uploader_name' => (string) ( $data['uploader_name'] ?? '' ),
 			'uploaded_at'   => (string) ( $data['uploaded_at'] ?? '' ),
 			'url'           => $vault_url,
-			'source'        => 'tskv',
+			'source'        => 'zkv',
 		);
 	}
 }

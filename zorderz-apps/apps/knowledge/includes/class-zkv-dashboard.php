@@ -368,7 +368,7 @@ class ZKV_Dashboard {
 				$report['poe_test_error'] = $e->getMessage();
 			}
 		} else {
-			$report['poe_test_response'] = 'SKIPPED — no API key';
+			$report['poe_test_response'] = 'SKIPPED: no API key';
 		}
 
 		// 7. ZKV classes loaded.
@@ -389,7 +389,7 @@ class ZKV_Dashboard {
 				$im = new \Imagick();
 				$vision['imagick_formats'] = implode( ', ', array_slice( $im->queryFormats( 'PDF*' ), 0, 5 ) );
 				if ( empty( $vision['imagick_formats'] ) ) {
-					$vision['imagick_pdf_support'] = 'NO — PDF format not supported (Ghostscript missing)';
+					$vision['imagick_pdf_support'] = 'NO: PDF format not supported (Ghostscript missing)';
 				} else {
 					$vision['imagick_pdf_support'] = 'YES';
 				}
@@ -456,7 +456,7 @@ class ZKV_Dashboard {
 							$vision['ai_vision_response'] = substr( $vision_response, 0, 300 );
 						}
 					} else {
-						$vision['extraction_failed'] = 'No images returned — check Imagick/GD';
+						$vision['extraction_failed'] = 'No images returned: check Imagick/GD';
 					}
 				} catch ( \Throwable $e ) {
 					$vision['extract_error'] = $e->getMessage() . ' in ' . basename( $e->getFile() ) . ':' . $e->getLine();
@@ -733,7 +733,7 @@ class ZKV_Dashboard {
 		if ( $existing ) {
 			// Clean up the file we just wrote.
 			@unlink( $file_path );
-			wp_send_json_error( 'Duplicate file — already exists as "' . $existing['title'] . '" (ID: ' . $existing['id'] . ').' );
+			wp_send_json_error( 'Duplicate file: already exists as "' . $existing['title'] . '" (ID: ' . $existing['id'] . ').' );
 		}
 
 		// Determine category.
@@ -932,7 +932,7 @@ Respond with ONLY the JSON object.";
 	public static function managed_app_note_html(): string {
 		return sprintf(
 			/* translators: %s: link to the Credentials screen */
-			esc_html__( 'Managed in %s — one set for every app.', 'zorderz' ),
+			esc_html__( 'Managed in %s, one set for every app.', 'zorderz' ),
 			'<a href="' . esc_url( self::credentials_url() ) . '">' . esc_html__( 'Zorderz → Credentials', 'zorderz' ) . '</a>'
 		);
 	}
@@ -941,7 +941,7 @@ Respond with ONLY the JSON object.";
 	public static function managed_note_html(): string {
 		return sprintf(
 			/* translators: %s: link to the Credentials screen */
-			esc_html__( 'Managed in %s — one key for every app.', 'zorderz' ),
+			esc_html__( 'Managed in %s, one key for every app.', 'zorderz' ),
 			'<a href="' . esc_url( self::credentials_url() ) . '">' . esc_html__( 'Zorderz → Credentials', 'zorderz' ) . '</a>'
 		);
 	}
@@ -1978,7 +1978,7 @@ Respond with ONLY the JSON object.";
 		// AI suggestions if no title provided.
 		if ( empty( $title ) && $want_private ) {
 			// Never the text's first line (often the sensitive part): a plain, dated name.
-			$title = 'Private note ' . date_i18n( 'M j, Y g:i a', current_time( 'timestamp' ) );
+			$title = 'Private note ' . date_i18n( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:i a' ) : 'M j, Y g:i a' ), current_time( 'timestamp' ) );
 		}
 		if ( empty( $title ) ) {
 			$suggestions = $this->get_ai_suggestions( $filename, 'text/plain', substr( $pasted_text, 0, 4000 ) );
@@ -2272,7 +2272,7 @@ Respond with ONLY the JSON object.";
 				'text_length' => strlen( $text ),
 			) );
 		} else {
-			wp_send_json_error( 'Chunk creation failed — text may be empty or corrupt.' );
+			wp_send_json_error( 'Chunk creation failed: text may be empty or corrupt.' );
 		}
 	}
 
@@ -2471,8 +2471,8 @@ Respond with ONLY the JSON object.";
 			'parties'   => $res['parties'],
 			'unmatched' => $res['unmatched'],
 			'message'   => 'active' === $res['status']
-				? 'Now private — live for its ' . $res['parties'] . ' matched ' . ( 1 === (int) $res['parties'] ? 'party' : 'parties' ) . '.'
-				: 'Now private — no speakers matched; it is latent until you bind the right people.',
+				? 'Now private: live for its ' . $res['parties'] . ' matched ' . ( 1 === (int) $res['parties'] ? 'party' : 'parties' ) . '.'
+				: 'Now private: no speakers matched; it is latent until you bind the right people.',
 		) );
 	}
 
@@ -2610,8 +2610,8 @@ Respond with ONLY the JSON object.";
 			'granted' => $granted,
 			'parties' => (int) ( $res['parties'] ?? 0 ),
 			'message' => $granted > 0
-				? 'Confirmed — ' . $granted . ' ' . ( 1 === $granted ? 'person' : 'people' ) . ' can now see this transcript.'
-				: 'Confirmed — this transcript stays private to you for now.',
+				? 'Confirmed: ' . $granted . ' ' . ( 1 === $granted ? 'person' : 'people' ) . ' can now see this transcript.'
+				: 'Confirmed: this transcript stays private to you for now.',
 		) );
 	}
 
@@ -2670,7 +2670,7 @@ Respond with ONLY the JSON object.";
 			wp_send_json_error( 'The shared kiosk account cannot receive private content.' );
 		}
 		if ( ZKV_ACL::is_party( $with_id, $doc_id ) ) {
-			wp_send_json_error( 'That person is already a party — they have full access.' );
+			wp_send_json_error( 'That person is already a party: they have full access.' );
 		}
 		// v1.5.2 (KV1): a recipient no longer needs the coarse knowledge-vault app
 		// grant. Sharing now gives SCOPED access — they can open only this transcript
@@ -2738,8 +2738,8 @@ Respond with ONLY the JSON object.";
 			'whole_url'   => $whole_url,
 			'shared_page' => home_url( '/vault/shared' ),
 			'message'     => 'whole' === $scope
-				? 'Shared — ' . $recipient->display_name . ' can now open this transcript (view only, never in their chat). They can find it under “Shared with me.”'
-				: 'Excerpt shared with ' . $recipient->display_name . ' — only the selected lines exist in their copy.',
+				? 'Shared: ' . $recipient->display_name . ' can now open this transcript (view only, never in their chat). They can find it under “Shared with me.”'
+				: 'Excerpt shared with ' . $recipient->display_name . '. Only the selected lines exist in their copy.',
 		) );
 	}
 

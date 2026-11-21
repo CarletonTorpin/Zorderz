@@ -101,11 +101,11 @@ final class AssistantAskBarTest extends TestCase {
 	}
 
 	public function test_trade_words_mark_things_never_people(): void {
-		$this->assertSame( 'Gate', ZDZ_Ask_Phrases::match_commission( 'how much did Gate earn' )['subject'] ?? null );
-		$GLOBALS['zdz_test_options']['zdz_ask_trade_words'] = array( 'gate', 'Awning', 'bad|word', '  ' );
-		$this->assertSame( array( 'gate', 'awning' ), ZDZ_Ask_Phrases::trade_words(), 'anything that could change a pattern is dropped' );
-		$this->assertNull( ZDZ_Ask_Phrases::match_commission( 'how much did the Example gate make' ) );
-		$this->assertSame( 'gate(?:s|es)?|awning(?:s|es)?', ZDZ_Ask_Phrases::trade_alt() );
+		$this->assertSame( 'Boiler', ZDZ_Ask_Phrases::match_commission( 'how much did Boiler earn' )['subject'] ?? null );
+		$GLOBALS['zdz_test_options']['zdz_ask_trade_words'] = array( 'boiler', 'Radiator', 'bad|word', '  ' );
+		$this->assertSame( array( 'boiler', 'radiator' ), ZDZ_Ask_Phrases::trade_words(), 'anything that could change a pattern is dropped' );
+		$this->assertNull( ZDZ_Ask_Phrases::match_commission( 'how much did the Example boiler make' ) );
+		$this->assertSame( 'boiler(?:s|es)?|radiator(?:s|es)?', ZDZ_Ask_Phrases::trade_alt() );
 	}
 
 	public function test_stock_frames_name_an_item_and_refuse_people_and_times(): void {
@@ -171,10 +171,10 @@ final class AssistantAskBarTest extends TestCase {
 	}
 
 	public function test_trade_words_join_the_rows(): void {
-		$this->assertNull( ZDZ_Ask_Actions::match( 'order more awnings' ) );
-		$GLOBALS['zdz_test_options']['zdz_ask_trade_words'] = array( 'awning' );
-		$this->assertSame( 'order_started', ZDZ_Ask_Actions::match( 'order more awnings' )['id'] );
-		$this->assertSame( '', ZDZ_Ask_Actions::name_in( 'for awnings' ), 'a trade word is never a name' );
+		$this->assertNull( ZDZ_Ask_Actions::match( 'order more radiators' ) );
+		$GLOBALS['zdz_test_options']['zdz_ask_trade_words'] = array( 'radiator' );
+		$this->assertSame( 'order_started', ZDZ_Ask_Actions::match( 'order more radiators' )['id'] );
+		$this->assertSame( '', ZDZ_Ask_Actions::name_in( 'for radiators' ), 'a trade word is never a name' );
 	}
 
 	public function test_every_row_runs_on_both_sides_and_a_bad_row_is_dropped(): void {

@@ -4,6 +4,9 @@
  * for the asker (ready to cut, installing within seven days, possible), with when the queue
  * was read. Counts only — no customer, address or amount leaves this verb.
  *
+ * An open internal order in the asker's list (the shop cutting for itself) is a job ready to
+ * cut. It has no install day, so it is never "this week". A remake is not counted.
+ *
  * The queue is Prep's own (ZPREP_Dashboard::build_queue()), read in the background with the
  * asker as the current user and without the billing self-heal, and kept per person. An
  * answer older than ten minutes asks for a new read; an answer older than an hour says so
@@ -29,11 +32,12 @@ class ZPREP_Queue_Counts {
 	const MAX_PEOPLE    = 25;
 	const WEEK          = 604800;
 
-	/** Injected in tests: now (unix), access (callable uid => bool), mode (callable uid => string), build (callable uid => payload). */
-	public static $now    = null;
-	public static $access = null;
-	public static $mode   = null;
-	public static $build  = null;
+	/** Injected in tests: now (unix), access (callable uid => bool), mode (callable uid => string), build (callable uid => payload), schedule (callable uid => void, in place of the one-off cron event). */
+	public static $now      = null;
+	public static $access   = null;
+	public static $mode     = null;
+	public static $build    = null;
+	public static $schedule = null;
 
 	public static function init(): void {
 		add_filter( 'zdz_register_capabilities', array( __CLASS__, 'register' ) );
@@ -51,7 +55,7 @@ class ZPREP_Queue_Counts {
 			'kiosk'         => false,
 			'kiosk_bounded' => false,
 			'side_effect'   => false,
-			'summary'       => 'How many jobs are in Prep\'s cut queue for you: ready to cut, installing this week, possible. Counts only, with when the queue was read.',
+			'summary'       => 'How many jobs are in Prep\'s cut queue for you: ready to cut (the shop\'s own open internal orders included), installing this week, possible. Counts only, with when the queue was read.',
 		);
 	}
 
@@ -107,9 +111,9 @@ class ZPREP_Queue_Counts {
 
 	public static function definitions(): array {
 		return array(
-			'to_cut'    => 'Jobs in Prep\'s Approved-to-Cut queue for you, exactly as Prep lists them, that are not cut yet.',
+			'to_cut'    => 'Jobs in Prep\'s Approved-to-Cut queue for you, exactly as Prep lists them, that are not cut yet, plus the shop\'s own open internal orders in your list.',
 			'this_week' => 'Of those, installing within the next 7 days, or already past their install day (a known date, or a date read from the job\'s paperwork).',
-			'possible'  => 'Cards Prep shows as "Possible — not yet approved"; not counted above.',
+			'possible'  => 'Cards Prep shows as "Possible, not yet approved"; not counted above.',
 		);
 	}
 
@@ -124,6 +128,13 @@ class ZPREP_Queue_Counts {
 		$c = array( 'to_cut' => 0, 'this_week' => 0, 'possible' => 0 );
 		foreach ( $payload['jobs'] as $job ) {
 			if ( ! is_array( $job ) || 'remake' === (string) ( $job['kind'] ?? '' ) ) {
+				continue;
+			}
+			if ( 'internal' === (string) ( $job['kind'] ?? '' ) ) {
+				// An open internal order in this person's list is a job to cut. It has no install day.
+				if ( 'open' === (string) ( $job['status'] ?? '' ) ) {
+					$c['to_cut']++;
+				}
 				continue;
 			}
 			if ( ! empty( $job['fb_possible'] ) ) {
@@ -192,7 +203,21 @@ class ZPREP_Queue_Counts {
 		}
 	}
 
+	/**
+	 * Have $uid's count read again soon (in the background), whatever its age: used when something this person just
+	 * did changed what their list holds, so the home tile is not left on the old number until the next re-read.
+	 */
+	public static function request_refresh( int $uid ): void {
+		if ( $uid > 0 ) {
+			self::ask_for_count( $uid );
+		}
+	}
+
 	private static function ask_for_count( int $uid ): void {
+		if ( is_callable( self::$schedule ) ) {
+			call_user_func( self::$schedule, $uid );
+			return;
+		}
 		if ( function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( self::CRON_HOOK, array( $uid ) ) ) {
 			return;
 		}

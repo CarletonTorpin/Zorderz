@@ -43,8 +43,8 @@ $seen_cust[ 'c:700' ] = true;
 $seen_cust[ 'n:' . ZPREP_Dashboard::norm_name( 'Casey Morgan' ) ] = true;
 $shown[] = [ 'Casey Morgan', '700' ];
 // Approved estimate — the paired household "Sam / Robin Blake", seeded by id
-$seen_cust[ 'c:899991' ] = true;
-$shown[] = [ 'Sam / Robin Blake', '899991' ];
+$seen_cust[ 'c:880012' ] = true;
+$shown[] = [ 'Sam / Robin Blake', '880012' ];
 
 $nm_alex = ZPREP_Dashboard::norm_name( 'Alex Rivera' );
 
@@ -67,7 +67,7 @@ ok( ZPREP_Dashboard::classify_invoice_card( 'Alex Rivera', '900001', $nm_alex, '
 section( "classify_invoice_card(): an invoice for an already-shown OTHER source folds" );
 ok( ZPREP_Dashboard::classify_invoice_card( 'Casey Morgan', '700', ZPREP_Dashboard::norm_name( 'Casey Morgan' ), 'M', $seen_cust, $shown, $seen_est ) === 'other_source',
 	"Casey's invoice -> other_source (folds into her CRM card)" );
-ok( ZPREP_Dashboard::classify_invoice_card( 'Sam Blake', '899991', 'sam blake', 'S', $seen_cust, $shown, $seen_est ) === 'other_source',
+ok( ZPREP_Dashboard::classify_invoice_card( 'Sam Blake', '880012', 'sam blake', 'S', $seen_cust, $shown, $seen_est ) === 'other_source',
 	"Sam Blake invoice -> other_source (same customer id as the estimate)" );
 ok( ZPREP_Dashboard::classify_invoice_card( 'Sam Blake', '', 'sam blake', 'S', $seen_cust, $shown, $seen_est ) === 'other_source',
 	"Sam Blake invoice with NO id -> other_source (fuzzy surname+given vs \"Sam / Robin Blake\")" );
@@ -83,12 +83,12 @@ ok( ZPREP_Dashboard::same_customer( 'Alex Rivera', '900001', 'Alex Rivera', '900
 	"different customer ids never merge, even on an identical name" );
 
 section( "the parser reads the exact 'Sched. M/D & M/D - 9 AM' lines" );
-$club  = 'Downtown - (CT) (TC) Building A - Sched. 9/13 & 9/14 - 9 AM';
-$lodge = 'Downtown - (CT) (TC) Building B - Sched. 9/16 & 9/17 - 9 AM';
-$rc = ZPREP_Install_Fallback::from_text( $club );
-$rl = ZPREP_Install_Fallback::from_text( $lodge );
+$first  = 'Downtown - (MC) (RV) Building A - Sched. 9/13 & 9/14 - 9 AM';
+$second = 'Downtown - (MC) (RV) Building B - Sched. 9/16 & 9/17 - 9 AM';
+$rc = ZPREP_Install_Fallback::from_text( $first );
+$rl = ZPREP_Install_Fallback::from_text( $second );
 ok( is_array( $rc ) && strpos( (string) $rc['start_utc'], '2026-09-13' ) === 0, "\"9/13 & 9/14\" -> 2026-09-13 (first day), start_utc set" );
-ok( is_array( $rc ) && $rc['assignee'] === 'CT', "installer initials -> CT (first of (CT)(TC))" );
+ok( is_array( $rc ) && $rc['assignee'] === 'MC', "installer initials -> MC (first of (MC)(RV))" );
 ok( is_array( $rl ) && strpos( (string) $rl['start_utc'], '2026-09-16' ) === 0, "\"9/16 & 9/17\" -> 2026-09-16, start_utc set" );
 
 /* ───────────────────────── summary ───────────────────────── */

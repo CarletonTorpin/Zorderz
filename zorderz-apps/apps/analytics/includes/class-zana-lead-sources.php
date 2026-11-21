@@ -468,7 +468,7 @@ class ZANA_Lead_Sources {
 						/* translators: 1: customers quoted, 2: estimates, 3: customers billed, 4: invoices */
 						__( 'In the billing system, with this source: %1$s customers quoted (%2$s estimates), %3$s billed (%4$s invoices)', 'zorderz' ),
 						self::n( $b['est_customers'] ), self::n( $b['estimates'] ), self::n( $b['customers'] ), self::n( $b['invoices'] )
-					) . ( $money ? ', $' . number_format( $b['amount'], 2 ) : '' ) . '.';
+					) . ( $money ? ', ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $b['amount'], 2 ) : '$' . number_format( $b['amount'], 2 ) ) : '' ) . '.';
 				}
 				$out[] = '';
 				if ( $f['by_month'] && $t['months'] ) {
@@ -486,7 +486,7 @@ class ZANA_Lead_Sources {
 				$k = '' !== $f['status'] ? $f['status'] : 'n';
 				return $b[ $k ] <=> $a[ $k ];
 			} );
-			$out[] = '**' . self::plural( $all['n'], 'lead', 'leads' ) . '** — ' . self::outcome( $all, $money );
+			$out[] = '**' . self::plural( $all['n'], 'lead', 'leads' ) . '**: ' . self::outcome( $all, $money );
 			$out[] = '';
 			$out[] = '| Source | Leads | Won |';
 			$out[] = '|---|---:|---:|';
@@ -565,7 +565,7 @@ class ZANA_Lead_Sources {
 			$fig        = '' !== $f['status'] ? '**' . self::n( $t[ $f['status'] ] ) . ' ' . $f['status'] . '** of ' . self::plural( $t['n'], 'lead', 'leads' ) : '**' . self::plural( $t['n'], 'lead', 'leads' ) . '**';
 			$b          = self::billing( $gk, $f['period'] );
 			if ( is_array( $b ) ) {
-				$fig .= ' · ' . self::n( $b['est_customers'] ) . ' customers quoted, ' . self::n( $b['customers'] ) . ' billed' . ( $money ? ' ($' . number_format( round( $b['amount'] ) ) . ')' : '' );
+				$fig .= ' · ' . self::n( $b['est_customers'] ) . ' customers quoted, ' . self::n( $b['customers'] ) . ' billed' . ( $money ? ' (' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( round( $b['amount'] ) ) : '$' . number_format( round( $b['amount'] ) ) ) . ')' : '' );
 			}
 			$figs[] = ( count( $f['groups'] ) > 1 ? $g['label'] . ': ' : '' ) . $fig;
 		}

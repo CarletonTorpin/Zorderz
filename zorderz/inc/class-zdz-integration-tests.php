@@ -12,7 +12,6 @@
  * "No wp_ajax_ in theme — REST API only; AJAX is plugin-only"
  *
  * @package Zorderz
- * @since   2.17.0 (Prompt Group 7B)
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -132,10 +131,10 @@ class ZDZ_Integration_Tests {
 		// ── Channel 9: the home tiles' read verbs ──
 		$checks[] = $this->check_kpi_metrics();
 
-		// ── Channel 10: Permission System (Group 5) ──
+		// ── Channel 10: the permission system ──
 		$checks[] = $this->check_permissions();
 
-		// ── Channel 11: Pricing Oracle (Group 6B) ──
+		// ── Channel 11: pricing from Knowledge Vault documents ──
 		$checks[] = $this->check_pricing_oracle();
 
 		return rest_ensure_response( [ 'checks' => $checks ] );
@@ -277,15 +276,15 @@ class ZDZ_Integration_Tests {
 		$has_class = class_exists( 'ZDZ_Data_Permissions' );
 		if ( ! $has_class ) {
 			return [
-				'name'   => 'Permission System (Group 5)',
+				'name'   => 'Permission System',
 				'pass'   => false,
-				'detail' => 'ZDZ_Data_Permissions class not found — Group 5 not yet deployed',
+				'detail' => 'ZDZ_Data_Permissions class not found: the theme is not fully loaded',
 			];
 		}
 		$user_id     = get_current_user_id();
 		$can_revenue = ZDZ_Data_Permissions::can( $user_id, 'view_company_revenue' );
 		return [
-			'name'   => 'Permission System (Group 5)',
+			'name'   => 'Permission System',
 			'pass'   => true,
 			'detail' => 'ZDZ_Data_Permissions active. Admin view_company_revenue: ' . ( $can_revenue ? 'allowed' : 'denied' ),
 		];
@@ -295,9 +294,9 @@ class ZDZ_Integration_Tests {
 		$has_bridge = class_exists( 'ZKV_Bridge' );
 		if ( ! $has_bridge ) {
 			return [
-				'name'   => 'Pricing Oracle (Group 6B)',
+				'name'   => 'Pricing Oracle (Knowledge Vault)',
 				'pass'   => false,
-				'detail' => 'ZKV_Bridge class not found — Group 6B not yet deployed',
+				'detail' => 'ZKV_Bridge class not found: is the Knowledge Vault app active?',
 			];
 		}
 		$pricing  = ZKV_Bridge::get_pricing_context();
@@ -325,16 +324,16 @@ class ZDZ_Integration_Tests {
 			}
 			if ( ! empty( $chunk_warnings ) ) {
 				return [
-					'name'   => 'Pricing Oracle (Group 6B)',
+					'name'   => 'Pricing Oracle (Knowledge Vault)',
 					'pass'   => false,
 					'detail' => $detail . ' ⚠️ ' . implode( ', ', $chunk_warnings )
-						. ' — run chunk seeder or re-index. The assistant cannot read pricing tables without chunks.',
+						. '. Run chunk seeder or re-index. The assistant cannot read pricing tables without chunks.',
 				];
 			}
 		}
 
 		return [
-			'name'   => 'Pricing Oracle (Group 6B)',
+			'name'   => 'Pricing Oracle (Knowledge Vault)',
 			'pass'   => true,
 			'detail' => $detail,
 		];

@@ -277,11 +277,16 @@ class ZDZ_Ask_Context {
 			$count( 'phone numbers', 1 ); return '[phone]';
 		}, $t );
 		// A 7-digit local number, but not "Invoice 100-2345" or "800-1200 sqft".
-		$t = preg_replace( '/(?<![\w$.,\/#:])(?<!Invoice )(?<!invoice )(?<!Est )(?<!No\. )[2-9]\d{2}-\d{4}(?![\w\/.])(?![ \t]*(?i:sq|ft|sqft|lbs?|units?|screens?|in\b|mm|cm|%))/', '[phone]', $t, -1, $n ); $count( 'phone numbers', $n );
+		$t = preg_replace( '/(?<![\w$.,\/#:])(?<!Invoice )(?<!invoice )(?<!Est )(?<!No\. )[2-9]\d{2}-\d{4}(?![\w\/.])(?![ \t]*(?i:sq|ft|sqft|lbs?|units?|pcs|pieces?|items?|in\b|mm|cm|%))/', '[phone]', $t, -1, $n ); $count( 'phone numbers', $n );
 		$t = preg_replace( '/\b(?i:cell|phone|mobile|tel)\b[ \t]*[:#]?[ \t]*\d{7,11}\b/', '[phone]', $t, -1, $n ); $count( 'phone numbers', $n );
 		$t = preg_replace( '/\b(?:gate|lock\s?box|alarm|door|garage|access)\s*(?:code|combo|pin|#)\s*(?:is|:|=|-)?\s*[\w#*\-]{2,12}/i', '[code]', $t, -1, $n ); $count( 'access codes', $n );
 		$t = preg_replace( '/\b(?:gate|lock\s?box|alarm|keypad|combo|code|pin|passcode)\b[ \t]*(?:is|:|=|-|#)?[ \t]*#?\d[\w#*\-]{2,11}/i', '[code]', $t, -1, $n ); $count( 'access codes', $n );
-		$street = '(?i:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Way|Blvd|Boulevard|Pl|Place|Cir|Circle|Ter|Terrace|Pkwy|Parkway|Hwy|Highway|Trl|Trail|Loop|Row|Glen|Point|Pt|Crest|Ridge|Run|Path|Walk|Cv|Cove|Real|Sq|Square|Mesa|Heights|Hts)';
+		// the common street endings, and the region's own from its Identity Pack (ZDZ_Sealed::street_end_words())
+		$end = '';
+		foreach ( ZDZ_Sealed::street_end_words() as $w ) {
+			$end .= '|' . preg_quote( $w, '/' );
+		}
+		$street = '(?i:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Way|Blvd|Boulevard|Pl|Place|Cir|Circle|Ter|Terrace|Pkwy|Parkway|Hwy|Highway|Trl|Trail|Loop|Row|Glen|Point|Pt|Crest|Ridge|Run|Path|Walk|Cv|Cove|Sq|Square|Heights|Hts' . $end . ')';
 		$unit   = '(?:[ \t,]*(?:#|Apt\.?|Unit|Ste\.?|Suite|Spc\.?|Space)[ \t]*[\w\-]+)?';
 		// Any case ("48210 EXAMPLE CT"), numbered streets ("1450 5th Ave"); at least one word before the street word,
 		// so "5 Point Example jobs" stays a count of jobs.
@@ -398,11 +403,11 @@ class ZDZ_Ask_Context {
 
 	/**
 	 * Words that are headings, columns, places' words or calendar words, not a person's name. They break a run of
-	 * capitalised words; they never exempt one (so "Sam Example Screen" still hides "Sam Example"). A fixed list: it
-	 * says nothing about the business's records. The business's own plain words (ZDZ_Private::PLAIN_WORDS_OPT) are
-	 * added by not_name_words().
+	 * capitalised words; they never exempt one (so "Sam Example Invoice" still hides "Sam Example"). A fixed list: it
+	 * says nothing about the business's records. The business's own plain words (ZDZ_Private::PLAIN_WORDS_OPT, its
+	 * catalog pack's vocabulary.plain_words: its trade's words for things, say) are added by not_name_words().
 	 */
-	const NOT_NAME_WORDS = 'customer customers client clients contact contacts name names service services support survey surveys satisfaction portal review reviews feedback count required info details notes note list us form page card method type status stage source sources amount amounts total totals subtotal date dates price prices balance value phone email address unassigned none unknown pending new since account accounts owner invoice invoices estimate estimates job jobs lead leads sale sales sold paid unpaid due open closed done today tomorrow yesterday week weeks month months year years ytd quarter day days monday tuesday wednesday thursday friday saturday sunday mon tue tues wed thu thur thurs fri sat sun january february march april may june july august september october november december jan feb mar apr jun jul aug sep sept oct nov dec screen screens door doors window windows garage patio mesh vent vents install installs installed installation measure measures measurement measurements repair repairs quote quotes appointment appointments schedule scheduled team crew tech techs rep reps report reports chart charts widget widgets dashboard analytics ask chat the a an of for in on at to by with from and or not no yes all my our your this that these top city cities area areas region territory territories location locations revenue profit margin cost costs average avg per more less view show hide edit add delete save send cancel back next previous prev home settings help search filter sort tax deposit payment payments received overdue draft drafts sent viewed accepted declined won lost follow up call calls called text message messages inbox mail calendar task tasks complete completed progress hours minutes north south east west county inc llc co corp company group data start end version ref time google ads facebook yelp nextdoor angi thumbtack houzz depot lowes referral referrals web website online organic direct other misc ok';
+	const NOT_NAME_WORDS = 'customer customers client clients contact contacts name names service services support survey surveys satisfaction portal review reviews feedback count required info details notes note list us form page card method type status stage source sources amount amounts total totals subtotal date dates price prices balance value phone email address unassigned none unknown pending new since account accounts owner invoice invoices estimate estimates job jobs lead leads sale sales sold paid unpaid due open closed done today tomorrow yesterday week weeks month months year years ytd quarter day days monday tuesday wednesday thursday friday saturday sunday mon tue tues wed thu thur thurs fri sat sun january february march april may june july august september october november december jan feb mar apr jun jul aug sep sept oct nov dec install installs installed installation measure measures measurement measurements repair repairs quote quotes appointment appointments schedule scheduled team crew tech techs rep reps report reports chart charts widget widgets dashboard analytics ask chat the a an of for in on at to by with from and or not no yes all my our your this that these top city cities area areas region territory territories location locations revenue profit margin cost costs average avg per more less view show hide edit add delete save send cancel back next previous prev home settings help search filter sort tax deposit payment payments received overdue draft drafts sent viewed accepted declined won lost follow up call calls called text message messages inbox mail calendar task tasks complete completed progress hours minutes north south east west county inc llc co corp company group data start end version ref time google ads facebook yelp nextdoor angi thumbtack houzz depot lowes referral referrals web website online organic direct other misc ok';
 
 	/** NOT_NAME_WORDS and the business's own plain words: [ word => true ]. */
 	public static function not_name_words(): array {

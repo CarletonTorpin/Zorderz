@@ -235,14 +235,12 @@ final class ZQID_Card {
 	 * The card email address.
 	 *
 	 *   1. A per-person override, if set.
-	 *   2. Otherwise the business's staff email PATTERN (e.g. "{first}@acme.com")
-	 *      with the person's name substituted — the configurable replacement for
-	 *      the old hardcoded "FirstName@<company>.com" rule. Used only if it
-	 *      fully resolves to a valid address.
+	 *   2. Otherwise the business's staff email PATTERN (e.g. "{first}@example.com")
+	 *      with the person's name substituted. Used only if it fully resolves
+	 *      to a valid address.
 	 *   3. Otherwise the person's own account email.
 	 *
-	 * The pattern is a SUGGESTION derived from config, never an assumption baked
-	 * into code, and there is no company/person example anywhere in this method.
+	 * The pattern is a SUGGESTION derived from config.
 	 */
 	private function card_email( $user, $pattern ) {
 		$override = $this->person_meta( $user->ID, 'zqid_email' );

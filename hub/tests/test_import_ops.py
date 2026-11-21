@@ -88,7 +88,7 @@ class OpsTest(unittest.TestCase):
         v = call("vocab")
         self.assertTrue(v["ok"], v)
         keys = {f["key"]: f for f in v["data"]["place_filters"]}
-        self.assertEqual(keys["safety_sites"]["values"], ["Westbrook Ridge"])
+        self.assertEqual(keys["safety_sites"]["values"], ["Westvale Ridge"])
         self.assertEqual(keys["safety_sites"]["label"], "Safety site")
         self.assertIn("tax_areas", keys)
 

@@ -108,10 +108,10 @@
         }
         if (currentSpendMin > 0 || currentSpendMax > 0) {
             var spendStr = 'Spend range: ';
-            if (currentSpendMin > 0) spendStr += '$' + currentSpendMin;
+            if (currentSpendMin > 0) spendStr += ((window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.sign === 'function') ? window.ZDZ.ui.sign() : ((window.zdzData && window.zdzData.currencySign) || '$')) + currentSpendMin;
             else spendStr += '$0';
-            spendStr += ' — ';
-            if (currentSpendMax > 0) spendStr += '$' + currentSpendMax;
+            spendStr += ' – ';
+            if (currentSpendMax > 0) spendStr += ((window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.sign === 'function') ? window.ZDZ.ui.sign() : ((window.zdzData && window.zdzData.currencySign) || '$')) + currentSpendMax;
             else spendStr += 'no limit';
             log('💰 ' + spendStr);
         }
@@ -137,7 +137,7 @@
         }, function (data) {
             currentBatchId = data.batch_id;
             log('✓ Batch #' + data.batch_id + ' created: ' + data.batch_tag);
-            log('💡 Pipeline running in background — you can close this page.');
+            log('💡 Pipeline running in background; you can close this page.');
             log('');
             setProgress(5);
 
@@ -187,7 +187,7 @@
                 if (d.stalled && status !== 'complete' && status !== 'error') {
                     var now = Date.now();
                     if (now - lastStalledAt > 30000) {
-                        log('⏳ Backend heartbeat silent for ' + (d.last_heartbeat_s || 0) + 's — still waiting (not failed).');
+                        log('⏳ Backend heartbeat silent for ' + (d.last_heartbeat_s || 0) + 's, still waiting (not failed).');
                         lastStalledAt = now;
                     }
                 }
@@ -265,7 +265,7 @@
         if (days <= 1825) return '5 years';
         if (days <= 3650) return '10 years';
         if (days <= 5475) return '15 years';
-        return 'Since 2000';
+        return 'all history';
     }
 
     /**
@@ -290,7 +290,7 @@
         ajaxPost('zl_fetch_invoices', { batch_id: currentBatchId, page: page }, function (data) {
             // Progress update per page
             if (data.total_pages > 1) {
-                log('  📄 Page ' + data.page + '/' + data.total_pages + ' — ' + data.invoice_count + ' invoices so far (' + data.customer_count + ' customers)');
+                log('  📄 Page ' + data.page + '/' + data.total_pages + ': ' + data.invoice_count + ' invoices so far (' + data.customer_count + ' customers)');
                 // Scale progress from 5% to 10% across pages
                 var pagePct = 5 + Math.round((data.page / data.total_pages) * 5);
                 setProgress(pagePct);
@@ -313,7 +313,7 @@
                 log('');
                 log('⚠️ FreshBooks Fallback Active (v1.5.3)');
                 log('   The include[]=lines parameter returned 0 invoices.');
-                log('   Fetched invoices WITHOUT line items — product filtering will be limited.');
+                log('   Fetched invoices WITHOUT line items; product filtering will be limited.');
                 log('   Run "Test FreshBooks Connection" in Settings for details.');
             }
 
@@ -328,7 +328,7 @@
             if (currentProductFilter && data.ai_available) {
                 stepExpandFilter(data.customer_count);
             } else if (currentProductFilter && !data.ai_available) {
-                log('⚠️ Poe API key not found — using basic keyword matching');
+                log('⚠️ Poe API key not found; using basic keyword matching');
                 log('   Add your Poe API key in Leads > Settings.');
                 setProgress(15);
                 stepEnrichChunk(0, data.customer_count);
@@ -351,7 +351,7 @@
         log('🤖 Running AI product filter expansion...');
         ajaxPost('zl_expand_filter', { batch_id: currentBatchId }, function (data) {
             if (data.skipped) {
-                log('⚠️ No product filter to expand — skipping');
+                log('⚠️ No product filter to expand, skipping');
             } else if (data.filter_expanded && data.filter_ai_used) {
                 log('✓ AI identified ' + data.filter_matches + ' matching product names' + elapsed());
                 if (data.filter_matched_names) {
@@ -361,7 +361,7 @@
                     log('🔑 Search phrases: ' + data.filter_keywords);
                 }
             } else {
-                log('⚠️ AI filter expansion failed — using basic keyword matching');
+                log('⚠️ AI filter expansion failed; using basic keyword matching');
                 if (data.filter_error) {
                     log('   Reason: ' + data.filter_error);
                 }
@@ -426,7 +426,7 @@
             window._tslLastCandCount = data.candidate_count;
 
             if (shouldLog) {
-                var logMsg = '📊 Processed ' + data.processed + '/' + data.total + ' — ' + data.candidate_count + ' eligible so far';
+                var logMsg = '📊 Processed ' + data.processed + '/' + data.total + ': ' + data.candidate_count + ' eligible so far';
                 if (data.errors > 0) {
                     logMsg += ' (' + data.errors + ' errors)';
                 }
@@ -488,7 +488,7 @@
         ajaxPost('zl_select_leads', { batch_id: currentBatchId, is_test: currentIsTest ? 1 : 0 }, function (data) {
             log('✓ Selected ' + data.lead_count + ' leads from ' + data.total_candidates + ' candidates' + elapsed());
             if (currentProductFilter && data.lead_count > (currentIsTest ? 3 : 50)) {
-                log('   (Over-selected for AI validation — will trim after strict check)');
+                log('   (Over-selected for AI validation; will trim after strict check)');
             }
             setProgress(55);
 
@@ -506,7 +506,7 @@
         log('');
         log('── Step 4: AI Strict Validation ───────────────────');
         if (!currentProductFilter) {
-            log('⏭ No product filter — skipping validation');
+            log('⏭ No product filter, skipping validation');
             setProgress(65);
             stepAIRefine(0);
             return;
@@ -517,7 +517,7 @@
 
         ajaxPost('zl_ai_validate', { batch_id: currentBatchId, is_test: currentIsTest ? 1 : 0 }, function (data) {
             if (data.skipped) {
-                log('⏭ Validation skipped' + (data.reason ? ' — ' + data.reason : '') + elapsed());
+                log('⏭ Validation skipped' + (data.reason ? ': ' + data.reason : '') + elapsed());
             } else if (data.ai_used) {
                 log('✓ AI Validation complete' + elapsed());
                 log('   ✅ ' + data.passed + ' leads PASSED strict validation');
@@ -526,7 +526,7 @@
                     log('   ❌ ' + data.rejected + ' leads REJECTED:');
                     if (data.details && data.details.length > 0) {
                         data.details.forEach(function (d) {
-                            log('      • ' + d.name + ' — ' + d.reason);
+                            log('      • ' + d.name + ': ' + d.reason);
                         });
                     }
                 }
@@ -537,7 +537,7 @@
 
                 log('   📊 Final lead count: ' + data.final_count);
             } else {
-                log('⚠️ AI validation unavailable — keeping all leads' + elapsed());
+                log('⚠️ AI validation unavailable; keeping all leads' + elapsed());
                 if (data.error) {
                     log('   Error: ' + data.error);
                 }
@@ -698,7 +698,7 @@
                     if (isRetryable && attempt < maxRetries) {
                         var reason = status === 'timeout' ? 'Request timed out' : 'HTTP ' + httpStatus;
                         var delaySec = (retryDelay * Math.pow(2, attempt)) / 1000;
-                        log('⚠️ ' + reason + ' — retrying in ' + delaySec + 's (attempt ' + (attempt + 2) + '/' + (maxRetries + 1) + ')...');
+                        log('⚠️ ' + reason + '; retrying in ' + delaySec + 's (attempt ' + (attempt + 2) + '/' + (maxRetries + 1) + ')...');
                         setTimeout(function () {
                             attemptRequest(attempt + 1);
                         }, retryDelay * Math.pow(2, attempt));
@@ -711,7 +711,7 @@
                     // Status 0 with "error" status = connection lost (server crashed)
                     // This commonly happens when PHP hits memory_limit or max_execution_time
                     if ((!httpStatus || httpStatus === 0) && status === 'error') {
-                        msg = 'Connection lost — server may have run out of memory (check PHP error log)';
+                        msg = 'Connection lost: server may have run out of memory (check PHP error log)';
                     } else {
                         msg = error || status || 'Request failed';
                     }
@@ -725,9 +725,9 @@
                             // If response isn't JSON, check for common PHP errors
                             var rt = xhr.responseText.substring(0, 300);
                             if (rt.indexOf('Fatal error') !== -1 || rt.indexOf('memory') !== -1) {
-                                msg = 'PHP fatal error (memory) — check server error log';
+                                msg = 'PHP fatal error (memory): check server error log';
                             } else if (rt.indexOf('Maximum execution time') !== -1) {
-                                msg = 'PHP timeout — try reducing lookback period';
+                                msg = 'PHP timeout: try reducing lookback period';
                             }
                         }
                     }
@@ -1139,7 +1139,7 @@
         // Safety: max 10 AJAX round-trips to prevent infinite loops
         if (attempts >= 10) {
             $btn.text('📤 Send to Nutshell').prop('disabled', false).removeClass('button-disabled');
-            alert('Stopped after ' + attempts + ' attempts. ' + totalCreated + ' leads sent successfully. Some leads may have failed — check the debug log.');
+            alert('Stopped after ' + attempts + ' attempts. ' + totalCreated + ' leads sent successfully. Some leads may have failed; check the debug log.');
             loadBatchLeads(batchId);
             return;
         }

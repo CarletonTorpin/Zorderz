@@ -15,6 +15,11 @@
  *                                  codes first; when one cannot be taken out, nothing is sent.
  *   set_location_codes( lines, c ) pure: the lines with the location line's codes replaced, or null when there is no
  *                                  single location line to change.
+ *   client( id )                   the billing system's own record of one customer, by its id: the record, null when
+ *                                  there is none (or another one answered), false when it could not be read.
+ *   probe_customer_link( number )  an administrator's check: does the billing system give ONE test customer's estimate
+ *                                  a link a customer can open? Refused for any other customer before anything that
+ *                                  could change the estimate is asked. Nothing is stored.
  *
  * Never throws; every failure is null / ok false with a plain reason, and nothing is logged but ids and HTTP codes.
  *
@@ -165,6 +170,105 @@ class ZEST_Billing_Doc {
 		) ) );
 		$est = is_array( $resp ) ? ( $resp['response']['result']['estimate'] ?? null ) : null;
 		return is_array( $est ) ? array( 'ok' => true, 'error' => '' ) : array( 'ok' => false, 'error' => __( 'The billing system did not send it just now. Try again in a minute.', 'zorderz' ) );
+	}
+
+	/**
+	 * One customer as the billing system has it, by its id: the record (its id is the one asked for), null when the
+	 * billing system answers and there is no such customer, false when it could not be read just now.
+	 *
+	 * @return array|null|false
+	 */
+	public static function client( string $id ) {
+		$acct = self::account();
+		if ( ! preg_match( '/^[1-9][0-9]{0,18}$/', $id ) ) {
+			return null;
+		}
+		if ( '' === $acct || ! self::available() ) {
+			return false;
+		}
+		$resp = self::call( 'GET', '/accounting/account/' . $acct . '/users/clients/' . $id );
+		if ( ! is_array( $resp ) ) {
+			return false;
+		}
+		$client = $resp['response']['result']['client'] ?? null;
+		if ( ! is_array( $client ) ) {
+			return null;
+		}
+		$got = (string) ( $client['id'] ?? ( $client['userid'] ?? '' ) );
+		return $got === $id ? $client : null;
+	}
+
+	/** A link a customer can open, as this billing system forms one (the only shape ever shown as a link found). */
+	const CUSTOMER_LINK = '~^https://([a-z0-9-]+\.)*freshbooks\.com/#/link/[A-Za-z0-9._\~-]+$~iD';
+
+	/** Any address at this billing system. */
+	const BILLING_ADDRESS = '~^https://([a-z0-9-]+\.)*freshbooks\.com/~i';
+
+	/**
+	 * Does the billing system give an estimate a link its customer can open? Three tries on ONE estimate, in this
+	 * order: the estimate's own customer-view link, its share address, then the billing system's share-link request.
+	 * The last one may mark the estimate sent, so the whole check runs only on a test customer's estimate
+	 * (ZEST_Terms_Note::is_test_doc()): any other customer is refused before it is asked. Nothing is stored, and the
+	 * log gets a reason code only, never a link.
+	 *
+	 * why: bad_number | unread | not_found | not_test. Each try: { label, form, customer_link, link }, where form is
+	 * none | customer_link | billing_address | bare, and link is filled only for a customer link.
+	 *
+	 * @return array{ok:bool,why:string,number:string,status:string,probes:array<int,array{label:string,form:string,customer_link:bool,link:string}>}
+	 */
+	public static function probe_customer_link( string $number ): array {
+		$out    = array( 'ok' => false, 'why' => '', 'number' => '', 'status' => '', 'probes' => array() );
+		$number = ltrim( trim( $number ), '0' );
+		if ( '' === $number || ! ctype_digit( $number ) || strlen( $number ) > 9 ) {
+			$out['why'] = 'bad_number';
+			return $out;
+		}
+		$found = self::find_by_number( 'estimate', $number );
+		if ( false === $found ) {
+			$out['why'] = 'unread';
+			return $out;
+		}
+		$id  = is_array( $found ) ? (string) ( $found['id'] ?? ( $found['estimateid'] ?? '' ) ) : '';
+		$doc = '' !== $id ? self::read( 'estimate', $id ) : null;
+		// The read by id must be the same document the search named.
+		if ( ! is_array( $doc ) || ltrim( (string) ( $doc['estimate_number'] ?? '' ), '0' ) !== $number ) {
+			$out['why'] = 'not_found';
+			return $out;
+		}
+		if ( ! class_exists( 'ZEST_Terms_Note' ) || ! ZEST_Terms_Note::is_test_doc( $doc ) ) {
+			$out['why'] = 'not_test';   // only a test customer's estimate: the third try may mark it sent
+			error_log( 'Zorderz Estimates: estimate link test: not_test' );
+			return $out;
+		}
+		$out['number'] = (string) preg_replace( '/[^0-9A-Za-z-]/', '', (string) ( $doc['estimate_number'] ?? $number ) );
+		$out['status'] = substr( (string) preg_replace( '/[^a-z0-9_ -]/i', '', (string) ( $doc['v3_status'] ?? ( $doc['ui_status'] ?? ( $doc['status'] ?? '' ) ) ) ), 0, 20 );
+		$tries         = array(
+			array( 'links.client_view', is_array( $doc['links'] ?? null ) ? ( $doc['links']['client_view'] ?? '' ) : '' ),
+			array( 'share_url', $doc['share_url'] ?? '' ),
+		);
+		$resp  = self::call( 'GET', self::path( 'estimate', $id ) . '/share_link?share_method=share_link' );
+		$share = '';
+		if ( is_array( $resp ) ) {
+			$inner = $resp['response']['result']['share_link'] ?? null;
+			foreach ( array( is_array( $inner ) ? ( $inner['share_link'] ?? null ) : null, $inner, $resp['share_link'] ?? null ) as $c ) {
+				if ( is_string( $c ) && '' !== $c ) {
+					$share = $c;
+					break;
+				}
+			}
+		}
+		$tries[] = array( 'share_link' . ( is_array( $resp ) ? '' : ' (no answer)' ), $share );
+		$any     = false;
+		foreach ( $tries as $t ) {
+			$v    = is_string( $t[1] ) ? trim( $t[1] ) : '';
+			$cust = (bool) preg_match( self::CUSTOMER_LINK, $v );
+			$form = '' === $v ? 'none' : ( $cust ? 'customer_link' : ( preg_match( self::BILLING_ADDRESS, $v ) ? 'billing_address' : 'bare' ) );
+			$any  = $any || $cust;
+			$out['probes'][] = array( 'label' => $t[0], 'form' => $form, 'customer_link' => $cust, 'link' => $cust ? $v : '' );
+		}
+		error_log( 'Zorderz Estimates: estimate link test: ' . ( $any ? 'found' : 'none' ) );   // a reason code, never the link
+		$out['ok'] = true;
+		return $out;
 	}
 
 	/** Lines as read, reduced to the fields a write may carry (each line's words, quantity, price and taxes). */

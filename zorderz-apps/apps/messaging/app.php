@@ -3,7 +3,7 @@
  * Plugin Name: Zorderz Messaging
  * Plugin URI:  https://zorderz.org
  * Description: One-to-one direct messages and team channels inside the Zorderz Field OS. @mentions, phone notifications held to quiet hours, estimate and invoice cards shared one document at a time.
- * Version:     1.9.0
+ * Version:     1.10.0
  * Author:      Zorderz
  * Text Domain: zdz-internal-messaging
  * Requires PHP: 8.0
@@ -74,7 +74,7 @@
  * DELIBERATELY NOT INCLUDED (see README "Not in this release"):
  *  - Threaded replies / reactions / typing indicators
  *  - External integrations (chat bridges)
- *  - WebSockets: HTTP polling (Trap 1)
+ *  - WebSockets: HTTP polling (design rule 1)
  *  - Cross-conversation search
  *
  * REAL-TIME MODEL:
@@ -85,12 +85,12 @@
  * This plugin uses NO external API clients. Estimate and invoice cards read
  * through the Estimates app's document reader (zdz_fb_document_for_viewer)
  * or, without it, the analytics app's /zorderz/v1/freshbooks-preview/{id}
- * endpoint; with neither, a #NNNNN chip shows its number only. See Trap 2.
+ * endpoint; with neither, a #NNNNN chip shows its number only. See design rule 2.
  *
  * CUSTOMER-FACING MODE:
  * If the analytics app's customer-facing mode is active for the current user, this plugin
  * hides entirely — widget returns null, full-page route renders the theme's
- * generic "not available" template. Never a visible refusal. See Trap 5.
+ * generic "not available" template. Never a visible refusal. See design rule 5.
  *
  * DB TABLES (see db/migrate-1.0.0.php):
  *  wp_zim_conversations       — channels + DMs, unified namespace
@@ -109,13 +109,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIM_VERSION', '1.9.0' );
+define( 'ZIM_VERSION', '1.10.0' );
 define( 'ZIM_PLUGIN_FILE', __FILE__ );
 define( 'ZIM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ZIM_NONCE', 'zim_nonce' );
 
-// Attachment policy (Trap 9).
+// Attachment policy (design rule 9).
 define( 'ZIM_MAX_UPLOAD_BYTES', 5 * 1024 * 1024 ); // 5 MB
 define( 'ZIM_ATTACHMENT_RETENTION_DAYS', 30 );
 
@@ -130,13 +130,13 @@ if ( ! defined( 'ZIM_ALLOWED_MIMES' ) ) {
 	) ) );
 }
 
-// Message edit window (Trap 3 / acceptance #3).
+// Message edit window (design rule 3).
 define( 'ZIM_EDIT_WINDOW_SECONDS', 5 * MINUTE_IN_SECONDS );
 
-// Push subscription rotation (Trap 6).
+// Push subscription rotation (design rule 6).
 define( 'ZIM_PUSH_ROTATION_DAYS', 90 );
 
-// Email fallback cooldown (acceptance #5).
+// Email fallback cooldown.
 define( 'ZIM_EMAIL_DIGEST_COOLDOWN_SECONDS', 30 * MINUTE_IN_SECONDS );
 
 // Default quiet hours (user-overridable).
@@ -377,7 +377,7 @@ add_filter( 'ajax_query_attachments_args', function ( $args ) {
 register_deactivation_hook( __FILE__, 'zim_deactivate' );
 
 function zim_deactivate() {
-	// "Deactivating preserves data" (acceptance #1). Do NOT drop tables.
+	// "Deactivating preserves data". Do NOT drop tables.
 	wp_clear_scheduled_hook( 'zim_cron_dispatch_notifications' );
 	wp_clear_scheduled_hook( 'zim_cron_purge_attachments' );
 	wp_clear_scheduled_hook( 'zim_cron_rotate_push_keys' );
@@ -397,28 +397,6 @@ function zim_maybe_upgrade() {
 		// Flag so the includes-loader re-seeds after classes are available.
 		update_option( 'zim_needs_reseed', '1' );
 	}
-	zim_migrate_attachment_meta_keys();
-}
-
-/**
- * Chat attachments written by Zorderz 2.0.0 and earlier carry older meta key names. Rename them once,
- * so existing attachments stay out of the Media Library and their signed links keep working.
- * Idempotent; a fresh install has nothing to rename. Removed in a later release.
- */
-function zim_migrate_attachment_meta_keys() {
-	if ( '1' === get_option( 'zim_attachment_meta_keys_v2' ) ) {
-		return;
-	}
-	global $wpdb;
-	$renames = array(
-		'_tsim_chat_attachment' => '_zim_chat_attachment',
-		'_tsim_att_token'       => '_zim_att_token',
-	);
-	foreach ( $renames as $old => $new ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time key rename.
-		$wpdb->update( $wpdb->postmeta, array( 'meta_key' => $new ), array( 'meta_key' => $old ) );
-	}
-	update_option( 'zim_attachment_meta_keys_v2', '1', false );
 }
 
 // ── Load all class files ───────────────────────────────────────────
@@ -473,7 +451,7 @@ function zim_load_includes() {
 		zim_grant_tile_to_all_eligible_users();
 	}
 
-	// Invalidate Web Push subscriptions on logout (Trap 6): only the device signing out (its session's rows).
+	// Invalidate Web Push subscriptions on logout (design rule 6): only the device signing out (its session's rows).
 	add_action( 'clear_auth_cookie', array( 'ZIM_Push', 'on_logout' ) );
 	// messaging.push_setup, the read verb Settings -> Notifications asks (ZDZ_Push_Setup).
 	add_filter( 'zdz_register_capabilities', array( 'ZIM_Push', 'register_capabilities' ) );
@@ -481,6 +459,8 @@ function zim_load_includes() {
 	add_filter( 'zdz_register_capabilities', array( 'ZIM_Unread_Counts', 'register_capabilities' ) );
 	// The business's own channels, from its Identity Pack (org.yml messaging.channels).
 	add_filter( 'zdz_identity_pack_consumers', array( 'ZIM_Channels', 'pack_consumer' ) );
+	// The class names of the business's own training-video pages (mappings.yml messaging.video_embed_classes).
+	add_filter( 'zdz_identity_pack_consumers', array( 'ZIM_Messages', 'pack_consumer' ) );
 
 	// Full-page route — ?zim_page=1 renders the inline widget full-viewport.
 	add_action( 'template_redirect', 'zim_maybe_render_full_page' );
@@ -537,7 +517,7 @@ add_action( 'rest_api_init', function () {
  * Full-page view handler for the Tier 1 fallback and direct deep-links.
  *
  * Pattern: /?zim_page=1 — theme bridge opens this in its iframe/app shell.
- * Applies the same customer-facing hide as the inline widget (Trap 5).
+ * Applies the same customer-facing hide as the inline widget (design rule 5).
  */
 function zim_maybe_render_full_page() {
 	if ( empty( $_GET['zim_page'] ) ) {
@@ -642,7 +622,7 @@ function zim_is_compact() {
  * existence. Used for customer-facing hide and for unauthenticated access.
  */
 function zim_render_unavailable() {
-	status_header( 200 ); // NOT 403 — 403 leaks existence (Trap 5 / acceptance #4).
+	status_header( 200 ); // NOT 403 — 403 leaks existence (design rule 5).
 	nocache_headers();
 	header( 'Content-Type: text/html; charset=utf-8' );
 	echo '<!doctype html><html><head><meta charset="utf-8"><title>Not available</title>';
@@ -679,7 +659,7 @@ add_action( 'after_setup_theme', function() {
 					'nm'          => 'Messages',
 					'icon'        => 'message-square',
 					'cat'         => 'Team',
-					'cc'          => '#3B82F6',
+					'cc'          => '#56B4E9',
 					'desc'        => 'Team messaging, channels, @mentions.',
 					// v1.0.24 — zdz_general (shared kiosk) is included so the
 					// Messages tile is visible on the workshop iPad. Its access
@@ -699,7 +679,7 @@ add_action( 'after_setup_theme', function() {
 			}
 
 			public function render_dashboard_widget( int $user_id ): ?string {
-				// Customer-facing hard-block (Trap 5 / acceptance #4).
+				// Customer-facing hard-block (design rule 5).
 				if ( ! ZIM_Widget::should_render() ) {
 					return null;
 				}
@@ -724,7 +704,7 @@ add_action( 'after_setup_theme', function() {
 					'nm'          => 'Messages',
 					'icon'        => 'message-square',
 					'cat'         => 'Team',
-					'cc'          => '#3B82F6',
+					'cc'          => '#56B4E9',
 					'desc'        => 'Team messaging.',
 					// v1.0.24 — see Tier 2 note: kiosk gets read-only access.
 					'roles'       => array( 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'zdz_general' ),

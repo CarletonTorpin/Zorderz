@@ -4,6 +4,9 @@
  * answer before anyone reads it.
  *
  * before_model(): a narrow question one app answers is answered by that app, and the model is never asked:
+ *   0. "reply to #1"                       ZANA_Mail_Reply_Route: the one exception, where a model does read one email
+ *                                           (the person's own, picked by them, handed over by the inbox app) to draft
+ *                                           its answer; decided first, by rule
  *   1. "show me the <page> page"           ZANA_Page_Nav (the business's page list)
  *   2. "how many hours did I work…"        ZANA_Hours_Route (hours.lookup)
  *   3. "plan 3 routes near … for …"        ZANA_Plan_Routes (opens the Route Planner)
@@ -49,6 +52,15 @@ class ZANA_Routes {
 		$fence = ZANA_Markers::data_start();
 		if ( '' !== $fence && false !== strpos( $message, $fence ) ) {
 			return $out;   // a widget block shared into the chat is the model's to read
+		}
+
+		// "reply to #1": one email of the person's own, answered as a draft. Ahead of every other route (the mailbox
+		// route would only list it again); a line of its own when the reply cannot start.
+		if ( class_exists( 'ZANA_Mail_Reply_Route' ) ) {
+			$mr = ZANA_Mail_Reply_Route::route( $uid, $message, $history, $ctx );
+			if ( null !== $mr ) {
+				return $mr;
+			}
 		}
 
 		$a = ZANA_Page_Nav::route( $message );
@@ -97,6 +109,7 @@ class ZANA_Routes {
 			}
 		};
 		$add( ZANA_User_Memory::prompt_block( $uid ) );
+		$add( class_exists( 'ZANA_Style_Memory' ) ? ZANA_Style_Memory::prompt_block( $uid ) : '' );   // how this administrator writes, by audience
 		$tier = class_exists( 'ZDZ_Capabilities' ) ? ZDZ_Capabilities::tier_of( $uid ) : 'viewer';
 		$add( ZANA_Company_Facts::block( $tier ) );
 		$add( ZANA_Page_Nav::prompt_block() );

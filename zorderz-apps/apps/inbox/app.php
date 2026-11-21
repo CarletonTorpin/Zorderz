@@ -2,7 +2,7 @@
 /**
  * Module: Zorderz — Inbox
  * Description: Per-user mailbox connect + assistant for the Zorderz dashboard; dark by default.
- * Version:     0.23.0
+ * Version:     0.24.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -48,7 +48,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZIB_VERSION', '0.23.0' );
+define( 'ZIB_VERSION', '0.24.0' );
 define( 'ZIB_PLUGIN_FILE', __FILE__ );
 define( 'ZIB_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZIB_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

@@ -6,7 +6,7 @@
  * new table — it is a thin facade over the committed Flow writer (class-zdz-flow.php). Everything a
  * Project references (its estimate, invoice, appointments, cuts, receipts, surveys, conversations,
  * CRM lead, and its own child jobs) is recorded in the namespaced ref map (Zdz_Flow_Refs), keyed by
- * (system, entity, external_id) — NEVER a bare document number (estimate #5982 is not invoice #5982).
+ * (system, entity, external_id) — NEVER a bare document number (estimate #12 is not invoice #12).
  *
  * INVARIANTS this class is built around (do not "simplify" any away):
  *   - INV-A — derived status is a MATERIALIZED VIEW. The five-branch derivation is computed by the
@@ -61,7 +61,7 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 
 		/**
 		 * The GENERIC ref namespaces this container registers, as system => entity. The `entity`
-		 * disambiguates document numbers across systems so estimate #5982 and invoice #5982 never
+		 * disambiguates document numbers across systems so estimate #12 and invoice #12 never
 		 * collide. `job/handoff` is the container's own internal child-linkage namespace. Provider-
 		 * named namespaces (a billing provider's estimate/invoice, a CRM's lead) are NOT here — the
 		 * connections pack adds them through the same filter ([IDENTITY]).
@@ -584,7 +584,7 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 				$sig = Zjob_Project_Signal::table();
 				$sql = "SELECT wi.* FROM {$wi} wi LEFT JOIN {$sig} sig ON sig.project_id = wi.id WHERE "
 					. implode( ' AND ', $where )
-					. ' ORDER BY COALESCE(sig.signal, 0) DESC, wi.created_at DESC LIMIT ' . $limit;
+					. ' ORDER BY COALESCE(sig.`signal`, 0) DESC, wi.created_at DESC LIMIT ' . $limit;
 			} else {
 				$sql = "SELECT wi.* FROM {$wi} wi WHERE " . implode( ' AND ', $where ) . ' ORDER BY wi.created_at DESC LIMIT ' . $limit;
 			}
@@ -842,6 +842,25 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 			$name = substr( 'zjobprj_' . md5( $key ), 0, 64 ); // GET_LOCK names cap at 64 chars.
 			$got  = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, 2 ) );
 			return '1' === (string) $got;
+		}
+
+		/**
+		 * Who made the estimate: its row's created_by, carried onto the Project it mints as its originator.
+		 * 0 when the Estimates app is not here, the row is gone or nobody is recorded: the Project is then
+		 * made with no originator, as a Project from any other system is.
+		 *
+		 * @param int $estimate_id
+		 * @return int a user id, or 0.
+		 */
+		private static function estimate_created_by( int $estimate_id ): int {
+			global $wpdb;
+			if ( $estimate_id <= 0 || ! isset( $wpdb ) || ! class_exists( 'ZEST_DB' ) || ! method_exists( 'ZEST_DB', 'estimates_table' ) ) {
+				return 0;
+			}
+			$table = ZEST_DB::estimates_table();
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is the Estimates app's own constant name.
+			$by = $wpdb->get_var( $wpdb->prepare( "SELECT created_by FROM {$table} WHERE id = %d", $estimate_id ) );
+			return max( 0, (int) $by );
 		}
 
 		/** Release the advisory mint lock. Idempotent / harmless if not held. */
@@ -1245,11 +1264,11 @@ if ( ! class_exists( 'Zjob_Project' ) ) {
 
 		/**
 		 * Resolve a raw document pointer to (doc_type, id) — and its (system, entity, external_id)
-		 * ref key. REFUSES a bare number (returns []): the estimate #5982 vs invoice #5982 collision
+		 * ref key. REFUSES a bare number (returns []): the estimate #12 vs invoice #12 collision
 		 * is prevented by requiring the type, never keying on the number alone.
 		 *
-		 * Accepts: ['doc_type'=>..,'id'=>..], ['system'=>..,'external_id'=>..], or "estimate:5982" /
-		 * "estimate#5982". A lone "5982" is refused.
+		 * Accepts: ['doc_type'=>..,'id'=>..], ['system'=>..,'external_id'=>..], or "estimate:12" /
+		 * "estimate#12". A lone "12" is refused.
 		 *
 		 * @param mixed $raw
 		 * @return array{} | array{doc_type:string,id:string,system:string,entity:string,external_id:string}

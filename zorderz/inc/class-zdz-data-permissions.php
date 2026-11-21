@@ -10,7 +10,6 @@
  *   ZDZ_Data_Permissions::can( $user_id, 'view_company_revenue' )
  *
  * @package Zorderz
- * @since   2.17.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;

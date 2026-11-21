@@ -5,7 +5,7 @@
  * Detects #NNNNN tokens in message bodies and, on demand, renders a small
  * preview card (number, kind, customer, amount, status). The actual data
  * comes from Analytics via its REST endpoint `/zorderz/v1/freshbooks-preview/{id}`
- * — we never talk to the billing system directly (Trap 2 — no external API
+ * — we never talk to the billing system directly (design rule 2 — no external API
  * clients in this plugin). With the Estimates app's document reader present,
  * ZIM_Doc_Shares answers instead (the document itself, for someone who may
  * see it); this card is the plain fallback.

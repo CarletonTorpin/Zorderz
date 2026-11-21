@@ -550,7 +550,7 @@ class ZHR_Time {
 
 	/** A meal's state in words, for the day view and the accountant's file. */
 	public static function meal_words( array $m ) {
-		$at  = $m['start_ts'] ? ( new DateTimeImmutable( '@' . (int) $m['start_ts'] ) )->setTimezone( self::tz() )->format( 'g:i A' ) : '';
+		$at  = $m['start_ts'] ? ( new DateTimeImmutable( '@' . (int) $m['start_ts'] ) )->setTimezone( self::tz() )->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i A' ) : 'g:i A' ) ) : '';
 		$no  = (int) $m['no'];
 		$aft = ZHR_Rules::after_words( (int) ( $m['after'] ?? 0 ) );
 		switch ( $m['status'] ) {
@@ -701,17 +701,17 @@ class ZHR_Time {
 		}
 		$tz  = self::tz();
 		$sd  = ( new DateTimeImmutable( '@' . $s ) )->setTimezone( $tz );
-		$day = $sd->format( 'D M j' );
+		$day = $sd->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D M j' ) : 'D M j' ) );
 		if ( empty( $end_at ) ) {
 			/* translators: 1: time, 2: day */
-			return sprintf( __( 'the clock running since %1$s, %2$s', 'zorderz' ), $sd->format( 'g:i A' ), $day );
+			return sprintf( __( 'the clock running since %1$s, %2$s', 'zorderz' ), $sd->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i A' ) : 'g:i A' ) ), $day );
 		}
 		$e = self::ts( $end_at );
 		if ( null === $e ) {
-			return $sd->format( 'g:i A' ) . ', ' . $day;
+			return $sd->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i A' ) : 'g:i A' ) ) . ', ' . $day;
 		}
 		$ed = ( new DateTimeImmutable( '@' . $e ) )->setTimezone( $tz );
-		return $sd->format( 'g:i A' ) . '–' . $ed->format( 'g:i A' ) . ', ' . $day;
+		return $sd->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i A' ) : 'g:i A' ) ) . '–' . $ed->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i A' ) : 'g:i A' ) ) . ', ' . $day;
 	}
 
 	/**
@@ -1026,7 +1026,7 @@ class ZHR_Time {
 	/** '7:12 am', or '7:12 am on Fri Mar 6' when that is not $today. */
 	public static function time_words( $ts, $today = null ) {
 		$d = ( new DateTimeImmutable( '@' . (int) $ts ) )->setTimezone( self::tz() );
-		return $d->format( 'g:i a' ) . ( null !== $today && $d->format( 'Y-m-d' ) !== $today ? ' ' . __( 'on', 'zorderz' ) . ' ' . $d->format( 'D M j' ) : '' );
+		return $d->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'g:i a' ) : 'g:i a' ) ) . ( null !== $today && $d->format( 'Y-m-d' ) !== $today ? ' ' . __( 'on', 'zorderz' ) . ' ' . $d->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D M j' ) : 'D M j' ) ) : '' );
 	}
 
 	/**

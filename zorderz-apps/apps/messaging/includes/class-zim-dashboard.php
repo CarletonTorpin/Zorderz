@@ -12,13 +12,13 @@
  *   4. verify conversation membership when applicable
  *   5. return JSON only (wp_send_json_success / wp_send_json_error)
  *
- * POLLING ENDPOINT SHAPE (required pattern, see MEP prompt):
+ * POLLING ENDPOINT SHAPE (required pattern):
  *   - `zim_poll` takes ( conversation_id, since )
  *   - Returns up to 50 messages with id > since
  *   - Frontend keeps ≤ 2 in-flight requests per tab (one per open
  *     conversation + one sidebar tick). Backoff on error.
  *
- * NO-CACHE CONTRACT (acceptance #14):
+ * NO-CACHE CONTRACT:
  *   We never write message bodies into transients or wp_cache_*. Message
  *   data flows Messages table → fetch_since() → JSON → client. The only
  *   caches this plugin writes are:
@@ -696,7 +696,7 @@ class ZIM_Dashboard {
 	}
 
 	// ─────────────────────────────────────────────────────────────
-	// DM open (deterministic — acceptance #12)
+	// DM open (deterministic)
 	// ─────────────────────────────────────────────────────────────
 
 	public function ajax_dm_open() {

@@ -23,7 +23,7 @@ if ( ! class_exists( 'ZDZ_Name_Match' ) ) {
 	class ZDZ_Name_Match {
 		public static function sounds_like( $a, $b ) {
 			$a = strtolower( trim( $a ) ); $b = strtolower( trim( $b ) );
-			foreach ( array( array( 'hale', 'haile' ), array( 'marsh', 'marsch' ) ) as $g ) {
+			foreach ( array( array( 'vale', 'vayle' ), array( 'marsh', 'marshe' ) ) as $g ) {
 				if ( in_array( $a, $g, true ) && in_array( $b, $g, true ) ) { return true; }
 			}
 			return $a === $b;
@@ -45,10 +45,10 @@ function ok( bool $c, string $m ): void {
 }
 function fold( string $a, string $b ): bool { return ZPREP_Dashboard::same_customer( $a, '', $b, '' ); }
 
-ok( fold( 'Robin Hale', 'Robin Haile' ) === true,     'soundalike surname + same given -> FOLD (Hale/Haile, both Robin)' );
-ok( fold( 'Robin Hale', 'Morgan Haile' ) === false,   'soundalike surname + different given -> distinct (never merge)' );
-ok( fold( 'Hale', 'Haile' ) === false,                'soundalike surname, surname-only -> distinct (never merge on sound alone)' );
-ok( fold( 'Quinn Marsh', 'Quinn Marsch' ) === true,   'second soundalike pair + same given -> FOLD' );
+ok( fold( 'Robin Vale', 'Robin Vayle' ) === true,     'soundalike surname + same given -> FOLD (Vale/Vayle, both Robin)' );
+ok( fold( 'Robin Vale', 'Morgan Vayle' ) === false,   'soundalike surname + different given -> distinct (never merge)' );
+ok( fold( 'Vale', 'Vayle' ) === false,                'soundalike surname, surname-only -> distinct (never merge on sound alone)' );
+ok( fold( 'Quinn Marsh', 'Quinn Marshe' ) === true,   'second soundalike pair + same given -> FOLD' );
 ok( fold( 'Alex Rivera', 'Alex Rivera' ) === true,    'exact surname + given -> FOLD (unchanged)' );
 ok( fold( 'Jordan Rivera', 'Alex Rivera' ) === false, 'exact surname, different given -> distinct (unchanged)' );
 ok( fold( 'Rivera', 'Rivera' ) === true,              'exact surname-only -> FOLD (unchanged)' );

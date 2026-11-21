@@ -177,7 +177,7 @@ class ZCC_Month_Lock {
 			/* translators: 1: a month and year, 2: an amount, 3: an invoice count. */
 			_n( '%1$s is locked: %2$s on %3$d invoice.', '%1$s is locked: %2$s on %3$d invoices.', $n, 'zorderz' ),
 			$name,
-			'$' . number_format( $commission, 2 ),
+			( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( $commission, 2 ) : number_format( $commission, 2 ) ),
 			$n
 		);
 		if ( $elsewhere ) {
@@ -235,7 +235,7 @@ class ZCC_Month_Lock {
 			'can_lock'   => $paidp && ( ! $rec || $open > 0 ),
 			'needs_paid' => ! $paidp,
 			/* translators: 1: a month and year, 2: a person's name, 3: an amount. */
-			'ask'        => sprintf( __( 'Lock %1$s for %2$s at %3$s? Only do this after the commission is paid. The app can’t unlock it.', 'zorderz' ), $name, $who, '$' . number_format( (float) ( $summary['total_commission'] ?? 0 ), 2 ) ),
+			'ask'        => sprintf( __( 'Lock %1$s for %2$s at %3$s? Only do this after the commission is paid. The app can’t unlock it.', 'zorderz' ), $name, $who, ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) ( $summary['total_commission'] ?? 0 ), 2 ) : number_format( (float) ( $summary['total_commission'] ?? 0 ), 2 ) ) ),
 			/* translators: 1: a month and year, 2: a person's name. */
 			'label'      => $rec ? __( 'Lock again', 'zorderz' ) : sprintf( __( 'Lock %1$s for %2$s', 'zorderz' ), $name, $who ),
 		];

@@ -655,8 +655,7 @@ class ZJOB_AJAX {
 			return sanitize_key( $pre );
 		}
 		$t = strtolower( $text );
-		if ( strpos( $t, 'repair' ) !== false || strpos( $t, 'service' ) !== false
-			|| strpos( $t, 'rescreen' ) !== false || strpos( $t, 're-screen' ) !== false || strpos( $t, 'fix' ) !== false ) {
+		if ( strpos( $t, 'repair' ) !== false || strpos( $t, 'service' ) !== false || strpos( $t, 'fix' ) !== false ) {
 			return 'service';
 		}
 		return function_exists( 'zjob_default_component' ) ? zjob_default_component() : 'other';

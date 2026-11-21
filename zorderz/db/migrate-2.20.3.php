@@ -12,8 +12,6 @@
  * wp_usermeta from installs. This migration removes them.
  *
  * Idempotent: safe to run multiple times — DELETE WHERE ignores missing rows.
- *
- * @since 2.20.3
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

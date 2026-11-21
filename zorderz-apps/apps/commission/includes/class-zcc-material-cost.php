@@ -265,7 +265,7 @@ class ZCC_Material_Cost {
 			$fc = self::family_cost( $family, $line, $qty ); // phpcs:ignore PHPCompatibility.Extensions.RemovedExtensions.famRemoved -- self::family_cost() is this class's own method, not the removed fam extension
 			if ( $fc['cost'] > 0 ) {
 				$new     = $fc['cost'];
-				$steps[] = sprintf( 'Supplier cost $%s%s, from the price book', number_format( $fc['cost'], 2 ), $fc['units'] > 1 ? ' (' . $fc['units'] . ' × $' . number_format( $fc['each'], 2 ) . ')' : '' );
+				$steps[] = sprintf( 'Supplier cost %s%s, from the price book', ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $fc['cost'], 2 ) : '$' . number_format( $fc['cost'], 2 ) ), $fc['units'] > 1 ? ' (' . $fc['units'] . ' × ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $fc['each'], 2 ) : '$' . number_format( $fc['each'], 2 ) ) . ')' : '' );
 				if ( $fc['assumed'] ) {
 					$steps[] = 'Assumed: ' . implode( '; ', array_map( 'strval', $fc['assumed'] ) );
 				}
@@ -285,9 +285,9 @@ class ZCC_Material_Cost {
 			if ( $r['rate'] > 0 ) {
 				$tax = round( $new * $r['rate'] / 100, 2 );
 				if ( ! isset( $material['dealer'] ) ) {
-					$steps[] = sprintf( 'Material cost $%s', number_format( $new, 2 ) );
+					$steps[] = sprintf( 'Material cost %s', ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $new, 2 ) : '$' . number_format( $new, 2 ) ) );
 				}
-				$steps[]   = sprintf( '+ %s%% purchase tax (%s) $%s', rtrim( rtrim( number_format( $r['rate'], 3 ), '0' ), '.' ), $r['area'], number_format( $tax, 2 ) );
+				$steps[]   = sprintf( '+ %s%% purchase tax (%s) %s', rtrim( rtrim( number_format( $r['rate'], 3 ), '0' ), '.' ), $r['area'], ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $tax, 2 ) : '$' . number_format( $tax, 2 ) ) );
 				$new      += $tax;
 				$material += [ 'tax' => $tax, 'rate' => $r['rate'], 'area' => $r['area'], 'group' => $group ];
 			}

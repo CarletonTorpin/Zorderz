@@ -67,7 +67,7 @@ class ZDZ_Business_Profile {
 				 * A short internal token for the business — the thing that appears on
 				 * paperwork as shorthand. It is registered as a RESERVED token so the
 				 * attribution parser can never mistake the company's own abbreviation
-				 * for a person's initials, which is a real defect this platform had.
+				 * for a person's initials.
 				 */
 				'short_code'    => '',
 				'publisher'     => '',                        // display-only "published by" string
@@ -94,9 +94,8 @@ class ZDZ_Business_Profile {
 			],
 			/*
 			 * Sending identities, by purpose. Any purpose left blank inherits
-			 * 'default'; 'default' itself falls back to WordPress. This replaced
-			 * per-plugin hardcoded from-names, which is how one person's name
-			 * ended up as the sender on a whole category of mail.
+			 * 'default'; 'default' itself falls back to WordPress, so no app names
+			 * a sender of its own.
 			 */
 			'senders' => [
 				'default'   => [ 'name' => '', 'email' => '' ],
@@ -120,22 +119,22 @@ class ZDZ_Business_Profile {
 				 * is a v1.1 task with a contrast pass attached.
 				 */
 				'ramp' => [
-					'50'  => '#EBF5FF', '100' => '#D6EBFF', '200' => '#ADCFFF',
-					'300' => '#7AB3FF', '400' => '#4796F7', '500' => '#2C5F8A',
-					'600' => '#1E3A5F', '700' => '#162D4A', '800' => '#0F1F35',
-					'900' => '#091526', '950' => '#050D18',
+					'50'  => '#F5F6FE', '100' => '#EAEDFE', '200' => '#D3DAFF',
+					'300' => '#B1BCFF', '400' => '#7D87FB', '500' => '#5150D6',
+					'600' => '#433FBD', '700' => '#36339C', '800' => '#282876',
+					'900' => '#1D1D56', '950' => '#11123A',
 				],
 				/*
-				 * App-category tile colours. These are a second, independent skin
-				 * lever: the ramp above themes the chrome, this themes the dashboard.
-				 * Core ships the palette and the tenant only chooses which category
-				 * each app sits in — but a business with its own colour language can
-				 * override the palette itself here.
+				 * One colour per app category, printed as --cat-* for custom styles and
+				 * add-ons. Each defaults to the colour of the dashboard group that
+				 * category is filed under (ZDZ_App_Groups::CAT_FALLBACK), so anything
+				 * styled with them agrees with the dashboard. The groups themselves are
+				 * fixed to a colour-blind-safe set (Okabe-Ito) and are not changed here.
 				 */
 				'categories' => [
-					'sales'   => '#7C3AED', 'finance' => '#059669', 'service' => '#2563EB',
-					'field'   => '#EA580C', 'admin'   => '#DC2626', 'ops'     => '#0891B2',
-					'team'    => '#DB2777',
+					'sales'   => '#E69F00', 'finance' => '#0072B2', 'service' => '#0072B2',
+					'field'   => '#009E73', 'admin'   => '#0072B2', 'ops'     => '#009E73',
+					'team'    => '#56B4E9',
 				],
 				/*
 				 * Logo artwork, in two shapes × two modes.
@@ -178,9 +177,18 @@ class ZDZ_Business_Profile {
 			'locale' => [
 				'timezone'      => '',                        // falls back to WP timezone
 				'locale'        => '',                        // falls back to WP locale
-				'currency'      => 'USD',
+				'currency'      => 'USD',                     // a business outside the US that sets none gets its country's
 				'currency_sign' => '$',
 				'date_format'   => 'n/j/Y',
+				/*
+				 * The rest follow the business's country (Contact → Address → Country), else its language's
+				 * region, else the United States; a value stored here always wins.
+				 */
+				'units'          => '',                       // "us" (inches, °F) or "metric" (cm, °C, mm of rain)
+				'postcode_label' => '',                       // "ZIP", "Postcode", "Postal code", …
+				'region_label'   => '',                       // "State", "County", "Province", "Region"
+				'time_format'    => '',                       // a PHP time format: "g:i a" or "H:i"
+				'number_format'  => '',                       // "1,234.56", "1.234,56", "1 234,56" or "1'234.56"
 			],
 			'people' => [
 				// e.g. "{first}@example.com" — used to suggest, never to assume.
@@ -224,6 +232,43 @@ class ZDZ_Business_Profile {
 		if ( '' === $profile['contact']['email'] )         $profile['contact']['email']         = (string) get_option( 'admin_email' );
 		if ( '' === $profile['web']['app_domain'] )        $profile['web']['app_domain']        = (string) wp_parse_url( home_url(), PHP_URL_HOST );
 		if ( '' === $profile['locale']['timezone'] )       $profile['locale']['timezone']       = function_exists( 'wp_timezone_string' ) ? wp_timezone_string() : 'UTC';
+		$given = is_array( $stored ) && isset( $stored['locale'] ) && is_array( $stored['locale'] ) ? $stored['locale'] : [];
+		$lang  = '' !== (string) $profile['locale']['locale'] ? (string) $profile['locale']['locale'] : ( function_exists( 'get_locale' ) ? (string) get_locale() : '' );
+		// The country the rest follows: the business address's, else the language's region, else the United States.
+		$cc = self::country_code_from( (string) ( $profile['contact']['address']['country'] ?? '' ), $lang );
+		$profile['locale']['country'] = $cc;
+		$unset = static function ( $k ) use ( $given ) {
+			return '' === trim( (string) ( $given[ $k ] ?? '' ) );
+		};
+		// A business outside the United States that names no currency bills in its country's ("GB" → GBP).
+		if ( $unset( 'currency' ) && ! ( is_array( $stored ) && '' !== trim( (string) ( $stored['currency'] ?? '' ) ) ) ) {
+			$profile['locale']['currency'] = self::currency_for( $cc );
+		}
+		// The sign follows the currency when only the currency was given ("GBP" reads "£"); a stored sign always wins.
+		$flat = is_array( $stored ) && is_string( $stored['currency_sign'] ?? null ) ? trim( $stored['currency_sign'] ) : ''; // a profile stored flat
+		if ( $unset( 'currency_sign' ) && '' === $flat ) {
+			$profile['locale']['currency_sign'] = self::sign_for( (string) $profile['locale']['currency'] );
+		}
+		// Dates follow the language, and the country where the language says no more than "en_US" or "en"
+		// ("en_GB", or a business in the United Kingdom, writes 19/11/2026); a stored format always wins.
+		if ( $unset( 'date_format' ) ) {
+			$profile['locale']['date_format'] = self::date_format_for( self::language_for_country( $lang, $cc ) );
+		}
+		if ( $unset( 'units' ) || ! in_array( $profile['locale']['units'], [ 'us', 'metric' ], true ) ) {
+			$profile['locale']['units'] = self::units_for( $cc );
+		}
+		if ( $unset( 'postcode_label' ) ) {
+			$profile['locale']['postcode_label'] = self::postcode_label_for( $cc );
+		}
+		if ( $unset( 'region_label' ) ) {
+			$profile['locale']['region_label'] = self::region_label_for( $cc );
+		}
+		if ( $unset( 'time_format' ) || ! preg_match( '/^[gGhH]:i(?: ?[aA])?$/', (string) $profile['locale']['time_format'] ) ) {
+			$profile['locale']['time_format'] = self::time_format_for( $cc );
+		}
+		if ( $unset( 'number_format' ) || ! isset( self::NUMBER_FORMATS[ $profile['locale']['number_format'] ] ) ) {
+			$profile['locale']['number_format'] = self::number_format_for( self::language_for_country( $lang, $cc ) );
+		}
 		if ( '' === $profile['brand']['pwa']['name'] )     $profile['brand']['pwa']['name']       = $profile['identity']['trading_name'];
 		if ( '' === $profile['brand']['pwa']['short_name'] ) $profile['brand']['pwa']['short_name'] = $profile['identity']['short_name'];
 		if ( '' === $profile['brand']['pwa']['theme_color'] ) $profile['brand']['pwa']['theme_color'] = $profile['brand']['ramp']['600'];
@@ -239,9 +284,414 @@ class ZDZ_Business_Profile {
 		return self::$resolved;
 	}
 
+	/** Signs of the currencies a business is most likely to bill in; any other reads as its code ("CHF 40"). */
+	const CURRENCY_SIGNS = [
+		'USD' => '$', 'CAD' => '$', 'AUD' => '$', 'NZD' => '$', 'SGD' => '$', 'HKD' => '$', 'MXN' => '$',
+		'GBP' => '£', 'EUR' => '€', 'JPY' => '¥', 'CNY' => '¥', 'INR' => '₹', 'KRW' => '₩', 'ILS' => '₪',
+		'PHP' => '₱', 'NGN' => '₦', 'TRY' => '₺', 'THB' => '฿', 'VND' => '₫', 'ZAR' => 'R', 'BRL' => 'R$',
+		'PLN' => 'zł', 'SEK' => 'kr', 'NOK' => 'kr', 'DKK' => 'kr',
+	];
+
+	/** The business's money sign (Business Profile → Locale), "$" when none resolves. */
+	public static function sign() {
+		$s = (string) self::get( 'locale.currency_sign', '$' );
+		return '' !== $s ? $s : '$';
+	}
+
+	/**
+	 * A sum in the business's money: money(1080) "$1,080.00", money(-175, 0) "-$175". $minus is the sign written
+	 * before a negative sum ("-", or U+2212 as some paperwork prints it).
+	 */
+	public static function money( $amount, $places = 2, $minus = '-' ) {
+		$v = (float) $amount;
+		return ( $v < 0 ? $minus : '' ) . self::sign() . self::number( abs( $v ), (int) $places );
+	}
+
+	/**
+	 * The sign for a currency code: CURRENCY_SIGNS, else the code itself followed by a space; "$" with no code.
+	 * Filter: zdz_currency_sign ( $sign, $code ). Pure apart from the filter.
+	 */
+	public static function sign_for( $code ) {
+		$code = strtoupper( trim( (string) $code ) );
+		if ( '' === $code ) {
+			$sign = '$';
+		} elseif ( isset( self::CURRENCY_SIGNS[ $code ] ) ) {
+			$sign = self::CURRENCY_SIGNS[ $code ];
+		} else {
+			$sign = preg_match( '/^[A-Z]{3}$/', $code ) ? $code . ' ' : '$';
+		}
+		return function_exists( 'apply_filters' ) ? (string) apply_filters( 'zdz_currency_sign', $sign, $code ) : $sign;
+	}
+
+	/**
+	 * The short date format a language writes ("en_US" n/j/Y, "en_GB" j/n/Y, "de_DE" j.n.Y, "sv_SE" Y-m-d): month first
+	 * only where that is the custom. Filter: zdz_date_format_for ( $format, $locale ). Pure apart from the filter.
+	 */
+	public static function date_format_for( $locale ) {
+		$l    = strtolower( str_replace( '-', '_', trim( (string) $locale ) ) );
+		$lang = (string) strtok( $l, '_' );
+		$reg  = strtoupper( (string) ( explode( '_', $l )[1] ?? '' ) );
+		if ( '' === $l || in_array( $reg, [ 'US', 'PH', 'FM', 'MH', 'PW' ], true ) || ( 'en' === $lang && '' === $reg ) ) {
+			$f = 'n/j/Y';
+		} elseif ( in_array( $lang, [ 'zh', 'ja', 'ko', 'hu', 'lt', 'sv', 'mn' ], true ) || 'CA' === $reg && 'en' === $lang ) {
+			$f = 'Y-m-d';
+		} elseif ( in_array( $lang, [ 'de', 'ru', 'pl', 'cs', 'sk', 'fi', 'nb', 'nn', 'no', 'da', 'tr', 'uk', 'ro', 'et', 'lv', 'sl', 'hr', 'sr', 'bg', 'is', 'be', 'kk', 'az' ], true ) ) {
+			$f = 'j.n.Y';
+		} elseif ( 'nl' === $lang ) {
+			$f = 'j-n-Y';
+		} else {
+			$f = 'j/n/Y';
+		}
+		return function_exists( 'apply_filters' ) ? (string) apply_filters( 'zdz_date_format_for', $f, $locale ) : $f;
+	}
+
+	/**
+	 * The business's short date format (Business Profile → Locale → Date format). $padded writes the day and month in
+	 * two digits ("01/05/2026"), as printed paperwork does.
+	 */
+	public static function date_format( $padded = false ) {
+		$f = (string) self::get( 'locale.date_format', 'n/j/Y' );
+		return $padded ? strtr( $f, [ 'n' => 'm', 'j' => 'd' ] ) : $f;
+	}
+
+	/**
+	 * The business's language as a browser reads it ("en-GB"): Locale → Language, else the site's, else "en-US"; an
+	 * English language that names the United States or no country takes the business's own country ("en-GB" for a
+	 * business in the United Kingdom on a site left in "en_US"). Only the language and its country, so every browser
+	 * takes it.
+	 */
+	public static function js_locale() {
+		$l = trim( (string) self::get( 'locale.locale', '' ) );
+		if ( '' === $l && function_exists( 'get_locale' ) ) {
+			$l = (string) get_locale();
+		}
+		$l = self::language_for_country( $l, (string) self::get( 'locale.country', 'US' ) );
+		return preg_match( '/^([a-z]{2,3})(?:[_-]([A-Za-z]{2}|\d{3}))?(?:[_-]|$)/', $l, $m )
+			? $m[1] . ( isset( $m[2] ) && '' !== $m[2] ? '-' . strtoupper( $m[2] ) : '' )
+			: 'en-US';
+	}
+
+	// ─────────────────────────────────────────────── country, units, labels, numbers and textual dates
+
+	/** Country names a business is likely to write in its address, by their two-letter codes. */
+	const COUNTRY_NAMES = [
+		'UNITED STATES' => 'US', 'UNITED STATES OF AMERICA' => 'US', 'USA' => 'US', 'U.S.' => 'US', 'U.S.A.' => 'US',
+		'AMERICA' => 'US', 'UNITED KINGDOM' => 'GB', 'UK' => 'GB', 'U.K.' => 'GB', 'GREAT BRITAIN' => 'GB',
+		'BRITAIN' => 'GB', 'ENGLAND' => 'GB', 'SCOTLAND' => 'GB', 'WALES' => 'GB', 'NORTHERN IRELAND' => 'GB',
+		'IRELAND' => 'IE', 'CANADA' => 'CA', 'AUSTRALIA' => 'AU', 'NEW ZEALAND' => 'NZ', 'INDIA' => 'IN',
+		'SOUTH AFRICA' => 'ZA', 'SINGAPORE' => 'SG', 'PHILIPPINES' => 'PH', 'MEXICO' => 'MX', 'BRAZIL' => 'BR',
+		'GERMANY' => 'DE', 'AUSTRIA' => 'AT', 'SWITZERLAND' => 'CH', 'FRANCE' => 'FR', 'BELGIUM' => 'BE',
+		'NETHERLANDS' => 'NL', 'THE NETHERLANDS' => 'NL', 'SPAIN' => 'ES', 'PORTUGAL' => 'PT', 'ITALY' => 'IT',
+		'SWEDEN' => 'SE', 'NORWAY' => 'NO', 'DENMARK' => 'DK', 'FINLAND' => 'FI', 'POLAND' => 'PL', 'JAPAN' => 'JP',
+		'CHINA' => 'CN', 'SOUTH KOREA' => 'KR', 'KOREA' => 'KR', 'ISRAEL' => 'IL', 'UNITED ARAB EMIRATES' => 'AE',
+		'NIGERIA' => 'NG', 'KENYA' => 'KE', 'MALAYSIA' => 'MY', 'PUERTO RICO' => 'PR', 'LIBERIA' => 'LR', 'MYANMAR' => 'MM',
+	];
+
+	/**
+	 * The two-letter country the locale follows: the address's country (a name from COUNTRY_NAMES or a two-letter
+	 * code), else the language's region ("en_GB" → GB), else US. Pure.
+	 */
+	public static function country_code_from( $country, $language = '' ) {
+		$c = strtoupper( trim( preg_replace( '/\s+/', ' ', (string) $country ) ) );
+		if ( isset( self::COUNTRY_NAMES[ $c ] ) ) {
+			return self::COUNTRY_NAMES[ $c ];
+		}
+		if ( preg_match( '/^[A-Z]{2}$/', $c ) ) {
+			return 'UK' === $c ? 'GB' : $c;
+		}
+		if ( preg_match( '/^[a-z]{2,3}[_-]([A-Za-z]{2})(?:[_-]|$)/', trim( (string) $language ), $m ) ) {
+			return strtoupper( $m[1] );
+		}
+		return 'US';
+	}
+
+	/** The business's country, as a two-letter code (see country_code_from()). */
+	public static function country() {
+		return (string) self::get( 'locale.country', 'US' );
+	}
+
+	/**
+	 * A language with its country filled in where the language alone says nothing more than the platform's
+	 * default: "en_US" or "en" for a business in GB reads "en_GB"; any other language is kept as it is. Pure.
+	 */
+	public static function language_for_country( $language, $country ) {
+		$l  = str_replace( '-', '_', trim( (string) $language ) );
+		$cc = strtoupper( (string) $country );
+		if ( preg_match( '/^[A-Z]{2}$/', $cc ) && 'US' !== $cc && ( '' === $l || 'en' === strtolower( $l ) || 'en_US' === $l ) ) {
+			return 'en_' . $cc;
+		}
+		return $l;
+	}
+
+	/** The currency a country bills in, for a business that names none. Pure. */
+	public static function currency_for( $country ) {
+		$euro = [ 'AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK' ];
+		$own  = [ 'GB' => 'GBP', 'CA' => 'CAD', 'AU' => 'AUD', 'NZ' => 'NZD', 'IN' => 'INR', 'ZA' => 'ZAR', 'SG' => 'SGD',
+			'PH' => 'PHP', 'MX' => 'MXN', 'BR' => 'BRL', 'CH' => 'CHF', 'SE' => 'SEK', 'NO' => 'NOK', 'DK' => 'DKK',
+			'PL' => 'PLN', 'JP' => 'JPY', 'CN' => 'CNY', 'KR' => 'KRW', 'IL' => 'ILS', 'AE' => 'AED', 'NG' => 'NGN',
+			'KE' => 'KES', 'MY' => 'MYR', 'HK' => 'HKD' ];
+		$cc = strtoupper( (string) $country );
+		return in_array( $cc, $euro, true ) ? 'EUR' : ( $own[ $cc ] ?? 'USD' );
+	}
+
+	/** "us" where inches, °F and inches of rain are the custom (the United States and a few others), else "metric". Pure. */
+	public static function units_for( $country ) {
+		return in_array( strtoupper( (string) $country ), [ 'US', 'PR', 'LR', 'MM', 'FM', 'MH', 'PW' ], true ) ? 'us' : 'metric';
+	}
+
+	/** What a country calls its postal code. Pure apart from translation. */
+	public static function postcode_label_for( $country ) {
+		$t  = function_exists( '__' ) ? '__' : static function ( $s ) { return $s; };
+		$cc = strtoupper( (string) $country );
+		if ( in_array( $cc, [ 'US', 'PR', 'PH' ], true ) ) {
+			return $t( 'ZIP', 'zorderz' );
+		}
+		if ( 'CA' === $cc ) {
+			return $t( 'Postal code', 'zorderz' );
+		}
+		if ( 'IN' === $cc ) {
+			return $t( 'PIN code', 'zorderz' );
+		}
+		if ( 'IE' === $cc ) {
+			return $t( 'Eircode', 'zorderz' );
+		}
+		return $t( 'Postcode', 'zorderz' );
+	}
+
+	/** What a country calls the part of it an address names after the town. Pure apart from translation. */
+	public static function region_label_for( $country ) {
+		$t  = function_exists( '__' ) ? '__' : static function ( $s ) { return $s; };
+		$cc = strtoupper( (string) $country );
+		if ( in_array( $cc, [ 'US', 'AU', 'IN', 'MX', 'BR', 'MY', 'NG', 'DE', 'AT' ], true ) ) {
+			return $t( 'State', 'zorderz' );
+		}
+		if ( in_array( $cc, [ 'CA', 'ZA', 'AR', 'ES', 'IT', 'NL', 'BE', 'PH' ], true ) ) {
+			return $t( 'Province', 'zorderz' );
+		}
+		if ( in_array( $cc, [ 'GB', 'IE', 'KE' ], true ) ) {
+			return $t( 'County', 'zorderz' );
+		}
+		return $t( 'Region', 'zorderz' );
+	}
+
+	/** The clock a country reads: "g:i a" (12-hour) where that is the custom, else "H:i". Pure. */
+	public static function time_format_for( $country ) {
+		return in_array( strtoupper( (string) $country ), [ 'US', 'PR', 'CA', 'AU', 'NZ', 'PH', 'IN', 'PK', 'BD', 'EG', 'SA', 'MY', 'CO', 'SV', 'HN', 'NI' ], true ) ? 'g:i a' : 'H:i';
+	}
+
+	/** The four ways numbers are grouped: pattern => [ decimal point, thousands separator ]. */
+	const NUMBER_FORMATS = [
+		'1,234.56' => [ '.', ',' ],
+		'1.234,56' => [ ',', '.' ],
+		'1 234,56' => [ ',', "\u{00A0}" ],
+		"1'234.56" => [ '.', "\u{2019}" ],
+	];
+
+	/** How a language groups numbers ("de_DE" 1.234,56; "fr_FR" 1 234,56; "de_CH" 1'234.56). Pure. */
+	public static function number_format_for( $language ) {
+		$l    = str_replace( '-', '_', strtolower( trim( (string) $language ) ) );
+		$lang = (string) strtok( $l, '_' );
+		$reg  = strtoupper( (string) ( explode( '_', $l )[1] ?? '' ) );
+		if ( 'CH' === $reg || 'LI' === $reg ) {
+			return "1'234.56";
+		}
+		if ( in_array( $lang, [ 'fr', 'sv', 'nb', 'nn', 'no', 'fi', 'cs', 'sk', 'pl', 'ru', 'uk', 'bg', 'hu', 'lt', 'lv', 'et', 'be', 'kk' ], true ) || 'pt_pt' === $l ) {
+			return '1 234,56';
+		}
+		if ( in_array( $lang, [ 'de', 'nl', 'es', 'it', 'pt', 'id', 'tr', 'da', 'el', 'ro', 'hr', 'sl', 'sr', 'vi', 'is' ], true ) && ! in_array( $l, [ 'es_mx', 'es_us', 'es_pr' ], true ) ) {
+			return '1.234,56';
+		}
+		if ( 'en' === $lang && 'ZA' === $reg ) {
+			return '1 234,56';
+		}
+		return '1,234.56';
+	}
+
+	/** A number grouped the business's way: number(12500.5, 2) "12,500.50" / "12.500,50". */
+	public static function number( $value, $places = 0 ) {
+		$sep = self::NUMBER_FORMATS[ (string) self::get( 'locale.number_format', '1,234.56' ) ] ?? self::NUMBER_FORMATS['1,234.56'];
+		return number_format( (float) $value, max( 0, (int) $places ), $sep[0], $sep[1] );
+	}
+
+	/** "us" or "metric" (Business Profile → Locale → Units). */
+	public static function units() {
+		return 'metric' === self::get( 'locale.units', 'us' ) ? 'metric' : 'us';
+	}
+
+	/** True when the business measures in centimetres, °C and millimetres of rain. */
+	public static function metric() {
+		return 'metric' === self::units();
+	}
+
+	/** What the business calls a postal code ("ZIP", "Postcode"). */
+	public static function postcode_label() {
+		$v = trim( (string) self::get( 'locale.postcode_label', '' ) );
+		return '' !== $v ? $v : self::postcode_label_for( self::country() );
+	}
+
+	/** What the business calls the region an address names ("State", "County"). */
+	public static function region_label() {
+		$v = trim( (string) self::get( 'locale.region_label', '' ) );
+		return '' !== $v ? $v : self::region_label_for( self::country() );
+	}
+
+	/** The business's time format ("g:i a" or "H:i"). */
+	public static function time_format() {
+		$v = trim( (string) self::get( 'locale.time_format', '' ) );
+		return '' !== $v ? $v : 'g:i a';
+	}
+
+	/** A temperature given in °F, written the business's way: "72°F", or "22°C" for a metric business. */
+	public static function temperature( $fahrenheit ) {
+		$f = (float) $fahrenheit;
+		return self::metric() ? round( ( $f - 32 ) * 5 / 9 ) . '°C' : round( $f ) . '°F';
+	}
+
+	/** Rain given in inches, written the business's way: "0.25 in", or "6 mm" for a metric business. */
+	public static function rain( $inches ) {
+		$i = (float) $inches;
+		return self::metric() ? self::number( round( $i * 25.4 ), 0 ) . ' mm' : self::number( $i, 2 ) . ' in';
+	}
+
+	/**
+	 * A textual date format written month first, the way the United States writes it ("M j, Y", "D, M j", "l, F j, Y",
+	 * "M j, Y g:i a"), turned into the business's: unchanged for a month-first business; otherwise day first ("j M Y",
+	 * "D j M", "l j F Y"); and the clock in the business's time format. Escaped letters ("\a\t") are kept.
+	 */
+	public static function date_text( $format ) {
+		$tokens = self::date_tokens( (string) $format );
+		if ( 'n' !== self::date_order() ) {
+			$tokens = self::day_first_tokens( $tokens );
+		}
+		$t = self::time_format();
+		if ( 'g:i a' !== $t ) {
+			$tokens = self::clock_tokens( $tokens, $t );
+		}
+		return implode( '', array_column( $tokens, 1 ) );
+	}
+
+	/** date_text() for a business that writes the day first, whatever its own setting. Pure. */
+	public static function date_text_day_first( $format ) {
+		return implode( '', array_column( self::day_first_tokens( self::date_tokens( (string) $format ) ), 1 ) );
+	}
+
+	/** A date format as tokens: [ 'f', letter ] for a format letter, [ 'l', text ] for anything written as it is. Pure. */
+	private static function date_tokens( $format ) {
+		$out = [];
+		$len = strlen( $format );
+		for ( $i = 0; $i < $len; $i++ ) {
+			$c = $format[ $i ];
+			if ( '\\' === $c && $i + 1 < $len ) {
+				$out[] = [ 'l', $c . $format[ ++$i ] ];
+			} elseif ( ctype_alpha( $c ) ) {
+				$out[] = [ 'f', $c ];
+			} elseif ( $out && 'l' === $out[ count( $out ) - 1 ][0] && '\\' !== $out[ count( $out ) - 1 ][1][0] ) {
+				$out[ count( $out ) - 1 ][1] .= $c;
+			} else {
+				$out[] = [ 'l', $c ];
+			}
+		}
+		return $out;
+	}
+
+	/** "M j[S][, Y]" → "j[S] M[ Y]", and "D, j"/"l, j" → "D j"/"l j". Pure. */
+	private static function day_first_tokens( array $t ) {
+		$is = static function ( $tok, $kind, $vals ) {
+			return is_array( $tok ) && $kind === $tok[0] && in_array( $tok[1], (array) $vals, true );
+		};
+		$out = [];
+		$n   = count( $t );
+		for ( $i = 0; $i < $n; $i++ ) {
+			if ( $is( $t[ $i ], 'f', [ 'M', 'F' ] ) && $is( $t[ $i + 1 ] ?? null, 'l', ' ' ) && $is( $t[ $i + 2 ] ?? null, 'f', [ 'j', 'd' ] ) ) {
+				$month = $t[ $i ];
+				$day   = [ $t[ $i + 2 ] ];
+				$i    += 2;
+				if ( $is( $t[ $i + 1 ] ?? null, 'f', 'S' ) ) {
+					$day[] = $t[ ++$i ];
+				}
+				$year = null;
+				if ( $is( $t[ $i + 1 ] ?? null, 'l', ', ' ) && $is( $t[ $i + 2 ] ?? null, 'f', [ 'Y', 'y' ] ) ) {
+					$year = $t[ $i + 2 ];
+					$i   += 2;
+				}
+				// "D, " or "l, " just before the day loses its comma: "D j M"
+				$last = count( $out ) - 1;
+				if ( $last >= 1 && $is( $out[ $last ], 'l', ', ' ) && $is( $out[ $last - 1 ], 'f', [ 'D', 'l' ] ) ) {
+					$out[ $last ] = [ 'l', ' ' ];
+				}
+				foreach ( $day as $d ) {
+					$out[] = $d;
+				}
+				$out[] = [ 'l', ' ' ];
+				$out[] = $month;
+				if ( $year ) {
+					$out[] = [ 'l', ' ' ];
+					$out[] = $year;
+				}
+				continue;
+			}
+			$out[] = $t[ $i ];
+		}
+		return $out;
+	}
+
+	/** "g:i a", "g:ia", "g:i A" → the business's time format. Pure. */
+	private static function clock_tokens( array $t, $time_format ) {
+		$out = [];
+		$n   = count( $t );
+		for ( $i = 0; $i < $n; $i++ ) {
+			if ( 'f' === $t[ $i ][0] && 'g' === $t[ $i ][1] && [ 'l', ':' ] === ( $t[ $i + 1 ] ?? null ) && [ 'f', 'i' ] === ( $t[ $i + 2 ] ?? null ) ) {
+				$j = $i + 3;
+				if ( [ 'l', ' ' ] === ( $t[ $j ] ?? null ) && in_array( $t[ $j + 1 ] ?? null, [ [ 'f', 'a' ], [ 'f', 'A' ] ], true ) ) {
+					$j += 2;
+				} elseif ( in_array( $t[ $j ] ?? null, [ [ 'f', 'a' ], [ 'f', 'A' ] ], true ) ) {
+					$j += 1;
+				} else {
+					$out[] = $t[ $i ];
+					continue;
+				}
+				foreach ( self::date_tokens( (string) $time_format ) as $tok ) {
+					$out[] = $tok;
+				}
+				$i = $j - 1;
+				continue;
+			}
+			$out[] = $t[ $i ];
+		}
+		return $out;
+	}
+
+	/** The first thing the business's short date writes: "n" (month), "j" (day) or "Y" (year). */
+	public static function date_order() {
+		foreach ( self::date_tokens( self::date_format() ) as $tok ) {
+			if ( 'f' === $tok[0] && in_array( $tok[1], [ 'n', 'm', 'j', 'd', 'Y', 'y' ], true ) ) {
+				return strtr( $tok[1], [ 'm' => 'n', 'd' => 'j', 'y' => 'Y' ] );
+			}
+		}
+		return 'n';
+	}
+
+	/** What a page's script needs to write the business's way (zdzData.l10n). */
+	public static function l10n_for_js() {
+		$sep = self::NUMBER_FORMATS[ (string) self::get( 'locale.number_format', '1,234.56' ) ] ?? self::NUMBER_FORMATS['1,234.56'];
+		return [
+			'country'       => self::country(),
+			'units'         => self::units(),
+			'postcodeLabel' => self::postcode_label(),
+			'regionLabel'   => self::region_label(),
+			'dateOrder'     => self::date_order(),
+			'hour12'        => false !== strpbrk( self::time_format(), 'gh' ),
+			'decimal'       => $sep[0],
+			'thousands'     => $sep[1],
+		];
+	}
+
 	/** Deep merge, where a stored scalar or list replaces the default outright. */
 	private static function merge( array $base, array $over ) {
 		foreach ( $over as $k => $v ) {
+			if ( [] === $v && isset( $base[ $k ] ) && is_array( $base[ $k ] ) && $base[ $k ] && ! array_is_list( $base[ $k ] ) ) {
+				continue; // an empty group stored (a JSON "[]" for "{}") keeps every default inside it
+			}
 			if ( is_array( $v ) && isset( $base[ $k ] ) && is_array( $base[ $k ] ) && ! array_is_list( $v ) ) {
 				$base[ $k ] = self::merge( $base[ $k ], $v );
 			} else {
@@ -513,6 +963,28 @@ class ZDZ_Business_Profile {
 		add_filter( 'wp_mail_from', [ __CLASS__, 'filter_mail_from' ], 5 );
 		add_filter( 'wp_mail_from_name', [ __CLASS__, 'filter_mail_from_name' ], 5 );
 		add_action( 'init', [ __CLASS__, 'absorb_legacy_options' ], 5 );
+		add_filter( 'zdz_business_profile_choices', [ __CLASS__, 'locale_choices' ] );
+	}
+
+	/** The Locale screen's choices; the blank one follows the country. */
+	public static function locale_choices( $choices ) {
+		$choices = is_array( $choices ) ? $choices : [];
+		$cc      = self::country();
+		$follow  = static function ( $now ) {
+			/* translators: %s: the value the country gives. */
+			return sprintf( __( 'Follow the country (%s)', 'zorderz' ), $now );
+		};
+		$units = [ 'us' => __( 'US: inches, °F, inches of rain', 'zorderz' ), 'metric' => __( 'Metric: centimetres, °C, millimetres of rain', 'zorderz' ) ];
+		$choices['locale.units'] = [ '' => $follow( $units[ self::units_for( $cc ) ] ) ] + $units;
+		$nums = [];
+		foreach ( array_keys( self::NUMBER_FORMATS ) as $pattern ) {
+			$nums[ $pattern ] = $pattern;
+		}
+		$lang = self::language_for_country( (string) ( self::get( 'locale.locale', '' ) ?: ( function_exists( 'get_locale' ) ? get_locale() : '' ) ), $cc );
+		$choices['locale.number_format'] = [ '' => $follow( self::number_format_for( $lang ) ) ] + $nums;
+		$times = [ 'g:i a' => __( '2:30 pm', 'zorderz' ), 'g:i A' => __( '2:30 PM', 'zorderz' ), 'H:i' => __( '14:30', 'zorderz' ) ];
+		$choices['locale.time_format'] = [ '' => $follow( $times[ self::time_format_for( $cc ) ] ) ] + $times;
+		return $choices;
 	}
 
 	/**
@@ -522,7 +994,7 @@ class ZDZ_Business_Profile {
 	 * --ref-brand-* ramp and derives every --sys-* colour from it, so replacing
 	 * those eleven values re-skins the entire interface in all four theme modes
 	 * without touching CSS. The --cat-* tokens are the same trick for the
-	 * dashboard tiles.
+	 * per-category colours that custom styles and add-ons use.
 	 *
 	 * Only values that actually differ from the shipped default are emitted, so
 	 * an install that has not set a palette pays nothing and the stylesheet stays
@@ -654,8 +1126,8 @@ class ZDZ_Business_Profile {
 			'scope'           => home_url( '/' ),
 			'display'          => 'standalone',
 			'orientation'      => 'portrait',
-			'background_color' => $pwa['background_color'] ?? '#1E3A5F',
-			'theme_color'      => $pwa['theme_color'] ?? '#1E3A5F',
+			'background_color' => $pwa['background_color'] ?? '#433FBD',
+			'theme_color'      => $pwa['theme_color'] ?? '#433FBD',
 			'icons'            => $icons,
 		];
 	}

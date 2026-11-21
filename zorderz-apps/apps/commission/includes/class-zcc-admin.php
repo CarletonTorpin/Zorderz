@@ -112,11 +112,11 @@ class ZCC_Admin {
 		<h2><?php esc_html_e( 'Parity self-test', 'zorderz' ); ?></h2>
 		<p>
 			<strong><?php echo $selftest['passed'] ? '✅ ' . esc_html__( 'PASS', 'zorderz' ) : '❌ ' . esc_html__( 'FAIL', 'zorderz' ); ?></strong>
-			— <?php esc_html_e( 'counts × rates join, replayed on a synthetic ledger.', 'zorderz' ); ?>
+			 · <?php esc_html_e( 'counts × rates join, replayed on a synthetic ledger.', 'zorderz' ); ?>
 		</p>
 		<ul>
 			<?php foreach ( (array) $selftest['results'] as $r ) : ?>
-				<li><?php echo ( ! empty( $r['ok'] ) ? '✅' : '❌' ) . ' ' . esc_html( $r['name'] ) . ' — ' . esc_html( $r['detail'] ); ?></li>
+				<li><?php echo ( ! empty( $r['ok'] ) ? '✅' : '❌' ) . ' ' . esc_html( $r['name'] ) . ': ' . esc_html( $r['detail'] ); ?></li>
 			<?php endforeach; ?>
 		</ul>
 
@@ -164,7 +164,7 @@ class ZCC_Admin {
 			<?php
 			printf(
 				/* translators: %d: payment-lookback floor in days. */
-				esc_html__( 'Read-only observability: is every fetched invoice attributed to a rep, and is anything sitting past the %d-day payment-lookback floor where it could vanish silently? This surface reports counts and one unassigned-revenue total only — never an individual\'s pay. It cannot change a payout.', 'zorderz' ),
+				esc_html__( 'Read-only observability: is every fetched invoice attributed to a rep, and is anything sitting past the %d-day payment-lookback floor where it could vanish silently? This surface reports counts and one unassigned-revenue total only, never an individual\'s pay. It cannot change a payout.', 'zorderz' ),
 				(int) $lookback
 			);
 			?>
@@ -195,7 +195,7 @@ class ZCC_Admin {
 						<tr><th><?php esc_html_e( 'Invoices fetched', 'zorderz' ); ?></th><td><?php echo (int) $cov['fetched']; ?></td></tr>
 						<tr><th><?php esc_html_e( 'Attributed (has a rep code)', 'zorderz' ); ?></th><td><?php echo (int) $cov['attributed']; ?></td></tr>
 						<tr><th><?php esc_html_e( 'Unattributed (no rep code)', 'zorderz' ); ?></th><td><?php echo (int) $cov['unattributed']; ?></td></tr>
-						<tr><th><?php esc_html_e( 'Unassigned revenue (company-wide)', 'zorderz' ); ?></th><td>$<?php echo esc_html( number_format( (float) $cov['unattributed_rev'], 2 ) ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Unassigned revenue (company-wide)', 'zorderz' ); ?></th><td><?php echo esc_html( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) $cov['unattributed_rev'], 2 ) : number_format( (float) $cov['unattributed_rev'], 2 ) ) ); ?></td></tr>
 						<tr><th><?php esc_html_e( 'Would attribute if Tier-2 live (shadow-ready)', 'zorderz' ); ?></th><td><?php echo (int) $cov['shadow_ready']; ?></td></tr>
 						<tr><th><?php esc_html_e( 'Payment lookback floor', 'zorderz' ); ?></th><td><?php echo (int) $cov['lookback_days']; ?> <?php esc_html_e( 'days', 'zorderz' ); ?></td></tr>
 						<tr><th><?php esc_html_e( 'Paid near the floor (0.8×–1×)', 'zorderz' ); ?></th><td><?php echo (int) $cov['gap_near_floor']; ?></td></tr>
@@ -223,28 +223,28 @@ class ZCC_Admin {
 		?>
 		<h2><?php esc_html_e( 'Tier-2 attribution (bare initials)', 'zorderz' ); ?></h2>
 		<p class="description">
-			<?php esc_html_e( 'Tier-1 is the parenthesised document code on the invoice. Tier-2 is a roster-guarded second opinion on bare initials in the free text. It runs in SHADOW: it records what it would attribute for comparison, and pays nothing. Only the toggle below can ever let it feed pay — and it ships OFF.', 'zorderz' ); ?>
+			<?php esc_html_e( 'Tier-1 is the parenthesised document code on the invoice. Tier-2 is a roster-guarded second opinion on bare initials in the free text. It runs in SHADOW: it records what it would attribute for comparison, and pays nothing. Only the toggle below can ever let it feed pay, and it ships OFF.', 'zorderz' ); ?>
 		</p>
 		<p>
 			<strong><?php esc_html_e( 'Mode:', 'zorderz' ); ?></strong>
 			<?php echo $live
-				? '<span style="color:#b32d2e">' . esc_html__( 'LIVE — Tier-2 may feed pay', 'zorderz' ) . '</span>'
-				: '<span style="color:#2271b1">' . esc_html__( 'SHADOW (OFF) — records only, never pays', 'zorderz' ) . '</span>'; ?>
+				? '<span style="color:#b32d2e">' . esc_html__( 'LIVE: Tier-2 may feed pay', 'zorderz' ) . '</span>'
+				: '<span style="color:#2271b1">' . esc_html__( 'SHADOW (OFF): records only, never pays', 'zorderz' ) . '</span>'; ?>
 		</p>
 
 		<h3><?php esc_html_e( 'Roster allow-list', 'zorderz' ); ?></h3>
 		<p class="description"><?php esc_html_e( 'A bare-initials match may hit ONLY these configured initials. An empty list means the shadow is inert.', 'zorderz' ); ?></p>
 		<?php if ( empty( $roster ) ) : ?>
-			<p><em><?php esc_html_e( 'No roster configured — the Tier-2 shadow is inert.', 'zorderz' ); ?></em></p>
+			<p><em><?php esc_html_e( 'No roster configured: the Tier-2 shadow is inert.', 'zorderz' ); ?></em></p>
 		<?php else : ?>
 			<p><code><?php echo esc_html( implode( ', ', array_map( 'strval', $roster ) ) ); ?></code></p>
 		<?php endif; ?>
 
 		<h3><?php esc_html_e( 'Before you flip Tier-2 live', 'zorderz' ); ?></h3>
 		<ol>
-			<li><?php esc_html_e( 'Confirm every initial above is a real, current rep — an ambiguous or stale code is never guessed, but a live flip pays what it does match.', 'zorderz' ); ?></li>
+			<li><?php esc_html_e( 'Confirm every initial above is a real, current rep. An ambiguous or stale code is never guessed, but a live flip pays what it does match.', 'zorderz' ); ?></li>
 			<li><?php esc_html_e( 'Confirm reserved place/source tokens are declared so caps-prose is rejected, not attributed.', 'zorderz' ); ?></li>
-			<li><?php esc_html_e( 'Review the shadow output against Tier-1 for a full period first — Tier-2 only fills gaps Tier-1 left.', 'zorderz' ); ?></li>
+			<li><?php esc_html_e( 'Review the shadow output against Tier-1 for a full period first: Tier-2 only fills gaps Tier-1 left.', 'zorderz' ); ?></li>
 			<li><?php esc_html_e( 'Turning it live changes pay. It is a human decision; the plugin never flips itself.', 'zorderz' ); ?></li>
 		</ol>
 
@@ -331,7 +331,7 @@ class ZCC_Admin {
 		<?php endif; ?>
 		<table class="widefat striped" style="max-width:720px"><thead><tr><th><?php esc_html_e( 'Item', 'zorderz' ); ?></th><th><?php esc_html_e( 'Kind', 'zorderz' ); ?></th><th><?php esc_html_e( 'Cost', 'zorderz' ); ?></th><th></th></tr></thead><tbody>
 		<?php foreach ( $entries as $id => $e ) : ?>
-			<tr><td><?php echo esc_html( (string) $id ); ?></td><td><?php echo esc_html( (string) ( $e['cost_type'] ?? 'per_unit' ) ); ?></td><td><?php echo esc_html( isset( $e['cost'] ) ? '$' . number_format( (float) $e['cost'], 2 ) : ( isset( $e['cost_percent'] ) ? (float) $e['cost_percent'] . '%' : '' ) ); ?></td>
+			<tr><td><?php echo esc_html( (string) $id ); ?></td><td><?php echo esc_html( (string) ( $e['cost_type'] ?? 'per_unit' ) ); ?></td><td><?php echo esc_html( isset( $e['cost'] ) ? ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() : '$' ) . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::number( (float) $e['cost'], 2 ) : number_format( (float) $e['cost'], 2 ) ) : ( isset( $e['cost_percent'] ) ? (float) $e['cost_percent'] . '%' : '' ) ); ?></td>
 			<td><?php if ( in_array( (string) ( $e['cost_type'] ?? 'per_unit' ), [ 'per_unit', 'fixed' ], true ) ) : ?><a href="<?php echo esc_url( add_query_arg( [ 'page' => self::PAGE, 'tab' => 'costs', 'item' => $id ], admin_url( 'options-general.php' ) ) ); ?>"><?php esc_html_e( 'Edit', 'zorderz' ); ?></a><?php endif; ?></td></tr>
 		<?php endforeach; ?>
 		</tbody></table>

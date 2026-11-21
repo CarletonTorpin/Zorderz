@@ -4,8 +4,7 @@
  *
  * Two screens under the Zorderz menu:
  *
- *   Business Profile — the form where a business says who it is. Every field here
- *   replaces something that used to be a hardcoded string in PHP.
+ *   Business Profile — the form where a business says who it is.
  *
  *   Identity Pack — load a business's identity from files instead of typing it.
  *   Preview shows the actual diff; applying requires a typed confirmation; a
@@ -75,7 +74,7 @@ class ZDZ_Business_Profile_Admin {
 					'identity.short_name'   => [ __( 'Short name', 'zorderz' ), 'text', __( 'For tight spaces and the home-screen icon label.', 'zorderz' ) ],
 					'identity.short_code'   => [ __( 'Short code', 'zorderz' ), 'text', __( 'An internal abbreviation, e.g. on paperwork. Reserved so it can never be read as a person\'s initials.', 'zorderz' ) ],
 					'identity.tagline'      => [ __( 'Tagline', 'zorderz' ), 'text', '' ],
-					'identity.industry'     => [ __( 'Industry', 'zorderz' ), 'text', __( 'Plain words, e.g. "screen enclosure installation". Used to describe the business, not to categorise it.', 'zorderz' ) ],
+					'identity.industry'     => [ __( 'Industry', 'zorderz' ), 'text', __( 'Plain words, e.g. "plumbing and heating". Used to describe the business, not to categorise it.', 'zorderz' ) ],
 					'identity.license'      => [ __( 'Licence line', 'zorderz' ), 'text', __( 'Rendered as-is where a registration number is shown.', 'zorderz' ) ],
 					'identity.former_names' => [ __( 'Former names', 'zorderz' ), 'list', __( 'One per line. Shown as "formerly …" where old paperwork may not match.', 'zorderz' ) ],
 				],
@@ -121,11 +120,18 @@ class ZDZ_Business_Profile_Admin {
 			],
 			'locale' => [
 				'label'  => __( 'Locale', 'zorderz' ),
+				'intro'  => __( 'How money, dates, times, numbers, units and address words are written. Anything left blank follows the country in Contact → Address (else the site language\'s country, else the United States).', 'zorderz' ),
 				'fields' => [
 					'locale.timezone'      => [ __( 'Timezone', 'zorderz' ), 'text', __( 'Falls back to the WordPress timezone.', 'zorderz' ) ],
 					'locale.currency'      => [ __( 'Currency code', 'zorderz' ), 'text', '' ],
 					'locale.currency_sign' => [ __( 'Currency symbol', 'zorderz' ), 'text', '' ],
-					'locale.date_format'   => [ __( 'Date format', 'zorderz' ), 'text', __( 'PHP date format, e.g. n/j/Y.', 'zorderz' ) ],
+					'locale.date_format'   => [ __( 'Date format', 'zorderz' ), 'text', __( 'PHP date format, e.g. n/j/Y. Dates written with the month\'s name follow it: day first unless this starts with the month.', 'zorderz' ) ],
+					'locale.locale'        => [ __( 'Language', 'zorderz' ), 'text', __( 'A language code such as en_GB. Falls back to the site language.', 'zorderz' ) ],
+					'locale.units'         => [ __( 'Units', 'zorderz' ), 'select', __( 'Temperatures, rain and lengths shown to people. Prep\'s cut lists measure in inches either way.', 'zorderz' ) ],
+					'locale.number_format' => [ __( 'Numbers', 'zorderz' ), 'select', '' ],
+					'locale.time_format'   => [ __( 'Time', 'zorderz' ), 'select', '' ],
+					'locale.postcode_label' => [ __( 'Postal code is called', 'zorderz' ), 'text', __( 'The word forms and lists use. Leave it blank and it follows the country: ZIP in the United States, Postcode in the United Kingdom, Postal code in Canada.', 'zorderz' ) ],
+					'locale.region_label'  => [ __( 'Region is called', 'zorderz' ), 'text', __( 'Leave it blank and it follows the country: State, County, Province or Region.', 'zorderz' ) ],
 				],
 			],
 			'legal' => [
@@ -143,12 +149,12 @@ class ZDZ_Business_Profile_Admin {
 			],
 			'logo' => [
 				'label'  => __( 'Logo artwork', 'zorderz' ),
-				'intro'  => __( 'Two shapes, each drawn in two ink colours. Paste the URL of an uploaded PNG — Media → Add New, then copy the file URL. "Dark ink" means the artwork itself is dark, so it goes on light surfaces; "light ink" is the pale or white version for dark surfaces like the topbar. Most brands need both, because a navy wordmark disappears on a navy topbar. Supplying only one of anything is fine — the app falls back in a declared order and lays out whatever it actually found rather than stretching it.', 'zorderz' ),
+				'intro'  => __( 'Two shapes, each drawn in two ink colours. Paste the URL of an uploaded PNG: Media → Add New, then copy the file URL. "Dark ink" means the artwork itself is dark, so it goes on light surfaces; "light ink" is the pale or white version for dark surfaces like the topbar. Most brands need both, because a navy wordmark disappears on a navy topbar. Supplying only one of anything is fine: the app falls back in a declared order and lays out whatever it actually found rather than stretching it.', 'zorderz' ),
 				'fields' => [
-					'brand.logo.wide.dark'    => [ __( 'Wide 2:1 — dark ink', 'zorderz' ), 'url', __( 'The main one. Your lockup — wordmark, or mark plus words — in its normal colours, for light surfaces: the login screen, document headers, email headers.', 'zorderz' ) ],
-					'brand.logo.wide.light'   => [ __( 'Wide 2:1 — light ink', 'zorderz' ), 'url', __( 'The same lockup in white or pale, for the topbar and other dark surfaces.', 'zorderz' ) ],
-					'brand.logo.square.dark'  => [ __( 'Square 1:1 — dark ink', 'zorderz' ), 'url', __( 'The mark alone, in its normal colours. Used for the home-screen icon, the favicon, avatars, and any tight square slot.', 'zorderz' ) ],
-					'brand.logo.square.light' => [ __( 'Square 1:1 — light ink', 'zorderz' ), 'url', __( 'The mark in white or pale, for square slots on dark surfaces.', 'zorderz' ) ],
+					'brand.logo.wide.dark'    => [ __( 'Wide 2:1, dark ink', 'zorderz' ), 'url', __( 'The main one. Your lockup (wordmark, or mark plus words) in its normal colours, for light surfaces: the login screen, document headers, email headers.', 'zorderz' ) ],
+					'brand.logo.wide.light'   => [ __( 'Wide 2:1, light ink', 'zorderz' ), 'url', __( 'The same lockup in white or pale, for the topbar and other dark surfaces.', 'zorderz' ) ],
+					'brand.logo.square.dark'  => [ __( 'Square 1:1, dark ink', 'zorderz' ), 'url', __( 'The mark alone, in its normal colours. Used for the home-screen icon, the favicon, avatars, and any tight square slot.', 'zorderz' ) ],
+					'brand.logo.square.light' => [ __( 'Square 1:1, light ink', 'zorderz' ), 'url', __( 'The mark in white or pale, for square slots on dark surfaces.', 'zorderz' ) ],
 					'brand.logo.favicon'      => [ __( 'Favicon', 'zorderz' ), 'url', __( 'Optional. Falls back to the square mark.', 'zorderz' ) ],
 				],
 			],
@@ -276,7 +282,7 @@ class ZDZ_Business_Profile_Admin {
 			self::notice(
 				sprintf(
 					/* translators: %s: comma-separated list of field names. */
-					__( 'Not saved — these are not valid hex colours: %s', 'zorderz' ),
+					__( 'Not saved. These are not valid hex colours: %s', 'zorderz' ),
 					implode( ', ', $bad )
 				),
 				'error'
@@ -345,7 +351,7 @@ class ZDZ_Business_Profile_Admin {
 		self::notice(
 			sprintf(
 				/* translators: 1: brand hex code, 2: semicolon-separated list of contrast problems */
-				__( 'Heads up: brand colour %1$s may be hard to read — %2$s. It was saved as chosen; a darker or lighter shade would clear AA.', 'zorderz' ),
+				__( 'Heads up: brand colour %1$s may be hard to read (%2$s). It was saved as chosen; a darker or lighter shade would clear AA.', 'zorderz' ),
 				'<code>' . esc_html( strtoupper( (string) $brand500 ) ) . '</code>',
 				esc_html( implode( '; ', $problems ) )
 			),
@@ -448,7 +454,7 @@ class ZDZ_Business_Profile_Admin {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Business Profile', 'zorderz' ); ?></h1>
 			<p style="max-width:46em">
-				<?php esc_html_e( 'This is where Zorderz learns who it is working for. Every field here replaces something that used to be typed into the code — a name in a page title, an address in an email footer, a colour in a stylesheet.', 'zorderz' ); ?>
+				<?php esc_html_e( 'This is where Zorderz learns who it is working for. Every field here replaces something that used to be typed into the code: a name in a page title, an address in an email footer, a colour in a stylesheet.', 'zorderz' ); ?>
 			</p>
 			<?php self::render_notices(); ?>
 			<?php if ( $applied ) : ?>
@@ -487,7 +493,7 @@ class ZDZ_Business_Profile_Admin {
 							<td>
 								<?php if ( 'select' === $type && self::choices( $path ) ) : ?>
 									<select id="<?php echo esc_attr( self::form_key( $path ) ); ?>" name="<?php echo esc_attr( $name ); ?>">
-										<?php $current = is_array( $stored ) ? '' : (string) ( '' === (string) $stored ? $resolved : $stored ); ?>
+										<?php $current = is_array( $stored ) ? '' : (string) ( '' === (string) $stored && ! array_key_exists( '', self::choices( $path ) ) ? $resolved : $stored ); ?>
 										<?php foreach ( self::choices( $path ) as $value => $choice_label ) : ?>
 											<option value="<?php echo esc_attr( (string) $value ); ?>" <?php selected( $current, (string) $value ); ?>><?php echo esc_html( (string) $choice_label ); ?></option>
 										<?php endforeach; ?>
@@ -585,12 +591,12 @@ class ZDZ_Business_Profile_Admin {
 				$off
 					? sprintf(
 						/* translators: 1: width, 2: height, 3: actual ratio, 4: expected ratio. */
-						__( '%1$d×%2$d — that is %3$s:1, not the %4$s:1 this slot expects. It will be fitted inside the space with room left over rather than stretched, which usually looks fine but may not be what you drew.', 'zorderz' ),
+						__( '%1$d×%2$d: that is %3$s:1, not the %4$s:1 this slot expects. It will be fitted inside the space with room left over rather than stretched, which usually looks fine but may not be what you drew.', 'zorderz' ),
 						$m['w'], $m['h'], number_format( $m['ratio'], 2 ), number_format( $want, 0 )
 					)
 					: sprintf(
 						/* translators: 1: width, 2: height. */
-						__( '%1$d×%2$d — the right proportions for this slot.', 'zorderz' ),
+						__( '%1$d×%2$d: the right proportions for this slot.', 'zorderz' ),
 						$m['w'], $m['h']
 					)
 			)
@@ -648,7 +654,7 @@ class ZDZ_Business_Profile_Admin {
 		<?php endforeach; ?>
 		</tbody></table>
 		<p class="description" style="max-width:46em">
-			<?php esc_html_e( 'Fallback order: the exact slot, then the same shape in the other ink, then the other shape in the right ink, then whatever exists, then the business name as text. A square standing in for a wide slot is laid out as a square and centred — never stretched to fill it. The home-screen icon is the one exception: it takes a square or nothing, because a wordmark squashed into a launcher tile looks worse than the default icon.', 'zorderz' ); ?>
+			<?php esc_html_e( 'Fallback order: the exact slot, then the same shape in the other ink, then the other shape in the right ink, then whatever exists, then the business name as text. A square standing in for a wide slot is laid out as a square and centred, never stretched to fill it. The home-screen icon is the one exception: it takes a square or nothing, because a wordmark squashed into a launcher tile looks worse than the default icon.', 'zorderz' ); ?>
 		</p>
 		<?php
 	}
@@ -658,11 +664,11 @@ class ZDZ_Business_Profile_Admin {
 		$groups   = [
 			'ramp'       => [
 				__( 'Brand ramp', 'zorderz' ),
-				__( 'Eleven steps from lightest to darkest. Every themed colour in the app is derived from these, in all four display modes — so replacing them re-skins the whole interface without touching CSS. 500 is the main brand colour and 600 is its hover and chrome shade.', 'zorderz' ),
+				__( 'Eleven steps from lightest to darkest. Every themed colour in the app is derived from these, in all four display modes, so replacing them re-skins the whole interface without touching CSS. 500 is the main brand colour and 600 is its hover and chrome shade. Keep white text readable on 500 and 600 (at least 4.5:1) and keep 400 readable on the dark background; the shipped indigo does both.', 'zorderz' ),
 			],
 			'categories' => [
 				__( 'App categories', 'zorderz' ),
-				__( 'The dashboard tile colours. Change these only if your business has its own colour language.', 'zorderz' ),
+				__( 'One colour per app category, for custom styles and add-ons (the --cat-* CSS variables). Each starts as the colour of the dashboard group that category sits in. The dashboard groups themselves use a fixed colour-blind-safe set and are not changed here.', 'zorderz' ),
 			],
 		];
 		?>
@@ -710,7 +716,7 @@ class ZDZ_Business_Profile_Admin {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Identity Pack', 'zorderz' ); ?></h1>
 			<p style="max-width:46em">
-				<?php esc_html_e( 'An Identity Pack is a business as data — names, brand, contact details, role labels — in plain files you can read, review and version. Applying one to a stock Zorderz install turns it into that business\'s app. Nothing is ever applied on its own; you preview the exact changes first.', 'zorderz' ); ?>
+				<?php esc_html_e( 'An Identity Pack is a business as data (names, brand, contact details, role labels) in plain files you can read, review and version. Applying one to a stock Zorderz install turns it into that business\'s app. Nothing is ever applied on its own; you preview the exact changes first.', 'zorderz' ); ?>
 			</p>
 			<?php self::render_notices(); ?>
 
@@ -805,7 +811,7 @@ class ZDZ_Business_Profile_Admin {
 		<?php endforeach; ?>
 
 		<?php if ( ! $p['changes'] ) : ?>
-			<p><?php esc_html_e( 'Nothing would change — every value in this pack already matches what is stored.', 'zorderz' ); ?></p>
+			<p><?php esc_html_e( 'Nothing would change: every value in this pack already matches what is stored.', 'zorderz' ); ?></p>
 		<?php else : ?>
 			<p class="description">
 				<?php
@@ -885,7 +891,7 @@ class ZDZ_Business_Profile_Admin {
 			<h3><?php esc_html_e( 'Apply it', 'zorderz' ); ?></h3>
 			<div style="background:#fff;border-left:4px solid #dba617;padding:12px 16px;max-width:46em">
 				<p style="margin-top:0">
-					<?php esc_html_e( 'Everything this pack would write is recorded first, so Revert puts it back exactly. Roles themselves are not created, renamed or removed — a pack may relabel a role and set which apps it opens with, nothing more. Rules a pack brings for other apps start in shadow; a person turns them live.', 'zorderz' ); ?>
+					<?php esc_html_e( 'Everything this pack would write is recorded first, so Revert puts it back exactly. Roles themselves are not created, renamed or removed: a pack may relabel a role and set which apps it opens with, nothing more. Rules a pack brings for other apps start in shadow; a person turns them live.', 'zorderz' ); ?>
 				</p>
 				<form method="post" action="">
 					<?php wp_nonce_field( 'zdz_bp_apply_pack' ); ?>

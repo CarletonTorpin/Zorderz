@@ -526,7 +526,7 @@ Produce this JSON:
   "document_type": "one of: invoice | policy | technical | correspondence | report | transcript | photo_note | general",
   "key_entities": {
     "people": ["names"], "companies": ["names"], "products": ["names"],
-    "locations": ["places"], "amounts": ["$ amounts with context"]
+    "locations": ["places"], "amounts": ["money amounts with context"]
   },
   "key_facts": ["Specific queryable fact 1", "Fact 2"],
   "tags": ["keyword1", "keyword2"]
@@ -837,7 +837,7 @@ Produce this JSON:
   "document_type": "one of: invoice | policy | technical | correspondence | report | transcript | photo_note | general",
   "key_entities": {
     "people": ["names"], "companies": ["names"], "products": ["names"],
-    "locations": ["places"], "amounts": ["$ amounts with context"]
+    "locations": ["places"], "amounts": ["money amounts with context"]
   },
   "key_facts": ["Specific fact 1", "Fact 2"],
   "tags": ["keyword1", "keyword2"]

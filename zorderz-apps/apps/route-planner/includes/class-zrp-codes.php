@@ -255,7 +255,7 @@ class ZRP_Codes {
 	}
 
 	/**
-	 * The codes the theme's reader finds, less door sizes ("screen door #3080", "French door no. 6080" are a door's size,
+	 * The codes the theme's reader finds, less door sizes ("storm door #3080", "French door no. 6080" are a door's size,
 	 * not a code): a "door" match counts only when its words say code, pin, combo or key.
 	 * Zero-width marks are read through before the quick word check, as the theme's reader does. [[start, len, kind, words]]
 	 */

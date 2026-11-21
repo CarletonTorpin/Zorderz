@@ -7,12 +7,12 @@
  * install photos from the shared media store, render a neutral letterhead template, and
  * publish a token-gated public receipt page with a reviewer Approve-&-Send gate.
  *
- * CONFIGURABLE (v1.1):
+ * CONFIGURABLE:
  *   - The single receipt mode is generic and product-tag-bound (MODE_TAGGED). The admin picks which
  *     Item Engine tag/subtype receipts apply to; NO product name is compiled in.
  *   - Unit counting binds to the Item Engine COUNTS CONTRACT (zrcpt_count_* helpers ->
- *     ZDZ_Item_Engine::count_phrase()/classify()); the old hardcoded 'vent/screen' heuristic
- *     degrades to a neutral all-line count on an empty catalog.
+ *     ZDZ_Item_Engine::count_phrase()/classify()); with an empty catalog
+ *     it degrades to a neutral all-line count.
  *   - Letterhead / email identity (name, colours, sender, logo, address) come from
  *     ZDZ_Business_Profile; the words come from the platform's Ai router (ZRCPT_Writer, caller
  *     'receipts'), which codes every customer detail before anything leaves the site.
@@ -564,7 +564,7 @@ final class ZRCPT_Receipt {
         // v3.6.6 — drag-to-reorder photos during Review & Approve.
         add_action( 'wp_ajax_zrcpt_reorder_photos',  [ $this, 'ajax_reorder_photos' ] );
 
-        // v2.9.0 — Trap 4: the ?zrcpt_from_cutter=1 handoff must bypass WP Engine's
+        // v2.9.0: the ?zrcpt_from_cutter=1 handoff must bypass WP Engine's
         // full-page cache. Emit a Cache-Control: private, no-cache header whenever
         // the query param is present.
         add_action( 'send_headers', [ $this, 'maybe_bypass_page_cache' ] );
@@ -767,7 +767,7 @@ final class ZRCPT_Receipt {
     /** v3.7.0: confirmation notice after a link regenerate. */
     public function regenerate_link_notice() {
         if ( ! empty( $_GET['zrcpt_link_ok'] ) ) {
-            echo '<div class="notice notice-success is-dismissible"><p>Receipt secret link regenerated — the old link no longer works.</p></div>';
+            echo '<div class="notice notice-success is-dismissible"><p>Receipt secret link regenerated: the old link no longer works.</p></div>';
         } elseif ( ! empty( $_GET['zrcpt_link_err'] ) ) {
             echo '<div class="notice notice-error is-dismissible"><p>Could not regenerate the receipt link. Check the share word-list.</p></div>';
         }
@@ -821,7 +821,7 @@ final class ZRCPT_Receipt {
             <h1>Receipt Generator</h1>
             <?php if ( empty( $permalink_structure ) ) : ?>
                 <div class="notice notice-error">
-                    <p><strong>Pretty Permalinks Required</strong> — Receipt URLs are currently ugly
+                    <p><strong>Pretty Permalinks Required</strong>: Receipt URLs are currently ugly
                     (<code>?zrcpt_receipt=slug</code>). Go to
                     <a href="<?php echo esc_url( admin_url( 'options-permalink.php' ) ); ?>">Settings &rarr; Permalinks</a>
                     and choose any structure other than "Plain" (we recommend <strong>Post name</strong>)
@@ -846,18 +846,18 @@ final class ZRCPT_Receipt {
             <p>
                 <strong>Billing connection:</strong>
                 <?php if ( ( class_exists( 'ZDZ_Core_Settings' ) && ( new ZRCPT_FreshBooks() )->is_ready() ) ) : ?>
-                    <span style="color:#0a7a3a;font-weight:600;">✓ Connected — auto-lookup enabled</span>
+                    <span style="color:#0a7a3a;font-weight:600;">✓ Connected: auto-lookup enabled</span>
                 <?php else : ?>
-                    <span style="color:#b32d2e;font-weight:600;">✗ Not configured — connect a billing provider in Zorderz settings to enable auto-lookup</span>
+                    <span style="color:#b32d2e;font-weight:600;">✗ Not configured: connect a billing provider in Zorderz settings to enable auto-lookup</span>
                 <?php endif; ?>
             </p>
 
             <p>
                 <strong>Photo library (auto-pull):</strong>
                 <?php if ( class_exists( 'ZDZ_User_Media' ) && method_exists( 'ZDZ_User_Media', 'get_user_media' ) ) : ?>
-                    <span style="color:#0a7a3a;font-weight:600;">✓ Available — the generator pulls each tech's already-captured photos automatically</span>
+                    <span style="color:#0a7a3a;font-weight:600;">✓ Available: the generator pulls each tech's already-captured photos automatically</span>
                 <?php else : ?>
-                    <span style="color:#b32d2e;font-weight:600;">✗ Not available — requires the Zorderz theme's shared media store (ZDZ_User_Media). The generator will fall back to manual photo upload.</span>
+                    <span style="color:#b32d2e;font-weight:600;">✗ Not available: requires the Zorderz theme's shared media store (ZDZ_User_Media). The generator will fall back to manual photo upload.</span>
                 <?php endif; ?>
                 <br />
                 <span class="description">
@@ -1050,7 +1050,7 @@ final class ZRCPT_Receipt {
             header( 'Retry-After: 60' );
             nocache_headers();
             header( 'X-Robots-Tag: noindex', true );
-            echo 'Too many requests — please wait a minute and open your link again.';
+            echo 'Too many requests. Please wait a minute and open your link again.';
             exit;
         }
 
@@ -1176,7 +1176,7 @@ final class ZRCPT_Receipt {
             ];
         }
 
-        wp_localize_script( 'zrcpt-lookup-js', 'tserLookupData', [
+        wp_localize_script( 'zrcpt-lookup-js', 'zrcptLookupData', [
             'ajaxurl'    => admin_url( 'admin-ajax.php' ),
             'nonce'      => wp_create_nonce( self::NONCE_ACTION ),
             'fromCutter' => (object) $from_cutter, // object so JS sees {} when empty
@@ -1201,7 +1201,7 @@ final class ZRCPT_Receipt {
                 <p class="zrcpt-lookup-hint">Type an estimate #, invoice #, customer name, or phone.</p>
 
                 <div class="zrcpt-lookup-row">
-                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 5541 or Jordan Blake or 555-555-0123" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                    <input type="text" id="zrcpt-lookup-input" placeholder="e.g. 1042 or Jordan Blake or 555-555-0123" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                     <button type="button" id="zrcpt-lookup-btn">Find</button>
                 </div>
 
@@ -1222,23 +1222,30 @@ final class ZRCPT_Receipt {
        FORM  (HTML + CSS + JS)
        ===================================================================== */
 
+    /** One step of the business's brand ramp (Business Profile → Brand), as a hex; $default when unset or not a colour. */
+    private function brand_hex( $step, $default ) {
+        $v = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.ramp.' . $step, $default ) : $default;
+        return preg_match( '/^#[0-9A-Fa-f]{6}$/', $v ) ? $v : $default;
+    }
+
     private function render_form() {
         $nonce    = wp_create_nonce( self::NONCE_ACTION );
         $ajax_url = admin_url( 'admin-ajax.php' );
         ?>
 <style>
+.zrcpt{--zrcpt-ink:<?php echo esc_html( $this->brand_hex( '600', '#433FBD' ) ); ?>;--zrcpt-ink-hover:<?php echo esc_html( $this->brand_hex( '700', '#36339C' ) ); ?>;--zrcpt-ink-soft:<?php echo esc_html( $this->brand_hex( '50', '#F5F6FE' ) ); ?>}
 .zrcpt{max-width:620px;margin:2rem auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#333}
 .zrcpt *{box-sizing:border-box}
-.zrcpt h2{color:#1e4d6e;font-size:1.55rem;font-weight:700;text-align:center;margin:0 0 .3rem}
+.zrcpt h2{color:var(--zrcpt-ink);font-size:1.55rem;font-weight:700;text-align:center;margin:0 0 .3rem}
 .zrcpt .sub{text-align:center;color:#777;font-size:.88rem;margin:0 0 1.75rem}
 .zrcpt-card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:2rem}
 .zrcpt-field{margin-bottom:1.4rem}
-.zrcpt-field label{display:block;color:#1e4d6e;font-weight:600;font-size:.9rem;margin-bottom:.3rem}
+.zrcpt-field label{display:block;color:var(--zrcpt-ink);font-weight:600;font-size:.9rem;margin-bottom:.3rem}
 .zrcpt-field .note{font-size:.78rem;color:#999;margin-bottom:.35rem}
 .zrcpt-field input[type=text],.zrcpt-field input[type=url],.zrcpt-field input[type=date]{width:100%;padding:.55rem .7rem;border:1px solid #ddd;border-radius:6px;font-size:.9rem}
-.zrcpt-field input:focus{outline:none;border-color:#1e4d6e}
+.zrcpt-field input:focus{outline:none;border-color:var(--zrcpt-ink)}
 .zrcpt-drop{border:2px dashed #ccc;border-radius:8px;padding:1.4rem 1rem;text-align:center;cursor:pointer;background:#fafafa;transition:all .15s}
-.zrcpt-drop:hover,.zrcpt-drop.over{border-color:#1e4d6e;background:#f0f6fa}
+.zrcpt-drop:hover,.zrcpt-drop.over{border-color:var(--zrcpt-ink);background:var(--zrcpt-ink-soft)}
 .zrcpt-drop .ico{font-size:1.6rem;margin-bottom:.2rem}
 .zrcpt-drop p{margin:.15rem 0;font-size:.85rem;color:#777}
 .zrcpt-drop .name{color:#333;font-weight:600}
@@ -1248,29 +1255,29 @@ final class ZRCPT_Receipt {
 .zrcpt-thumb img{width:100%;height:100%;object-fit:cover}
 .zrcpt-thumb .rm{position:absolute;top:2px;right:2px;width:18px;height:18px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
 .zrcpt-thumb.loading::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center}
-.zrcpt-btn{display:block;width:100%;padding:.7rem;background:#1e4d6e;color:#fff;font-size:1rem;font-weight:600;border:none;border-radius:25px;cursor:pointer;transition:background .15s;margin-top:.5rem}
-.zrcpt-btn:hover{background:#163d58}
+.zrcpt-btn{display:block;width:100%;padding:.7rem;background:var(--zrcpt-ink);color:#fff;font-size:1rem;font-weight:600;border:none;border-radius:25px;cursor:pointer;transition:background .15s;margin-top:.5rem}
+.zrcpt-btn:hover{background:var(--zrcpt-ink-hover)}
 .zrcpt-btn:disabled{background:#a0b8c8;cursor:not-allowed}
 .zrcpt-progress{display:none;text-align:center;padding:2.5rem 1.5rem}
-.zrcpt-progress .spin{width:40px;height:40px;border:3px solid #e0e0e0;border-top-color:#1e4d6e;border-radius:50%;animation:tspin .8s linear infinite;margin:0 auto 1rem}
-@keyframes tspin{to{transform:rotate(360deg)}}
+.zrcpt-progress .spin{width:40px;height:40px;border:3px solid #e0e0e0;border-top-color:var(--zrcpt-ink);border-radius:50%;animation:zrcpt-spin .8s linear infinite;margin:0 auto 1rem}
+@keyframes zrcpt-spin{to{transform:rotate(360deg)}}
 .zrcpt-progress .st{font-size:.95rem;color:#333;font-weight:500}
 .zrcpt-progress .sub{font-size:.82rem;color:#999;margin-top:.25rem}
 .zrcpt-result{display:none;text-align:center;padding:2.5rem 1.5rem}
 .zrcpt-result .ico{font-size:3rem;margin-bottom:.25rem}
-.zrcpt-result h3{color:#1e4d6e;font-size:1.35rem;margin:.4rem 0 1rem;font-weight:700}
+.zrcpt-result h3{color:var(--zrcpt-ink);font-size:1.35rem;margin:.4rem 0 1rem;font-weight:700}
 .zrcpt-result p{color:#666;font-size:.9rem;margin:.2rem 0}
 .zrcpt-result .meta{text-align:left;background:#f8f9fa;border:1px solid #e8e8e8;border-radius:10px;padding:1.25rem 1.5rem;margin:0 0 1.25rem;font-size:.95rem;display:grid;grid-template-columns:auto 1fr;gap:.6rem 1rem;align-items:baseline}
-.zrcpt-result .meta dt{font-weight:600;color:#1e4d6e;white-space:nowrap}
+.zrcpt-result .meta dt{font-weight:600;color:var(--zrcpt-ink);white-space:nowrap}
 .zrcpt-result .meta dd{margin:0;color:#444;line-height:1.45}
 .zrcpt-result .meta .permalink-row{grid-column:1/-1;border-top:1px solid #e8e8e8;padding-top:.6rem;margin-top:.2rem;font-size:.85rem;color:#888;word-break:break-all}
-.zrcpt-result .meta .permalink-row a{color:#1e4d6e;text-decoration:none}
+.zrcpt-result .meta .permalink-row a{color:var(--zrcpt-ink);text-decoration:none}
 .zrcpt-result .meta .permalink-row a:hover{text-decoration:underline}
-.zrcpt-result a.vbtn{display:inline-block;padding:.75rem 2rem;background:#1e4d6e;color:#fff;text-decoration:none;border-radius:25px;font-weight:600;font-size:1rem;transition:background .15s}
-.zrcpt-result a.vbtn:hover{background:#163d58}
+.zrcpt-result a.vbtn{display:inline-block;padding:.75rem 2rem;background:var(--zrcpt-ink);color:#fff;text-decoration:none;border-radius:25px;font-weight:600;font-size:1rem;transition:background .15s}
+.zrcpt-result a.vbtn:hover{background:var(--zrcpt-ink-hover)}
 .zrcpt-result.err h3{color:#b00}
 .zrcpt-result .retry{display:inline-block;margin-top:.75rem;padding:.5rem 1.2rem;background:#555;color:#fff;border:none;border-radius:25px;cursor:pointer;font-size:.85rem;font-weight:600}
-.zrcpt-photo-count{font-size:.82rem;color:#1e4d6e;font-weight:600;margin-top:.4rem}
+.zrcpt-photo-count{font-size:.82rem;color:var(--zrcpt-ink);font-weight:600;margin-top:.4rem}
 </style>
 
 <div class="zrcpt" id="zrcpt-app">
@@ -1296,7 +1303,7 @@ final class ZRCPT_Receipt {
 
             <div class="zrcpt-field">
                 <label>Installation Photos</label>
-                <p class="note">JPG, PNG, WEBP, or HEIC — uploaded to your media library</p>
+                <p class="note">JPG, PNG, WEBP, or HEIC · uploaded to your media library</p>
                 <div class="zrcpt-drop" id="zrcpt-photo-drop">
                     <div class="ico">&#128247;</div>
                     <p>Drop photos here or click to browse</p>
@@ -1795,7 +1802,7 @@ final class ZRCPT_Receipt {
         // A human-readable, customer-tagged title so the photo reads sensibly in
         // the Media library and in any "photos for <customer>" search later.
         $title = $customer_name !== ''
-            ? sprintf( 'Installation — %s', $customer_name )
+            ? sprintf( 'Installation · %s', $customer_name )
             : 'Installation photo';
         $description = $customer_name !== ''
             ? sprintf( 'Installation photo uploaded via the Receipt app for %s.', $customer_name )
@@ -2575,7 +2582,7 @@ final class ZRCPT_Receipt {
 
         /* --- Create / UPDATE WordPress page --- */
         $slug  = sanitize_title( $receipt['vanity_slug'] );
-        $title = 'Installation Receipt — ' . $receipt['address_short'];
+        $title = 'Installation Receipt · ' . $receipt['address_short'];
 
         // v3.3.6: regenerating the same invoice UPDATES its existing receipt in
         // place (same URL) instead of spawning a new post each time. Pass the
@@ -2593,8 +2600,7 @@ final class ZRCPT_Receipt {
          * prior approval was for the OLD content, and any prior "Sent" was the
          * OLD version reaching the customer. Leaving those flags in place made
          * History claim a redone receipt was already "Sent" — so nobody knew
-         * the corrected version still needed approval + a re-send (the exact
-         * confusion in the field on invoice #15558 / post 2343). Now, when an
+         * the corrected version still needed approval + a re-send. Now, when an
          * UPDATE changes the content:
          *   • the approval is invalidated (same rule as photo remove/reorder;
          *     the send path already refuses stale approvals — this makes the
@@ -2959,25 +2965,24 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * v3.5.0 — THE QTY-FIELD TRAP (invoice 15476): shop invoices often carry
-     * the real unit count in the line TEXT — "(4) units. White Color."
-     * — while the FreshBooks QTY field is 1 (one flat-priced bundle). Counting
-     * QTY alone yields 1, and because our count is enforced as authoritative
-     * all the way into force_vent_count_in_html(), the receipt then proudly
-     * says "This home has 1 unit" for a 4-unit job.
+     * THE QTY-FIELD TRAP: an invoice line can carry the real unit count in its
+     * TEXT — "(4) units. White Color." — while the billing system's quantity
+     * field is 1 (one flat-priced bundle). Counting the quantity alone yields 1,
+     * and because the count is authoritative all the way into the receipt's HTML,
+     * the receipt would say "This home has 1 unit" for a 4-unit job.
      *
      * This parses a unit count out of the line's own text. Patterns, in
      * priority order (first hit wins; name checked before description):
-     *   1. "(4) Units"        — parenthesized bare integer (the shop's
-     *                                 own convention; size/percent/money
-     *                                 parens like (AS), (50%), ($600), (14x6)
+     *   1. "(4) Units"        — parenthesized bare integer (a common
+     *                                 convention; code/percent/money/size
+     *                                 parens like (AB), (50%), ($100), (2x4)
      *                                 never match — digits only).
      *   2. "qty 4" / "quantity: 4"  — explicit quantity wording in the text.
      *   3. "4 Units"          — leading bare count; NEVER a size: the
      *                                 next word must not be a unit (in/inch/
      *                                 ft/mm/…) or another number ("4 6x6…").
      *   4. "4x …" / "… x4"          — multiplier shorthand; dimensions like
-     *                                 "14x6" are rejected (digit on the other
+     *                                 "12x6" are rejected (digit on the other
      *                                 side of the x).
      * Returns 0 when no convincing count is present.
      */
@@ -3041,9 +3046,9 @@ final class ZRCPT_Receipt {
      * Build the text "invoice" we attach for the receipt writer, leading with an explicit,
      * unambiguous total so the writer never has to guess the count from pricing. The authoritative
      * count is stated two ways: a tagged ZRCPT_COUNT_MARKER line the writer's instructions name
-     * directly, and a prose line using the item's OWN unit noun (COUNTS CONTRACT — never a
-     * hardcoded product word). The unit noun comes from the Item Engine (or the neutral
-     * fallback) so this text carries no product name.
+     * directly, and a prose line using the item's OWN unit noun (COUNTS CONTRACT). The unit
+     * noun comes from the Item Engine (or the generic fallback), so this text carries no
+     * product name.
      */
     private function build_bot_invoice_text( array $lookup_data, array $lines, int $vent_count ): string {
         $out = [];
@@ -3906,9 +3911,9 @@ final class ZRCPT_Receipt {
      * @return bool  True on success (including no-op), false on failure.
      */
     /**
-     * The label for the $0 receipt-link line written onto the billing document (Document
-     * Convention D20). Bound through the `zrcpt_document_convention` filter; the neutral
-     * default carries no product/brand word.
+     * The label for the $0 receipt-link line written onto the billing document (a document
+     * convention). Bound through the `zrcpt_document_convention` filter; the default carries
+     * no product or brand word.
      */
     private function receipt_link_label(): string {
         $label = (string) zrcpt_document_convention( 'receipt_link_label', 'Installation Receipt - Link' );
@@ -4098,7 +4103,7 @@ final class ZRCPT_Receipt {
 
         // Check if FreshBooks credentials are available
         if ( ! $this->fb_has_credentials() ) {
-            $result['error'] = 'FreshBooks not connected — receipt link not added.';
+            $result['error'] = 'FreshBooks not connected: receipt link not added.';
             error_log( 'ZRCPT FreshBooks: No credentials available, skipping invoice link.' );
             return $result;
         }
@@ -4327,7 +4332,7 @@ final class ZRCPT_Receipt {
      * Cache bypass for the Prep module handoffs. WP Engine (and any full-page
      * cache) would otherwise serve everyone the same pre-populated page.
      * Hooked to send_headers so it runs before content is emitted.
-     * Trap 4: belt + suspenders with the `?_ts=<timestamp>` param on the
+     * Belt + suspenders with the `?_ts=<timestamp>` param on the
      * cutter's side.
      */
     public function maybe_bypass_page_cache() {
@@ -4580,13 +4585,13 @@ final class ZRCPT_Receipt {
             return [ 'type' => 'phone', 'value' => $trimmed, 'raw' => $input ];
         }
 
-        // Pure number: "14767", "#14767"
+        // Pure number: "1042", "#1042"
         $clean = preg_replace( '/[\s#]/', '', $trimmed );
         if ( preg_match( '/^\d{3,}$/', $clean ) ) {
             return [ 'type' => 'number', 'value' => preg_replace( '/[^0-9]/', '', $trimmed ), 'raw' => $input ];
         }
 
-        // Document keyword + number: "Invoice 14767", "Inv #14767", "EST 5541"
+        // Document keyword + number: "Invoice 1042", "Inv #1042", "EST 1001"
         if ( preg_match( '/^(?:invoice|inv|estimate|est|receipt|rec)[#\s._-]*(\d{3,})/i', $trimmed, $m ) ) {
             return [ 'type' => 'number', 'value' => $m[1], 'raw' => $input ];
         }
@@ -4623,7 +4628,7 @@ final class ZRCPT_Receipt {
             wp_send_json_success( [
                 'available' => false,
                 'sessions'  => [],
-                'message'   => 'Photo library not available on this site — upload photos manually.',
+                'message'   => 'Photo library not available on this site: upload photos manually.',
             ] );
         }
 
@@ -4765,7 +4770,7 @@ final class ZRCPT_Receipt {
 
     /**
      * Build a plain-text customer block for the AI input when auto-lookup
-     * succeeds. Replaces the invoice-image upload on that path (Trap 5).
+     * succeeds. Replaces the invoice-image upload on that path.
      * Keeps the manual-upload path unchanged.
      */
     /**
@@ -5025,16 +5030,16 @@ final class ZRCPT_Receipt {
 
     /**
      * Does this material class DOCUMENT ITSELF FROM external spec
-     * knowledge (a vent, which pulls an approved-product spec), or is it SELF-
-     * DOCUMENTED (a caulk / sealant, which is described from a fixed instruction
+     * knowledge (a fitted part, which pulls an approved-product spec), or is it SELF-
+     * DOCUMENTED (a consumable, which is described from a fixed instruction
      * with no knowledge pull)? Reads the Item Engine `documents_from` attribute
-     * (C3) defensively, then a mirrored filter, then a receipts-local override.
+     * defensively, then a mirrored filter, then a receipts-local override.
      *
      * Core default when the class is UNKNOWN (empty catalog / attribute unset):
-     * FALSE — do NOT pull external knowledge. This is the fail-safe that fixes D1:
+     * FALSE — do NOT pull external knowledge. This is the fail-safe:
      * the server never renders an unbacked manufacturer spec for a class it can't
-     * confirm should pull one (the sealant↔branded-product pairing that made D1 possible
-     * is a tenant KNOWLEDGE property, declared via the attribute, not assumed by Core).
+     * confirm should pull one (which product a consumable is paired with is the
+     * business's own KNOWLEDGE, declared via the attribute, not assumed by Core).
      *
      * @param array $item An Item Engine match row.
      * @return bool
@@ -5123,8 +5128,8 @@ final class ZRCPT_Receipt {
         $material_keys = $this->canonical_material_keys( $detected );
 
         // Pull external spec knowledge ONLY for a class that DOCUMENTS
-        // FROM knowledge (a vent). A self-documented class (caulk/sealant) never
-        // triggers a knowledge query, so a caulk tag can't drag in a vent
+        // FROM knowledge (a fitted part). A self-documented class (a consumable) never
+        // triggers a knowledge query, so a consumable's tag can't drag in a part
         // manufacturer's guideline. When nothing is knowledge-documented the
         // context stays '' and the writer documents the item(s) generically.
         $context = '';
@@ -5279,8 +5284,8 @@ final class ZRCPT_Receipt {
                 $m['selectable'] = false;
                 $m['suggested']  = false;
                 $m['reason']     = ( $type === 'estimate' )
-                    ? 'Estimate — not yet invoiced. Receipts can only be made from invoices.'
-                    : 'Not an invoice — cannot be receipted.';
+                    ? 'Estimate, not yet invoiced. Receipts can only be made from invoices.'
+                    : 'Not an invoice: cannot be receipted.';
             }
             $out[] = $m;
         }
@@ -5391,12 +5396,12 @@ final class ZRCPT_Receipt {
 
         return [
             'approved'        => $approved,
-            'approved_at'     => $approved_at ? mysql2date( 'M j, Y g:i a', $approved_at ) : '',
+            'approved_at'     => $approved_at ? mysql2date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:i a' ) : 'M j, Y g:i a' ), $approved_at ) : '',
             'approved_by'     => $by_name,
             'approved_by_me'  => $is_me,
             'sent'            => $sent,
-            'sent_at'         => $sent_at ? mysql2date( 'M j, Y g:i a', $sent_at ) : '',
-            'prev_sent_at'    => ( ! $sent && $prev_sent !== '' ) ? mysql2date( 'M j, Y g:i a', $prev_sent ) : '',
+            'sent_at'         => $sent_at ? mysql2date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:i a' ) : 'M j, Y g:i a' ), $sent_at ) : '',
+            'prev_sent_at'    => ( ! $sent && $prev_sent !== '' ) ? mysql2date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:i a' ) : 'M j, Y g:i a' ), $prev_sent ) : '',
             // Whether we even CAN send: a verified customer email must exist.
             'can_send'        => ( get_post_meta( $post_id, '_customer_email', true ) !== '' ),
         ];
@@ -5492,7 +5497,7 @@ final class ZRCPT_Receipt {
         // Guard: never strip the gallery to nothing — a receipt with zero photos
         // reads as broken. Require at least one to remain.
         if ( empty( $kept ) ) {
-            wp_send_json_error( [ 'message' => 'You can’t remove every photo — a receipt needs at least one. Leave one photo, or regenerate the receipt instead.' ] );
+            wp_send_json_error( [ 'message' => 'You can’t remove every photo: a receipt needs at least one. Leave one photo, or regenerate the receipt instead.' ] );
         }
 
         // Rebuild the three photo-bearing regions of the stored HTML from $kept.
@@ -6117,7 +6122,7 @@ final class ZRCPT_Receipt {
         $address    = (string) get_post_meta( $post_id, '_address_short', true );
         $receipt_url= get_permalink( $post_id );
 
-        $subject = 'Your installation receipt' . ( $address !== '' ? ' — ' . $address : '' );
+        $subject = 'Your installation receipt' . ( $address !== '' ? ' for ' . $address : '' );
         $body    = $this->build_receipt_email_html( $first_name, $address, $receipt_url );
 
         // ── 3) Send via wp_mail() — same From + HTML content type as Surveys ──
@@ -6226,8 +6231,8 @@ final class ZRCPT_Receipt {
         // Identity + palette from Business Profile (neutral fallbacks).
         $biz_name  = class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::name() : get_bloginfo( 'name' );
         $sign_name = $this->receipt_from_name();
-        $header_bg = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.ramp.600', '#1E3A5F' ) : '#1E3A5F';
-        $btn_bg    = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.ramp.500', '#2C5F8A' ) : '#2C5F8A';
+        $header_bg = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.ramp.600', '#433FBD' ) : '#433FBD';
+        $btn_bg    = class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.ramp.500', '#5150D6' ) : '#5150D6';
         $biz_name  = esc_html( $biz_name );
         $sign_name = esc_html( $sign_name );
         $header_bg = esc_attr( $header_bg );
@@ -6428,7 +6433,7 @@ View your receipt
             return [ 'approved', 'Approved by ' . $state['approved_by'] . ' ' . $state['approved_at'] ];
         }
         if ( ! empty( $state['prev_sent_at'] ) ) {
-            return [ 'redone', 'Redone — approve & re-send (previously sent ' . $state['prev_sent_at'] . ')' ];
+            return [ 'redone', 'Redone: approve & re-send (previously sent ' . $state['prev_sent_at'] . ')' ];
         }
         return [ 'draft', 'Needs approval' ];
     }
@@ -6452,7 +6457,7 @@ View your receipt
             'deleted'    => [ 'success', 'Receipt permanently deleted.' ],
             'declined'   => [ 'success', 'Deletion request declined. The receipt is untouched.' ],
             'fbsynced'   => [ 'success', 'FreshBooks invoice link re-synced to this receipt’s current URL.' ],
-            'fbsync_err' => [ 'error',   'Could not re-sync the FreshBooks invoice link — check the debug log (ZRCPT FB SYNC lines).' ],
+            'fbsync_err' => [ 'error',   'Could not re-sync the FreshBooks invoice link: check the debug log (ZRCPT FB SYNC lines).' ],
             'error'      => [ 'error',   'That action could not be completed.' ],
         ];
         if ( isset( $_GET['zrcpt_notice'], $notices[ $_GET['zrcpt_notice'] ] ) ) {
@@ -6518,7 +6523,7 @@ View your receipt
         ];
 
         echo '<div class="wrap"><h1 class="wp-heading-inline">Manage Receipts</h1>';
-        echo '<p>Every installation receipt, with the same state the app shows — plus admin-only delete. '
+        echo '<p>Every installation receipt, with the same state the app shows, plus admin-only delete. '
            . '<strong>Delete moves a receipt to Trash</strong>: its customer link stops working immediately, and it can be restored (same link) or deleted forever from the Trash view.</p>';
 
         // ── Pending deletion requests panel (always on top when any exist) ──
@@ -6538,7 +6543,7 @@ View your receipt
                 $invs = (array) get_post_meta( $p->ID, '_fb_doc_numbers', false );
                 if ( $invs ) { echo ' <span style="color:#666;">(Invoice ' . esc_html( '#' . implode( ', #', $invs ) ) . ')</span>'; }
                 echo '<br /><span style="color:#8a1f1f;">“' . esc_html( (string) ( $req['reason'] ?? '' ) ) . '”</span>';
-                echo '<br /><span style="color:#666;">Requested by ' . esc_html( (string) ( $req['name'] ?? '?' ) ) . ' on ' . esc_html( mysql2date( 'M j, Y g:i a', (string) $req['at'] ) ) . '</span>';
+                echo '<br /><span style="color:#666;">Requested by ' . esc_html( (string) ( $req['name'] ?? '?' ) ) . ' on ' . esc_html( mysql2date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:i a' ) : 'M j, Y g:i a' ), (string) $req['at'] ) ) . '</span>';
                 echo ' · <a href="' . esc_url( get_permalink( $p->ID ) ) . '" target="_blank" rel="noopener">view receipt ↗</a>';
                 echo '</div><div style="display:flex;gap:6px;">';
                 echo $this->admin_action_form( 'zrcpt_admin_trash_receipt', (int) $p->ID, 'Approve & delete', 'button button-primary', 'Delete this receipt? Its customer link stops working immediately. (It moves to Trash and can be restored.)' );
@@ -6584,20 +6589,20 @@ View your receipt
             $creator = get_userdata( (int) get_post_meta( $pid, '_created_by', true ) );
             $req   = $this->delete_request_of( $pid );
             list( $skey, $slabel ) = $this->receipt_state_for_admin( $pid );
-            $scolor = [ 'sent' => '#166534', 'approved' => '#1E4D6E', 'redone' => '#B45309', 'draft' => '#666' ][ $skey ] ?? '#666';
+            $scolor = [ 'sent' => '#166534', 'approved' => $this->brand_hex( '600', '#433FBD' ), 'redone' => '#B45309', 'draft' => '#666' ][ $skey ] ?? '#666';
 
             echo '<tr' . ( $req ? ' style="background:#FCF0F0;"' : '' ) . '>';
             echo '<td><strong>' . esc_html( $addr ?: $p->post_title ) . '</strong>';
             if ( $idate ) { echo '<br /><span style="color:#666;">Installed ' . esc_html( $idate ) . '</span>'; }
             echo '</td>';
-            echo '<td>' . ( $invs ? esc_html( '#' . implode( ', #', $invs ) ) : '—' ) . '</td>';
-            echo '<td>' . esc_html( $cust ?: '—' ) . ( $esrc && $esrc !== 'none' ? '<br /><span style="color:#666;">email via ' . esc_html( $esrc ) . '</span>' : '' ) . '</td>';
+            echo '<td>' . ( $invs ? esc_html( '#' . implode( ', #', $invs ) ) : '–' ) . '</td>';
+            echo '<td>' . esc_html( $cust ?: '–' ) . ( $esrc && $esrc !== 'none' ? '<br /><span style="color:#666;">email via ' . esc_html( $esrc ) . '</span>' : '' ) . '</td>';
             echo '<td><span style="color:' . esc_attr( $scolor ) . ';font-weight:600;">' . esc_html( $slabel ) . '</span>';
             if ( $req ) {
                 echo '<br /><span style="color:#8a1f1f;">🗑 Deletion requested by ' . esc_html( (string) ( $req['name'] ?? '?' ) ) . ': “' . esc_html( (string) ( $req['reason'] ?? '' ) ) . '”</span>';
             }
             echo '</td>';
-            echo '<td>' . esc_html( mysql2date( 'M j, Y', $p->post_date ) ) . ( $creator ? '<br /><span style="color:#666;">by ' . esc_html( $creator->display_name ) . '</span>' : '' ) . '</td>';
+            echo '<td>' . esc_html( mysql2date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), $p->post_date ) ) . ( $creator ? '<br /><span style="color:#666;">by ' . esc_html( $creator->display_name ) . '</span>' : '' ) . '</td>';
             echo '<td>';
             if ( $status === 'trash' ) {
                 echo '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
@@ -6801,7 +6806,7 @@ View your receipt
                 . 'By:       ' . $name . "\n"
                 . 'Reason:   ' . $reason . "\n\n"
                 . "Approve or decline it here:\n" . $manage . "\n";
-        @wp_mail( get_option( 'admin_email' ), 'Receipt deletion requested — ' . ( $addr ?: '#' . $post_id ), $body );
+        @wp_mail( get_option( 'admin_email' ), 'Receipt deletion requested: ' . ( $addr ?: '#' . $post_id ), $body );
 
         error_log( sprintf( 'ZRCPT DELREQ: post_id=%d requested by %s (uid %d): %s', $post_id, $name, $uid, $reason ) );
 
@@ -6809,7 +6814,7 @@ View your receipt
             'message' => 'Request sent to the admin. The receipt stays up until they approve the deletion.',
             'del_req' => [
                 'by_name' => $name,
-                'at'      => mysql2date( 'M j, Y g:i a', $req['at'] ),
+                'at'      => mysql2date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y g:i a' ) : 'M j, Y g:i a' ), $req['at'] ),
                 'reason'  => $reason,
                 'mine'    => true,
             ],
@@ -6849,7 +6854,7 @@ View your receipt
         if ( ! $this->trash_receipt( $post_id, 'widget (admin)' ) ) {
             wp_send_json_error( [ 'message' => 'Could not delete the receipt.' ] );
         }
-        wp_send_json_success( [ 'message' => 'Receipt deleted (moved to Trash — restorable from Manage Receipts in wp-admin).' ] );
+        wp_send_json_success( [ 'message' => 'Receipt deleted (moved to Trash; restorable from Manage Receipts in wp-admin).' ] );
     }
 }
 

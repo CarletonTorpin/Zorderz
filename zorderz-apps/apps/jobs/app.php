@@ -8,7 +8,7 @@
  *   photo-gated completion, with a recorded single-party attestation path for a solo
  *   operator. Consumes the theme's crew-lead hierarchy (ZDZ_Hierarchy), party roster
  *   (ZDZ_Party), media store (ZDZ_User_Media) and geocoder (ZDZ_Media_Geocoder).
- * Version:     1.19.0
+ * Version:     1.20.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -57,7 +57,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZJOB_VERSION', '1.19.0' );
+define( 'ZJOB_VERSION', '1.20.0' );
 define( 'ZJOB_FILE', __FILE__ );
 define( 'ZJOB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZJOB_URL', plugin_dir_url( __FILE__ ) );

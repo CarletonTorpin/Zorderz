@@ -41,7 +41,7 @@ final class NotifyGeocoderTest extends TestCase {
 		$GLOBALS['zdz_test_filters']['zdz_geocoder_address_abbreviations'] = function () { return array( 'street' => 'st', 'Avenue' => 'ave', 'bad<' => 'x' ); };
 		$this->assertSame( '12 example st, sample city', ZDZ_Geocoder::normalize_string( '12 Example Street, Sample City' ) );
 		$this->assertSame( ZDZ_Geocoder::normalize_string( '12 Example St, Sample City' ), ZDZ_Geocoder::normalize_string( '12 Example Street, Sample City' ), 'both spellings, one key' );
-		$this->assertSame( '12 streeter ave', ZDZ_Geocoder::normalize_string( '12 Streeter Avenue' ), 'whole words only' );
+		$this->assertSame( '12 streetlight ave', ZDZ_Geocoder::normalize_string( '12 Streetlight Avenue' ), 'whole words only' );
 	}
 
 	public function test_nothing_configured_means_no_call_and_no_failure(): void {

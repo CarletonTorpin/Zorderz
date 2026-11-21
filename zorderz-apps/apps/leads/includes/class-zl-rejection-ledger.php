@@ -22,7 +22,6 @@
  * Pure PHP: no WordPress, no I/O. Proven in a no-WP harness.
  *
  * @package Zorderz\Leads
- * @since   2.8.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -230,7 +229,7 @@ class ZL_Rejection_Ledger {
 				// The AI review gate speaks in the operator's terms.
 				$passed = $matched + $dn;
 				$parts[] = sprintf(
-					'%d passed every filter, then the AI review dropped %s — not a territory or product miss.',
+					'%d passed every filter, then the AI review dropped %s, not a territory or product miss.',
 					$passed,
 					$dn === $passed ? 'them all' : ( $dn . ' of them' )
 				);
@@ -246,7 +245,7 @@ class ZL_Rejection_Ledger {
 					}
 				}
 				if ( ! empty( $named ) ) {
-					$msg .= ' Candidates were in ' . implode( ', ', $named ) . ' — a territory mismatch, not a product one. Try All Salespeople.';
+					$msg .= ' Candidates were in ' . implode( ', ', $named ) . ': a territory mismatch, not a product one. Try All Salespeople.';
 				} else {
 					$msg .= ' Try widening the service area or All Salespeople.';
 				}

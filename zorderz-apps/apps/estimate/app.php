@@ -11,7 +11,7 @@
  *   compiled into the model prompt. Reads identity from ZDZ_Business_Profile,
  *   ZDZ_Item_Engine, ZDZ_Party, ZDZ_Core_FreshBooks, ZDZ_Core_Nutshell, ZDZ_Core_Poe and
  *   ZDZ_Core_Settings.
- * Version:     1.27.0
+ * Version:     1.28.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -60,7 +60,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /* ── Identity ──────────────────────────────────────────────────────── */
-define( 'ZEST_VERSION', '1.27.0' );
+define( 'ZEST_VERSION', '1.28.0' );
 define( 'ZEST_FILE', __FILE__ );
 define( 'ZEST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZEST_URL', plugin_dir_url( __FILE__ ) );
@@ -180,6 +180,26 @@ require_once ZEST_DIR . 'includes/class-zest-added-measurements.php';
 require_once ZEST_DIR . 'includes/class-zest-door-handle.php';
 require_once ZEST_DIR . 'includes/class-zest-billing-view.php';
 require_once ZEST_DIR . 'includes/class-zest-reassign.php';
+require_once ZEST_DIR . 'includes/class-zest-followup.php';
+require_once ZEST_DIR . 'includes/class-zest-followup-ajax.php';
+require_once ZEST_DIR . 'includes/class-zest-lists.php';
+require_once ZEST_DIR . 'includes/class-zest-privacy-view.php';
+
+// Estimates for an account in Privacy View: hooked now, as the files load, so the platform's gate (which runs before
+// any app boots) finds the app's own part whenever it asks.
+ZEST_Privacy_View::boot();
+
+/** REST routes of this app are an administrator's, and never an account's in Privacy View. */
+function zest_rest_admin_only() {
+	return current_user_can( 'manage_options' ) && ! ZEST_Privacy_View::on();
+}
+
+/** The printable pages show a customer's own details: never to an account in Privacy View. */
+function zest_no_privacy_view_page() {
+	if ( ZEST_Privacy_View::on() ) {
+		wp_die( esc_html__( 'Not available in Privacy View.', 'zorderz' ), 403 );
+	}
+}
 
 /**
  * The app's main actions, counted in the Usage view where each succeeded (ZDZ_Usage::record, which applies the
@@ -233,6 +253,9 @@ function zest_activate() {
 /** Deactivation — clear scheduled events + our transients (data + tables preserved). */
 function zest_deactivate() {
 	wp_clear_scheduled_hook( 'zest_daily_sync' );
+	if ( function_exists( 'wp_unschedule_hook' ) ) {
+		wp_unschedule_hook( ZEST_Followup_Ajax::CRON );   // CRM notes still waiting stay on their rows
+	}
 	ZEST_Client_Index::unschedule();
 	ZEST_Accept_Watch::unschedule();
 	ZEST_Line_Options::unschedule();
@@ -306,6 +329,7 @@ add_action( 'plugins_loaded', function () {
 	ZEST_Added_Measurements::init();
 	ZEST_Billing_View::init();
 	ZEST_Reassign::init();
+	ZEST_Followup_Ajax::init();
 
 	// Publish this module's chat markers to the orchestrator as one map.
 	add_filter( 'zdz_chat_markers', function ( $markers ) {
@@ -359,6 +383,7 @@ add_action( 'template_redirect', function () {
 	if ( ! is_user_logged_in() ) {
 		auth_redirect();
 	}
+	zest_no_privacy_view_page();
 	$ok = current_user_can( 'manage_options' );
 	if ( ! $ok && is_callable( array( 'ZDZ_Plugin_API', 'user_can_access_app' ) ) ) {
 		$ok = ZDZ_Plugin_API::user_can_access_app( get_current_user_id(), ZEST_APP_ID );
@@ -386,7 +411,7 @@ add_action( 'rest_api_init', function () {
 	$ns = defined( 'ZDZ_REST_NS' ) ? ZDZ_REST_NS : 'zorderz/v1';
 	register_rest_route( $ns, '/estimate/import', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+		'permission_callback' => 'zest_rest_admin_only',
 		'callback'            => function ( WP_REST_Request $req ) {
 			if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
 				return new WP_Error( 'zest_no_renderer', 'Renderer unavailable.', array( 'status' => 500 ) );
@@ -415,7 +440,7 @@ add_action( 'rest_api_init', function () {
 	// NOT a side effect — a human still reviews + confirms before /estimate|invoice/import.
 	register_rest_route( $ns, '/estimate/parse', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+		'permission_callback' => 'zest_rest_admin_only',
 		'callback'            => function ( WP_REST_Request $req ) {
 			$text = (string) $req->get_param( 'text' );
 			if ( '' === trim( $text ) ) {
@@ -434,7 +459,7 @@ add_action( 'rest_api_init', function () {
 	// no DB write, no import. Admin only.
 	register_rest_route( $ns, '/estimate/preview', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+		'permission_callback' => 'zest_rest_admin_only',
 		'callback'            => function ( WP_REST_Request $req ) {
 			if ( ! class_exists( 'ZEST_Doc_Renderer' ) ) {
 				return new WP_Error( 'zest_no_renderer', 'Renderer unavailable.', array( 'status' => 500 ) );
@@ -460,6 +485,7 @@ add_action( 'template_redirect', function () {
 	if ( ! is_user_logged_in() ) {
 		auth_redirect();
 	}
+	zest_no_privacy_view_page();
 	$ok = current_user_can( 'manage_options' );
 	if ( ! $ok && is_callable( array( 'ZDZ_Plugin_API', 'user_can_access_app' ) ) ) {
 		$ok = ZDZ_Plugin_API::user_can_access_app( get_current_user_id(), ZEST_APP_ID );
@@ -484,7 +510,7 @@ add_action( 'template_redirect', function () {
 // record a payment. Kept intentionally minimal — document + payment tracking only.
 add_action( 'rest_api_init', function () {
 	$ns    = defined( 'ZDZ_REST_NS' ) ? ZDZ_REST_NS : 'zorderz/v1';
-	$admin = function () { return current_user_can( 'manage_options' ); };
+	$admin = 'zest_rest_admin_only';
 
 	register_rest_route( $ns, '/invoice/import', array(
 		'methods'             => 'POST',
@@ -545,6 +571,7 @@ add_action( 'template_redirect', function () {
 	if ( ! is_user_logged_in() ) {
 		auth_redirect();
 	}
+	zest_no_privacy_view_page();
 	$ok = current_user_can( 'manage_options' );
 	if ( ! $ok && is_callable( array( 'ZDZ_Plugin_API', 'user_can_access_app' ) ) ) {
 		$ok = ZDZ_Plugin_API::user_can_access_app( get_current_user_id(), ZEST_APP_ID );
@@ -580,7 +607,7 @@ add_action( 'after_setup_theme', function () {
  * namespaced refs so the later migration onto the Zorderz Flow substrate is a mechanical
  * rename. accepted ≠ invoiced ≠ paid are three DISTINCT states (an answer that presents
  * "accepted" as invoiced reads as confident and is wrong). Keys are
- * (system, entity, external_id) — never a bare document number (estimate#5982 ≠ invoice#5982).
+ * (system, entity, external_id) — never a bare document number (estimate #12 ≠ invoice #12).
  */
 add_filter( 'zdz_work_item_ref_namespaces', function ( $list ) {
 	$list = is_array( $list ) ? $list : array();

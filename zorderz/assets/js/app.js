@@ -10,12 +10,35 @@ const ZDZ_GROUPS = (typeof zdzData !== 'undefined' && zdzData.appGroups && Array
       { id: 'team', label: 'Team', color: '#56B4E9', ink: '#1A1A1A' }, { id: 'office', label: 'Office', color: '#0072B2', ink: '#FFFFFF' },
       { id: 'tools', label: 'Tools', color: '#CC79A7', ink: '#1A1A1A' } ];
 const CATEGORIES = ZDZ_GROUPS.map(g => ({ id: g.label, color: g.color, ink: g.ink }));
+// A group's colour, or the reserved "needs you" colour, for things that belong to a group but are not an app tile
+// (the home number tiles, the ask bar's own rows).
+function zdzGroupColor(id) {
+  if (id === 'needs-you') return (typeof zdzData !== 'undefined' && zdzData.appGroups && zdzData.appGroups.needsYou) || '#D55E00';
+  var g = ZDZ_GROUPS.filter(function (x) { return x.id === id; })[0];
+  return g ? g.color : '#5B5B5B';
+}
+// The plate an ask row draws for an app: that app's own group colour and ink when this person has it, else the group given.
+function zdzAppPlate(appId, groupId) {
+  var a = (typeof zdzData !== 'undefined' && Array.isArray(zdzData.apps) ? zdzData.apps : []).filter(function (x) { return x && x.id === appId; })[0];
+  if (a && a.cc) return { color: a.cc, ink: a.ink || zdzInkOn(a.cc) };
+  var c = zdzGroupColor(groupId);
+  return { color: c, ink: zdzInkOn(c) };
+}
+// The ink that reads on a plate colour: near-black or white, whichever has more contrast.
+function zdzInkOn(hex) {
+  var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return '#FFFFFF';
+  var n = parseInt(m[1], 16), ch = [n >> 16 & 255, n >> 8 & 255, n & 255].map(function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  var L = 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  return (L + 0.05) / 0.0603 >= 1.05 / (L + 0.05) ? '#1A1A1A' : '#FFFFFF';
+}
 // The icon plate: the group's color, the ink that reads on it, and the app id the "needs you" badge finds it by.
 function zdzPlate(a) {
   a = a || {};
   const id = String(a.id || '').replace(/[^a-z0-9_-]/gi, '');
   const hx = (c, f) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : f);
-  return 'data-zdz-app="' + id + '" style="background:' + hx(a.cc, '#5B5B5B') + ';color:' + hx(a.ink, '#FFFFFF') + '"';
+  const bg = hx(a.cc, '#5B5B5B');
+  return 'data-zdz-app="' + id + '" style="background:' + bg + ';color:' + hx(a.ink, zdzInkOn(bg)) + '"';
 }
 
 const PINNED = {
@@ -180,10 +203,14 @@ function zdzFreshNonce() {
     return r.text().then(function (t) {
       var j = null;
       try { j = JSON.parse(t); } catch (e) { /* a host's error page or a PHP error page: not an answer */ }
-      if (!r.ok || !j || !j.success || !j.data || !j.data.rest) { throw new Error(r.status === 401 || r.status === 400 ? 'signed_out' : 'no_answer'); }
-      zdzData.nonce = j.data.rest;
+      if (!r.ok || !j || !j.success || !j.data || !(j.data.nonce || j.data.rest)) { throw new Error(r.status === 401 || r.status === 400 ? 'signed_out' : 'no_answer'); }
+      // "nonce" first (an account in Privacy View is always sent that key whole), then "rest". A nonce is letters,
+      // digits, - and _ only: a value with anything else in it (a masked value has a "·" or brackets) is never kept.
+      var fresh = (typeof j.data.nonce === 'string' && j.data.nonce) ? j.data.nonce : j.data.rest;
+      if (typeof fresh !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(fresh)) { throw new Error('no_answer'); }
+      zdzData.nonce = fresh;
       _zdzNonceAt = Date.now();
-      return { nonce: j.data.rest, demo: !!j.data.demo };
+      return { nonce: fresh, demo: !!j.data.demo };
     });
   });
 }
@@ -326,7 +353,10 @@ function applyTheme(t) {
   } else if (t === 'sunlight') {
     meta?.setAttribute('content', '#000000');
   } else {
-    meta?.setAttribute('content', '#1E3A5F');
+    // the business's brand (Business Profile → Brand, printed as --ref-brand-600), else Zorderz' own
+    var brandTop = '';
+    try { brandTop = getComputedStyle(document.documentElement).getPropertyValue('--ref-brand-600').trim(); } catch (e) {}
+    meta?.setAttribute('content', /^#[0-9A-Fa-f]{6}$/.test(brandTop) ? brandTop : '#433FBD');
   }
   // Update the nav bar logo for the current theme
   updateNavLogo();
@@ -499,7 +529,7 @@ function renderLeadsTile() {
       const count = item.count | 0;
       const label = String(item.label || (count + ' leads to contact'));
       const urgency = item.urgency || 'low';
-      const color = /^#[0-9a-f]{3,8}$/i.test(item.color || '') ? item.color : '#22C55E';
+      const color = /^#[0-9a-f]{3,8}$/i.test(item.color || '') ? item.color : zdzGroupColor('sales');
 
       // Build the tile. Whole tile is a button → opens Leads in rep mode.
       el.style.display = '';
@@ -581,7 +611,7 @@ function renderQuickStats() {
           <i data-lucide="file-text"></i>
         </div>
         <div>
-          <div class="stat-val" data-zdz-kpi="estimates-mtd">—</div>
+          <div class="stat-val" data-zdz-kpi="estimates-mtd">–</div>
           <div class="stat-label">Estimates MTD</div>
         </div>
       </div>
@@ -591,7 +621,7 @@ function renderQuickStats() {
           <i data-lucide="briefcase"></i>
         </div>
         <div>
-          <div class="stat-val" data-zdz-kpi="mtd-revenue">—</div>
+          <div class="stat-val" data-zdz-kpi="mtd-revenue">–</div>
           <div class="stat-label">Paid Jobs</div>
         </div>
       </div>
@@ -604,51 +634,52 @@ function renderQuickStats() {
 // ---- KPI DATA ----
 // The tiles, in order. key = the server's tile key; dom = data-zdz-kpi (kept for saved card orders). Labels here are the
 // first paint only: the server's `label` wins (a salesperson-shaped answer says "Your estimates this month").
+// A tile's icon wears the colour of the group its number comes from, so the home screen speaks one colour language.
 var ZDZ_KPI_TILES = [
   { key: 'ytd_revenue', dom: 'ytd-revenue', label: 'Revenue this year', primary: true },
   { key: 'mtd_revenue', dom: 'mtd-revenue', label: 'Revenue this month', primary: true },
-  { key: 'estimates_mtd', dom: 'estimates-mtd', label: 'Estimates this month', icon: 'file-text', color: '#3B82F6' },
-  { key: 'surveys_month', dom: 'surveys-month', label: 'Surveys this month', icon: 'mail-check', color: '#8B5CF6' },
-  { key: 'google_reviews', dom: 'google-reviews', label: 'Google reviews', icon: 'star', color: '#F59E0B' },
-  { key: 'website_reviews', dom: 'website-reviews', label: 'Website reviews', icon: 'message-square-heart', color: '#A855F7' },
-  { key: 'new_leads', dom: 'new-leads', label: 'New leads this month', icon: 'user-plus', color: '#10B981' },
-  { key: 'leads_contacted', dom: 'leads-contacted', label: 'Contacted', icon: 'phone-call', color: '#06B6D4' },
+  { key: 'estimates_mtd', dom: 'estimates-mtd', label: 'Estimates this month', icon: 'file-text', color: zdzGroupColor('sales') },
+  { key: 'surveys_month', dom: 'surveys-month', label: 'Surveys this month', icon: 'mail-check', color: zdzGroupColor('office') },
+  { key: 'google_reviews', dom: 'google-reviews', label: 'Google reviews', icon: 'star', color: zdzGroupColor('office') },
+  { key: 'website_reviews', dom: 'website-reviews', label: 'Website reviews', icon: 'message-square-heart', color: zdzGroupColor('office') },
+  { key: 'new_leads', dom: 'new-leads', label: 'New leads this month', icon: 'user-plus', color: zdzGroupColor('sales') },
+  { key: 'leads_contacted', dom: 'leads-contacted', label: 'Contacted', icon: 'phone-call', color: zdzGroupColor('sales') },
   // dom stays 'leads-to-jobs' (the card it replaces): a saved card order keeps it in its place
-  { key: 'leads_won', dom: 'leads-to-jobs', label: 'Leads won this month', icon: 'trophy', color: '#EC4899' }
+  { key: 'leads_won', dom: 'leads-to-jobs', label: 'Leads won this month', icon: 'trophy', color: zdzGroupColor('sales') }
 ];
 // the tile set per role, as the server answers it (ZDZ_KPI_Metrics::SETS). The salesperson's: counts
 // only, no dollars. dom ids are new: no saved order to keep.
 var ZDZ_KPI_SETS = {
   company: ZDZ_KPI_TILES,
   sales: [
-    { key: 'my_estimates', dom: 'my-estimates', label: 'Your estimates this month', icon: 'file-text', color: '#3B82F6' },
-    { key: 'my_invoices', dom: 'my-invoices', label: 'Your invoices this month', icon: 'receipt', color: '#8B5CF6' },
-    { key: 'my_leads', dom: 'my-leads', label: 'Leads to contact', icon: 'phone-call', color: '#10B981' },
-    { key: 'my_installed', dom: 'my-installed', label: 'Jobs installed this month', icon: 'house', color: '#F59E0B' }
+    { key: 'my_estimates', dom: 'my-estimates', label: 'Your estimates this month', icon: 'file-text', color: zdzGroupColor('sales') },
+    { key: 'my_invoices', dom: 'my-invoices', label: 'Your invoices this month', icon: 'receipt', color: zdzGroupColor('office') },
+    { key: 'my_leads', dom: 'my-leads', label: 'Leads to contact', icon: 'phone-call', color: zdzGroupColor('sales') },
+    { key: 'my_installed', dom: 'my-installed', label: 'Jobs installed this month', icon: 'house', color: zdzGroupColor('field') }
   ],
   // the shop's: Prep's jobs, then up to three item counts the business names (the Commission app's counts). The item
   // cards' words are the server's (first paint: "Items this month"); the server sends only the ones configured.
   shop: [
-    { key: 'shop_prep', dom: 'shop-prep', label: 'Prep jobs', icon: 'scissors', color: '#EF4444' },
-    { key: 'shop_item_1', dom: 'shop-item-1', label: 'Items this month', icon: 'package', color: '#3B82F6' },
-    { key: 'shop_item_2', dom: 'shop-item-2', label: 'Items this month', icon: 'boxes', color: '#8B5CF6' },
-    { key: 'shop_item_3', dom: 'shop-item-3', label: 'Items this month', icon: 'layers', color: '#10B981' }
+    { key: 'shop_prep', dom: 'shop-prep', label: 'Prep jobs', icon: 'scissors', color: zdzGroupColor('field') },
+    { key: 'shop_item_1', dom: 'shop-item-1', label: 'Items this month', icon: 'package', color: zdzGroupColor('field') },
+    { key: 'shop_item_2', dom: 'shop-item-2', label: 'Items this month', icon: 'boxes', color: zdzGroupColor('field') },
+    { key: 'shop_item_3', dom: 'shop-item-3', label: 'Items this month', icon: 'layers', color: zdzGroupColor('field') }
   ],
   // the operator's: the survey call list now, who was talked with this month, notes to read, review e-mails
   operator: [
-    { key: 'op_to_call', dom: 'op-to-call', label: 'Customers to call', icon: 'phone-outgoing', color: '#3B82F6' },
-    { key: 'op_talked', dom: 'op-talked', label: 'Talked with this month', icon: 'messages-square', color: '#10B981' },
-    { key: 'op_attention', dom: 'op-attention', label: 'Needs a look', icon: 'circle-alert', color: '#F59E0B' },
-    { key: 'op_reviews', dom: 'op-reviews', label: 'Review e-mails this month', icon: 'mail-check', color: '#8B5CF6' }
+    { key: 'op_to_call', dom: 'op-to-call', label: 'Customers to call', icon: 'phone-outgoing', color: zdzGroupColor('office') },
+    { key: 'op_talked', dom: 'op-talked', label: 'Talked with this month', icon: 'messages-square', color: zdzGroupColor('office') },
+    { key: 'op_attention', dom: 'op-attention', label: 'Needs a look', icon: 'circle-alert', color: zdzGroupColor('needs-you') },
+    { key: 'op_reviews', dom: 'op-reviews', label: 'Review e-mails this month', icon: 'mail-check', color: zdzGroupColor('office') }
   ],
   // the field tech's POOL: My hours first, then three of the other four, in the order the server sends
   // (`order`, from the tech's own use). Before the first answer the role's starting order is drawn (zdzKpiCardsFor).
   tech: [
-    { key: 'tech_hours', dom: 'tech-hours', label: 'My hours this week', icon: 'clock', color: '#3B82F6' },
-    { key: 'tech_jobs', dom: 'tech-jobs', label: 'My installs this week', icon: 'house', color: '#F59E0B' },
-    { key: 'tech_schedule', dom: 'tech-schedule', label: 'Appointments today', icon: 'calendar-days', color: '#10B981' },
-    { key: 'tech_media', dom: 'tech-media', label: 'Photos this week', icon: 'camera', color: '#8B5CF6' },
-    { key: 'tech_messages', dom: 'tech-messages', label: 'Unread messages', icon: 'message-circle', color: '#EF4444' }
+    { key: 'tech_hours', dom: 'tech-hours', label: 'My hours this week', icon: 'clock', color: zdzGroupColor('team') },
+    { key: 'tech_jobs', dom: 'tech-jobs', label: 'My installs this week', icon: 'house', color: zdzGroupColor('field') },
+    { key: 'tech_schedule', dom: 'tech-schedule', label: 'Appointments today', icon: 'calendar-days', color: zdzGroupColor('team') },
+    { key: 'tech_media', dom: 'tech-media', label: 'Photos this week', icon: 'camera', color: zdzGroupColor('tools') },
+    { key: 'tech_messages', dom: 'tech-messages', label: 'Unread messages', icon: 'message-circle', color: zdzGroupColor('team') }
   ]
 };
 // the cards a set draws, in order: the keys the server sent last (`order`: the tiles the business chose for the set,
@@ -682,7 +713,7 @@ function zdzKpiDrawSet(el, kpiSet, order) {
       (t.primary ? '<div class="kpi-label">' + escapeHtml(t.label) + '</div>' : '') +
       // the tech's cards carry no data-zdz-kpi, so the drag-to-reorder script leaves them alone: their
       // order is the tech's use, picked on the server, and a redraw would drop its handles anyway.
-      '<div class="kpi-value"' + (kpiSet === 'tech' ? '' : ' data-zdz-kpi="' + t.dom + '"') + '>—</div>' +
+      '<div class="kpi-value"' + (kpiSet === 'tech' ? '' : ' data-zdz-kpi="' + t.dom + '"') + '>–</div>' +
       (t.primary ? '' : '<div class="kpi-label">' + escapeHtml(t.label) + '</div>') +
       '<div class="kpi-sub"></div><div class="kpi-when"></div>' +
     '</div>';
@@ -712,12 +743,22 @@ function zdzKpiSetFor(role) {
   if (role === 'zdz_tech') { return 'tech'; }
   return '';
 }
+// A sum in the business's money (Business Profile → Locale): the kit's helper once it has loaded; a figure it can't
+// read (already written out, "1,200.00") keeps its own digits behind the business's sign.
+function zdzMoney(v) {
+  if (window.ZDZ && window.ZDZ.ui && typeof window.ZDZ.ui.money === 'function') {
+    var s = window.ZDZ.ui.money(v);
+    if (s !== '') { return s; }
+  }
+  var sign = (typeof zdzData !== 'undefined' && zdzData && zdzData.currencySign) || '$';
+  return sign + String(v);
+}
 var ZDZ_KPI_REFRESH_MS = 120000; // the server keeps each person's answer 2 minutes; a page left open asks again after that
 function zdzKpiStoreKey() { return 'zdz_kpi_v2_' + String((typeof zdzData !== 'undefined' && zdzData && zdzData.userId) || 0).replace(/[^0-9]/g, ''); }
 // The month now, in the answer's own time zone (the site's): a copy from another month is never shown as "this month".
 function zdzKpiMonthNow(tz) {
   try {
-    var parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'America/Los_Angeles', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+    var parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz || undefined, year: 'numeric', month: '2-digit' }).formatToParts(new Date());
     var y = '', m = '';
     parts.forEach(function (p) { if (p.type === 'year') { y = p.value; } if (p.type === 'month') { m = p.value; } });
     return y && m ? y + '-' + m : '';
@@ -726,7 +767,7 @@ function zdzKpiMonthNow(tz) {
 // an answer that names its day (the tech's: today's appointments, this week's installs) is
 // current only on that day, so yesterday's copy is never painted as today's.
 function zdzKpiDayNow(tz) {
-  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
   catch (e) { return ''; }
 }
 function zdzKpiThisMonth(data) { return !!(data && data.month && data.month === zdzKpiMonthNow(data.tz) && (!data.day || data.day === zdzKpiDayNow(data.tz))); }
@@ -737,8 +778,17 @@ function zdzKpiAgeWords(t) {
   if (!t || !t.as_of) { return t && t.as_of_kind === 'entered' ? 'no date kept' : ''; }
   var d = new Date(t.as_of * 1000), now = new Date();
   var same = d.toDateString() === now.toDateString();
-  var when = same ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-                  : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  // Written the business's way (Business Profile → Locale), like the figures beside it: its language and its clock.
+  var pd = (typeof zdzData !== 'undefined' && zdzData) || {};
+  var lang = pd.locale ? [String(pd.locale).replace('_', '-')] : [];
+  var clock = { hour: 'numeric', minute: '2-digit' };
+  if (pd.l10n && typeof pd.l10n.hour12 === 'boolean') { clock.hour12 = pd.l10n.hour12; }
+  var when;
+  try {
+    when = same ? d.toLocaleTimeString(lang, clock) : d.toLocaleDateString(lang, { day: 'numeric', month: 'short' });
+  } catch (e) {
+    when = same ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  }
   return (t.as_of_kind === 'entered' ? 'entered ' : 'as of ') + when;
 }
 // Old = older than its interval, or the app that owns the number marked it stale, or it could not be refreshed. Never "just now" for a copy.
@@ -772,7 +822,7 @@ function zdzKpiPaintCard(card, t, failed) {
   var labels = card.querySelectorAll('.kpi-label');
   card.hidden = t.state === 'not_shown';
   if (t.label && labels.length) { labels[0].textContent = t.label; }
-  var shown = (t.state === 'error' && t.last_good) ? t.last_good.display : (t.display || '—');
+  var shown = (t.state === 'error' && t.last_good) ? t.last_good.display : (t.display || '–');
   if (val) {
     val.textContent = shown;
     val.classList.remove('kpi-loading');
@@ -812,7 +862,7 @@ function zdzKpiPaint(data, failed) {
 function zdzKpiNoData() {
   document.querySelectorAll('[data-zdz-kpi-tile]').forEach(function (card) {
     var v = card.querySelector('.kpi-value');
-    if (v) { v.classList.remove('kpi-loading', 'kpi-value-word'); v.textContent = '\u2014'; }
+    if (v) { v.classList.remove('kpi-loading', 'kpi-value-word'); v.textContent = '\u2013'; }
     var sub = card.querySelector('.kpi-sub'), when = card.querySelector('.kpi-when');
     if (sub) { sub.textContent = 'couldn\u2019t load'; }
     if (when) { when.textContent = ''; }
@@ -827,7 +877,7 @@ function zdzKpiNoData() {
 function zdzKpiOtherSet() {
   document.querySelectorAll('[data-zdz-kpi-tile]').forEach(function (card) {
     var v = card.querySelector('.kpi-value');
-    if (v) { v.classList.remove('kpi-loading', 'kpi-value-word'); v.textContent = '\u2014'; }
+    if (v) { v.classList.remove('kpi-loading', 'kpi-value-word'); v.textContent = '\u2013'; }
     var sub = card.querySelector('.kpi-sub'), when = card.querySelector('.kpi-when');
     if (sub) { sub.textContent = 'their own figures'; }
     if (when) { when.textContent = 'shown when they sign in'; }
@@ -922,7 +972,7 @@ function zdzKpiOpenSheet(key) {
     add('p', 'kpi-sheet-state', S.other ? 'These are this person’s own figures. They show on their home screen when they sign in, not in View As.' : (S.failed ? 'The figures couldn’t be loaded just now. Try again in a minute.' : 'Still loading…'));
   } else {
     var p = zdzKpiSubParts(t, S.failed);
-    var shown = (t.state === 'error' && t.last_good) ? t.last_good.display : (t.display || '—');
+    var shown = (t.state === 'error' && t.last_good) ? t.last_good.display : (t.display || '–');
     add('div', 'kpi-sheet-value' + (t.state === 'held' ? ' kpi-value-word' : ''), shown);
     var detail = (t.state === 'error' && t.last_good) ? t.last_good.detail : t.detail;
     if (detail && t.state !== 'held') { add('div', 'kpi-sheet-detail', detail); }
@@ -2495,7 +2545,7 @@ function renderKioskDemoBanner() {
   bar.setAttribute('role', 'status');
   bar.innerHTML =
     '<span class="zdz-kiosk-banner-label">' +
-    '<i data-lucide="shield-check"></i> Demo Mode — shared kiosk view</span>' +
+    '<i data-lucide="shield-check"></i> Demo Mode · shared kiosk view</span>' +
     '<button class="zdz-kiosk-banner-exit" onclick="exitKioskDemo()">Exit (PIN)</button>';
   document.body.appendChild(bar);
   if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
@@ -2697,7 +2747,7 @@ function saveFieldPreferences() {
     if (typeof Haptics !== 'undefined') Haptics.success();
   })
   .catch(function(e) {
-    showToast('Save failed — ' + (e.message || 'try again'));
+    showToast('Save failed: ' + (e.message || 'try again'));
     if (typeof Haptics !== 'undefined') Haptics.error();
   })
   .finally(function() {
@@ -2759,7 +2809,7 @@ function renderAppAuthorizations() {
     let nsHint, nsAction;
     if (ns.connected && isAdmin) {
       nsHint = 'Company account is connected as <strong>' + escapeHtml(ns.email || '') + '</strong>. ' +
-               'Everyone on the team uses this same Nutshell connection — no individual setup required.';
+               'Everyone on the team uses this same Nutshell connection; no individual setup required.';
       nsAction = `
         <div class="settings-row mt-4">
           <button id="zdz-authorize-ns-btn" class="btn btn-outline w-full">
@@ -2767,7 +2817,7 @@ function renderAppAuthorizations() {
           </button>
         </div>`;
     } else if (ns.connected && !isAdmin) {
-      nsHint = 'Your team\'s Nutshell connection is active. Nothing for you to set up — estimates and leads sync automatically through the company account.';
+      nsHint = 'Your team\'s Nutshell connection is active. Nothing for you to set up: estimates and leads sync automatically through the company account.';
       nsAction = ''; // read-only for non-admins
     } else if (!ns.connected && isAdmin) {
       nsHint = 'Set this once on behalf of the whole team. You\'ll need the company\'s Nutshell login email + an API key from <strong>Nutshell → Setup → API Keys</strong>. Every Zorderz user will inherit this connection.';
@@ -2778,7 +2828,7 @@ function renderAppAuthorizations() {
           </button>
         </div>`;
     } else {
-      nsHint = '<em>Not yet connected.</em> Ask an administrator to configure Nutshell from their Settings view — once set, it works for everyone automatically.';
+      nsHint = '<em>Not yet connected.</em> Ask an administrator to configure Nutshell from their Settings view; once set, it works for everyone automatically.';
       nsAction = ''; // no button for non-admins
     }
 
@@ -2790,8 +2840,8 @@ function renderAppAuthorizations() {
     let calBlock = '';
     if (cal) {
       const calHint = cal.connected
-        ? 'Your outside calendars (Google / Microsoft Exchange) are connected — the team scheduler treats their events as busy time. Only you see the details; teammates just see that you\'re busy.'
-        : 'Connect your own Google or Microsoft (Exchange) calendar so the team scheduler knows when you\'re busy outside this app. Only you see event details — teammates just see busy time.';
+        ? 'Your outside calendars (Google / Microsoft Exchange) are connected: the team scheduler treats their events as busy time. Only you see the details; teammates just see that you\'re busy.'
+        : 'Connect your own Google or Microsoft (Exchange) calendar so the team scheduler knows when you\'re busy outside this app. Only you see event details; teammates just see busy time.';
       const calBtnLabel = cal.connected
         ? ('Manage Calendars' + (cal.count ? ' (' + cal.count + ')' : ''))
         : 'Connect a Calendar';
@@ -2842,7 +2892,7 @@ function renderAppAuthorizations() {
 
     // v1.1.0 — Connected Calendars: deep-link into the schedule widget's connect
     // modal (the scheduler plugin owns the OAuth flow; we just route to it via a
-    // neutral namespaced query var the scheduler port must listen for).
+    // namespaced query var the scheduler app listens for).
     const calBtn = document.getElementById('zdz-connect-cal-btn');
     if (calBtn) calBtn.addEventListener('click', () => {
       window.location.href = window.location.origin + '/?zdz_connect_calendar=open';
@@ -2940,7 +2990,7 @@ function openNutshellModal(currentEmail) {
   overlay.innerHTML = `
     <div class="zdz-ns-modal" role="dialog" aria-modal="true" aria-labelledby="zdz-ns-title">
       <div class="zdz-ns-header">
-        <h3 id="zdz-ns-title"><i data-lucide="key-round"></i> Nutshell — Company Credentials</h3>
+        <h3 id="zdz-ns-title"><i data-lucide="key-round"></i> Nutshell: Company Credentials</h3>
         <button type="button" class="btn-icon" id="zdz-ns-close" aria-label="Close">
           <i data-lucide="x" style="width:20px;height:20px"></i>
         </button>
@@ -2948,7 +2998,7 @@ function openNutshellModal(currentEmail) {
       <div class="zdz-ns-body">
         <p class="zdz-ns-hint" style="margin-bottom:4px">
           These credentials are shared by <strong>every Zorderz user</strong>. Paste the
-          company Nutshell login + API key once — the rest of the team will not need to do anything.
+          company Nutshell login + API key once; the rest of the team will not need to do anything.
         </p>
         <label class="zdz-ns-label">Nutshell Login Email
           <input type="email" id="zdz-ns-email" autocomplete="email"
@@ -3033,7 +3083,7 @@ function saveNutshellCredentials() {
       return;
     }
     closeNutshellModal();
-    showToast('✓ Company Nutshell connection saved — all users inherit this.');
+    showToast('✓ Company Nutshell connection saved; all users inherit this.');
     renderAppAuthorizations(); // refresh status badge
   })
   .catch(() => {
@@ -3832,7 +3882,7 @@ function initCommandPalette() {
         // (which tried to "take a picture" itself — wrong). Now any recognized
         // capture intent opens the real camera; the label is applied if present.
         var camName = label
-          ? 'Open Camera — label photos "' + label + '"'
+          ? 'Open Camera, label photos "' + label + '"'
           : 'Open Camera';
         var camDesc = label
           ? 'Tags every photo you take as "' + label + '" until you stop'
@@ -3842,7 +3892,7 @@ function initCommandPalette() {
           name: camName,
           desc: camDesc,
           icon: 'camera',
-          color: '#0EA5E9',
+          color: zdzAppPlate('zdz-camera', 'tools').color, ink: zdzAppPlate('zdz-camera', 'tools').ink,
           run: function () {
             // Confirm the launch with a haptic tap (the shutter-button haptic
             // itself lives in the Camera app).
@@ -3871,7 +3921,7 @@ function initCommandPalette() {
     if (commCard) return commCard;
 
     // ---- 1b. GENERIC APP LAUNCH: "open the schedule", "new estimate
-    // for the Smith job", "start a sketch", "check stock for sliders", "pull up
+    // for the Smith job", "start a sketch", "check stock for hinges", "pull up
     // commission for last month", etc. Like the Camera block, these are INSTANT
     // in-shell shell actions — openApp() jumps to the app's dashboard widget (no
     // the assistant round-trip). Each app can optionally capture a bit of context
@@ -3894,9 +3944,9 @@ function initCommandPalette() {
         query: stockItem,
         rawQuery: q,
         name: 'Stock: ' + stockItem,
-        desc: 'How many are on hand — shown right here',
+        desc: 'How many are on hand, shown right here',
         icon: 'package',
-        color: '#7C3AED',
+        color: zdzAppPlate('stock', 'field').color, ink: zdzAppPlate('stock', 'field').ink,
         options: { prompt: q, orchestrator_hint: { verb: 'stock', query: stockItem } }
       };
     }
@@ -3911,9 +3961,9 @@ function initCommandPalette() {
         kind: 'route',
         appId: 'sales-analytics',
         name: 'Draft an email to ' + emailTo,
-        desc: 'Writes it in the house voice — click to send',
+        desc: 'Writes it in the house voice; click to send',
         icon: 'mail',
-        color: '#6366F1',
+        color: zdzAppPlate('sales-analytics', 'sales').color, ink: zdzAppPlate('sales-analytics', 'sales').ink,
         options: { prompt: q, orchestrator_hint: { verb: 'email', to: emailTo } }
       };
     }
@@ -3931,9 +3981,9 @@ function initCommandPalette() {
         query: contactName,
         rawQuery: q,              // server re-classifies from the exact words
         name: 'Get ' + contactName + '’s contact info',
-        desc: 'Phone, email & address — shown right here',
+        desc: 'Phone, email & address, shown right here',
         icon: 'contact',
-        color: '#6366F1',
+        color: zdzAppPlate('sales-analytics', 'sales').color, ink: zdzAppPlate('sales-analytics', 'sales').ink,
         // Fallback prompt if the user chooses the chat handoff.
         options: { prompt: q, orchestrator_hint: { verb: 'contact', query: contactName } }
       };
@@ -3950,9 +4000,9 @@ function initCommandPalette() {
         query: lookupName,
         rawQuery: q,
         name: 'Look up ' + lookupName,
-        desc: 'Their open estimates & invoices — shown right here',
+        desc: 'Their open estimates & invoices, shown right here',
         icon: 'file-search',
-        color: '#6366F1',
+        color: zdzAppPlate('sales-analytics', 'sales').color, ink: zdzAppPlate('sales-analytics', 'sales').ink,
         options: { prompt: q, orchestrator_hint: { verb: 'lookup', query: lookupName } }
       };
     }
@@ -4160,20 +4210,20 @@ function initCommandPalette() {
 
     var who = subject || 'my';
     var label = subject ? (subject + '’s commission') : 'My commission';
-    if (multiNames && multiNames.length > 1) { label = subject + '’s commission (of ' + multiNames.length + ' — showing ' + subject + ')'; }
-    var focusLabel = focus === 'products' ? ' — by product' : (focus === 'jobs' ? ' — jobs' : (focus === 'basis' ? ' — how it’s calculated' : ''));
+    if (multiNames && multiNames.length > 1) { label = subject + '’s commission (of ' + multiNames.length + ', showing ' + subject + ')'; }
+    var focusLabel = focus === 'products' ? ' by product' : (focus === 'jobs' ? ': jobs' : (focus === 'basis' ? ': how it’s calculated' : ''));
     return {
       kind: 'inline',
       verb: 'commission',
       query: who,
       rawQuery: q,                 // server re-classifies from the exact words
       focus: focus,                // '' | 'jobs' | 'products' | 'basis' → auto-open
-      name: label + (period ? ' — ' + period : '') + (period ? '' : focusLabel),
+      name: label + (period ? ', ' + period : '') + (period ? '' : focusLabel),
       desc: focus
-        ? 'Opens straight to ' + (focus === 'products' ? 'the product split' : (focus === 'jobs' ? 'the jobs' : 'the rate basis')) + ' — shown right here'
-        : 'The figure with a tap-to-expand breakdown — shown right here',
+        ? 'Opens straight to ' + (focus === 'products' ? 'the product split' : (focus === 'jobs' ? 'the jobs' : 'the rate basis')) + ', shown right here'
+        : 'The figure with a tap-to-expand breakdown, shown right here',
       icon: 'calculator',
-      color: '#10B981',
+      color: zdzAppPlate('commission-calculator', 'office').color, ink: zdzAppPlate('commission-calculator', 'office').ink,
       options: { prompt: q, orchestrator_hint: { verb: 'commission', subject: who, period: period, focus: focus } }
     };
   }
@@ -4257,7 +4307,7 @@ function initCommandPalette() {
     if (!m) return null;
     var appCfg = visible.filter(function (a) { return a.id === m.app; })[0] || {};
     var appName = appCfg.nm || m.app;
-    var what = m.name ? ' \u2014 ' + m.name : (m.number ? ' \u2014 #' + m.number : '');
+    var what = m.name ? ': ' + m.name : (m.number ? ': #' + m.number : '');
     return {
       kind: 'shell',
       name: m.label + what,
@@ -4410,20 +4460,20 @@ function initCommandPalette() {
 
       var who = subject || 'my';
       var label = subject ? (subject + '’s commission') : 'My commission';
-      if (multiNames && multiNames.length > 1) { label = subject + '’s commission (of ' + multiNames.length + ' — showing ' + subject + ')'; }
-      var focusLabel = focus === 'products' ? ' — by product' : (focus === 'jobs' ? ' — jobs' : (focus === 'basis' ? ' — how it’s calculated' : ''));
+      if (multiNames && multiNames.length > 1) { label = subject + '’s commission (of ' + multiNames.length + ', showing ' + subject + ')'; }
+      var focusLabel = focus === 'products' ? ' by product' : (focus === 'jobs' ? ': jobs' : (focus === 'basis' ? ': how it’s calculated' : ''));
       return {
         kind: 'inline',
         verb: 'commission',
         query: who,
         rawQuery: q,                 // server re-classifies from the exact words
         focus: focus,                // '' | 'jobs' | 'products' | 'basis' → auto-open
-        name: label + (period ? ' — ' + period : '') + (period ? '' : focusLabel),
+        name: label + (period ? ', ' + period : '') + (period ? '' : focusLabel),
         desc: focus
-          ? 'Opens straight to ' + (focus === 'products' ? 'the product split' : (focus === 'jobs' ? 'the jobs' : 'the rate basis')) + ' — shown right here'
-          : 'The figure with a tap-to-expand breakdown — shown right here',
+          ? 'Opens straight to ' + (focus === 'products' ? 'the product split' : (focus === 'jobs' ? 'the jobs' : 'the rate basis')) + ', shown right here'
+          : 'The figure with a tap-to-expand breakdown, shown right here',
         icon: 'calculator',
-        color: '#10B981',
+        color: zdzAppPlate('commission-calculator', 'office').color, ink: zdzAppPlate('commission-calculator', 'office').ink,
         options: { prompt: q, orchestrator_hint: { verb: 'commission', subject: who, period: period, focus: focus } }
       };
     }
@@ -4492,23 +4542,23 @@ function initCommandPalette() {
 
       // requireVerb:true rows ONLY launch on an explicit launch verb (new/open/…),
       // never on a bare "<app> for <name>" — so "estimate for Riley" / "stock for
-      // sliders" still fall through to the inline document/contact lookups below.
+      // hinges" still fall through to the inline document/contact lookups below.
       // Rows without requireVerb may also launch when the query STARTS with the app
       // word (e.g. typing "schedule" or "commission" alone).
       var TABLE = [
-        { ids:['scheduler'],            re:/\b(schedule|scheduler|calendar|appointments?|availability)\b/,         icon:'calendar',     cc:'#0EA5E9', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{focus:p}, suffix:' — '+p}:null;} },
-        { ids:['estimate-creator'],     re:/\b(estimate|estimates|quote|quotes|bid|bids|proposal)\b/,             icon:'file-text',    cc:'#F59E0B', verb:'New',   requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{customer:n}, suffix:' for '+n}:null;} },
-        { ids:['zdz-sketch-pad','sketch'], re:/\b(sketch|sketchpad|draw(?:ing)?|doodle|diagram)\b/,                 icon:'pencil',       cc:'#F59E0B', verb:'Start', ctx:null },
-        { ids:['stock'],                re:/\b(stock|inventory|in stock|on hand)\b/,                              icon:'package',      cc:'#3B82F6', verb:'Check', requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{query:n}, suffix:' for '+n}:null;} },
-        { ids:['commission-calculator'], re:/\b(commission|commissions|payroll|installer pay|sales ledger|my pay)\b/, icon:'calculator',  cc:'#10B981', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{period:p}, suffix:' — '+p}:null;} },
-        { ids:['leads'],       re:/\b(leads?|lead generator|prospects?)\b/,                              icon:'target',       cc:'#22C55E', verb:'Open',  requireVerb:true, ctx:null },
-        { ids:['surveys'], re:/\b(surveys?|satisfaction|csat)\b/,                                    icon:'clipboard-check', cc:'#3B82F6', verb:'Open', requireVerb:true, ctx:null },
-        { ids:['prep'],                 re:/\b(prep|cutter|cut(?:ting)? queue|fabricat|shop queue)\b/,            icon:'scissors',     cc:'#F59E0B', verb:'Open',  ctx:null },
-        { ids:['receipts'],             re:/\b(receipts?)\b/,                                                     icon:'receipt',      cc:'#0EA5E9', verb:'Open',  requireVerb:true, ctx:null },
-        { ids:['knowledge-vault'],      re:/\b(knowledge|knowledge vault|knowledge base)\b/,                      icon:'book-open',    cc:'#22C55E', verb:'Open',  ctx:null },
-        { ids:['internal-messaging'],   re:/\b(messages?|messaging|team chat|inbox)\b/,                           icon:'message-square', cc:'#3B82F6', verb:'Open', requireVerb:true, ctx:null },
-        { ids:['zdz-media','zdz-media-all'], re:/\b(media|photos? library|gallery|image library)\b/,                icon:'image',        cc:'#64748B', verb:'Open',  ctx:null },
-        { ids:['game'],                 re:/\b(game|play a game)\b/,                                              icon:'gamepad-2',    cc:'#84CC16', verb:'Open',  ctx:null }
+        { ids:['scheduler'],            re:/\b(schedule|scheduler|calendar|appointments?|availability)\b/,         icon:'calendar',     cc:'#56B4E9', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{focus:p}, suffix:': '+p}:null;} },
+        { ids:['estimate-creator'],     re:/\b(estimate|estimates|quote|quotes|bid|bids|proposal)\b/,             icon:'file-text',    cc:'#E69F00', verb:'New',   requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{customer:n}, suffix:' for '+n}:null;} },
+        { ids:['zdz-sketch-pad','sketch'], re:/\b(sketch|sketchpad|draw(?:ing)?|doodle|diagram)\b/,                 icon:'pencil',       cc:'#CC79A7', verb:'Start', ctx:null },
+        { ids:['stock'],                re:/\b(stock|inventory|in stock|on hand)\b/,                              icon:'package',      cc:'#009E73', verb:'Check', requireVerb:true, ctx:function(s){var n=grabFor(s); return n?{options:{query:n}, suffix:' for '+n}:null;} },
+        { ids:['commission-calculator'], re:/\b(commission|commissions|payroll|installer pay|sales ledger|my pay)\b/, icon:'calculator',  cc:'#0072B2', verb:'Open',  ctx:function(s){var p=grabPeriod(s); return p?{options:{period:p}, suffix:': '+p}:null;} },
+        { ids:['leads'],       re:/\b(leads?|lead generator|prospects?)\b/,                              icon:'target',       cc:'#E69F00', verb:'Open',  requireVerb:true, ctx:null },
+        { ids:['surveys'], re:/\b(surveys?|satisfaction|csat)\b/,                                    icon:'clipboard-check', cc:'#0072B2', verb:'Open', requireVerb:true, ctx:null },
+        { ids:['prep'],                 re:/\b(prep|cutter|cut(?:ting)? queue|fabricat|shop queue)\b/,            icon:'scissors',     cc:'#009E73', verb:'Open',  ctx:null },
+        { ids:['receipts'],             re:/\b(receipts?)\b/,                                                     icon:'receipt',      cc:'#009E73', verb:'Open',  requireVerb:true, ctx:null },
+        { ids:['knowledge-vault'],      re:/\b(knowledge|knowledge vault|knowledge base)\b/,                      icon:'book-open',    cc:'#0072B2', verb:'Open',  ctx:null },
+        { ids:['internal-messaging'],   re:/\b(messages?|messaging|team chat|inbox)\b/,                           icon:'message-square', cc:'#56B4E9', verb:'Open', requireVerb:true, ctx:null },
+        { ids:['zdz-media','zdz-media-all'], re:/\b(media|photos? library|gallery|image library)\b/,                icon:'image',        cc:'#CC79A7', verb:'Open',  ctx:null },
+        { ids:['game'],                 re:/\b(game|play a game)\b/,                                              icon:'gamepad-2',    cc:'#CC79A7', verb:'Open',  ctx:null }
       ];
 
       // aggregate/analytic COMMISSION questions ("commission by
@@ -4634,7 +4684,7 @@ function initCommandPalette() {
       var ctxVal = row.ctx === 'for' ? grabFor(q) : (row.ctx === 'period' ? grabPeriod(q) : '');
       var opts = { source: 'orchestrator' };
       var suffix = '';
-      if (ctxVal && row.key) { opts[row.key] = ctxVal; suffix = row.ctx === 'for' ? ' for ' + ctxVal : ' — ' + ctxVal; }
+      if (ctxVal && row.key) { opts[row.key] = ctxVal; suffix = row.ctx === 'for' ? ' for ' + ctxVal : ': ' + ctxVal; }
       return {
         kind: 'shell',
         name: row.verb + ' ' + appName + suffix,
@@ -4813,6 +4863,13 @@ function zdzInlineSkeleton(route) {
   return '<div class="zdz-inline-card zdz-inline-loading">Looking that up\u2026</div>';
 }
 
+// A theme REST address with a query string. A site on plain links serves the API at ?rest_route=/…, so the query
+// joins with & there (one ? only).
+function zdzApiQuery(path, query) {
+  var base = String((window.zdzData && zdzData.apiUrl) || '/wp-json/zorderz/v1/');
+  return base + path + (base.indexOf('?') >= 0 ? '&' : '?') + query;
+}
+
 function zdzRunInline() {
   var route = window.__zdzPendingInline;
   if (!route) return;
@@ -4822,7 +4879,7 @@ function zdzRunInline() {
   mount.innerHTML = zdzInlineSkeleton(route);
 
   var q = (route.query && route.rawQuery) ? route.rawQuery : (route.rawQuery || route.query || '');
-  var url = zdzData.apiUrl + 'orchestrate?query=' + encodeURIComponent(q);
+  var url = zdzApiQuery('orchestrate', 'query=' + encodeURIComponent(q));
   fetch(url, { headers: { 'X-WP-Nonce': zdzData.nonce } })
     .then(function (r) { return r.json(); })
     .then(function (res) {
@@ -4894,7 +4951,7 @@ function zdzQaFetch(q) {
   if (hit) { return Promise.resolve(hit); }
   if (S.inflight && S.inflight.k === k) { return S.inflight.p; }
   if (typeof zdzData === 'undefined' || !zdzData.apiUrl) { return Promise.resolve({ miss: true, t: Date.now() }); }
-  var p = fetch(zdzData.apiUrl + 'orchestrate?mode=answer&query=' + encodeURIComponent(String(q).trim()), { headers: { 'X-WP-Nonce': zdzData.nonce } })
+  var p = fetch(zdzApiQuery('orchestrate', 'mode=answer&query=' + encodeURIComponent(String(q).trim())), { headers: { 'X-WP-Nonce': zdzData.nonce } })
     .then(function (r) { return r.json(); })
     .then(function (res) {
       var ok = res && res.route === 'inline' && res.verb === 'answer' && res.result && res.result.html;
@@ -5043,10 +5100,10 @@ function renderInlineDocs(mount, res, route) {
   var rows = docs.slice(0, 6).map(function (d) {
     var num = d.estimate_num || d.invoice_num || d.number || '';
     var status = d.status_text || d.status || '';
-    var total = (d.total_hidden ? '' : (d.total != null ? ('$' + d.total) : ''));
+    var total = (d.total_hidden ? '' : (d.total != null ? zdzMoney(d.total) : ''));
     var label = (d.doc_type ? (d.doc_type.charAt(0).toUpperCase() + d.doc_type.slice(1)) : 'Doc') + (num ? ' #' + num : '');
     var meta = [status, total].filter(Boolean).join(' · ');
-    return '<div class="zdz-inline-row"><span class="zdz-inline-ic">📄</span>' + esc(label) + (meta ? ' — ' + esc(meta) : '') + '</div>';
+    return '<div class="zdz-inline-row"><span class="zdz-inline-ic">📄</span>' + esc(label) + (meta ? ' · ' + esc(meta) : '') + '</div>';
   }).join('');
 
   // CLOSEST-MATCH BANNER — the document card resolves the customer
@@ -5059,7 +5116,7 @@ function renderInlineDocs(mount, res, route) {
   if (r.closest_match && r.asked) {
     askedBanner =
       '<div class="zdz-inline-note" style="color:var(--sys-warn,#b45309);">' +
-        'No exact match for "' + esc(r.asked) + '" — showing the closest customer, ' +
+        'No exact match for "' + esc(r.asked) + '". Showing the closest customer, ' +
         esc(name) + '. Open in chat to search more.' +
       '</div>';
   }
@@ -5068,7 +5125,7 @@ function renderInlineDocs(mount, res, route) {
 
   mount.innerHTML =
     '<div class="zdz-inline-card">' +
-      '<div class="zdz-inline-name">' + esc(name) + ' — open documents</div>' +
+      '<div class="zdz-inline-name">' + esc(name) + ': open documents</div>' +
       askedBanner +
       rows +
       '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Open in chat →</button>' +
@@ -5088,7 +5145,7 @@ function renderInlineStock(mount, res, route) {
   var words = { out: 'out', critical: 'very low', low: 'low', good: '' };
   var rows = r.items.map(function (it) {
     var st = words[it.status] || '';
-    return '<div class="zdz-inline-row"><span class="zdz-inline-ic">📦</span>' + esc(it.name) + ' — <strong>' +
+    return '<div class="zdz-inline-row"><span class="zdz-inline-ic">📦</span>' + esc(it.name) + ': <strong>' +
       esc(String(it.on_hand)) + '</strong> ' + esc(it.unit || '') + (st ? ' · ' + esc(st) : '') + '</div>';
   }).join('');
   var more = r.more ? '<div class="zdz-inline-note">and ' + esc(String(r.more)) + ' more</div>' : '';
@@ -5111,7 +5168,7 @@ function zdzStockOpenWidget() {
 function renderInlineCommission(mount, res, route) {
   var esc = (typeof escapeHtml === 'function') ? escapeHtml : function (s) { return String(s == null ? '' : s); };
   var r = res.result || {};
-  function money(n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function money(n) { return zdzMoney(Number(n || 0)); }
 
   // Non-figure states (denied on kiosk, error, no-match) → message + handoff.
   // ALSO treat "no amount produced" as a non-figure state. The bridge
@@ -5245,7 +5302,7 @@ function renderInlineContact(mount, res, route) {
     var msg = res.message || res.error || 'No contact details available.';
     var nm = (res.contact && res.contact.name) ? res.contact.name : '';
     var loc = (res.contact && res.contact.city) ? res.contact.city : '';
-    var sub = (nm ? ('<div class="zdz-inline-sub"><strong>' + esc(nm) + '</strong>' + (loc ? ' — ' + esc(loc) : '') + '</div>') : '');
+    var sub = (nm ? ('<div class="zdz-inline-sub"><strong>' + esc(nm) + '</strong>' + (loc ? ' · ' + esc(loc) : '') + '</div>') : '');
     mount.innerHTML =
       '<div class="zdz-inline-card">' +
         '<div class="zdz-inline-msg">' + esc(msg) + '</div>' + sub +
@@ -5288,7 +5345,7 @@ function renderInlineContact(mount, res, route) {
   if (res.closest_match && res.asked) {
     askedBanner =
       '<div class="zdz-inline-note" style="color:var(--sys-warn,#b45309);">' +
-        'No exact match for "' + esc(res.asked) + '" — showing the closest contact, ' +
+        'No exact match for "' + esc(res.asked) + '". Showing the closest contact, ' +
         esc(c.name || 'this customer') + '. Ask chat to search more.' +
       '</div>';
   }
@@ -5481,9 +5538,9 @@ function initInstallBanner() {
       if (isChrome && !isAndroid) {
         showToast('Look for the install icon (⊕) in the right side of the address bar, or go to Menu (⋮) → "Save and share" → "Install Zorderz"', 8000);
       } else if (isEdge) {
-        showToast('Click Menu (⋯) → Apps → "Install Zorderz" — or look for the install icon in the address bar', 7000);
+        showToast('Click Menu (⋯) → Apps → "Install Zorderz", or look for the install icon in the address bar', 7000);
       } else if (isFirefox) {
-        showToast('Firefox doesn\'t support app install — use Chrome or Edge for the best experience, or bookmark this page', 7000);
+        showToast('Firefox doesn\'t support app install; use Chrome or Edge for the best experience, or bookmark this page', 7000);
       } else if (isSafari && isMac) {
         showToast('In Safari: File → "Add to Dock" to install Zorderz as a desktop app', 6000);
       } else {
@@ -5555,7 +5612,7 @@ window.zdzMapsUrl       = zdzMapsUrl;       // v1.6.2: shared map-URL helper, re
       var recovery = document.createElement('div');
       recovery.style.cssText = 'padding:40px 20px;text-align:center;';
       recovery.innerHTML = '<p style="margin-bottom:16px;color:var(--sys-text-sec,#64748B);">Something went wrong loading the app.</p>'
-        + '<button onclick="location.reload()" style="padding:12px 24px;border-radius:8px;background:var(--sys-brand,#2C5F8A);color:#fff;font-weight:600;font-size:17px;cursor:pointer;border:none;">Tap to Retry</button>';
+        + '<button onclick="location.reload()" style="padding:12px 24px;border-radius:8px;background:var(--sys-brand,#5150D6);color:var(--sys-text-brand,#fff);font-weight:600;font-size:17px;cursor:pointer;border:none;">Tap to Retry</button>';
       main.prepend(recovery);
     }
   }, 5000);
@@ -5609,7 +5666,7 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     if (conn && conn.effectiveType && /^(slow-2g|2g)$/.test(conn.effectiveType)) {
-      showToast('Low signal — some features may be slower', 4000);
+      showToast('Low signal; some features may be slower', 4000);
     }
   } catch(e) {}
 
@@ -5657,7 +5714,7 @@ document.addEventListener('DOMContentLoaded', () => {
       errDiv.className = 'zdz-boot-error';
       errDiv.style.cssText = 'padding:40px 20px;text-align:center;';
       errDiv.innerHTML = '<p style="margin-bottom:16px;color:var(--sys-text-sec,#64748B);">Something went wrong. Tap to retry.</p>'
-        + '<button onclick="location.reload()" style="padding:12px 24px;border-radius:8px;background:var(--sys-brand,#2C5F8A);color:#fff;font-weight:600;font-size:17px;cursor:pointer;border:none;">Retry</button>';
+        + '<button onclick="location.reload()" style="padding:12px 24px;border-radius:8px;background:var(--sys-brand,#5150D6);color:var(--sys-text-brand,#fff);font-weight:600;font-size:17px;cursor:pointer;border:none;">Retry</button>';
       dash.prepend(errDiv);
     }
   }

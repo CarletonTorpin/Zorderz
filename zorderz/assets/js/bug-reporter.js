@@ -11,7 +11,6 @@
  * - Console error buffering for debug payloads
  *
  * @package Zorderz
- * @since   2.7.0
  */
 const BugReporter = {
 

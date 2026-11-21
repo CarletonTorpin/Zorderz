@@ -149,10 +149,10 @@
  *     shared inventory transient is tier-keyed (admin/staff) + transcript-free.
  *
  * v1.4.1 (shared-mailbox coordination for the messaging DM-reply bridge):
- *   The App@ mailbox poller now (a) selects toRecipients/ccRecipients so a
+ *   The mailbox poller now (a) selects toRecipients/ccRecipients so a
  *   consumer can see the delivery address, and (b) hands a DM-reply email off to
  *   Zorderz Internal Messaging (ZIM_Email_Reply) BEFORE turning it into a vault
- *   document. A message addressed to app+dm-<token>@… (or carrying an in-body DM
+ *   document. A message addressed to <mailbox>+dm-<token>@… (or carrying an in-body DM
  *   token) is posted back into the DM and filed as "Vault Processed"; an
  *   unroutable one is filed under "Messaging Failed". This keeps the vault as the
  *   single reader of the shared mailbox (no two-poller race). No behaviour change
@@ -1214,7 +1214,7 @@ function zkv_render_admin_page() {
 			$mail_app_managed = class_exists( 'ZKV_Dashboard' ) && ZKV_Dashboard::cred_managed( 'ms_vault_mail' );
 		?>
 		<div class="card" style="max-width:600px;padding:20px;margin-bottom:20px;">
-			<h2>Email-In — Forward Mail to the Vault (Microsoft 365)</h2>
+			<h2>Email-In: Forward Mail to the Vault (Microsoft 365)</h2>
 			<p class="description" style="margin-bottom:10px;">
 				Staff forward an email to the address below and it is filed into the vault automatically:
 				the AI picks a category, tags it "<?php echo esc_html( class_exists( 'ZKV_Email_Ingest' ) ? ZKV_Email_Ingest::TAG_LABEL : 'Email Correspondence' ); ?>", records who sent it,
@@ -1224,17 +1224,17 @@ function zkv_render_admin_page() {
 			<p style="margin:0 0 10px;">
 				<strong>Status:</strong>
 				<?php if ( $mail_status['enabled'] && $mail_status['configured'] ) : ?>
-					<span style="color:#059669;font-weight:600;">Active</span> — polling every 5 minutes.
+					<span style="color:#059669;font-weight:600;">Active</span>, polling every 5 minutes.
 				<?php elseif ( $mail_status['configured'] ) : ?>
 					<span style="color:#D97706;font-weight:600;">Configured but disabled</span>
 				<?php else : ?>
 					<span style="color:#DC2626;font-weight:600;">Not configured</span>
 				<?php endif; ?>
 				<?php if ( 'scheduler' === $mail_creds['source'] ) : ?>
-					<br><em>Using the Scheduler's Microsoft connection — add <code>Mail.Read</code> to that same Azure app.</em>
+					<br><em>Using the Scheduler's Microsoft connection: add <code>Mail.Read</code> to that same Azure app.</em>
 				<?php endif; ?>
 				<?php if ( ! empty( $mail_status['last_poll'] ) ) : ?>
-					<br>Last check: <?php echo esc_html( $mail_status['last_poll'] ); ?> — <?php echo esc_html( $mail_status['last_result'] ); ?>
+					<br>Last check: <?php echo esc_html( $mail_status['last_poll'] ); ?> · <?php echo esc_html( $mail_status['last_result'] ); ?>
 				<?php endif; ?>
 			</p>
 			<form method="post">
@@ -1271,7 +1271,7 @@ function zkv_render_admin_page() {
 						<th>Client secret</th>
 						<td>
 							<input type="password" name="zkv_mail_secret" class="regular-text" autocomplete="new-password"
-								placeholder="<?php echo ZKV_Mailbox::has_secret() ? '•••••• (saved — leave blank to keep)' : ''; ?>" />
+								placeholder="<?php echo ZKV_Mailbox::has_secret() ? '•••••• (saved; leave blank to keep)' : ''; ?>" />
 							<p class="description">Stored in its own isolated option; read only server-side. Leave blank to keep the saved value.</p>
 						</td>
 					</tr>
@@ -1310,7 +1310,7 @@ function zkv_render_admin_page() {
 					<?php else : ?>
 						<?php foreach ( $docs as $doc ) : ?>
 						<tr>
-							<td><strong><?php echo esc_html( $doc['title'] ); ?></strong><br><small><?php echo esc_html( $doc['original_name'] ); ?></small><?php if ( ! empty( $doc['user_context'] ) ) : ?><br><small style="color:#2C5F8A;"><?php echo esc_html( substr( $doc['user_context'], 0, 80 ) ); ?><?php echo strlen( $doc['user_context'] ) > 80 ? '...' : ''; ?></small><?php endif; ?></td>
+							<td><strong><?php echo esc_html( $doc['title'] ); ?></strong><br><small><?php echo esc_html( $doc['original_name'] ); ?></small><?php if ( ! empty( $doc['user_context'] ) ) : ?><br><small style="color:#5150D6;"><?php echo esc_html( substr( $doc['user_context'], 0, 80 ) ); ?><?php echo strlen( $doc['user_context'] ) > 80 ? '...' : ''; ?></small><?php endif; ?></td>
 							<td><?php echo esc_html( $doc['category_label'] ?? 'General' ); ?></td>
 							<td>
 								<?php
@@ -1320,7 +1320,7 @@ function zkv_render_admin_page() {
 								?>
 							</td>
 							<td><?php echo esc_html( $doc['uploader_name'] ?? 'Unknown' ); ?></td>
-							<td><?php echo date( 'M j, Y', strtotime( $doc['created_at'] ) ); ?></td>
+							<td><?php echo esc_html( date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), strtotime( $doc['created_at'] ) ) ); ?></td>
 							<td><?php echo size_format( (int) $doc['file_size'] ); ?></td>
 						</tr>
 						<?php endforeach; ?>
@@ -1436,7 +1436,7 @@ add_action( 'template_redirect', function () {
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Excerpt — <?php echo esc_html( $title ); ?></title>
+<title>Excerpt: <?php echo esc_html( $title ); ?></title>
 <style>
 	body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;background:#f4f5f7;color:#1f2937;}
 	.zkv-x-wrap{max-width:760px;margin:0 auto;padding:24px 16px 64px;}
@@ -1453,7 +1453,7 @@ add_action( 'template_redirect', function () {
 	}
 </style>
 </head><body><div class="zkv-x-wrap">
-	<div class="zkv-x-banner">Excerpt shared with you by <?php echo esc_html( $by ); ?> · view only<?php echo $expires ? ' · expires ' . esc_html( $expires ) : ''; ?>. This is the shared portion only — there is no full-document link.</div>
+	<div class="zkv-x-banner">Excerpt shared with you by <?php echo esc_html( $by ); ?> · view only<?php echo $expires ? ' · expires ' . esc_html( $expires ) : ''; ?>. This is the shared portion only: there is no full-document link.</div>
 	<h1 class="zkv-x-title">Excerpt from &ldquo;<?php echo esc_html( $title ); ?>&rdquo;</h1>
 	<div class="zkv-x-meta">Private transcript excerpt · shared <?php echo esc_html( date_i18n( get_option( 'date_format', 'M j, Y' ), strtotime( $share['created_at'] ) ) ); ?></div>
 	<div class="zkv-x-body"><?php
@@ -1523,7 +1523,7 @@ add_action( 'template_redirect', function () {
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shared with me — Knowledge Vault</title>
+<title>Shared with me · Knowledge Vault</title>
 <style>
 	body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;background:#f4f5f7;color:#1f2937;}
 	.zkv-s-wrap{max-width:760px;margin:0 auto;padding:24px 16px 64px;}
@@ -1748,7 +1748,7 @@ add_action( 'after_setup_theme', function () {
 					'nm'          => 'Knowledge',
 					'icon'        => 'library',
 					'cat'         => 'Admin',
-					'cc'          => '#059669',
+					'cc'          => '#0072B2',
 					'desc'        => 'Company document repository with AI indexing.',
 					'roles'       => [ 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech' ],
 					'bridge_type' => 'inline_widget',
@@ -1925,7 +1925,7 @@ add_action( 'after_setup_theme', function () {
 									<div class="zkv-dropzone" id="zkv-dropzone">
 										<i data-lucide="upload-cloud"></i>
 										<p>Tap to select files or drag &amp; drop</p>
-										<span class="zkv-dropzone-hint">PDF, DOC, MD, TXT, SRT, VTT, images &amp; more — up to 50 MB each, 10 at a time</span>
+										<span class="zkv-dropzone-hint">PDF, DOC, MD, TXT, SRT, VTT, images &amp; more, up to 50 MB each, 10 at a time</span>
 										<input type="file" id="zkv-file-input" multiple style="display:none;" />
 									</div>
 									<div class="zkv-file-preview" id="zkv-file-preview" style="display:none;">
@@ -1942,7 +1942,7 @@ add_action( 'after_setup_theme', function () {
 									</div>
 								</div>
 								<div id="zkv-paste-mode" style="display:none;">
-									<textarea id="zkv-paste-input" rows="8" placeholder="Paste your text here — meeting transcripts, notes, copy from phone, etc. No length limit."></textarea>
+									<textarea id="zkv-paste-input" rows="8" placeholder="Paste your text here: meeting transcripts, notes, copy from phone, etc. No length limit."></textarea>
 								</div>
 								<div id="zkv-duplicate-warning" class="zkv-duplicate-warning" style="display:none;">
 									<i data-lucide="alert-triangle"></i>
@@ -1962,8 +1962,8 @@ add_action( 'after_setup_theme', function () {
 									<textarea id="zkv-description" rows="2" placeholder="What is this document about?"></textarea>
 								</div>
 								<div class="zkv-form-group zkv-context-group">
-									<label for="zkv-user-context">Context <span class="zkv-label-hint">— stored exactly as you type it, always searchable</span></label>
-									<textarea id="zkv-user-context" rows="3" placeholder="Anything you'd search by later — job number, invoice number, lead number, address, customer name..."></textarea>
+									<label for="zkv-user-context">Context <span class="zkv-label-hint">stored exactly as you type it, always searchable</span></label>
+									<textarea id="zkv-user-context" rows="3" placeholder="Anything you'd search by later: job number, invoice number, lead number, address, customer name..."></textarea>
 								</div>
 								<div class="zkv-form-group">
 									<label>Visibility</label>
@@ -1972,7 +1972,7 @@ add_action( 'after_setup_theme', function () {
 										<label><input type="radio" name="zkv-visibility" value="admin_only" /> Admin only</label>
 										<label><input type="radio" name="zkv-visibility" value="transcript_private" /> Private transcript</label>
 									</div>
-									<span class="zkv-hint" id="zkv-transcript-hint" style="display:none;">Only the people named as speakers in this transcript will be able to see it — not admins, not the uploader, unless they spoke in it. Speaker names are matched to staff accounts automatically; anyone we can't match waits for an admin to confirm.</span>
+									<span class="zkv-hint" id="zkv-transcript-hint" style="display:none;">Only the people named as speakers in this transcript will be able to see it. Not admins, not the uploader, unless they spoke in it. Speaker names are matched to staff accounts automatically; anyone we can't match waits for an admin to confirm.</span>
 								</div>
 							</div>
 							<div class="zkv-modal-footer">
@@ -2019,7 +2019,7 @@ add_action( 'after_setup_theme', function () {
 					'nm'          => 'Knowledge',
 					'icon'        => 'library',
 					'cat'         => 'Admin',
-					'cc'          => '#059669',
+					'cc'          => '#0072B2',
 					'desc'        => 'Company document repository with AI indexing.',
 					'roles'       => [ 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech' ],
 					'bridge_type' => 'iframe',

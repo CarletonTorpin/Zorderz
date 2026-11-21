@@ -244,7 +244,7 @@ final class ChartsAppTest extends TestCase {
 	}
 
 	public function test_counts_helpers(): void {
-		$this->assertSame( '15558', ZCH_Counts::norm_no( '0015558' ) );
+		$this->assertSame( '1042', ZCH_Counts::norm_no( '0001042' ) );
 		$this->assertSame( '', ZCH_Counts::norm_no( '12 34' ) );
 		$this->assertSame( 'Google Ads', ZCH_Counts::clean_label( '  Google   Ads ' ) );
 		$this->assertSame( 'Other', ZCH_Counts::clean_label( 'call 555-0101' ) );

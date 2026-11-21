@@ -4,7 +4,7 @@
  *
  * @mention parsing, resolution, reconciliation.
  *
- * KEY INVARIANT (Trap 3):
+ * KEY INVARIANT (design rule 3):
  *   When a message is edited, we re-parse mentions but ONLY newly-added
  *   mentions fire a push. Existing mentions get nothing (no re-notification).
  *   Removed mentions are audit-stamped but NEVER notified ("you were
@@ -20,7 +20,7 @@
  *                      added gets an INSERT; removed gets an UPDATE of
  *                      removed_at; neither physically deletes.
  *
- * SOFT-DELETE INTERACTION (Trap 4):
+ * SOFT-DELETE INTERACTION (design rule 4):
  *   When a parent message is soft-deleted, mention rows are preserved. A
  *   user's "your mentions" history still contains those entries; clicking
  *   the notification lands on the [deleted by user] placeholder.

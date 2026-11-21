@@ -134,7 +134,7 @@ class ZL_Progress {
 	 * Heartbeat — refresh updated_at without changing anything else.
 	 * Safe to call as often as the pipeline wants; cheap.
 	 *
-	 * Trap 3 compliance: call this at LEAST every HEARTBEAT_INTERVAL_S
+	 * Call this at LEAST every HEARTBEAT_INTERVAL_S
 	 * regardless of whether concrete progress has been made.
 	 *
 	 * @param int $batch_id

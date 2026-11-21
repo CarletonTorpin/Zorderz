@@ -81,9 +81,24 @@ class ZEST_FreshBooks {
 	 * Normalise an email to a valid address or ''. Collapses the placeholder the parser
 	 * sometimes emits for a missing email ("unknown") so it can never reach the provider
 	 * and 422. Deterministic backstop — the send path also refuses on a blank email.
+	 *
+	 * A dictated or pasted address arrives with its sentence's punctuation ("... my email is
+	 * alex@example.com." keeps the full stop), so opening brackets and quotes are dropped from
+	 * the front, closing punctuation, brackets and quotes from the end, and a mailto: prefix,
+	 * before the address is checked. The front set is narrow on purpose: "!", "?" and "{" are
+	 * legal at the start of an address, so they are never removed. Anything longer than an
+	 * address can be is refused without being scanned.
 	 */
 	public static function clean_email( $email ): string {
-		$email = strtolower( trim( (string) $email ) );
+		$email = is_scalar( $email ) ? trim( (string) $email ) : '';
+		if ( strlen( $email ) > 320 ) {
+			return '';
+		}
+		$front = '/^[\s(\[<"\'\x{201C}\x{2018}\x{FEFF}]+/u';
+		$back  = '/[\s.,;:!?)\]}>"\'\x{201D}\x{2019}\x{FEFF}]+$/u';
+		$email = (string) preg_replace( $back, '', (string) preg_replace( $front, '', $email ) );
+		$email = (string) preg_replace( '/^mailto:/i', '', $email );
+		$email = strtolower( (string) preg_replace( $back, '', (string) preg_replace( $front, '', $email ) ) );
 		if ( '' === $email || in_array( $email, array( 'unknown', 'n/a', 'none', 'na', 'no email', 'noemail' ), true ) ) {
 			return '';
 		}

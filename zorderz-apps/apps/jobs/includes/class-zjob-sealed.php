@@ -84,7 +84,7 @@ class ZJOB_Sealed {
 	}
 
 	/**
-	 * The codes the vault's reader finds in $text, less door sizes: "screen door #3080" is a door's size on a priced
+	 * The codes the vault's reader finds in $text, less door sizes: "storm door #3080" is a door's size on a priced
 	 * line, not a code. A "door" match counts only when its words say code, pin, combo or key. [[start, length, kind,
 	 * words]]
 	 */

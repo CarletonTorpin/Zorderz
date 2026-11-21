@@ -23,7 +23,6 @@
  * This class never mutates the record. Caching of geo_place is done by the
  * REST layer (which has the media id), so the builder stays pure/testable.
  *
- * @since   2.21.0
  * @package Zorderz
  */
 
@@ -382,7 +381,7 @@ class ZDZ_Media_Exif {
 			return $mysql;
 		}
 		// e.g. "Mar 14, 2026 · 1:17 PM"
-		return date_i18n( 'M j, Y · g:i A', $ts );
+		return date_i18n( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y · g:i A' ) : 'M j, Y · g:i A' ), $ts );
 	}
 
 	private static function summary_line( string $captured_at, ?array $location ): string {

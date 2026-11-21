@@ -305,7 +305,7 @@ class ZL_Parallel_Dispatch {
 	/**
 	 * Convenience: detect whether any result in a batch indicates a 429.
 	 * Callers use this to halve their concurrency cap for the remainder
-	 * of the current generation run (not forever — see Trap 3 of prompt).
+	 * of the current generation run (not forever).
 	 *
 	 * @param array $results Results from run().
 	 * @return bool

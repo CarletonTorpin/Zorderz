@@ -420,7 +420,7 @@ def _scope(tokens, i, listed=frozenset()):
     comma that opens a new clause ("…, not the repairs, in Cedar Hills": the "not" is about the repairs).
     a list carries its negation to the end. The other values of the same exclusion (`listed`, token
     indexes) and the words that join them don't count toward NEAR, so "excluding Cedar Hills, Maple Falls, Pine Ridge, Millbrook,
-    Fairview and Brookfield" excludes Brookfield too."""
+    Fairview and Northfield" excludes Northfield too."""
     out, j, counted = [], i - 1, 0
     while j >= 0 and counted < NEAR:
         t = tokens[j]

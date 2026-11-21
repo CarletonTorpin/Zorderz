@@ -51,7 +51,7 @@ final class SealedVaultTest extends TestCase {
 	/* ── the reader ───────────────────────────────────────────────────────── */
 
 	public function test_reader_cuts_codes_and_leaves_sizes_money_and_times(): void {
-		$cut = ZDZ_Sealed::cut( 'Gate code is 4821, lockbox # 5521, alarm: #5871. Screen door #3080, $1,450 paid, meet at the gate 0930.' );
+		$cut = ZDZ_Sealed::cut( 'Gate code is 4821, lockbox # 5521, alarm: #5871. Storm door #3080, $1,450 paid, meet at the gate 0930.' );
 		foreach ( array( '4821', '5521', '5871' ) as $code ) {
 			$this->assertStringNotContainsString( $code, $cut );
 		}

@@ -66,7 +66,7 @@ class ZMI_Admin {
 				<th><label for="zmi_aliases">Aliases</label></th>
 				<td>
 					<textarea name="zmi_aliases" id="zmi_aliases" class="large-text" rows="2"><?php echo esc_textarea( $aliases ); ?></textarea>
-					<p class="description">Other addresses that land in this mailbox (proxy aliases, a personal alias, etc.). One account per address — a duplicate is rejected and names the current owner.</p>
+					<p class="description">Other addresses that land in this mailbox (proxy aliases, a personal alias, etc.). One account per address: a duplicate is rejected and names the current owner.</p>
 				</td>
 			</tr>
 			<?php wp_nonce_field( 'zmi_save_profile_' . (int) $user->ID, 'zmi_profile_nonce' ); ?>
@@ -159,7 +159,7 @@ class ZMI_Admin {
 
 			<h2>Consumer wiring</h2>
 			<p>Resolver available: <strong><?php echo class_exists( 'ZDZ_Mailbox_Identity' ) ? 'yes' : 'no'; ?></strong>.
-			The Scheduler, the Inbox, and login each read this resolver behind a <code>class_exists()</code> guard, adopted independently — until a consumer reads it, this module only provides the API and this admin surface. Nothing here reads mail.</p>
+			The Scheduler, the Inbox, and login each read this resolver behind a <code>class_exists()</code> guard, adopted independently. Until a consumer reads it, this module only provides the API and this admin surface. Nothing here reads mail.</p>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="zmi_save_settings" />
@@ -181,14 +181,14 @@ class ZMI_Admin {
 									<?php echo esc_html( $role['name'] ); ?>
 								</label>
 							<?php endforeach; ?>
-							<p class="description">Roles permitted to read a shared service mailbox. Company mail, not owner-private — default administrators only.</p>
+							<p class="description">Roles permitted to read a shared service mailbox. Company mail, not owner-private; default administrators only.</p>
 						</td>
 					</tr>
 					<tr>
 						<th><label for="zmi_services">Service / shared mailboxes</label></th>
 						<td>
 							<textarea name="zmi_services" id="zmi_services" class="large-text code" rows="4" placeholder="help@example.com | all | automated | 0"><?php echo esc_textarea( trim( $svc_text ) ); ?></textarea>
-							<p class="description">One per line: <code>address | index_mode(none|external|all) | automated|human | owner_service_user_id</code>. These are internal, never-a-person addresses. Ships empty; indexing them is a later, separately flagged step — here you only register them.</p>
+							<p class="description">One per line: <code>address | index_mode(none|external|all) | automated|human | owner_service_user_id</code>. These are internal, never-a-person addresses. Ships empty; indexing them is a later, separately flagged step; here you only register them.</p>
 						</td>
 					</tr>
 					<tr>
@@ -201,8 +201,8 @@ class ZMI_Admin {
 			</form>
 
 			<hr />
-			<h2>Import roster — Exchange mailboxes &amp; aliases</h2>
-			<p class="description">One person per line: <code>Display Name | primary mailbox | alias(es)</code>. <strong>Preview</strong> matches each line to a WP user by email (then exact display name); <strong>Import</strong> writes identities for confident matches only — unmatched lines are reported, never guessed. Shared/service boxes (a support inbox, a sales inbox…) go in the registry above, not here.</p>
+			<h2>Import roster: Exchange mailboxes &amp; aliases</h2>
+			<p class="description">One person per line: <code>Display Name | primary mailbox | alias(es)</code>. <strong>Preview</strong> matches each line to a WP user by email (then exact display name); <strong>Import</strong> writes identities for confident matches only; unmatched lines are reported, never guessed. Shared/service boxes (a support inbox, a sales inbox…) go in the registry above, not here.</p>
 			<?php
 			$pv_key = 'zmi_preview_' . get_current_user_id();
 			$pv     = get_transient( $pv_key );
@@ -223,7 +223,7 @@ class ZMI_Admin {
 
 			<hr />
 			<h2>Seed from legacy</h2>
-			<p>Backfill every user's identity from the existing <code>zsch_mailbox</code> + <code>zdz_login_aliases</code> metas. Idempotent — it never overwrites an identity that's already set.</p>
+			<p>Backfill every user's identity from the existing <code>zsch_mailbox</code> + <code>zdz_login_aliases</code> metas. Idempotent: it never overwrites an identity that's already set.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="zmi_seed_all" />
 				<?php wp_nonce_field( 'zmi_seed_all' ); ?>
@@ -296,7 +296,7 @@ class ZMI_Admin {
 		echo '<table class="widefat striped" style="max-width:1040px;margin:12px 0;"><thead><tr><th>Name</th><th>Primary (Exchange mailbox)</th><th>Alias(es)</th><th>Matched WP user</th><th>Matched by</th></tr></thead><tbody>';
 		foreach ( $preview as $r ) {
 			$ok   = (int) ( $r['uid'] ?? 0 ) > 0;
-			$cell = $ok ? esc_html( (string) $r['user'] ) : '<span style="color:#a00;">— no match —</span>';
+			$cell = $ok ? esc_html( (string) $r['user'] ) : '<span style="color:#a00;">(no match)</span>';
 			printf(
 				'<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
 				esc_html( (string) ( $r['name'] ?? '' ) ),

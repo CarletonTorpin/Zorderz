@@ -324,7 +324,7 @@ class ZKV_Ext_Links {
 		$who   = $by ? $by->display_name : '';
 		$site  = self::site_name();
 		$ts    = strtotime( $row['expires_at'] . ' UTC' );
-		$until = function_exists( 'wp_date' ) ? wp_date( 'F j, Y', $ts ) : gmdate( 'F j, Y', $ts );
+		$until = function_exists( 'wp_date' ) ? wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'F j, Y' ) : 'F j, Y' ), $ts ) : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'F j, Y' ) : 'F j, Y' ), $ts );
 		$file  = self::url( $token ) . '/file';
 		$size  = function_exists( 'size_format' ) ? size_format( (int) $row['file_size'] ) : '';
 		echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow">'

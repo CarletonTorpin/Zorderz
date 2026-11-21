@@ -324,7 +324,7 @@ class ZDZ_Admin_UI {
 					<input type="text" id="zdz_user_email_name" name="zdz_user_email_name"
 						value="<?php echo esc_attr( get_user_meta( $user->ID, 'zdz_user_email_name', true ) ); ?>"
 						class="regular-text" placeholder="<?php echo esc_attr( $user->display_name ); ?>" />
-					<p class="description"><?php esc_html_e( 'How this person signs off emails — a first name, a full name, or a name plus role. Defaults to their display name if left empty.', 'zorderz' ); ?></p>
+					<p class="description"><?php esc_html_e( 'How this person signs off emails: a first name, a full name, or a name plus role. Defaults to their display name if left empty.', 'zorderz' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -336,13 +336,29 @@ class ZDZ_Admin_UI {
 					<p class="description"><?php esc_html_e( 'Comma-separated territory codes this person covers. Used by the Lead Generator to auto-filter lead batches.', 'zorderz' ); ?></p>
 				</td>
 			</tr>
+			<?php
+			// Backup sign-in addresses: other addresses this person may type on the sign-in screen. A sign-in code goes
+			// to the address that was typed, so an address at another mail service is the way in when the work mailbox
+			// is down. Only the person who manages sign-in routes changes them (Zorderz → Sign-in routes); before anyone
+			// has been named, an administrator. Never for the shared device or an account in Privacy View.
+			$zdz_sr_gets = ! class_exists( 'ZDZ_Signin_Routes' ) || ZDZ_Signin_Routes::gets_routes( (int) $user->ID );
+			$zdz_sr_can  = class_exists( 'ZDZ_Signin_Routes' ) && $zdz_sr_gets && ZDZ_Signin_Routes::may_edit_addresses( (int) get_current_user_id() );
+			?>
 			<tr>
-				<th><label for="zdz_login_aliases"><?php esc_html_e( 'Login Email Aliases', 'zorderz' ); ?></label></th>
+				<th><label for="zdz_login_aliases"><?php esc_html_e( 'Backup sign-in addresses', 'zorderz' ); ?></label></th>
 				<td>
 					<input type="text" id="zdz_login_aliases" name="zdz_login_aliases"
 						value="<?php echo esc_attr( implode( ', ', (array) ( get_user_meta( $user->ID, 'zdz_login_aliases', true ) ?: [] ) ) ); ?>"
-						class="regular-text" placeholder="e.g. shop@example.com, front-desk@example.com" />
-					<p class="description"><?php esc_html_e( 'Comma-separated extra email addresses this person may sign in with, in addition to their account email — on both the login-code and magic-link paths. Each must be a valid address that no other account already uses; any that are not are dropped on save.', 'zorderz' ); ?></p>
+						class="regular-text" placeholder="<?php esc_attr_e( 'e.g. a personal, non-work address', 'zorderz' ); ?>" <?php disabled( ! $zdz_sr_can ); ?> />
+					<p class="description"><?php
+					if ( ! $zdz_sr_gets ) {
+						esc_html_e( 'The shared device and an account in Privacy View get no backup sign-in.', 'zorderz' );
+					} elseif ( ! $zdz_sr_can ) {
+						esc_html_e( 'Only the person who manages sign-in routes changes these (Zorderz → Sign-in routes).', 'zorderz' );
+					} else {
+						esc_html_e( 'Other addresses this person may type on the sign-in screen, comma-separated. The sign-in code is sent to the address that was typed, so an address at a different mail service gets them in when the work mailbox is down. Also for a mail alias of the same mailbox (a shared inbox). An address already used by another account (to sign in, or as a backup) is refused, and named after you save.', 'zorderz' );
+					}
+					?></p>
 				</td>
 			</tr>
 		</table>
@@ -408,26 +424,19 @@ class ZDZ_Admin_UI {
 			update_user_meta( $user_id, 'zdz_user_territories', array_values( array_unique( $territories ) ) );
 		}
 
-		// Login Email Aliases: saved for ALL roles (admins included) — this runs
+		// Backup sign-in addresses: saved for ALL roles (admins included) — this runs
 		// BEFORE the admin-role early-return below so an owner/admin can also carry
-		// an alias. Each candidate is normalised, validated, and run through the
-		// collision guard; anything that is not a valid, unclaimed address is dropped
-		// (never stored) so a duplicate can never shadow another account's login.
-		if ( isset( $_POST['zdz_login_aliases'] ) ) {
-			$raw   = wp_unslash( (string) $_POST['zdz_login_aliases'] );
-			$parts = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
-			$clean = [];
-			foreach ( $parts as $part ) {
-				$addr = strtolower( sanitize_email( $part ) );
-				if ( '' === $addr || ! is_email( $addr ) ) {
-					continue; // not a valid address
-				}
-				if ( self::alias_taken_by_other( $addr, (int) $user_id ) ) {
-					continue; // already another account's login email or alias
-				}
-				$clean[] = $addr;
+		// one. Only the person who manages sign-in routes saves them (before anyone has
+		// been named: an administrator), never the account itself, and never under View As
+		// or in Demo Mode: ZDZ_Signin_Routes::save_addresses() decides. Each entry must be a
+		// valid email that is not this account's own address, another account's sign-in
+		// address or another person's backup address; an entry that is refused is not
+		// stored and is named in a notice with its reason.
+		if ( isset( $_POST['zdz_login_aliases'] ) && class_exists( 'ZDZ_Signin_Routes' ) ) {
+			$refused = ZDZ_Signin_Routes::save_addresses( (int) get_current_user_id(), (int) $user_id, sanitize_text_field( wp_unslash( $_POST['zdz_login_aliases'] ) ) );
+			if ( is_array( $refused ) ) {
+				ZDZ_Signin_Routes::remember_refused( $refused );
 			}
-			update_user_meta( $user_id, 'zdz_login_aliases', array_values( array_unique( $clean ) ) );
 		}
 
 		// -- Save the Crew (hierarchy). This is intentionally saved for
@@ -468,50 +477,6 @@ class ZDZ_Admin_UI {
 			}
 			update_user_meta( $user_id, 'zdz_data_permissions', $clean_perms );
 		}
-	}
-
-	/**
-	 * Collision guard for a login alias: true when this address is already claimed
-	 * by a DIFFERENT account — either as that account's real user_email, or in that
-	 * account's own alias list. Load-bearing security: an alias must never resolve
-	 * to two people, or shadow another account's real login address.
-	 *
-	 * @param string $alias
-	 * @param int    $uid   The user the alias is being assigned to (excluded from the scan).
-	 * @return bool
-	 */
-	public static function alias_taken_by_other( $alias, $uid ) {
-		$alias = strtolower( trim( (string) $alias ) );
-		if ( '' === $alias ) {
-			return false;
-		}
-		// (a) equal to any OTHER account's real login email.
-		$owner = get_user_by( 'email', $alias );
-		if ( $owner instanceof WP_User && (int) $owner->ID !== (int) $uid ) {
-			return true;
-		}
-		// (b) already present in a DIFFERENT user's alias list.
-		$cap     = (int) apply_filters( 'zdz_login_alias_scan_cap', 500 );
-		$holders = get_users( [
-			'meta_key' => 'zdz_login_aliases',
-			'number'   => $cap,
-			'fields'   => 'all',
-		] );
-		foreach ( $holders as $holder ) {
-			if ( (int) $holder->ID === (int) $uid ) {
-				continue;
-			}
-			$aliases = get_user_meta( $holder->ID, 'zdz_login_aliases', true );
-			if ( ! is_array( $aliases ) ) {
-				continue;
-			}
-			foreach ( $aliases as $a ) {
-				if ( strtolower( trim( (string) $a ) ) === $alias ) {
-					return true;
-				}
-			}
-		}
-		return false;
 	}
 }
 

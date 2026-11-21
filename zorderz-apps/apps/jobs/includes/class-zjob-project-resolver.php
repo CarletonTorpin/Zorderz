@@ -27,6 +27,13 @@
  * surfaces MUST go through ZDZ_User_Media::secure_url() (the token proxy) — never a raw uploads URL
  * (geo-PII). The built-in sources surface counts only, so no raw URL is emitted here.
  *
+ * WHAT THE ESTIMATE SAYS IN WORDS is CLASS_WORK too (src_said): the estimate's notes, and what the salesperson
+ * wrote or said to make it, whole. Whoever orders or installs the work reads them to the end, so up to SAID_MAX
+ * characters of each are carried, counted in characters, and a note that reaches the bound ends with a plain
+ * sentence saying where the rest is. STILL NO MONEY: every amount is taken out of every string first
+ * (without_amounts()), because people without money access read this panel; and every access code is cut before
+ * anything is clipped.
+ *
  * EXISTENCE ORACLE closed: a missing project and a REL_NONE viewer return the SAME single literal
  * refusal, so two responses cannot enumerate ids.
  *
@@ -58,6 +65,23 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 
 		/** The valid states a gathered source may return (withheld is only ever set by the gate). */
 		const GATHER_STATES = array( self::STATE_OK, self::STATE_EMPTY, self::STATE_WITHHELD, self::STATE_UNAVAILABLE );
+
+		/**
+		 * The most of an estimate's notes, or of what the salesperson wrote or said, that one opened Project carries, in
+		 * characters. It is only there so one pasted document cannot make a reply unbounded; a note that reaches it says
+		 * so in words (said_more()).
+		 */
+		const SAID_MAX = 60000;
+
+		/** How many of a Project's estimates the words are read from (the first recorded first); the rest are counted. */
+		const SAID_ESTIMATES = 4;
+
+		/**
+		 * A text many times SAID_MAX is not read to its end. Where the reading stopped can be the middle of an amount or
+		 * of an access code, which is then not seen as one: so this much of the end of what was read is left off, in
+		 * bytes.
+		 */
+		const SAID_EDGE = 400;
 
 		/* ===================================================================
 		 * GATHER — the money-gated panel assembly.
@@ -191,6 +215,7 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 		private static function sources( int $viewer, array $project ): array {
 			$builtin = array(
 				array( 'id' => 'estimate', 'class' => self::CLASS_WORK, 'gather' => array( __CLASS__, 'src_estimate' ) ),
+				array( 'id' => 'said', 'class' => self::CLASS_WORK, 'gather' => array( __CLASS__, 'src_said' ) ),
 				array( 'id' => 'billing', 'class' => self::CLASS_WORK, 'gather' => array( __CLASS__, 'src_billing' ) ),
 				array( 'id' => 'billing_amount', 'class' => self::CLASS_MONEY, 'gather' => array( __CLASS__, 'src_billing_amount' ) ),
 				array( 'id' => 'schedule', 'class' => self::CLASS_WORK, 'gather' => array( __CLASS__, 'src_schedule' ) ),
@@ -255,6 +280,317 @@ if ( ! class_exists( 'Zjob_Project_Resolver' ) ) {
 				return array( 'state' => self::STATE_EMPTY, 'data' => null );
 			}
 			return array( 'state' => self::STATE_OK, 'data' => array( 'estimate_ids' => array_values( $ids ) ) );
+		}
+
+		/**
+		 * WORK: what the estimate says in words. For each estimate the Project holds (the first recorded first, at most
+		 * SAID_ESTIMATES): its document number, its notes, and what the salesperson wrote or said to make it. Whole, up
+		 * to SAID_MAX characters each. No figure: every amount is taken out of every string.
+		 *
+		 * data: { estimates: [ { estimate_num, notes, said } ], more: int (estimates past the first SAID_ESTIMATES) }
+		 */
+		public static function src_said( int $viewer, array $project, bool $see_money ): array {
+			unset( $viewer, $see_money );
+			$ids = self::estimate_ids( $project );
+			if ( empty( $ids ) ) {
+				return array( 'state' => self::STATE_EMPTY, 'data' => null );
+			}
+			$rows = self::estimate_word_rows( array_slice( $ids, 0, self::SAID_ESTIMATES ) );
+			if ( null === $rows ) {
+				// The estimate app's record could not be read: a failure, never "nothing was written".
+				return array( 'state' => self::STATE_UNAVAILABLE, 'data' => null );
+			}
+			$data = self::said_from_rows( $rows, max( 0, count( $ids ) - self::SAID_ESTIMATES ) );
+			if ( empty( $data['estimates'] ) ) {
+				return array( 'state' => self::STATE_EMPTY, 'data' => null );
+			}
+			return array( 'state' => self::STATE_OK, 'data' => $data );
+		}
+
+		/**
+		 * The words of estimate rows as an opened Project carries them. PURE apart from the code reader and the
+		 * business's currency. Each text: access codes cut first (so the bound can never split one), then amounts out,
+		 * then held to SAID_MAX characters. An estimate with no words is left out.
+		 *
+		 * @param array $rows each { doc_number, billing_doc_num, notes, input_text }, in the order to show. The number
+		 *                    shown is the estimate's own, else the one the billing system gave it.
+		 * @param int   $more estimates of the Project that were not read
+		 * @return array{estimates:array<int,array{estimate_num:string,notes:string,said:string}>,more:int}
+		 */
+		public static function said_from_rows( array $rows, int $more = 0 ): array {
+			$out = array();
+			foreach ( $rows as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$notes = self::said_text( $row['notes'] ?? '' );
+				$said  = self::said_text( $row['input_text'] ?? '' );
+				if ( '' === $notes && '' === $said ) {
+					continue;
+				}
+				$num   = trim( (string) ( $row['doc_number'] ?? '' ) );
+				$num   = '' !== $num ? $num : trim( (string) ( $row['billing_doc_num'] ?? '' ) );
+				$out[] = array(
+					'estimate_num' => (string) preg_replace( '/[^A-Za-z0-9\-]/', '', $num ),
+					'notes'        => $notes,
+					'said'         => $said,
+				);
+			}
+			return array( 'estimates' => $out, 'more' => max( 0, $more ) );
+		}
+
+		/**
+		 * One text of an estimate as the panel carries it: no access code, no amount, at most SAID_MAX characters.
+		 * In that order, so the bound can never cut a code or an amount in two and leave half of it showing.
+		 */
+		private static function said_text( $text ): string {
+			$text = is_string( $text ) ? trim( $text ) : '';
+			if ( '' === $text ) {
+				return '';
+			}
+			// Bytes that are not text are dropped first: nothing below can read a string that is not UTF-8.
+			$text = self::text_only( $text );
+			// A pasted document many times the bound is not read to its end: only its start can be shown. Twice the
+			// bound is read, since taking codes and amounts out makes it shorter.
+			list( $text, $long ) = self::first_chars( $text, 2 * self::SAID_MAX );
+			if ( class_exists( 'ZJOB_Sealed' ) ) {
+				$text = (string) ZJOB_Sealed::cut( $text );
+			}
+			$text = self::without_amounts( $text );
+			if ( $long ) {
+				$text = self::without_edge( $text, self::SAID_EDGE );
+			}
+			list( $head, $cut ) = self::first_chars( $text, self::SAID_MAX );
+			return ( $cut || $long ) ? self::cut_short( $head ) : $text;
+		}
+
+		/** $s less its last $bytes bytes, ending on a whole character. PURE. */
+		public static function without_edge( string $s, int $bytes ): string {
+			$len = strlen( $s );
+			$at  = $len - max( 0, $bytes );
+			while ( $at > 0 && $at < $len && 0x80 === ( ord( $s[ $at ] ) & 0xC0 ) ) {
+				$at--; // inside a character: back to where it starts
+			}
+			return $at > 0 ? substr( $s, 0, $at ) : '';
+		}
+
+		/** A text that was cut, as it is shown: an ellipsis, then where the rest is. */
+		private static function cut_short( string $head ): string {
+			return rtrim( $head ) . "\u{2026}" . self::said_more();
+		}
+
+		/**
+		 * The estimate app's own rows for these ids, in the order given: { doc_number, billing_doc_num, notes,
+		 * input_text }. null when the estimate app is not there to ask (no guess is made from anything else).
+		 *
+		 * @param int[] $ids
+		 * @return array<int,array<string,string>>|null
+		 */
+		private static function estimate_word_rows( array $ids ): ?array {
+			global $wpdb;
+			if ( ! isset( $wpdb ) || ! class_exists( 'ZEST_DB' ) || ! is_callable( array( 'ZEST_DB', 'estimates_table' ) ) ) {
+				return null;
+			}
+			$out = array();
+			foreach ( $ids as $id ) {
+				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT doc_number, billing_doc_num, notes, input_text FROM ' . ZEST_DB::estimates_table() . ' WHERE id = %d', (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name is $wpdb->prefix plus a fixed name; the id is a placeholder.
+				if ( is_array( $row ) ) {
+					$out[] = $row;
+				}
+			}
+			return $out;
+		}
+
+		/**
+		 * $s with every byte that is not part of a UTF-8 character dropped: a stray byte from an older encoding, or half
+		 * a character. Text that is already UTF-8 comes back as it is. Needs no extension, so it is the same on every
+		 * server. PURE.
+		 */
+		public static function text_only( string $s ): string {
+			if ( '' === $s || 1 === preg_match( '//u', $s ) ) {
+				return $s;
+			}
+			// One UTF-8 character, byte by byte: no overlong form, no surrogate, nothing past U+10FFFF.
+			$char = '[\x00-\x7F]|[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]|\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2}';
+			// A run of characters is kept; a byte that starts none is dropped.
+			$out = preg_replace( '/((?:' . $char . ')++)|[\x80-\xFF]/', '$1', $s );
+			return is_string( $out ) ? $out : '';
+		}
+
+		/** What a note that reached SAID_MAX ends with: where the rest is, never a bare ellipsis. */
+		public static function said_more(): string {
+			return "\n\n[" . __( 'This note is longer than Projects shows. The rest is on the estimate.', 'zorderz' ) . ']';
+		}
+
+		/**
+		 * $s held to $max characters. Counted in characters and only in characters: a note under the bound in
+		 * characters but over it in bytes (curly quotes, inch marks, dashes) is never cut, and a cut never ends in the
+		 * middle of a character. A note that is cut ends with said_more(). PURE.
+		 *
+		 * @param string    $s
+		 * @param int       $max       characters
+		 * @param bool|null $multibyte false counts without the multibyte functions; null uses them when they exist
+		 */
+		public static function clip( string $s, int $max, ?bool $multibyte = null ): string {
+			list( $head, $cut ) = self::first_chars( $s, $max, $multibyte );
+			return $cut ? self::cut_short( $head ) : $s;
+		}
+
+		/**
+		 * The first $max characters of $s, and whether anything was left off: [ string, bool ]. Characters, never bytes.
+		 * PURE.
+		 *
+		 * @param string    $s
+		 * @param int       $max       characters
+		 * @param bool|null $multibyte false counts without the multibyte functions; null uses them when they exist
+		 * @return array{0:string,1:bool}
+		 */
+		public static function first_chars( string $s, int $max, ?bool $multibyte = null ): array {
+			$max = max( 0, $max );
+			if ( null === $multibyte ? function_exists( 'mb_strlen' ) : $multibyte ) {
+				return mb_strlen( $s, 'UTF-8' ) > $max ? array( mb_substr( $s, 0, $max, 'UTF-8' ), true ) : array( $s, false );
+			}
+			// Without the multibyte functions: still cut on a character.
+			if ( strlen( $s ) <= $max ) {
+				return array( $s, false ); // bytes are never fewer than characters
+			}
+			// One step of the pattern takes at most 60,000 characters, so a longer run is taken in steps.
+			$head = '';
+			$at   = 0;
+			for ( $left = $max; $left > 0; $left -= 60000 ) {
+				if ( 1 !== preg_match( '/\G.{0,' . min( $left, 60000 ) . '}/su', $s, $m, 0, $at ) ) {
+					return array( substr( $s, 0, $max ), true ); // the text was not valid UTF-8 to begin with: a plain cut
+				}
+				$head .= $m[0];
+				$at   += strlen( $m[0] );
+			}
+			return $at >= strlen( $s ) ? array( $s, false ) : array( $head, true );
+		}
+
+		/**
+		 * The marks that make a number money, as two patterns: one for a mark before the number, one for a mark after.
+		 * Core knows the common signs and codes; the business's own currency (Business Profile, locale.currency and
+		 * locale.currency_sign) is always among them. PURE when $currency is given.
+		 *
+		 * @param array|null $currency { code, sign }; null reads the Business Profile
+		 * @return array{0:string,1:string}
+		 */
+		public static function currency_marks( ?array $currency = null ): array {
+			if ( null === $currency ) {
+				$currency = array( 'code' => '', 'sign' => '' );
+				if ( class_exists( 'ZDZ_Business_Profile' ) && method_exists( 'ZDZ_Business_Profile', 'get' ) ) {
+					$currency['code'] = (string) ZDZ_Business_Profile::get( 'locale.currency', '' );
+					$currency['sign'] = (string) ZDZ_Business_Profile::get( 'locale.currency_sign', '' );
+				}
+			}
+			// A sign, with or without the letters some countries put before it (written in capitals, joined to it).
+			$signs  = '(?:(?-i:(?<![\p{L}\p{N}])[A-Z]{1,3})?[\$\x{20AC}\x{00A3}\x{00A5}\x{20B9}])';
+			$codes  = 'USD|EUR|GBP|CAD|AUD|NZD|CHF|JPY|CNY|INR|MXN|BRL|ZAR|SEK|NOK|DKK|PLN';
+			$before = array( $signs, '\b(?:' . $codes . ')\b\.?' );
+			$after  = array( '[\x{20AC}\x{00A3}\x{20B9}]', '\b(?:' . $codes . '|dollars?|bucks|euros?)\b' );
+			$code   = strtoupper( (string) preg_replace( '/[^A-Za-z]/', '', (string) ( $currency['code'] ?? '' ) ) );
+			if ( 3 === strlen( $code ) && false === strpos( '|' . $codes . '|', '|' . $code . '|' ) ) {
+				// The business's own code, as written (capitals), so an ordinary word that spells it is left alone.
+				$before[] = '(?-i:\b' . $code . '\b)\.?';
+				$after[]  = '(?-i:\b' . $code . '\b)';
+			}
+			$sign = trim( (string) ( $currency['sign'] ?? '' ) );
+			$len  = function_exists( 'mb_strlen' ) ? mb_strlen( $sign, 'UTF-8' ) : strlen( $sign );
+			if ( '' !== $sign && '$' !== $sign && $len <= 4 && ! preg_match( '/[\d\s]/', $sign ) ) {
+				$q = preg_quote( $sign, '/' );
+				if ( preg_match( '/^[\p{L}.]+$/u', $sign ) ) {
+					// A sign made of letters ("kr"): only as a whole word, as written, beside its number.
+					$before[] = '(?-i:(?<![\p{L}\p{N}])' . $q . ')(?=\s?[-+]?\s?\d)';
+					$after[]  = '(?-i:' . $q . ')(?![\p{L}\p{N}])';
+				} else {
+					$before[] = $q;
+					$after[]  = $q;
+				}
+			}
+			return array( '(?:' . implode( '|', $before ) . ')', '(?:' . implode( '|', $after ) . ')' );
+		}
+
+		/**
+		 * Remove every amount of money from a string: a number with a currency mark before or after it, a rate
+		 * ("@ 37 each", "111/ea"), a number written as money after a money word ("Total 2,222", "Cost: 333"), and the
+		 * money word left with nothing after it ("Tax:"). Measurements and counts are not money and stay ("48 in",
+		 * "12x24", "Total 3 pieces", "Total 120 ft of gutter guard"); so does a document number ("Quote 1001"). Line
+		 * breaks are kept. A bare number after a money word stays only when a measure or a counting word follows it:
+		 * Core knows the measures and the plainest counting words, and a business adds its own
+		 * (`zjob_amount_count_words`), since what it counts is its own. A text the amounts cannot be taken out of comes
+		 * back empty. PURE apart from that setting and the currency.
+		 *
+		 * @param string     $s
+		 * @param array|null $currency { code, sign }; null reads the Business Profile
+		 */
+		public static function without_amounts( string $s, ?array $currency = null ): string {
+			if ( '' === $s ) {
+				return '';
+			}
+			// A NUMBER (digits with optional thousands separators - comma, period or space - and decimals).
+			$num = '\d{1,3}(?:[,. ]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?';
+			// MONEY: a currency mark before it, or a currency mark or word after it.
+			list( $cur_before, $cur_after ) = self::currency_marks( $currency );
+			$money = '(?:' . $cur_before . '\s?[-+]?\s?(?:' . $num . ')(?:\s?k\b)?|(?:' . $num . ')\s?' . $cur_after . ')';
+			// WORDS that make the number after them money, with a currency mark or without.
+			$labels = '(?:price[ds]?|priced at|cost[s]?|total|sub-?total|grand total|amount|deposit|balance|tax|labou?r|fee[s]?|charge[s]?|rate|quote[d]?|paid|due|invoice[d]?|discount|msrp|retail)';
+
+			// 1. a money word and everything up to and including its number ("Deposit 50% = 444", "Price 333.00").
+			// After a money word, a bare number counts as money only when it looks like money: 3+ digits, thousands
+			// separators or cents ("Total 2,222", "Labor 222.00"), never "Total 3 pieces".
+			$big = '\d{1,3}(?:[,. ]\d{3})+(?:[.,]\d{1,2})?|\d{3,}(?:[.,]\d{1,2})?|\d+[.,]\d{2}';
+			// A bare number is money only after the money words themselves (not "Quote 1001", "Invoice 1002": document
+			// numbers), and never when a measure or a counting word follows ("Total 120 ft of gutter guard").
+			$bare_labels = '(?:price[ds]?|priced at|cost[s]?|total|sub-?total|grand total|amount|deposit|balance|tax|labou?r|fee[s]?|charge[s]?|paid|msrp|retail|discount)';
+			$unit        = '(?![^\S\n]*(?:"|\'|\x{201D}|\x{2019}|in\b|inch|inches|ft\b|feet|foot|yd\b|yards?\b|x\b|\x{00D7}|mm\b|cm\b|m\b|sq|linear|lf\b|%|' . self::count_words() . '))';
+			$steps = array(
+				array( '/\b' . $labels . '\b[^\S\n]*(?:[:=]|of|is|was|at)?[^\S\n]*(?:\d{1,3}\s?%[^\S\n]*(?:=|of)?[^\S\n]*)?' . $money . '/iu', '' ),
+				array( '/\b' . $bare_labels . '\b[^\S\n]*(?:[:=]|of|is|was|at)?[^\S\n]*(?:\d{1,3}\s?%[^\S\n]*(?:=|of)?[^\S\n]*)?(?:' . $big . ')\b' . $unit . '/iu', '' ),
+				// 2. "@ $37 each", "@ 333", "111/ea", "37 per hour": a unit price.
+				array( '/[^\S\n]*@[^\S\n]*(?:' . $money . '|(?:' . $num . ')\b(?![^\S\n]*(?:"|\'|\x{201D}|\x{2019}|in\b|inch|ft\b|feet|x\b|\x{00D7}|mm\b|cm\b)))[^\S\n]*(?:each|ea\b\.?|per[^\S\n]+\w+)?/iu', '' ),
+				array( '/(?:' . $money . '|(?:' . $num . '))[^\S\n]*\/[^\S\n]*(?:ea|each|hr|hour|unit|ft|sq\s?ft)\b/iu', '' ),
+				// 3. any money left.
+				array( '/' . $money . '/iu', '' ),
+				// 4. a money word left with nothing after it ("Tax:"); "Price: for the pair" stays readable.
+				array( '/\b' . $labels . '\b[^\S\n]*[:=][^\S\n]*(?=$|[\n,;.])/imu', '' ),
+				array( '/([?!.])[ \t]*\.(?=\s|$)/u', '$1' ), // a full stop left behind an amount that ended a sentence
+				array( '/[ \t]{2,}/u', ' ' ),
+				array( '/[ \t]+([,.;:])/u', '$1' ),
+				array( '/[,;:]+(?=[.!?](?:\s|$))/u', '' ), // a comma left before the full stop once the last amount is gone
+				array( '/^[ \t]*[.,;:=-]+[ \t]*/mu', '' ),
+				array( '/[ \t]+[-:=,;]+[ \t]*$/mu', '' ), // a dash left hanging once its amount is gone
+				array( '/[ \t]+$/mu', '' ),
+			);
+			foreach ( $steps as $step ) {
+				$s = preg_replace( $step[0], $step[1], $s );
+				if ( null === $s ) {
+					return ''; // it could not be read: nothing, rather than a text with its amounts still in it
+				}
+			}
+			return trim( $s );
+		}
+
+		/**
+		 * The counting words after which a bare number is a count, not money, as one pattern. Core: the plainest ones.
+		 * A business adds what it counts (option `zjob_amount_count_words`, a list of words; filter of the same name).
+		 * Letters only; each also matches with a final "s". A number with a currency mark is money whatever follows it.
+		 */
+		private static function count_words(): string {
+			$words = array( 'pc', 'piece', 'unit', 'item', 'set', 'pair' );
+			$own   = function_exists( 'get_option' ) ? get_option( 'zjob_amount_count_words', array() ) : array();
+			$words = array_merge( $words, is_array( $own ) ? array_values( $own ) : array() );
+			if ( function_exists( 'apply_filters' ) ) {
+				$more  = apply_filters( 'zjob_amount_count_words', $words );
+				$words = is_array( $more ) ? $more : $words;
+			}
+			$out = array();
+			foreach ( $words as $w ) {
+				$w = strtolower( (string) preg_replace( '/[^a-z]/i', '', is_scalar( $w ) ? (string) $w : '' ) );
+				if ( strlen( $w ) >= 2 && count( $out ) < 60 ) {
+					$out[ $w ] = preg_quote( $w, '/' ) . 's?\b';
+				}
+			}
+			return $out ? implode( '|', $out ) : '(?!)';
 		}
 
 		/**

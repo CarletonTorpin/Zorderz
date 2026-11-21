@@ -44,7 +44,7 @@ if ( ! class_exists( 'ZDZ_Name_Match' ) ) :
 
 class ZDZ_Name_Match {
 
-	const VERSION = '1.1.0';
+	const VERSION = '1.2.0';
 
 	/** Where the curated map lives: a site option, never autoloaded, never in a file that ships. */
 	const OPTION = 'zdz_name_homophones';
@@ -293,11 +293,45 @@ class ZDZ_Name_Match {
 		$b = strtolower( trim( (string) $b ) );
 		if ( $a === '' || $b === '' ) return false;
 		if ( $a === $b ) return true;
-		if ( strpos( $a, $b ) !== false || strpos( $b, $a ) !== false ) return true;
+		if ( self::contained_alike( $a, $b ) ) return true;
+		// A nickname and its full name ("sam" / "samuel") stay alike for callers that pass first names here.
+		if ( self::nickname_root( $a ) === self::nickname_root( $b ) ) return true;
 		if ( self::name_close( $a, $b ) ) return true;
 		if ( in_array( $b, self::homophone_variants( $a ), true ) ) return true;
 		$ka = self::name_sound_key( $a );
 		return $ka !== '' && $ka === self::name_sound_key( $b );
+	}
+
+	/**
+	 * One name written inside the other counts as "sounds like" only when
+	 *   (a) the shorter is a whole part of the longer, split on spaces and hyphens (one half of a
+	 *       double-barrelled surname), or
+	 *   (b) the shorter has CONTAIN_MIN or more letters AND at least two-thirds of the longer's letters
+	 *       (3 x shorter >= 2 x longer). Two-thirds rather than half, so a short surname is not offered as a
+	 *       sound-alike of every longer surname it ends or sits inside.
+	 * Letters are counted as letters (\p{L}, so "ñ" is one); marks, spaces and digits are not counted.
+	 * name_score() and homophone_points() follow: a candidate surname that is only a few letters of the searched
+	 * one earns no sound-alike points.
+	 */
+	const CONTAIN_MIN = 4;
+
+	public static function contained_alike( $a, $b ) {
+		$a = strtolower( trim( (string) $a ) );
+		$b = strtolower( trim( (string) $b ) );
+		if ( $a === '' || $b === '' ) return false;
+		if ( strlen( $a ) > strlen( $b ) ) { $t = $a; $a = $b; $b = $t; }   // $a is the shorter
+		if ( strpos( $b, $a ) === false ) return false;
+		$parts = preg_split( '/[\s\-]+/u', $b );
+		if ( is_array( $parts ) && count( $parts ) > 1 && in_array( $a, $parts, true ) ) return true;
+		$short = self::letter_count( $a );
+		$long  = self::letter_count( $b );
+		return $short >= self::CONTAIN_MIN && 3 * $short >= 2 * $long;
+	}
+
+	/** How many letters a name has (any alphabet; not marks, spaces or digits). */
+	private static function letter_count( $s ) {
+		$n = preg_match_all( '/\p{L}/u', (string) $s );
+		return ( false === $n ) ? strlen( (string) preg_replace( '/[^a-z]/', '', (string) $s ) ) : (int) $n;
 	}
 
 	public static function homophone_points( $cand_fname, $cand_lname, $search_fname_norm, $search_lname_lower ) {

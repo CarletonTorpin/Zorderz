@@ -102,7 +102,7 @@ class ZANA_Billing_Gaps {
 		$yr    = (int) gmdate( 'Y', $now );
 		$mons  = array( 'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'may' => 5, 'jun' => 6, 'jul' => 7, 'aug' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12 );
 		$mon_re = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?';
-		$fmt   = function ( $d ) { return gmdate( 'M j, Y', strtotime( $d . ' 00:00:00 UTC' ) ); };
+		$fmt   = function ( $d ) { return gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), strtotime( $d . ' 00:00:00 UTC' ) ); };
 		if ( preg_match( '/\b(?:since|from|after) (?:the (?:start|beginning) of )?' . $mon_re . '(?:,? (20\d\d))?\b/', $m, $w ) ) {
 			$mo    = $mons[ $w[1] ];
 			$y     = isset( $w[2] ) && '' !== $w[2] ? (int) $w[2] : ( $mo <= (int) gmdate( 'n', $now ) ? $yr : $yr - 1 );
@@ -278,7 +278,7 @@ class ZANA_Billing_Gaps {
 
 	protected static function day( string $ymd ): string {
 		$t = strtotime( $ymd . ' 12:00:00 UTC' );
-		return $t ? gmdate( 'M j, Y', $t ) : '-';
+		return $t ? gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y' ) : 'M j, Y' ), $t ) : '-';
 	}
 
 	protected static function line( array $o, string $tail ): string {
@@ -286,7 +286,7 @@ class ZANA_Billing_Gaps {
 		$enum = self::clean( $o['estimate_number'] );
 		return '- **' . ( '' !== $name ? $name : __( 'Unnamed customer', 'zorderz' ) ) . '** · ' . ( '' !== $enum ? 'estimate #' . $enum : 'estimate (no number)' )
 			. ' of ' . self::day( $o['est_date'] ) . ( ! empty( $o['archived'] ) ? ' (archived)' : '' )
-			. ' · $' . number_format( (float) $o['amount'], 2 ) . ' · ' . $tail;
+			. ' · ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( (float) $o['amount'], 2 ) : '$' . number_format( (float) $o['amount'], 2 ) ) . ' · ' . $tail;
 	}
 
 	/** The answer (markdown) for this person, or a sentence saying why not. */
@@ -315,11 +315,11 @@ class ZANA_Billing_Gaps {
 		if ( 0 === $s['n'] ) {
 			$out[] = 'No accepted estimate' . $whose . ' ' . $label . ' is left un-invoiced in the billing system.';
 		} else {
-			$out[] = '**Accepted estimates' . $whose . ' never invoiced, ' . $label . ' — ' . number_format( $s['n'] ) . ( $s['cut'] ? '+' : '' ) . '**';
+			$out[] = '**Accepted estimates' . $whose . ' never invoiced, ' . $label . ': ' . number_format( $s['n'] ) . ( $s['cut'] ? '+' : '' ) . '**';
 		}
 		if ( $s['open'] ) {
 			$out[] = '';
-			$out[] = '**No invoice to the customer since — ' . count( $s['open'] ) . ( $s['open_total'] > 0 ? ' · $' . number_format( $s['open_total'], 2 ) : '' ) . '**';
+			$out[] = '**No invoice to the customer since: ' . count( $s['open'] ) . ( $s['open_total'] > 0 ? ' · ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $s['open_total'], 2 ) : '$' . number_format( $s['open_total'], 2 ) ) : '' ) . '**';
 			$out[] = '_These are the ones to read: the work may never have been billed, or the job was lost without the estimate being declined._';
 			foreach ( array_slice( $s['open'], 0, self::SHOW ) as $o ) {
 				$out[] = self::line( $o, '' !== $o['last_before'] ? 'last invoiced ' . self::day( $o['last_before'] ) : 'no earlier invoice on file' );
@@ -332,20 +332,20 @@ class ZANA_Billing_Gaps {
 			$gap   = array_sum( array_column( $s['short'], 'gap' ) );
 			$n     = array_sum( array_map( function ( $g ) { return count( $g['rows'] ); }, $s['short'] ) );
 			$out[] = '';
-			$out[] = '**Invoiced afterwards, but for less — ' . $n . ' · $' . number_format( $gap, 2 ) . ' not accounted for**';
+			$out[] = '**Invoiced afterwards, but for less: ' . $n . ' · ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $gap, 2 ) : '$' . number_format( $gap, 2 ) ) . ' not accounted for**';
 			$out[] = '_The customer was invoiced after these estimates, but for less than they add up to once the estimates the billing system did link are taken out. Read these next._';
 			foreach ( array_slice( $s['short'], 0, self::SHOW ) as $g ) {
 				$name  = self::clean( $g['customer'] );
 				$nums  = array_map( function ( $o ) { $e = self::clean( $o['estimate_number'] ); return '' !== $e ? '#' . $e : '(no number)'; }, $g['rows'] );
 				$out[] = '- **' . ( '' !== $name ? $name : __( 'Unnamed customer', 'zorderz' ) ) . '** · ' . count( $g['rows'] ) . ' estimate' . ( 1 === count( $g['rows'] ) ? '' : 's' )
-					. ' ($' . number_format( $g['u'], 2 ) . ': ' . implode( ', ', $nums ) . ') · invoiced $' . number_format( $g['i'], 2 ) . ' since ' . self::day( $g['from'] )
-					. ( $g['l'] > 0 ? ', of which $' . number_format( $g['l'], 2 ) . ' for estimates the billing system linked' : '' )
-					. ' · **$' . number_format( $g['gap'], 2 ) . ' not accounted for**';
+					. ' (' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $g['u'], 2 ) : '$' . number_format( $g['u'], 2 ) ) . ': ' . implode( ', ', $nums ) . ') · invoiced ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $g['i'], 2 ) : '$' . number_format( $g['i'], 2 ) ) . ' since ' . self::day( $g['from'] )
+					. ( $g['l'] > 0 ? ', of which ' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $g['l'], 2 ) : '$' . number_format( $g['l'], 2 ) ) . ' for estimates the billing system linked' : '' )
+					. ' · **' . ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::sign() . ZDZ_Business_Profile::number( $g['gap'], 2 ) : '$' . number_format( $g['gap'], 2 ) ) . ' not accounted for**';
 			}
 		}
 		if ( $s['later'] ) {
 			$out[] = '';
-			$out[] = '**The customer was invoiced afterwards' . ( $company ? ', and for at least as much' : '' ) . ' — ' . count( $s['later'] ) . '**';
+			$out[] = '**The customer was invoiced afterwards' . ( $company ? ', and for at least as much' : '' ) . ': ' . count( $s['later'] ) . '**';
 			$out[] = '_Most likely billed on an invoice the billing system never linked to the estimate._';
 			foreach ( array_slice( $s['later'], 0, self::SHOW ) as $o ) {
 				$out[] = self::line( $o, 'invoiced ' . self::day( $o['first_after'] ) . ( $o['count_after'] > 1 ? ' (+' . ( $o['count_after'] - 1 ) . ' more)' : '' ) );

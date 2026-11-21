@@ -1,11 +1,11 @@
 <?php
 /**
- * ZL Lead Assignment — per-lead ownership by the app user.
+ * ZL Lead Assignment — per-lead ownership, kept by the app.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHAT THIS IS
  * ─────────────────────────────────────────────────────────────────────────────
- * This class makes a *the app user* the owner of a lead, and makes that
+ * This class makes a user of the app the owner of a lead, and makes that
  * ownership the **source of truth for assignment** — the app's own checkable data,
  * usable with NO Nutshell account. (Nutshell remains authoritative only for the
  * CRM pipeline *stage*; that's a separate concern.)
@@ -18,7 +18,7 @@
  *     overwrite the app's assignment.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * AUTHORITATIVE vs. FUZZY (the rigor you asked for)
+ * AUTHORITATIVE vs. FUZZY
  * ─────────────────────────────────────────────────────────────────────────────
  * Assignment going forward is EXPLICIT: an admin picks a WP user; we store that
  * user id on the lead row (assigned_user_id) with a timestamp and the assigning
@@ -39,7 +39,6 @@
  * a kiosk is not "a salesperson" (most-restrictive-wins).
  *
  * @package Zorderz\Leads
- * @since   2.4.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -349,6 +348,11 @@ class ZL_Lead_Assignment {
 			ARRAY_A
 		);
 		if ( empty( $rows ) ) {
+			// Nothing to seed (a new site, or every lead already has an owner): the deferred
+			// marker is cleared here too, or the next request would run this query again.
+			if ( empty( $wpdb->last_error ) ) {
+				delete_option( 'zl_assignment_backfill_pending' );
+			}
 			return 0;
 		}
 
@@ -390,7 +394,9 @@ class ZL_Lead_Assignment {
 	public static function maybe_run_deferred_backfill(): void {
 		if ( get_option( 'zl_assignment_backfill_pending' ) ) {
 			$seeded = self::backfill_from_batches();
-			error_log( 'ZL: deferred assignment backfill seeded ' . (int) $seeded . ' lead(s).' );
+			if ( $seeded > 0 ) {
+				error_log( 'ZL: deferred assignment backfill seeded ' . (int) $seeded . ' lead(s).' );
+			}
 		}
 	}
 }

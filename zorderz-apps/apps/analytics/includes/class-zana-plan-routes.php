@@ -354,7 +354,7 @@ class ZANA_Plan_Routes {
 	/** "Sat, Oct 31" */
 	public static function day_words( $ymd ) {
 		$d = DateTimeImmutable::createFromFormat( '!Y-m-d', (string) $ymd );
-		return $d ? $d->format( 'D, M j' ) : '';
+		return $d ? $d->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D, M j' ) : 'D, M j' ) ) : '';
 	}
 
 	/** The answer, whole: one line, and the button (or one line and nothing to press). */

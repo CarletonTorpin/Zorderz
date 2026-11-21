@@ -59,14 +59,14 @@ class ZRCPT_Nutshell {
 		if ( $this->delegate && method_exists( $this->delegate, 'find_lead_for_customer' ) ) {
 			return $this->delegate->find_lead_for_customer( $customer );
 		}
-		$this->last_trace[] = 'CRM lookup unavailable — turn on the Prep app and configure the CRM connection in Zorderz → Credentials.';
+		$this->last_trace[] = 'CRM lookup unavailable: turn on the Prep app and configure the CRM connection in Zorderz → Credentials.';
 		return null;
 	}
 
 	/**
 	 * Find install-related notes + activities for a Nutshell lead.
 	 *
-	 * Three places to look, per Trap 3:
+	 * Three places to look:
 	 *   1. Activity feed — findActivities({leadId: N}), filter type="On-Site Installation"
 	 *   2. Notes on the lead with install-keyword matches
 	 *   3. Activity-attached notes (getActivity)
@@ -118,7 +118,7 @@ class ZRCPT_Nutshell {
 					$this->last_trace[] = 'get_notes_for_lead failed: ' . $e->getMessage();
 				}
 			} elseif ( ! $this->delegate ) {
-				$this->last_trace[] = 'CRM client unavailable — configure the CRM connection in Zorderz settings.';
+				$this->last_trace[] = 'CRM client unavailable: configure the CRM connection in Zorderz settings.';
 				return $out;
 			} else {
 				// Delegate present but no notes accessor and none supplied on the
@@ -172,7 +172,7 @@ class ZRCPT_Nutshell {
 		return [
 			'ok'      => $ok,
 			'message' => $ok ? 'CRM credentials found in Zorderz Core.' : '',
-			'error'   => $ok ? '' : 'CRM connection not configured — configure it in Zorderz → Credentials.',
+			'error'   => $ok ? '' : 'CRM connection not configured: configure it in Zorderz → Credentials.',
 			'log'     => [],
 		];
 	}

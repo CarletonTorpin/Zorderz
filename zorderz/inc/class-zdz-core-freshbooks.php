@@ -187,7 +187,6 @@ class ZDZ_Core_FreshBooks {
 	/**
 	 * Fetch estimates with optional search parameters.
 	 *
-	 * @since 2.9.0 (KPI metrics)
 	 * @param array $params Query parameters (search filters, per_page, page).
 	 * @return array|null API response or null on error.
 	 */
@@ -199,7 +198,6 @@ class ZDZ_Core_FreshBooks {
 	/**
 	 * Check whether FreshBooks credentials are configured.
 	 *
-	 * @since 2.9.0
 	 * @return bool
 	 */
 	public function is_configured(): bool {
@@ -220,8 +218,6 @@ class ZDZ_Core_FreshBooks {
 	 * neutral data read. Status interpretation ("not paid yet") and any kiosk
 	 * redaction are the caller's responsibility (Estimates bridge), so this method
 	 * stays a pure source accessor with no policy baked in.
-	 *
-	 * @since 2.21.1 (cross-app orchestrator — Stage 0)
 	 *
 	 * @param int|string $client_id     FreshBooks client (customer) id.
 	 * @param int        $lookback_days Days back from today (default 90).

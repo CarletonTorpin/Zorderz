@@ -57,11 +57,16 @@ class ZPREP_Cut_State {
 	}
 
 	public static function migrate(): void {
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		dbDelta( self::schema_sql() );
+	}
+
+	/** The table, as dbDelta() is handed it. */
+	public static function schema_sql(): string {
 		global $wpdb;
 		$table   = self::table_name();
 		$charset = $wpdb->get_charset_collate();
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( "CREATE TABLE {$table} (
+		return "CREATE TABLE {$table} (
 			id             BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			created_at     DATETIME        NOT NULL DEFAULT '0000-00-00 00:00:00',
 			updated_at     DATETIME        NOT NULL DEFAULT '0000-00-00 00:00:00',
@@ -82,7 +87,7 @@ class ZPREP_Cut_State {
 			KEY idx_lead (lead_id),
 			KEY idx_job (source_job),
 			KEY idx_class (work_class)
-		) {$charset};" );
+		) {$charset};";
 	}
 
 	/* ================================================================

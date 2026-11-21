@@ -34,7 +34,6 @@
  * keeps the class portable and unit-testable.
  *
  * @package Zorderz\Leads
- * @since   2.2.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -298,9 +297,9 @@ class ZL_Nutshell_Writeback {
 		}
 		// wp_date() renders in the site's configured timezone (incl. abbrev T).
 		if ( function_exists( 'wp_date' ) ) {
-			return wp_date( 'M j, Y \a\t g:i A T', $ts );
+			return wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y \a\t g:i A T' ) : 'M j, Y \a\t g:i A T' ), $ts );
 		}
-		return gmdate( 'M j, Y \a\t g:i A', $ts ) . ' UTC';
+		return gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, Y \a\t g:i A' ) : 'M j, Y \a\t g:i A' ), $ts ) . ' UTC';
 	}
 
 	/* ───────────────────────────────────────────────────────────────────────

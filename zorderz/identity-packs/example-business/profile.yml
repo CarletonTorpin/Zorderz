@@ -53,7 +53,15 @@ hours:
 locale:
   timezone: "America/Los_Angeles"
   currency: "USD"
+  currency_sign: "$"      # optional: left out, it follows the currency ("GBP" reads "£")
+  date_format: "n/j/Y"    # how dates read on screens and paperwork (PHP date format: "j/n/Y", "Y-m-d" ...)
   locale: "en_US"
+  # Each of these follows the country in contact.address when left out; set one only to differ from it.
+  # units: metric           # "us" (inches, °F, inches of rain) or "metric" (cm, °C, mm of rain)
+  # number_format: "1.234,56"   # "1,234.56", "1.234,56", "1 234,56" or "1'234.56"
+  # time_format: "H:i"      # "g:i a" (2:30 pm), "g:i A" (2:30 PM) or "H:i" (14:30)
+  # postcode_label: "Postcode"
+  # region_label: "County"
 
 email:
   primary_domain: "example.com"
@@ -62,6 +70,11 @@ email:
   # sees the titles of their events. Exactly these domains, nothing below them.
   # Leave it out and no titles are shown at all.
   work_domains: [example.com]
+  # Public mail domains run by the same service that hosts the work mailboxes.
+  # A backup sign-in address at one of them may be down whenever the work
+  # mailbox is, and Zorderz → Sign-in routes says so beside it. Whole domains
+  # only. Leave it out and no address is marked.
+  shared_outage_domains: [example.org]
 
 messaging:
   senders:

@@ -197,7 +197,7 @@ class ZL_FreshBooks {
 	 * 
 	 * PURPOSE: Core data extraction for Step 2 of the pipeline.
 	 * BUSINESS LOGIC: Only fetches invoices with status=4 (Paid). 
-	 * In v1.2.0, lookback was extended (e.g., "Since 2000").
+	 * In v1.2.0, lookback was extended (e.g., "All history").
 	 *
 	 * @param int $days Number of days to look back.
 	 * @return array Array of verified paid invoices.

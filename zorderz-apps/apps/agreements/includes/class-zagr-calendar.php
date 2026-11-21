@@ -58,7 +58,7 @@ class ZAGR_Calendar {
 		if ( ! self::valid( $ymd ) ) {
 			return '';
 		}
-		return ( new DateTimeImmutable( $ymd, self::tz() ) )->format( 'l, F j, Y' );
+		return ( new DateTimeImmutable( $ymd, self::tz() ) )->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'l, F j, Y' ) : 'l, F j, Y' ) );
 	}
 
 	/** "Thu, Jan 8". */
@@ -66,7 +66,7 @@ class ZAGR_Calendar {
 		if ( ! self::valid( $ymd ) ) {
 			return '';
 		}
-		return ( new DateTimeImmutable( $ymd, self::tz() ) )->format( 'D, M j' );
+		return ( new DateTimeImmutable( $ymd, self::tz() ) )->format( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'D, M j' ) : 'D, M j' ) );
 	}
 
 	/** Today, locally (through ZAGR_Clock, so the suites can fix the day). */

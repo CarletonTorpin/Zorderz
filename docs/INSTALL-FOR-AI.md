@@ -255,7 +255,7 @@ A fresh install is a coherent but nameless blank slate: defaults are inherited f
 
 ### Option A: Business Profile (by form)
 
-**wp-admin:** Zorderz -> Business Profile. Set names, contact details, domains, mail senders, locale, logo artwork and the colour palette. A blank field means *inherit*; the screen shows what it is inheriting.
+**wp-admin:** Zorderz -> Business Profile. Set names, contact details, domains, mail senders, locale, logo artwork and the colour palette. A blank field means *inherit*; the screen shows what it is inheriting. For a business outside the United States, set Contact -> Address -> Country first: currency, date order, clock, number grouping, units and the words for postal code and region then follow it, and each can still be set under Locale.
 
 ### Option B: Identity Pack (by file): preferred for reproducible setup
 
@@ -306,6 +306,15 @@ Use this **only** when you are evaluating Zorderz and want every app populated w
 ```bash
 curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/item-engine/catalog" | head -c 200
 #    empty:false now, with a real item count.
+```
+
+**Guided tour.** Once the sample is loaded, the success notice links to **"Next: take the guided tour on your Home Screen"** (`SITE/?zdz_tour=start`), and the Home Screen offers the tour to every signed-in person until they finish or hide it. It walks through the app and one test job: an estimate from the sample catalog, a job for one of TestCo's people, a time on the schedule, then the receipt and the invoice. Nothing in it reaches a real person, because TestCo's people are made up. A person picks it up again from **Settings -> Guided tour** or by typing "guided tour" in the Ask bar. If you are handing the site to its owner, tell them about it rather than finishing it for them; their place in the tour is kept per person.
+
+**Tours for the team.** The sample tour is the administrators'. Everyone else is offered a tour of their own on any site, sample or not: the apps their role uses, what that role lets them do (whose jobs and estimates they see, whether they send work as jobs, what money they see) and that the business settings belong to an administrator. It never asks anyone to save anything. To check what a role will see, open **Settings -> Guided tour** as an administrator and pick the role under "See the tour a role gets" (a View As preview; **Exit Preview** at the top ends it, and nothing is saved). The switch in the same place stops offering the team tours.
+
+```bash
+curl -fsS -u "ADMIN_USER:APP_PASSWORD" "SITE/wp-json/zorderz/v1/tour/state"
+#    {"step":"","status":"new","at":0} until that person starts the tour; 403 when the tour is not offered to them.
 ```
 
 ---

@@ -25,7 +25,7 @@ class ZJOB_Scheduler {
 	const DEFAULT_DURATION_MIN = 120;
 
 	/** Calendar colour for job appointments (matches the Jobs app plate). */
-	const JOB_COLOR = '#0E9F8E';
+	const JOB_COLOR = '#009E73'; // the Field group's colour (ZDZ_App_Groups)
 
 	/** Is the Scheduler app present (its appointments model loaded)? */
 	public static function available(): bool {

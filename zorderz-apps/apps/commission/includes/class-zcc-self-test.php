@@ -32,6 +32,22 @@ class ZCC_Self_Test {
 	 * @return array { passed:bool, results:array<int,array{name:string,ok:bool,detail:string}> }
 	 */
 	public static function run(): array {
+		// The ledger below is synthetic and misses a rate on purpose: its dispositions stay in the
+		// result (test 2 checks them) and out of the error log, where they would read as real pay.
+		if ( class_exists( 'ZCC_Audit' ) && method_exists( 'ZCC_Audit', 'muted' ) ) {
+			return ZCC_Audit::muted( static function () {
+				return self::checks();
+			} );
+		}
+		return self::checks();
+	}
+
+	/**
+	 * The four parity checks.
+	 *
+	 * @return array { passed:bool, results:array }
+	 */
+	private static function checks(): array {
 		$results = [];
 
 		// Synthetic catalog identities + rates (never touches the real Item Engine
@@ -67,7 +83,7 @@ class ZCC_Self_Test {
 			&& $kind_b_line['pay'] === null                                // …with pay NULL, NOT a silent $0
 			&& abs( ( $kind_a_line['pay'] ?? 0 ) - 30.00 ) < 0.005;        // the rated kind still pays
 		$results[] = [
-			'name'   => 'missing rate ⇒ loud disposition, never silent $0',
+			'name'   => 'missing rate ⇒ loud disposition, never a silent zero',
 			'ok'     => $ok2,
 			'detail' => sprintf( 'missing=%s, resolved=%s, dispositions=%d, kind-b.pay=%s, kind-a.pay=%.2f',
 				implode( ',', $pay2['missing_rates'] ), ! empty( $pay2['resolved'] ) ? 'true' : 'false',

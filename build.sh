@@ -187,7 +187,7 @@ zip -rq "dist/zorderz-theme-${VER}.zip" zorderz -x '*.git*' -x '*/.DS_Store'
 
 # 4) The reference Charts hub, on its own (no caches).
 if [ -d hub ]; then
-  zip -rq "dist/zorderz-hub-${VER}.zip" hub -x '*.git*' -x '*/.DS_Store' -x '*/__pycache__/*' -x '*.pyc'
+  zip -rq "dist/zorderz-hub-${VER}.zip" hub -x '*.git*' -x '*/.DS_Store' -x '*/__pycache__/*' -x '*.pyc' -x '*/.pytest_cache/*'
 fi
 
 # The hub never rides inside the theme or the apps bundle.

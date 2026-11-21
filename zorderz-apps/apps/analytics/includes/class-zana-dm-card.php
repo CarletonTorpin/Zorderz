@@ -17,6 +17,9 @@
  * conversation_id, message }; the card in the saved answer then reads what happened, so a reloaded chat never shows an
  * armed card. Without the messaging app the press says so and nothing is sent.
  *
+ * Before the press, the person may change a held draft's words (revise(): the same person, chat and recipient, plain
+ * text, the hold's remaining time); what Send sends is always the server's copy.
+ *
  * @package Zorderz\Analytics
  */
 
@@ -166,6 +169,57 @@ class ZANA_DM_Card {
 			return $fail( __( 'Messages did not take it, so nothing was sent.', 'zorderz' ) );
 		}
 		return array( 'success' => true, 'message' => __( 'Sent.', 'zorderz' ), 'conversation_id' => (int) $r['conversation_id'], 'message_id' => (int) ( $r['message_id'] ?? 0 ) );
+	}
+
+	/**
+	 * The person changed a held draft's words before sending it (Edit on the card). Only the person and the chat the
+	 * draft is held for; the recipient stays as it was; plain text, not empty, at most MAX_LEN; the hold keeps the time
+	 * it had left, so an edit never extends it; a draft that was sent or has expired is not brought back. The card in
+	 * the saved answer gets the new words too, so a reloaded chat shows what Send will send. Never the shared device
+	 * or an account in Privacy View. { success, body } | { success: false, message }.
+	 */
+	public static function revise( int $uid, int $session_id, string $id, string $body ): array {
+		$fail = function ( $m ) { return array( 'success' => false, 'message' => $m ); };
+		$id   = strtolower( $id );
+		if ( $uid <= 0 || $session_id <= 0 || ! preg_match( '/^[a-f0-9]{32}$/', $id ) ) {
+			return $fail( __( 'That message is not waiting to be sent.', 'zorderz' ) );
+		}
+		if ( ( class_exists( 'ZANA_LLM_Client' ) && ZANA_LLM_Client::is_shared_device( $uid ) ) || ( class_exists( 'ZDZ_Privacy_View' ) && ZDZ_Privacy_View::is_on( $uid ) ) ) {
+			return $fail( __( 'Messages cannot be changed from this account.', 'zorderz' ) );
+		}
+		$key  = self::key( $uid, $session_id, $id );
+		$held = get_transient( $key );
+		$left = is_array( $held ) ? self::TTL - ( time() - (int) ( $held['at'] ?? 0 ) ) : 0;
+		if ( ! is_array( $held ) || empty( $held['to'] ) || $left <= 0 ) {
+			return $fail( __( 'That message has expired. Ask again and I\'ll draft it again.', 'zorderz' ) );
+		}
+		// plain words only, and nothing that could read as a card's own brackets
+		$body = trim( str_replace( array( self::OPEN, self::CLOSE ), '', wp_strip_all_tags( $body ) ) );
+		if ( '' === $body || mb_strlen( $body ) > self::MAX_LEN ) {
+			return $fail( __( 'That message is empty or too long to send from the chat.', 'zorderz' ) );
+		}
+		$held['body'] = $body;
+		set_transient( $key, $held, $left );
+		self::rewrite( $session_id, $uid, $id, $body );
+		return array( 'success' => true, 'body' => $body );
+	}
+
+	/** The held card's words in the saved answer (its id, recipient and name stay). */
+	private static function rewrite( int $session_id, int $uid, string $id, string $body ): void {
+		global $wpdb;
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || ! class_exists( 'ZANA_DB' ) ) {
+			return;
+		}
+		$t    = ZANA_DB::messages_table();
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, body FROM {$t} WHERE session_id = %d AND user_id = %d AND role = 'assistant' AND body LIKE %s", $session_id, $uid, '%' . $wpdb->esc_like( self::OPEN . $id ) . '%' ), ARRAY_A );   // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is this app's own (ZANA_DB), every value is a placeholder
+		foreach ( (array) $rows as $row ) {
+			$new = preg_replace_callback( '/(\[ZANA_DM_DRAFT:' . $id . '\|[^\]]*\])[\s\S]*?(\[\/ZANA_DM_DRAFT\])/', function ( $m ) use ( $body ) {
+				return $m[1] . $body . $m[2];
+			}, (string) $row['body'] );
+			if ( is_string( $new ) && $new !== (string) $row['body'] ) {
+				$wpdb->update( $t, array( 'body' => $new ), array( 'id' => (int) $row['id'] ), array( '%s' ), array( '%d' ) );
+			}
+		}
 	}
 
 	/** The card in the saved answer becomes what happened. */

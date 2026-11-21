@@ -1052,7 +1052,7 @@ if ( ! class_exists( 'Zjob_Install_Date' ) ) {
 
 		/**
 		 * Map an estimate DOCUMENT NUMBER to a local estimate id. The key is (doc_type=estimate, number)
-		 * — never a bare number (estimate #5982 != invoice #5982). Resolved through the
+		 * — never a bare number (estimate #12 != invoice #12). Resolved through the
 		 * `zdz_estimate_id_for_number` seam; the Core default reads the estimate store when present.
 		 *
 		 * @param string $number

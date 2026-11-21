@@ -98,7 +98,14 @@ class ZDZ_Private {
 	/** Option holding the business's own plain words (product words that are never a name on their own). */
 	const PLAIN_WORDS_OPT = 'zdz_private_plain_words';
 
-	/** Words before or after a surname that make it a customer ("the Example job", "at Example's", "for the Examples"). */
+	/** Option holding the words the business's own visits go by after a customer's name ("the Example survey"). */
+	const VISIT_WORDS_OPT = 'zdz_private_job_words';
+
+	/**
+	 * Words before or after a surname that make it a customer ("the Example job", "at Example's", "for the Examples").
+	 * A business adds the words its own visits go by after a name ("the Example survey"): Identity Pack catalog.yml
+	 * vocabulary.visit_words (option zdz_private_job_words), and code with the zdz_private_job_words filter.
+	 */
 	const BEFORE = array( 'the', 'at', 'for', 'with', 'from', 'to', 'over', 'customer', 'client', 'mr', 'mrs', 'ms', 'miss', 'dr' );
 	/** Words that make a name a business, not a person: such a name is still coded whole, but gives no "surname". */
 	const BUSINESS = array( 'llc', 'inc', 'corp', 'corporation', 'co', 'company', 'companies', 'business', 'businesses', 'service', 'services', 'construction', 'contractors', 'contracting', 'builders', 'building', 'hoa', 'association', 'assn', 'glass', 'depot', 'group', 'homes', 'realty', 'real', 'estate', 'properties', 'property', 'management', 'church', 'school', 'apartments', 'apartment', 'condo', 'condos', 'village', 'estates', 'club', 'community', 'center', 'centre', 'screens', 'screen', 'windows', 'doors', 'supply', 'supplies', 'solutions', 'design', 'designs', 'studio', 'shop', 'store', 'market', 'hotel', 'inn', 'resort', 'ranch', 'farms', 'farm', 'trust', 'family', 'partners', 'enterprises', 'industries', 'systems', 'pool', 'pools', 'landscaping', 'roofing', 'painting', 'plumbing', 'electric', 'hvac', 'the', 'of', 'and' );
@@ -120,7 +127,7 @@ class ZDZ_Private {
 	/** First names that are everyday words in invoices and notes: never taken for a first name alone. */
 	const PLAIN_FIRST = array( 'will', 'bill', 'mark', 'max', 'art', 'rob', 'sue', 'don', 'jack', 'ray', 'chuck', 'guy', 'gene', 'herb', 'dawn', 'eve', 'grace', 'faith', 'sky', 'summer', 'ivy', 'iris', 'penny', 'dean', 'wade', 'drew', 'cliff', 'glen', 'dale', 'rod', 'pierce', 'lance', 'miles', 'standard', 'premier', 'royal', 'major', 'sterling', 'pearl', 'ruby', 'amber', 'jade', 'crystal', 'sandy', 'rusty', 'bud', 'buck', 'sonny', 'king', 'prince', 'earl', 'duke', 'baron', 'carol', 'joy', 'hope', 'patience', 'temperance', 'honor', 'justice', 'august', 'june', 'april', 'may', 'jan', 'les', 'van', 'ted' );
 
-	const AFTER  = array( 'job', 'jobs', 'house', 'home', 'place', 'residence', 'property', 'install', 'installation', 'project', 'estimate', 'invoice', 'remeasure', 'measure', 'repair', 'family' );
+	const AFTER  = array( 'job', 'jobs', 'house', 'home', 'place', 'residence', 'property', 'install', 'installation', 'project', 'estimate', 'invoice', 'measure', 'repair', 'family' );
 
 	/** The purpose whose key, index and code handling are the Hours app's own (its stored notes). */
 	const LEGACY_HOURS = 'hours';
@@ -225,7 +232,23 @@ class ZDZ_Private {
 				$by_first[ $w[0] ][] = $w;
 			}
 		}
-		return self::$lists = array( 'common' => $common, 'places' => $by_first );
+		$after = function_exists( 'get_option' ) ? get_option( self::VISIT_WORDS_OPT, array() ) : array();
+		$after = is_array( $after ) ? $after : array();
+		$after = function_exists( 'apply_filters' ) ? apply_filters( 'zdz_private_job_words', $after ) : $after;
+		$after = array_fill_keys( array_merge( self::AFTER, self::clean_list( $after ) ), true );
+		// street endings beyond the common ones, and the words a street's name can start with ("1450 Via Example"):
+		// the region's own, from its Identity Pack (ZDZ_Sealed::street_end_words(), ::street_first_words())
+		$end   = array();
+		$first = array();
+		if ( class_exists( 'ZDZ_Sealed' ) ) {
+			foreach ( ZDZ_Sealed::street_end_words() as $w ) {
+				$end[] = preg_quote( $w, '/' );
+			}
+			foreach ( ZDZ_Sealed::street_first_words() as $w ) { // capitalised, as a street's name is written ("Via", not "via email")
+				$first[] = str_replace( ' ', '\s+', preg_quote( mb_convert_case( $w, MB_CASE_TITLE, 'UTF-8' ), '/' ) );
+			}
+		}
+		return self::$lists = array( 'common' => $common, 'places' => $by_first, 'after' => $after, 'street_end' => $end ? '|' . implode( '|', $end ) : '', 'street_first' => implode( '|', $first ) );
 	}
 
 	/** The words this site treats as plain English (COMMON and the business's plain words): [ word => true ]. */
@@ -580,12 +603,21 @@ class ZDZ_Private {
 			return preg_replace_callback( '/(?<![\d:])(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]\d{4}(?!\d)|(?<![\d:])\d{10}(?!\d)|(?<![\d:\-])\d{3}[.\-]\d{4}(?![\d\-])/u', $seal, $p );
 		} );
 		// a street address: a house number, one to four capitalised words, a street word written as one ("1450 Oak St",
-		// "12 N Example Ave"). Lower-case words never are ("put 4 screens back into place", "40 miles down Highway 9"),
-		// and a number right after another short number is a time ("ended 3 15 Elm St" keeps the 3 15).
-		$text = self::on_plain( $text, function ( $p ) use ( $seal ) {
-			$street = '(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Pl|Place|Way|Blvd|Boulevard|Cir|Circle|Ter|Terrace|Pkwy|Parkway|Hwy|Highway|Trl|Trail|Loop|Row|Glen|Pt|Point|Cv|Cove|Sq|Square|Real|Camino|Calle|Via)';
+		// "12 N Example Ave"), the region's own endings too. Lower-case words never are ("put 4 panels back into place",
+		// "40 miles down Highway 9"), and a number right after another short number is a time ("ended 3 15 Elm St" keeps
+		// the 3 15).
+		$lists = self::lists();
+		$text  = self::on_plain( $text, function ( $p ) use ( $seal, $lists ) {
+			$street = '(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Pl|Place|Way|Blvd|Boulevard|Cir|Circle|Ter|Terrace|Pkwy|Parkway|Hwy|Highway|Trl|Trail|Loop|Row|Glen|Pt|Point|Cv|Cove|Sq|Square' . $lists['street_end'] . ')';
 			return preg_replace_callback( '/(?<![\d:.])(?<!\d )\b\d{1,6}(?:\s+[NSEW]\.?)?(?:\s+(?:\p{Lu}[\p{L}\'.\-]*|\d+(?:st|nd|rd|th))){1,4}?\s+' . $street . '\b\.?(?:\s*(?:#|Apt\.?|apt\.?|Unit|unit|Ste\.?|Suite|suite)\s*[\w\-]+)?/u', $seal, $p );
 		} );
+		// a street named with its street word first ("1450 Via Example", "88 Calle de la Example"): Core's few common
+		// words and the region's own, written capitalised, then one to four capitalised words
+		if ( '' !== $lists['street_first'] ) {
+			$text = self::on_plain( $text, function ( $p ) use ( $seal, $lists ) {
+				return preg_replace_callback( '/(?<![\d:.])(?<!\d )\b\d{1,6}\s+(?:(?:El|La|Los|Las|Del|De)\s+)?(?:' . $lists['street_first'] . ')(?:\s+(?:(?:de|del|la|las|los)\s+)*\p{Lu}[\p{L}\'.\-]*){1,4}(?:\s*(?:#|Apt\.?|apt\.?|Unit|unit|Ste\.?|Suite|suite)\s*[\w\-]+)?/u', $seal, $p );
+			} );
+		}
 		if ( ! $cut ) {
 			// the Hours app's own stored notes only (see the class comment): a code word, then the digits, sealed as ⟦e⟧
 			$text = self::on_plain( $text, function ( $p ) use ( $seal ) {
@@ -634,6 +666,7 @@ class ZDZ_Private {
 			return $p;
 		}
 		$common = self::common_words();
+		$after  = self::lists()['after'];
 		$words  = $mm[0]; // [text, byte offset]
 		$n      = count( $words );
 		$spans  = array(); // [start, end, replacement]
@@ -680,7 +713,7 @@ class ZDZ_Private {
 		$firsts = self::LEGACY_HOURS !== $this->purpose && ! empty( $idx['first'] );   // never Hours: its own output
 		if ( $company && self::LEGACY_HOURS !== $this->purpose ) {
 			// company text: a person's name the list knows, written in another order or without a middle word ("Sam
-			// Example", "Example, Sam", "Example, Lee Sam") is still a name; "Example Vent" stays
+			// Example", "Example, Sam", "Example, Lee Sam") is still a name; "Example Valve" stays
 			$variants = $this->name_variants( $idx );
 			for ( $i = 0; $i < $n && $variants; $i++ ) {
 				for ( $len = min( 3, $n - $i ); $len >= 2; $len-- ) {
@@ -753,9 +786,9 @@ class ZDZ_Private {
 				// a word that is also plain English ("Wood", "Price", "Smith") only in a plain customer phrase; after a
 				// title too ("Mrs Thursday"), but a day or month never by the word after it ("Thursday job tomorrow"
 				// keeps its day)
-				? ( ( in_array( $next, self::AFTER, true ) && ! in_array( $k, self::CALENDAR, true ) ) || ( $poss && preg_match( '/^\p{Lu}/u', $raw ) )
+				? ( ( isset( $after[ $next ] ) && ! in_array( $k, self::CALENDAR, true ) ) || ( $poss && preg_match( '/^\p{Lu}/u', $raw ) )
 					|| in_array( $prev, self::TITLES, true ) )
-				: ( in_array( $prev, self::BEFORE, true ) || in_array( $next, self::AFTER, true ) || $poss || $caps );
+				: ( in_array( $prev, self::BEFORE, true ) || isset( $after[ $next ] ) || $poss || $caps );
 			if ( $hit ) {
 				$spans[] = array( $words[ $i ][1], $words[ $i ][1] + strlen( $bare ), $this->seal( $bare ) );
 			}

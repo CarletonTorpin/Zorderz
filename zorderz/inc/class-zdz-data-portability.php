@@ -400,9 +400,61 @@ class ZDZ_Data_Portability {
 			if ( $hit ) {
 				$excluded[] = $name . ' (secret value redacted)';
 			}
+			if ( 'zdz_business_profile' === $name && is_array( $val ) ) {
+				$val = self::portable_logo_urls( $val, self::uploads_base_url(), 'out' );
+			}
 			$out[ $name ] = $val;
 		}
 		return $out;
+	}
+
+	/** The site's uploads address, without a trailing slash ('' when WordPress cannot say). */
+	private static function uploads_base_url(): string {
+		if ( ! function_exists( 'wp_get_upload_dir' ) ) {
+			return '';
+		}
+		$dir = wp_get_upload_dir();
+		return rtrim( (string) ( $dir['baseurl'] ?? '' ), '/' );
+	}
+
+	/**
+	 * Make the Business Profile's logo addresses travel with the bundle. A logo is stored as a
+	 * full address on this site; a bundle restored on another site would still point here. On
+	 * the way out, an address inside this site's uploads becomes "{uploads}/2026/08/logo.png"
+	 * (the files travel in the bundle's uploads/ folder); on the way in, "{uploads}/" becomes
+	 * the restoring site's own uploads address. An address elsewhere is left as it is.
+	 *
+	 * @param array  $profile   The zdz_business_profile option.
+	 * @param string $base      This site's uploads address, no trailing slash.
+	 * @param string $direction 'out' (export) or 'in' (import).
+	 */
+	public static function portable_logo_urls( array $profile, string $base, string $direction ): array {
+		if ( empty( $profile['brand']['logo'] ) || ! is_array( $profile['brand']['logo'] ) || '' === $base ) {
+			return $profile;
+		}
+		$token = '{uploads}/';
+		// The same uploads folder may be written with either scheme, or with none.
+		$bare  = preg_replace( '#^(?:https?:)?//#i', '//', $base ) . '/';
+		$map   = function ( $v ) use ( $token, $base, $bare, $direction ) {
+			if ( ! is_string( $v ) || '' === $v ) {
+				return $v;
+			}
+			if ( 'in' === $direction ) {
+				return 0 === strpos( $v, $token ) ? $base . '/' . ltrim( substr( $v, strlen( $token ) ), '/' ) : $v;
+			}
+			$v_bare = preg_replace( '#^(?:https?:)?//#i', '//', $v );
+			return 0 === stripos( $v_bare, $bare ) ? $token . substr( $v_bare, strlen( $bare ) ) : $v;
+		};
+		foreach ( $profile['brand']['logo'] as $slot => $val ) {
+			if ( is_array( $val ) ) {
+				foreach ( $val as $ink => $url ) {
+					$profile['brand']['logo'][ $slot ][ $ink ] = $map( $url );
+				}
+			} else {
+				$profile['brand']['logo'][ $slot ] = $map( $val );
+			}
+		}
+		return $profile;
 	}
 
 	/** Column names for a table (for scrubbing and for import filtering). */
@@ -837,6 +889,9 @@ class ZDZ_Data_Portability {
 				if ( self::is_non_portable_option( (string) $name ) ) {
 					$res['skipped'][] = "option:{$name} (install state, not portable)";
 					continue;
+				}
+				if ( 'zdz_business_profile' === $name && is_array( $value ) ) {
+					$value = self::portable_logo_urls( $value, self::uploads_base_url(), 'in' );
 				}
 				if ( ! $dry ) {
 					update_option( $name, $value );
@@ -1350,6 +1405,14 @@ class ZDZ_Data_Portability {
 		$dry    = ! empty( $_POST['dry_run'] );
 
 		list( $notice, $result ) = self::import_from_zip_path( self::sample_bundle_path(), $dry );
+		if ( ! $dry && 'success' === ( $notice['type'] ?? '' ) && class_exists( 'ZDZ_Tour' ) ) {
+			// The sample is in: the guided tour is offered from now on, and the notice points to it.
+			ZDZ_Tour::mark_sample_loaded( $acting );
+			$notice['link'] = array(
+				'url'  => add_query_arg( 'zdz_tour', 'start', home_url( '/' ) ),
+				'text' => __( 'Next: take the guided tour on your Home Screen', 'zorderz' ),
+			);
+		}
 		if ( is_array( $result ) ) {
 			set_transient( 'zdz_dp_result_' . $acting, $result, 300 );
 		}
@@ -1375,7 +1438,11 @@ class ZDZ_Data_Portability {
 		echo '<p>Export all of this business\'s Zorderz data to one portable file, then restore it onto a fresh install. The bundle carries settings, catalog, roster, estimates and invoices, media files (logos and photos), and the WordPress site title, tagline, timezone and permalink structure, so the new install lands ready to use. Connection credentials (Poe, FreshBooks, Nutshell, calendar OAuth) are never exported for security; re-connect them on the new install. The bundle includes user password hashes so logins carry over, so treat the downloaded file as sensitive.</p>';
 
 		if ( $notice ) {
-			echo '<div class="notice notice-' . esc_attr( $notice['type'] ) . ' is-dismissible"><p>' . esc_html( $notice['msg'] ) . '</p></div>';
+			$link = '';
+			if ( ! empty( $notice['link']['url'] ) && ! empty( $notice['link']['text'] ) ) {
+				$link = ' <a class="button button-primary" href="' . esc_url( $notice['link']['url'] ) . '">' . esc_html( $notice['link']['text'] ) . '</a>';
+			}
+			echo '<div class="notice notice-' . esc_attr( $notice['type'] ) . ' is-dismissible"><p>' . esc_html( $notice['msg'] ) . $link . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $link is built from esc_url() and esc_html() above.
 		}
 		if ( is_array( $result ) ) {
 			echo '<div class="notice notice-info"><p><strong>' . ( $result['dry_run'] ? 'Would restore' : 'Restored' ) . ':</strong> '
@@ -1395,7 +1462,7 @@ class ZDZ_Data_Portability {
 		// Sample-data card (only when this build ships the bundled TestCo seed).
 		if ( self::has_sample_bundle() ) {
 			echo '<h2 class="title">Sample data</h2>';
-			echo '<p>New to Zorderz? Load the <strong>TestCo</strong> demo company &mdash; a complete fictional business with a product catalog, price list, estimates, invoices, a team roster, chat history and knowledge documents &mdash; so you can explore every app with realistic data before entering your own. This adds demo records and demo staff accounts, each with its own random password (sign-in as them is not possible until you reset one); it does <strong>not</strong> change your own account or your WordPress site title. Use it on a fresh install: if the demo accounts\' ids are already taken by real accounts, the loader refuses rather than overwrite them. Records use fixed ids, so loading again simply refreshes them.</p>';
+			echo '<p>New to Zorderz? Load the <strong>TestCo</strong> demo company (a complete fictional business with a product catalog, price list, estimates, invoices, a team roster, chat history and knowledge documents) so you can explore every app with realistic data before entering your own. Once it is in, the Home Screen offers a guided tour of the app and one test job. This adds demo records and demo staff accounts, each with its own random password (sign-in as them is not possible until you reset one); it does <strong>not</strong> change your own account or your WordPress site title. Use it on a fresh install: if the demo accounts\' ids are already taken by real accounts, the loader refuses rather than overwrite them. Records use fixed ids, so loading again simply refreshes them.</p>';
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 			wp_nonce_field( 'zdz_load_sample' );
 			echo '<input type="hidden" name="action" value="zdz_load_sample">';

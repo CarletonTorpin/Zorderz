@@ -37,7 +37,7 @@ class ZML_Fullscreen_App implements \Zorderz\App_Interface {
 			'name'        => 'Media Library',
 			'icon'        => 'images',
 			'cat'         => 'Tools',
-			'cc'          => '#2C5F8A',
+			'cc'          => '#CC79A7',
 			'desc'        => 'Browse all organization photos & sketches, and your own uploads',
 			'description' => 'Browse all organization photos & sketches, and your own uploads',
 			'roles'       => [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales', 'zdz_operator', 'zdz_mfg', 'zdz_tech', 'zdz_general' ],

@@ -35,8 +35,7 @@
  *   zrcptWidgetData.hasMedia   — shared photo library available to auto-pull
  *   zrcptWidgetData.mode       — receipt mode ('tagged' today)
  *
- * @since 2.5.0
- * @updated 3.1.0 — Photo-first, lookup-driven
+ * Photo-first and lookup-driven.
  */
 (function () {
   'use strict';
@@ -208,9 +207,9 @@
 
   var STEPS = [
     'Sending your data to the AI assistant\u2026',
-    'AI is reading the invoice and photos \u2014 this usually takes 1\u20132 minutes\u2026',
-    'Still generating \u2014 complex invoices take longer\u2026',
-    'Almost done \u2014 building the receipt page\u2026',
+    'AI is reading the invoice and photos; this usually takes 1\u20132 minutes\u2026',
+    'Still generating; complex invoices take longer\u2026',
+    'Almost done, building the receipt page\u2026',
     'Wrapping up\u2026',
   ];
 
@@ -403,7 +402,7 @@
     // No invoices at all \u2192 cannot generate. Be explicit about why.
     if (invoices.length === 0) {
       if (nonInvoices.some(function (m) { return (m.type === 'estimate'); })) {
-        html += '<div class="zrcpt-w-lookup-warn">\u26A0 Found an estimate but no invoice. A receipt can only be made from an invoice \u2014 invoice the job in FreshBooks, then re-run lookup.</div>';
+        html += '<div class="zrcpt-w-lookup-warn">\u26A0 Found an estimate but no invoice. A receipt can only be made from an invoice: invoice the job in FreshBooks, then re-run lookup.</div>';
       } else {
         html += '<div class="zrcpt-w-lookup-warn">\u26A0 No matching invoice found. Try the invoice #, customer name, or phone.</div>';
       }
@@ -652,7 +651,7 @@
       var note = document.createElement('div');
       note.className = 'zrcpt-w-redo-note';
       note.innerHTML = '<span class="zrcpt-w-inv-redo-chip">↻ Redo</span> '
-        + 'Replaces the existing receipt — same link, re-approve before re-sending.'
+        + 'Replaces the existing receipt: same link, re-approve before re-sending.'
         + (prior.length === 1 && prior[0].receipted.permalink
             ? ' <a href="' + esc(prior[0].receipted.permalink) + '" target="_blank" rel="noopener">current ↗</a>'
             : '');
@@ -756,8 +755,8 @@
       if (libraryEl) show(libraryEl);
       if (hintEl) {
         hintEl.textContent = (mediaSessions.length === 1
-          ? 'You have one photo set from the app. Tap it to review the photos — everything starts included; leave out or reorder any before generating.'
-          : 'You have ' + mediaSessions.length + ' photo sets from the app. Tap one to review its photos — everything starts included; leave out or reorder any before generating.');
+          ? 'You have one photo set from the app. Tap it to review the photos: everything starts included; leave out or reorder any before generating.'
+          : 'You have ' + mediaSessions.length + ' photo sets from the app. Tap one to review its photos: everything starts included; leave out or reorder any before generating.');
       }
       renderSessions(mediaSessions);
       // NOTE: unlike before, we do NOT auto-select a set. Uploading is the
@@ -810,10 +809,10 @@
     var total = (s.photos || []).length;
     var used = sessUsedCount(s);
     if (used === total) {
-      return 'All ' + total + ' photo' + (total === 1 ? '' : 's') + ' included — tap a ✓ to leave one out';
+      return 'All ' + total + ' photo' + (total === 1 ? '' : 's') + ' included; tap a ✓ to leave one out';
     }
     if (used === 0) {
-      return '⚠ Every photo is left out — tap a ＋ to include photos (or pick another set)';
+      return '⚠ Every photo is left out; tap a ＋ to include photos (or pick another set)';
     }
     return used + ' of ' + total + ' photos included · left-out photos won’t be on the receipt';
   }
@@ -895,13 +894,13 @@
     var cells = orderedSessionPhotos(s).map(function (p, idx) {
       var off = !!photoExcluded[p.media_id];
       return '<div class="zrcpt-w-ph zrcpt-w-ph-lg' + (off ? ' zrcpt-w-ph-off' : '') + '" data-mid="' + p.media_id + '" data-idx="' + idx + '"' +
-        ' role="button" tabindex="0" aria-label="Photo ' + (idx + 1) + (off ? ' (left out)' : '') + ' — tap to view large">' +
+        ' role="button" tabindex="0" aria-label="Photo ' + (idx + 1) + (off ? ' (left out)' : '') + ', tap to view large">' +
         '<img src="' + esc(p.thumb || p.url) + '" data-full="' + esc(p.url || '') + '" alt="" loading="lazy" draggable="false" />' +
         '<span class="zrcpt-w-ph-num" aria-hidden="true">' + (idx + 1) + '</span>' +
         '<button type="button" class="zrcpt-w-ph-toggle' + (off ? ' zrcpt-w-ph-toggle-off' : '') + '" data-mid="' + p.media_id + '"' +
           ' aria-pressed="' + (off ? 'false' : 'true') + '"' +
-          ' aria-label="' + (off ? 'Left out — tap to include this photo' : 'Included — tap to leave this photo out') + '"' +
-          ' title="' + (off ? 'Left out — tap to include' : 'Included — tap to leave out') + '">' +
+          ' aria-label="' + (off ? 'Left out: tap to include this photo' : 'Included: tap to leave this photo out') + '"' +
+          ' title="' + (off ? 'Left out: tap to include' : 'Included: tap to leave out') + '">' +
           (off ? '+' : '✓') +
         '</button>' +
         (off ? '<span class="zrcpt-w-ph-offlabel" aria-hidden="true">Left out</span>' : '') +
@@ -980,7 +979,7 @@
       '</button>';
     } else if (activeSession && setPickerExpanded && sessions.length > 1) {
       html += '<button type="button" id="zrcpt-w-sess-collapse" class="zrcpt-w-sess-expand">' +
-        '▾ Done — hide the other sets' +
+        '▾ Done, hide the other sets' +
       '</button>';
     }
 
@@ -1319,8 +1318,8 @@
     var off = !!photoExcluded[p.media_id];
     tg.classList.toggle('zrcpt-w-lb-toggle-off', off);
     tg.innerHTML = off
-      ? '＋ Left out — tap to include'
-      : '✓ Included — tap to leave out';
+      ? '＋ Left out: tap to include'
+      : '✓ Included: tap to leave out';
   }
 
   /* A set may be INCLUDED in the receipt only when its server-side
@@ -1613,7 +1612,7 @@
           thumbEl.className = 'zrcpt-w-thumb error';
           var imgEl = thumbEl.querySelector('img');
           if (imgEl) imgEl.alt = 'Upload failed';
-          thumbEl.title = (res.data && typeof res.data === 'string') ? res.data : 'Upload failed — tap to dismiss';
+          thumbEl.title = (res.data && typeof res.data === 'string') ? res.data : 'Upload failed; tap to dismiss';
           thumbEl.style.cursor = 'pointer';
           thumbEl.addEventListener('click', function () {
             thumbEl.remove();
@@ -1631,7 +1630,7 @@
         uploading--;
         // v3.0.0: Show error instead of silently removing
         thumbEl.className = 'zrcpt-w-thumb error';
-        thumbEl.title = 'Network error — tap to dismiss';
+        thumbEl.title = 'Network error; tap to dismiss';
         thumbEl.style.cursor = 'pointer';
         thumbEl.addEventListener('click', function () {
           thumbEl.remove();
@@ -1830,10 +1829,10 @@
       var prevSent = data.state && data.state.prev_sent_at ? data.state.prev_sent_at : '';
       var lines = '';
       if (data.updated) {
-        lines += '<div class="zrcpt-w-res-next-line">\u21bb This <strong>replaced the existing receipt</strong> \u2014 same link the customer already has.</div>';
+        lines += '<div class="zrcpt-w-res-next-line">\u21bb This <strong>replaced the existing receipt</strong>: same link the customer already has.</div>';
       }
       lines += '<div class="zrcpt-w-res-next-line">\u2709 <strong>No email has been sent.</strong> Review &amp; approve the receipt, then send it from History.'
-        + (prevSent ? ' (Previously sent ' + esc(prevSent) + ' \u2014 it needs a fresh approval before it can be re-sent.)' : '')
+        + (prevSent ? ' (Previously sent ' + esc(prevSent) + '; it needs a fresh approval before it can be re-sent.)' : '')
         + '</div>';
       nextEl.innerHTML = lines;
       show(nextEl);
@@ -1974,7 +1973,7 @@
           hintEl.textContent = '\u26A0 Pick the installation photo set above (or upload photos).';
         }
       } else if (emptyEl) {
-        emptyEl.textContent = 'Add at least one photo — pick a set from your library or upload below.';
+        emptyEl.textContent = 'Add at least one photo: pick a set from your library or upload below.';
         show(emptyEl);
       }
       return;
@@ -2113,7 +2112,7 @@
 
         if (totalEl) totalEl.textContent = d.total || '0';
         if (monthEl) monthEl.textContent = d.this_month || '0';
-        if (latestEl) latestEl.textContent = d.latest_date || '\u2014';
+        if (latestEl) latestEl.textContent = d.latest_date || '\u2013';
 
         var recentEl = $('zrcpt-w-recent');
         if (!recentEl) return;
@@ -2137,7 +2136,7 @@
           } else if (item.approved) {
             badge = '<span class="zrcpt-w-badge zrcpt-w-badge-approved">Approved</span>';
           } else if (item.prev_sent_at) {
-            badge = '<span class="zrcpt-w-badge zrcpt-w-badge-redone">Redone \u2014 approve &amp; re-send</span>';
+            badge = '<span class="zrcpt-w-badge zrcpt-w-badge-redone">Redone: approve &amp; re-send</span>';
           } else {
             badge = '<span class="zrcpt-w-badge zrcpt-w-badge-draft">Needs approval</span>';
           }
@@ -2149,7 +2148,7 @@
           } else if (item.approved && item.approved_by) {
             sub += ' \u00b7 Approved by ' + esc(item.approved_by);
           } else if (item.prev_sent_at) {
-            sub += ' \u00b7 Previously sent ' + esc(item.prev_sent_at) + ' \u2014 this redo has NOT gone out yet';
+            sub += ' \u00b7 Previously sent ' + esc(item.prev_sent_at) + '; this redo has NOT gone out yet';
           }
 
           // Primary action button depends on state.
@@ -2318,7 +2317,7 @@
       })
       .catch(function () {
         if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
-        setItemNote(historyItemEl(postId), 'Network error — the receipt was NOT deleted.', 'err');
+        setItemNote(historyItemEl(postId), 'Network error: the receipt was NOT deleted.', 'err');
       });
   }
 
@@ -2331,7 +2330,7 @@
 
     wrap.innerHTML =
         '<div class="zrcpt-w-delreq-form-title">Ask the admin to delete this receipt</div>'
-      + '<textarea class="zrcpt-w-delreq-reason" rows="3" maxlength="500" placeholder="Why should this receipt be deleted? (required — the admin sees this)"></textarea>'
+      + '<textarea class="zrcpt-w-delreq-reason" rows="3" maxlength="500" placeholder="Why should this receipt be deleted? (required; the admin sees this)"></textarea>'
       + '<div class="zrcpt-w-delreq-form-btns">'
       + '  <button type="button" class="zrcpt-w-delreq-send">Send request to admin</button>'
       + '  <button type="button" class="zrcpt-w-delreq-dismiss">Never mind</button>'
@@ -2348,7 +2347,7 @@
     wrap.querySelector('.zrcpt-w-delreq-send').addEventListener('click', function () {
       var reason = ta ? ta.value.replace(/^\s+|\s+$/g, '') : '';
       if (reason.length < 5) {
-        setItemNote(itemEl, 'Please give a short reason (at least 5 characters) — the admin needs it to decide.', 'err');
+        setItemNote(itemEl, 'Please give a short reason (at least 5 characters); the admin needs it to decide.', 'err');
         if (ta) ta.focus();
         return;
       }
@@ -2371,7 +2370,7 @@
         })
         .catch(function () {
           if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send request to admin'; }
-          setItemNote(itemEl, 'Network error — the request was NOT sent.', 'err');
+          setItemNote(itemEl, 'Network error: the request was NOT sent.', 'err');
         });
     });
   }
@@ -2395,7 +2394,7 @@
       })
       .catch(function () {
         if (btn) { btn.disabled = false; btn.textContent = 'Cancel request'; }
-        setItemNote(historyItemEl(postId), 'Network error — the request still stands.', 'err');
+        setItemNote(historyItemEl(postId), 'Network error: the request still stands.', 'err');
       });
   }
 

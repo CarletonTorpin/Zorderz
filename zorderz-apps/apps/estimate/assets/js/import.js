@@ -136,7 +136,7 @@
 				var text = ( r.text || '' ).trim();
 				var minChars = MIN_CHARS_PER_PAGE * Math.max( 1, r.pages || 1 );
 				if ( text.length < minChars ) {
-					setStatus( 'Not much text found — this PDF may be scanned images. Paste or type the text below, then parse.', 'warn' );
+					setStatus( 'Not much text found: this PDF may be scanned images. Paste or type the text below, then parse.', 'warn' );
 					if ( manualBox ) { manualBox.hidden = false; }
 					if ( textEl && ! textEl.value ) { textEl.value = text; }
 					return;
@@ -262,8 +262,8 @@
 			+ fldInput( 'Phone', 'f-cphone', c.phone )
 			+ fldInput( 'Street', 'f-cstreet', c.street )
 			+ fldInput( 'City', 'f-ccity', c.city )
-			+ fldInput( 'State', 'f-cstate', c.state )
-			+ fldInput( 'ZIP', 'f-czip', c.zip );
+			+ fldInput( ( window.ZDZ && window.ZDZ.ui && window.ZDZ.ui.regionLabel ) ? window.ZDZ.ui.regionLabel() : 'State', 'f-cstate', c.state )
+			+ fldInput( ( window.ZDZ && window.ZDZ.ui && window.ZDZ.ui.postcodeLabel ) ? window.ZDZ.ui.postcodeLabel() : 'ZIP', 'f-czip', c.zip );
 
 		var rows = doc.items.map( function ( li, i ) { return lineRow( li, i ); } ).join( '' );
 

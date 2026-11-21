@@ -57,7 +57,7 @@ add_action( 'after_setup_theme', function () {
 				'name'        => 'Camera',
 				'icon'        => 'camera',
 				'cat'         => 'Tools',
-				'cc'          => '#0EA5E9',
+				'cc'          => '#CC79A7',
 				'desc'        => 'Take photos and manage your photo library',
 				'description' => 'Take photos and manage your photo library',
 				// Intended audience (real Zorderz role slugs — verified against
@@ -156,7 +156,7 @@ add_action( 'after_setup_theme', function () {
 						       autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
 						<button type="button" id="zcam-w-note-clear" class="zcam-w-note-clear" aria-label="Clear note" hidden>&times;</button>
 					</div>
-					<p class="zcam-w-hint">Photos upload automatically — keep shooting, they save in the background. They're stored in your Media library.</p>
+					<p class="zcam-w-hint">Photos upload automatically. Keep shooting, they save in the background. They're stored in your Media library.</p>
 					<!-- Async upload status (non-blocking). This region RESERVES its space
 					     so adding/removing items never shifts the dashboard (CLS fix). -->
 					<div id="zcam-w-queue" class="zcam-w-queue" aria-live="polite"></div>
@@ -341,7 +341,7 @@ function zcam_ajax_save_photo() {
 	// dual-accept — fresh wp_rest nonce (X-WP-Nonce) OR legacy nonce.
 	if ( ! zcam_verify_request_nonce() ) {
 		error_log( 'ZCAM save: nonce check FAILED (stale/missing). ' . implode( ' | ', $debug ) );
-		wp_send_json_error( 'Your session expired — please reload and try again.', 403 );
+		wp_send_json_error( 'Your session expired. Please reload and try again.', 403 );
 	}
 	if ( ! is_user_logged_in() ) wp_send_json_error( 'Not logged in.' );
 	$debug[] = 'auth:ok user=' . get_current_user_id();
@@ -386,7 +386,7 @@ function zcam_ajax_save_photo() {
 	if ( (int) ( $_FILES['photo']['error'] ?? 0 ) === UPLOAD_ERR_OK
 	     && (int) ( $_FILES['photo']['size'] ?? 0 ) === 0 ) {
 		error_log( 'ZCAM save: EMPTY file body (0 bytes) — client-side bytes lost. ' . implode( ' | ', $debug ) );
-		wp_send_json_error( 'The photo data didn\'t arrive — it will retry automatically.' );
+		wp_send_json_error( 'The photo data didn\'t arrive. It will retry automatically.' );
 	}
 	// server-side image-type guard (mirrors zdz-media-library). The save
 	// path widens upload_mimes for HEIC, so verify the file really is an image
@@ -417,7 +417,7 @@ function zcam_ajax_save_photo() {
 	$thumb = wp_get_attachment_image_url( $att_id, 'medium' );
 
 	// Auto-title: "Photo — May 10, 3:45 PM"
-	$title = 'Photo — ' . date( 'M j, g:i A' );
+	$title = 'Photo · ' . date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:i A' ) : 'M j, g:i A' ) );
 
 	// ── Client-supplied provenance (HEIC safety net) ─────────────────────
 	// exifr reads EXIF — including HEIC, which PHP's exif_read_data() cannot —
@@ -578,7 +578,7 @@ function zcam_ajax_list_photos() {
 	// dual-accept (fresh wp_rest via X-WP-Nonce, OR legacy nonce) and a
 	// clean JSON 403 instead of check_ajax_referer's silent wp_die('-1').
 	if ( ! zcam_verify_request_nonce() ) {
-		wp_send_json_error( 'Your session expired — please reload and try again.', 403 );
+		wp_send_json_error( 'Your session expired. Please reload and try again.', 403 );
 	}
 	if ( ! is_user_logged_in() ) wp_send_json_error( 'Not logged in.' );
 	if ( ! class_exists( 'ZDZ_User_Media' ) ) { wp_send_json_success( [ 'photos' => [] ] ); return; }
@@ -607,7 +607,7 @@ function zcam_ajax_delete_photo() {
 	// dual-accept (fresh wp_rest via X-WP-Nonce, OR legacy nonce) and a
 	// clean JSON 403 instead of check_ajax_referer's silent wp_die('-1').
 	if ( ! zcam_verify_request_nonce() ) {
-		wp_send_json_error( 'Your session expired — please reload and try again.', 403 );
+		wp_send_json_error( 'Your session expired. Please reload and try again.', 403 );
 	}
 	if ( ! is_user_logged_in() ) wp_send_json_error( 'Not logged in.' );
 	$id = (int) ( $_POST['media_id'] ?? 0 );
@@ -671,7 +671,7 @@ function zcam_video_gate() {
 
 /** Receive one clip part and append it durably (idempotent by idx). */
 function zcam_ajax_video_chunk() {
-	if ( ! zcam_verify_request_nonce() ) { wp_send_json_error( 'Your session expired — please reload and try again.', 403 ); }
+	if ( ! zcam_verify_request_nonce() ) { wp_send_json_error( 'Your session expired. Please reload and try again.', 403 ); }
 	if ( ! is_user_logged_in() ) { wp_send_json_error( 'Not logged in.', 403 ); }
 	zcam_video_gate();
 
@@ -724,7 +724,7 @@ function zcam_ajax_video_chunk() {
 /** Assemble a clip's parts → attachment + poster + ZDZ_User_Media video row. */
 function zcam_ajax_video_finalize() {
 	global $wpdb;
-	if ( ! zcam_verify_request_nonce() ) { wp_send_json_error( 'Your session expired — please reload and try again.', 403 ); }
+	if ( ! zcam_verify_request_nonce() ) { wp_send_json_error( 'Your session expired. Please reload and try again.', 403 ); }
 	if ( ! is_user_logged_in() ) { wp_send_json_error( 'Not logged in.', 403 ); }
 	zcam_video_gate();
 	if ( ! class_exists( 'ZDZ_User_Media' ) ) { wp_send_json_error( 'Video storage is unavailable.' ); }
@@ -748,7 +748,7 @@ function zcam_ajax_video_finalize() {
 	if ( ! in_array( $ext, [ 'mp4', 'webm', 'm4v', 'mov' ], true ) ) { $ext = 'mp4'; }
 
 	$dir = zcam_video_parts_dir( $user_id, $uid, false );
-	if ( $dir === '' || ! is_dir( $dir ) ) { wp_send_json_error( 'Clip storage not found — please retry.' ); }
+	if ( $dir === '' || ! is_dir( $dir ) ) { wp_send_json_error( 'Clip storage not found. Please retry.' ); }
 
 	// ── Concatenate parts 0..total-1 into one file (streamed, low memory) ─────
 	$assembled = $dir . '/clip.' . $ext;
@@ -758,7 +758,7 @@ function zcam_ajax_video_finalize() {
 		$part = $dir . '/' . $i . '.part';
 		if ( ! file_exists( $part ) ) {
 			fclose( $out ); @unlink( $assembled );
-			wp_send_json_error( 'Missing chunk ' . $i . ' — please retry.' ); // client re-drains + re-finalizes
+			wp_send_json_error( 'Missing chunk ' . $i . '. Please retry.' ); // client re-drains + re-finalizes
 		}
 		$in = @fopen( $part, 'rb' );
 		if ( ! $in ) { fclose( $out ); @unlink( $assembled ); wp_send_json_error( 'Unreadable chunk ' . $i . '.' ); }
@@ -849,7 +849,7 @@ function zcam_ajax_video_finalize() {
 		'media_type'       => 'video',
 		'source_app'       => 'zdz-camera',
 		'source_ref'       => $source_ref,   // idempotency key
-		'title'            => 'Video — ' . date( 'M j, g:i A' ),
+		'title'            => 'Video · ' . date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_text( 'M j, g:i A' ) : 'M j, g:i A' ) ),
 		'description'      => $note,
 		'wp_attachment_id' => $att_id,
 		'captured_at'      => $captured_at,

@@ -235,7 +235,7 @@ class ZANA_Turn_Timings {
 			echo '<th>' . esc_html( $h ) . '</th>';
 		}
 		echo '</tr></thead><tbody>';
-		$s = function ( $v ) { return null === $v ? '—' : number_format( (float) $v, 1 ) . ' s'; };
+		$s = function ( $v ) { return null === $v ? '–' : number_format( (float) $v, 1 ) . ' s'; };
 		foreach ( $rows as $r ) {
 			echo '<tr><td>' . esc_html( $r['kind'] ) . '</td><td>' . (int) $r['n'] . '</td><td>' . esc_html( $s( $r['median_s'] ) ) . '</td><td>' . esc_html( $s( $r['p90_s'] ) )
 				. '</td><td>' . esc_html( $s( $r['model_s'] ) ) . '</td><td>' . (int) $r['failed'] . '</td><td>' . (int) $r['reasked'] . '</td><td>$' . esc_html( number_format( (float) $r['usd'], 2 ) ) . '</td></tr>';

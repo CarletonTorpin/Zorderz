@@ -511,12 +511,12 @@ class ZRCPT_FreshBooks {
 			return [ 'type' => 'phone', 'value' => $raw, 'raw' => $raw ];
 		}
 
-		// Pure digits: "14767", "#14767"
+		// Pure digits: "1042", "#1042"
 		if ( preg_match( '/^#?\d{3,}$/', preg_replace( '/[#\s]/', '', $raw ) ) ) {
 			return [ 'type' => 'number', 'value' => preg_replace( '/[^0-9]/', '', $raw ), 'raw' => $raw ];
 		}
 
-		// Document keyword + number: "Invoice 14767", "Inv #14767", "EST 5541"
+		// Document keyword + number: "Invoice 1042", "Inv #1042", "EST 1001"
 		if ( preg_match( '/^(?:invoice|inv|estimate|est|receipt|rec)[#\s._-]*(\d{3,})/i', $raw, $m ) ) {
 			return [ 'type' => 'number', 'value' => $m[1], 'raw' => $raw ];
 		}

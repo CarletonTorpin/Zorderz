@@ -17,7 +17,6 @@
  * Caching: individual lookups are cached for 15 minutes per email hash.
  * The published review count (count()) is cached for 1 hour.
  *
- * @since  2.14.5
  * @package Zorderz
  */
 

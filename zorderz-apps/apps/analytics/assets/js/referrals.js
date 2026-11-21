@@ -161,7 +161,7 @@
         } else {
           var note = el('input', 'zana-ref-note');
           note.type = 'text'; note.maxLength = 300; note.placeholder = I.refNote || '';
-          note.setAttribute('aria-label', (I.refNote || '') + ' — ' + p.name);
+          note.setAttribute('aria-label', (I.refNote || '') + ': ' + p.name);
           li.appendChild(note);
           var vb = el('button', 'zana-ref-btn', I.refVet || '');
           vb.type = 'button';

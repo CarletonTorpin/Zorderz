@@ -6,7 +6,7 @@
  *   service that speaks the same contract will do). This site keeps only saved chart settings,
  *   and, if the business turns it on, dated aggregate snapshots. With no hub connected the app
  *   runs in local mode and says so.
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -29,6 +29,7 @@
  *   includes/class-zch-feed.php          the hourly invoice feed to the hub
  *   includes/class-zch-counts.php        measured piece counts and lead sources for the hub
  *   includes/class-zch-chat-bridge.php   the registry verb charts.run
+ *   includes/class-zch-records-verb.php  the registry verb charts.records (invoice lines and job lists)
  *   includes/class-zch-prospect*.php     where to canvass; the registry verb charts.prospect
  *   includes/class-zch-local.php         the region's address and place data for the canvassing app
  *   includes/class-zch-survey-verb.php   the registry verb charts.survey (recorded drives)
@@ -47,7 +48,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZCH_VERSION', '1.0.0' );
+define( 'ZCH_VERSION', '1.1.0' );
 define( 'ZCH_DB_VERSION', '1' );
 define( 'ZCH_FILE', __FILE__ );
 define( 'ZCH_DIR', plugin_dir_path( __FILE__ ) );
@@ -90,6 +91,7 @@ require_once ZCH_DIR . 'includes/class-zch-admin.php';
 require_once ZCH_DIR . 'includes/class-zch-counts.php';
 require_once ZCH_DIR . 'includes/class-zch-feed.php';
 require_once ZCH_DIR . 'includes/class-zch-chat-bridge.php';
+require_once ZCH_DIR . 'includes/class-zch-records-verb.php';
 require_once ZCH_DIR . 'includes/class-zch-prospect.php';
 require_once ZCH_DIR . 'includes/class-zch-local.php';
 require_once ZCH_DIR . 'includes/class-zch-prospect-verb.php';

@@ -113,7 +113,7 @@ class ZDZ_Contact_Bridge {
 		}
 
 		if ( ! self::is_available() ) {
-			$result['error'] = 'Contact lookup is unavailable — neither the CRM nor FreshBooks is connected.';
+			$result['error'] = 'Contact lookup is unavailable: neither the CRM nor FreshBooks is connected.';
 			return $result;
 		}
 
@@ -131,8 +131,8 @@ class ZDZ_Contact_Bridge {
 		// full_disclosure_ok() decides whether we are confident the resolved record IS the
 		// asked person. If not, we disclose name + city only (below) — never the wrong
 		// person's phone/email/address. See the method for the confidence rule; it closes
-		// the tier-'none' and surname-only 'strong' full-PII paths an earlier weak-only
-		// gate let through (adversarial finding, 2026-09-20).
+		// the tier-'none' and surname-only 'strong' full-PII paths a weak-only gate would
+		// let through.
 		$full_ok = self::full_disclosure_ok( $query, (string) ( $record['name'] ?? '' ) );
 
 		// ── DISCLOSURE: kiosk gets name + city ONLY, regardless of scope ──
@@ -156,7 +156,7 @@ class ZDZ_Contact_Bridge {
 			$city              = (string) ( $record['city'] ?? '' );
 			$result['message'] = 'The closest customer I found is ' . $record['name']
 				. ( $city !== '' ? ' (' . $city . ')' : '' )
-				. ' — but it may be a different person than "' . $query . '". Open it in chat to confirm before using their contact details.';
+				. ', but it may be a different person than "' . $query . '". Open it in chat to confirm before using their contact details.';
 			return $result;
 		}
 
@@ -431,7 +431,7 @@ class ZDZ_Contact_Bridge {
 				$ln = strtolower( trim( (string) ( $c['lname'] ?? '' ) ) );
 				// Surname relatedness — exact / anchored prefix / edit<=2, plus the
 				// curated homophone + metaphone signals when the matcher is present. NOT
-				// sounds_like's substring rule (which would read "Ricks" as "Hendricks").
+				// sounds_like's containment rule (one name written inside most of another).
 				return $ln !== '' && self::surname_related( $ln, $wantl );
 			} ) );
 			if ( count( $near ) === 1 ) {
@@ -536,9 +536,9 @@ class ZDZ_Contact_Bridge {
 	/**
 	 * Surname relatedness — PRECISE signals only: exact, anchored prefix, edit-distance
 	 * <= 2, and (when ZDZ_Name_Match is present) the curated homophone map + metaphone-key
-	 * equality. Deliberately NOT ZDZ_Name_Match::sounds_like(), whose substring clause
-	 * ("hendricks" contains "ricks") is right for recall but catastrophic as an equality
-	 * gate. Self-contained so the theme runs without the matcher.
+	 * equality. Deliberately NOT ZDZ_Name_Match::sounds_like(), whose containment clause
+	 * (one name written inside most of another) is right for recall but catastrophic as
+	 * an equality gate. Self-contained so the theme runs without the matcher.
 	 */
 	private static function surname_related( string $a, string $b ): bool {
 		$a = strtolower( trim( $a ) );
@@ -584,9 +584,9 @@ class ZDZ_Contact_Bridge {
 		}
 		if ( class_exists( 'ZDZ_Name_Match' ) ) {
 			// Precise signals only, as in surname_related(): the curated nickname map, curated
-			// soundalike variants, and sound-key equality. Not sounds_like(), whose substring
-			// clause made "Don" compatible with "Brandon" and "Ann" with "Joanne", which let the
-			// gate hand back a different person's contact details.
+			// soundalike variants, and sound-key equality. Not sounds_like(): its containment and
+			// nickname rules are tuned for recall, and a recall rule here could hand back a
+			// different person's contact details.
 			if ( \ZDZ_Name_Match::first_names_equivalent( $a, $b ) ) {
 				return true;
 			}
@@ -904,8 +904,8 @@ class ZDZ_Contact_Bridge {
 	}
 
 	/**
-	 * L4-ready capability descriptor (NOT registered yet — zdz_register_capabilities
-	 * does not exist until Stage 1). Shaped so onboarding is a one-line add_filter.
+	 * The contact lookup as a capability descriptor (not registered on zdz_register_capabilities yet).
+	 * Shaped so registering it is a one-line add_filter.
 	 *
 	 * @return array
 	 */

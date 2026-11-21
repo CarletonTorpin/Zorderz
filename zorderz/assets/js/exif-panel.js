@@ -7,7 +7,7 @@
  *
  *   <div class="zdz-exif" data-media-id="123"></div>
  *
- * then call TSMediaExif.mount(rootEl) — or TSMediaExif.mountAll() to wire every
+ * then call ZDZMediaExif.mount(rootEl) — or ZDZMediaExif.mountAll() to wire every
  * .zdz-exif on the page. The first time the user EXPANDS the panel, we fetch
  * /zorderz/v1/media/{id}/exif (which lazily resolves + caches the place name server
  * side). Nothing is fetched on render, so lists/galleries stay cheap.
@@ -19,8 +19,6 @@
  *
  * No external deps. Uses fetch + the WP REST nonce if present
  * (window.wpApiSettings or a data-nonce attribute).
- *
- * @since 2.21.0
  */
 (function (global) {
 	'use strict';
@@ -213,7 +211,7 @@
 		}
 
 		function providerLabel(p) {
-			if (p === 'offline-local' || p === 'offline-sdcounty') return 'Place: offline';
+			if (typeof p === 'string' && p.indexOf('offline-') === 0) return 'Place: offline'; // the offline place lookup, whatever its data set
 			if (p === 'filter') return 'Place: custom';
 			return 'Place: ' + p;
 		}
@@ -269,7 +267,7 @@
 		function errorRow(err) {
 			var d = el('div', 'zdz-exif-status zdz-exif-status-error');
 			d.textContent = 'Couldn’t load metadata.';
-			if (err && global.console) console.warn('TSMediaExif:', err.message);
+			if (err && global.console) console.warn('ZDZMediaExif:', err.message);
 			return d;
 		}
 		function emptyRow() {
@@ -282,7 +280,7 @@
 		Array.prototype.forEach.call(nodes, mount);
 	}
 
-	global.TSMediaExif = { mount: mount, mountAll: mountAll };
+	global.ZDZMediaExif = { mount: mount, mountAll: mountAll };
 
 	// Auto-wire on DOM ready (idempotent; re-callable after dynamic inserts).
 	if (document.readyState === 'loading') {

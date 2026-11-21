@@ -463,7 +463,7 @@ class ZEST_Line_Edits {
 		if ( empty( $res['ok'] ) ) {
 			wp_send_json_error( array( 'message' => $res['error'] ) );
 		}
-		$notes = self::edited_by( (string) ( $doc['notes'] ?? '' ), class_exists( 'ZEST_Salesperson' ) ? ZEST_Salesperson::initials_of( $uid ) : '', function_exists( 'wp_date' ) ? (string) wp_date( 'n/j/Y' ) : gmdate( 'n/j/Y' ) );
+		$notes = self::edited_by( (string) ( $doc['notes'] ?? '' ), class_exists( 'ZEST_Salesperson' ) ? ZEST_Salesperson::initials_of( $uid ) : '', function_exists( 'wp_date' ) ? (string) wp_date( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format() : 'n/j/Y' ) ) : gmdate( ( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::date_format() : 'n/j/Y' ) ) );
 		if ( class_exists( 'ZEST_Warranty_Note' ) ) {
 			$notes = ZEST_Warranty_Note::add( $notes, self::to_wire_lines( $res['lines'] ) );
 		}

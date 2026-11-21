@@ -2,7 +2,7 @@
  *
  * Two surfaces (dashboard widget + full-screen gallery) + one shared lightbox.
  * Uses the theme's real --sys- and --ref- tokens so it tracks light/dark/system/
- * sunlight. Fallback values match the THEME palette (brand #2C5F8A), not the
+ * sunlight. Fallback values match the THEME palette (brand #5150D6), not the
  * v1 placeholder purple.
  *
  * widget usability: (1) scope tabs are sized to their labels (not
@@ -95,7 +95,7 @@
   background:var(--sys-surface,#FFF); color:var(--sys-text-sec,#475569);
   transition:background 150ms,color 150ms,border-color 150ms; -webkit-tap-highlight-color:transparent;
   min-height:36px; }
-.zml-chip.zml-active { background:var(--sys-brand,#2C5F8A); border-color:var(--sys-brand,#2C5F8A); color:var(--sys-text-brand,#FFF); }
+.zml-chip.zml-active { background:var(--sys-brand,#5150D6); border-color:var(--sys-brand,#5150D6); color:var(--sys-text-brand,#FFF); }
 
 .zml-empty { padding:32px 20px; text-align:center; font-size:var(--ref-font-xs,15px);
   color:var(--sys-text-ter,#64748B); line-height:1.5; }
@@ -108,7 +108,7 @@
   display:block; text-align:left; border-radius:12px; overflow:hidden; background:var(--sys-bg-alt,#E2E8F0);
   -webkit-tap-highlight-color:transparent; transition:transform 120ms, box-shadow 120ms; }
 .zml-cell:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.12); }
-.zml-cell:focus-visible { outline:3px solid var(--sys-brand,#2C5F8A); outline-offset:2px; }
+.zml-cell:focus-visible { outline:3px solid var(--sys-brand,#5150D6); outline-offset:2px; }
 /* the THUMB (not the cell) is the positioning context for every image
    overlay and it carries the aspect ratio — so a card can grow a text footer
    beneath it without the badge/note/vis/check overlays drifting. Square by
@@ -135,7 +135,7 @@
   filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
 .zml-cell-vis { position:absolute; left:6px; top:6px; width:20px; height:20px; display:flex;
   align-items:center; justify-content:center; color:#FFF; border-radius:50%;
-  background:rgba(44,95,138,0.92); filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+  background:rgba(81,80,214,0.92); filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
 /* video indicator — lower-right camcorder + duration (the free corner;
    source badge is bottom-left, note top-right, visibility top-left). Shown in
    BOTH the dense grid and the card grid. */
@@ -205,7 +205,7 @@
 
 .zml-seeall { appearance:none; border:none; background:transparent; cursor:pointer;
   display:inline-flex; align-items:center; gap:2px; padding:6px 4px;
-  font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-brand,#2C5F8A);
+  font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-brand,#5150D6);
   -webkit-tap-highlight-color:transparent; min-height:40px; white-space:nowrap; }
 .zml-seeall:hover { text-decoration:underline; }
 .zml-seeall svg { flex-shrink:0; }
@@ -225,10 +225,10 @@
 .zml-w-more { appearance:none; cursor:pointer; display:flex; align-items:center;
   justify-content:center; gap:6px; width:100%; margin-top:10px; min-height:44px;
   padding:10px 16px; border:1px solid var(--sys-border,#E2E8F0); border-radius:12px;
-  background:var(--sys-surface,#FFF); color:var(--sys-brand,#2C5F8A);
+  background:var(--sys-surface,#FFF); color:var(--sys-brand,#5150D6);
   font:inherit; font-size:var(--ref-font-xs,15px); font-weight:600; line-height:1;
   -webkit-tap-highlight-color:transparent; transition:background 150ms,border-color 150ms,filter 150ms; }
-.zml-w-more:hover { background:var(--sys-bg-alt,#F1F5F9); border-color:var(--sys-brand,#2C5F8A); }
+.zml-w-more:hover { background:var(--sys-bg-alt,#F1F5F9); border-color:var(--sys-brand,#5150D6); }
 .zml-w-more:disabled { opacity:0.65; cursor:default; }
 .zml-w-more svg { flex-shrink:0; }
 
@@ -490,7 +490,7 @@ body.zml-lb-open { overflow:hidden; }
   border:1px solid rgba(255,255,255,0.14); }
 .zml-lb-loc-maps { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; margin-top:4px;
   padding:8px 12px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none;
-  color:#fff; background:var(--sys-brand,#2C5F8A); min-height:40px;
+  color:var(--sys-text-brand, #FFFFFF); background:var(--sys-brand,#5150D6); min-height:40px;
   -webkit-tap-highlight-color:transparent; transition:filter 150ms; }
 .zml-lb-loc-maps:hover { filter:brightness(1.08); }
 .zml-lb-loc-maps svg { flex-shrink:0; }
@@ -502,7 +502,7 @@ body.zml-lb-open { overflow:hidden; }
 .zml-vis-btn { appearance:none; border:none; cursor:pointer; padding:8px 14px; border-radius:8px;
   font-size:var(--ref-font-xs,15px); font-weight:600; line-height:1; color:#CBD5E1; background:transparent;
   -webkit-tap-highlight-color:transparent; min-height:40px; transition:background 150ms,color 150ms; }
-.zml-vis-btn.zml-active { background:var(--sys-brand,#2C5F8A); color:#fff; }
+.zml-vis-btn.zml-active { background:var(--sys-brand,#5150D6); color:var(--sys-text-brand, #FFFFFF); }
 .zml-vis-btn:disabled { opacity:0.6; cursor:default; }
 .zml-lb-vis.zml-busy { opacity:0.85; }
 
@@ -516,7 +516,7 @@ body.zml-lb-open { overflow:hidden; }
   background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px;
   box-sizing:border-box; -webkit-appearance:none; }
 .zml-lb-note::placeholder { color:#94A3B8; }
-.zml-lb-note:focus { outline:none; border-color:var(--sys-brand,#2C5F8A); background:rgba(255,255,255,0.12); }
+.zml-lb-note:focus { outline:none; border-color:var(--sys-brand,#5150D6); background:rgba(255,255,255,0.12); }
 .zml-lb-note-ro { margin:0; font-size:var(--ref-font-sm,17px); line-height:1.45; color:#E5E7EB; white-space:pre-wrap; }
 
 .zml-lb-note-actions { display:flex; align-items:center; justify-content:flex-end; gap:12px;
@@ -530,8 +530,8 @@ body.zml-lb-open { overflow:hidden; }
 /* No-shift busy button. v2.10.3: busy is the kit's ZDZ.ui.busy(); its look (.zdz-btn-busy) is the
    theme's, so the private spinner that was here is gone. */
 .zml-lb-save { position:relative; appearance:none; border:none; cursor:pointer;
-  padding:10px 18px; border-radius:8px; font-size:var(--ref-font-xs,15px); font-weight:600; color:#fff;
-  background:var(--sys-brand,#2C5F8A); -webkit-tap-highlight-color:transparent; min-height:44px;
+  padding:10px 18px; border-radius:8px; font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-text-brand, #FFFFFF);
+  background:var(--sys-brand,#5150D6); -webkit-tap-highlight-color:transparent; min-height:44px;
   min-width:108px; /* fixed-ish box, so the busy state never resizes it */
   display:inline-flex; align-items:center; justify-content:center; transition:filter 150ms,opacity 150ms; }
 .zml-lb-save:hover:not(:disabled):not(.zdz-btn-busy) { filter:brightness(1.08); }
@@ -547,7 +547,7 @@ body.zml-lb-open { overflow:hidden; }
    matches the chip/See-All idiom and the ≥36–44px tap targets used elsewhere. */
 .zml-add { appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
   padding:8px 16px; border:none; border-radius:var(--ref-radius-md,12px); font:inherit; font-size:var(--ref-font-xs,15px);
-  font-weight:600; line-height:1; color:var(--sys-text-brand,#fff); background:var(--sys-brand,#2C5F8A);
+  font-weight:600; line-height:1; color:var(--sys-text-brand,#fff); background:var(--sys-brand,#5150D6);
   -webkit-tap-highlight-color:transparent; min-height:40px; white-space:nowrap;
   transition:filter 150ms; }
 .zml-add:hover { filter:brightness(1.08); }
@@ -613,7 +613,7 @@ body.zml-no-scroll { overflow:hidden; }
 .zml-up-back:disabled { opacity:0.5; cursor:default; }
 .zml-up-go { grid-column:3; justify-self:end; appearance:none; border:none; cursor:pointer;
   padding:9px 18px; border-radius:8px; font:inherit; font-size:var(--ref-font-xs,15px); font-weight:600;
-  color:#fff; background:var(--sys-brand,#2C5F8A); min-height:40px; -webkit-tap-highlight-color:transparent;
+  color:var(--sys-text-brand, #FFFFFF); background:var(--sys-brand,#5150D6); min-height:40px; -webkit-tap-highlight-color:transparent;
   transition:filter 150ms,opacity 150ms; }
 .zml-up-go:hover:not(:disabled) { filter:brightness(1.08); }
 .zml-up-go:disabled { opacity:0.45; cursor:not-allowed; }
@@ -629,16 +629,16 @@ body.zml-no-scroll { overflow:hidden; }
   font:inherit; font-size:var(--ref-font-sm,17px); line-height:1.4; color:var(--sys-text,#0F172A);
   background:var(--sys-bg,#F1F5F9); border:1px solid var(--sys-border,#E2E8F0); border-radius:10px;
   box-sizing:border-box; -webkit-appearance:none; }
-.zml-up-note:focus { outline:none; border-color:var(--sys-brand,#2C5F8A); background:var(--sys-surface,#FFF); }
+.zml-up-note:focus { outline:none; border-color:var(--sys-brand,#5150D6); background:var(--sys-surface,#FFF); }
 .zml-up-note:disabled { opacity:0.7; }
 .zml-up-note-hint { margin:0; font-size:12px; line-height:1.4; color:var(--sys-text-ter,#64748B); }
 
 .zml-up-pickrow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:2px; }
 .zml-up-pick { appearance:none; cursor:pointer; padding:9px 16px; border-radius:10px;
   border:1px dashed var(--sys-border,#CBD5E1); background:var(--sys-bg,#F1F5F9); font:inherit;
-  font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-brand,#2C5F8A);
+  font-size:var(--ref-font-xs,15px); font-weight:600; color:var(--sys-brand,#5150D6);
   min-height:42px; -webkit-tap-highlight-color:transparent; transition:background 150ms,border-color 150ms; }
-.zml-up-pick:hover { background:var(--sys-bg-alt,#E2E8F0); border-color:var(--sys-brand,#2C5F8A); }
+.zml-up-pick:hover { background:var(--sys-bg-alt,#E2E8F0); border-color:var(--sys-brand,#5150D6); }
 .zml-up-count { font-size:13px; color:var(--sys-text-sec,#475569); }
 .zml-up-input { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
   clip:rect(0,0,0,0); border:0; }
@@ -666,7 +666,7 @@ body.zml-no-scroll { overflow:hidden; }
    column slot in place of the remove button. */
 .zml-up-bar { width:64px; height:6px; border-radius:3px; background:var(--sys-bg-alt,#E2E8F0);
   overflow:hidden; }
-.zml-up-bar-fill { display:block; height:100%; width:0; background:var(--sys-brand,#2C5F8A);
+.zml-up-bar-fill { display:block; height:100%; width:0; background:var(--sys-brand,#5150D6);
   transition:width 180ms ease; }
 .zml-up-row.is-done .zml-up-bar-fill { background:#16A34A; }
 
@@ -747,8 +747,8 @@ body.zml-no-scroll { overflow:hidden; }
   color:var(--sys-text-sec,#475569); -webkit-tap-highlight-color:transparent;
   transition:background 150ms,color 150ms,border-color 150ms; }
 .zml-select-toggle:hover { color:var(--sys-text,#0F172A); }
-.zml-select-toggle.zml-active { background:var(--sys-brand,#2C5F8A);
-  border-color:var(--sys-brand,#2C5F8A); color:#FFF; }
+.zml-select-toggle.zml-active { background:var(--sys-brand,#5150D6);
+  border-color:var(--sys-brand,#5150D6); color:var(--sys-text-brand, #FFFFFF); }
 .zml-fs-bar .zml-select-toggle { position:absolute; top:12px; left:14px; }
 @media (max-width:480px) { .zml-fs-bar .zml-select-toggle { padding:8px 10px; } }
 
@@ -758,9 +758,9 @@ body.zml-no-scroll { overflow:hidden; }
   background:rgba(255,255,255,0.92); color:transparent;
   border:2px solid rgba(15,23,42,0.35); box-shadow:0 1px 3px rgba(0,0,0,0.35); }
 .zml-selecting .zml-cell:not(.zml-nodel) .zml-cell-check { display:flex; }
-.zml-cell.zml-checked .zml-cell-check { background:var(--sys-brand,#2C5F8A);
-  border-color:var(--sys-brand,#2C5F8A); color:#FFF; }
-.zml-cell.zml-checked { outline:3px solid var(--sys-brand,#2C5F8A); outline-offset:-3px; }
+.zml-cell.zml-checked .zml-cell-check { background:var(--sys-brand,#5150D6);
+  border-color:var(--sys-brand,#5150D6); color:var(--sys-text-brand, #FFFFFF); }
+.zml-cell.zml-checked { outline:3px solid var(--sys-brand,#5150D6); outline-offset:-3px; }
 .zml-cell.zml-checked .zml-cell-img { opacity:0.82; }
 /* In selection mode, photos you may NOT delete dim and stop responding. */
 .zml-selecting .zml-cell.zml-nodel { opacity:0.35; cursor:default; }
@@ -874,7 +874,7 @@ html body.zml-no-scroll #toast-container { z-index:100090; }
 .zml-lb-tag-btn {
   flex: 0 0 auto; font: inherit; font-size: 15px; font-weight: 600;
   min-height: 40px; padding: 7px 15px;
-  color: #fff; background: var(--sys-brand); border: 1px solid var(--sys-brand);
+  color: var(--sys-text-brand, #FFFFFF); background: var(--sys-brand); border: 1px solid var(--sys-brand);
   border-radius: var(--ref-radius-sm, 6px); cursor: pointer;
 }
 .zml-lb-tag-btn[disabled], .zml-lb-tag-btn.zdz-btn-busy { opacity: .6; cursor: default; }

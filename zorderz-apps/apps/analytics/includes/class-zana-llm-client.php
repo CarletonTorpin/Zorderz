@@ -13,6 +13,8 @@
  *
  * WHAT IT DOES ITSELF
  *   - the person's daily allowance (ZANA_Allowance): checked before a call, its cost added after;
+ *   - a narrower line for one person's calls (filter `zana_llm_call_cap_usd`, e.g. the day's line for replies in a
+ *     Messages thread): handed to the router as the call's cap, and nothing is sent once it is used up;
  *   - roles: a call that asks for the most effort is `reason`; everything else `chat`;
  *   - the instructions in three parts: the part before SPLIT is the same for everyone and every call (sent as the
  *     router's system_prefix, cached for an hour, with CODES_NOTE at its end); the part before TIER_SPLIT is the same for
@@ -23,7 +25,9 @@
  *     the web;
  *   - pictures: the chat is not a registered picture sender, so a picture part is left out and the model is told;
  *   - the answer comes back coded; names_check() takes out a person's name the model wrote that it was never sent,
- *     then the codes are turned back into words for the person who asked (they were allowed to see what was coded).
+ *     then the codes are turned back into words for the person who asked (they were allowed to see what was coded);
+ *   - a call the router refuses as over its per-call cap is asked once more with its biggest data block cut to fit
+ *     (ZANA_Data_Fit); data_cut says how much was left out, and the chat says so under the answer.
  *
  * chat() returns { ok, text, error, kind } and never throws.
  *
@@ -86,6 +90,10 @@ class ZANA_LLM_Client {
 	public $last_numbers = array();
 	/** @var string|null what the answer call was sent, as words (null outside an answer call). */
 	private $sent_plain = null;
+	/** @var int characters of data this client's calls left out to fit one call's cost limit (ZANA_Data_Fit). */
+	public $data_cut = 0;
+	/** @var bool a call is being asked once more with its data cut: it is never cut again. */
+	private $cutting = false;
 
 	public function __construct( int $uid = 0 ) {
 		$this->uid = $uid;
@@ -144,19 +152,44 @@ class ZANA_LLM_Client {
 	/* ---------------------------------------------------------------- the router */
 
 	private function ask( string $role, string $system, array $msgs, int $max_out, int $deadline ): array {
+		$cap = self::call_cap( $this->uid );
+		if ( null !== $cap && $cap <= 0 ) {
+			return self::fail( __( 'Today\'s Ai limit for this has been reached, so nothing was sent.', 'zorderz' ), 'allowance' );
+		}
 		try {
 			$r = ZDZ_Core_LLM::ask( $role, $this->request( $role, $system, $msgs, $max_out ), array(
 				'caller'       => self::CALLER,
 				'user_id'      => $this->uid,
 				'deadline'     => $deadline,
 				'primary_only' => self::primary_only(),
-			) );
+			) + ( null !== $cap ? array( 'cap_usd' => $cap ) : array() ) );
 		} catch ( \Throwable $e ) {
 			// the router books a call that threw at its whole hold; the day counts the per-call cap the same way
 			ZANA_Allowance::add_milli( $this->uid, self::CAP_MILLI );
 			error_log( 'ZANA_LLM_Client: the Ai router threw (' . get_class( $e ) . ').' );
 			return self::fail( __( 'The Ai couldn\'t answer that just now. Try again in a minute.', 'zorderz' ), 'transport' );
 		}
+		// ── Over the per-call cap (BEGIN): the call's biggest data block is cut from its end to fit, and the call is asked
+		// once more (ZANA_Data_Fit). The refused call cost nothing; a refusal a cut cannot fix is said in words below. ──
+		if ( ! $this->cutting && 'web' !== $role && is_wp_error( $r ) && 'zdz_llm_money' === $r->get_error_code() && class_exists( 'ZANA_Data_Fit' ) ) {
+			$line = method_exists( __CLASS__, 'call_cap' ) ? self::call_cap( $this->uid ) : null;   // a narrower line for this person, when one applies
+			$cut  = ZANA_Data_Fit::cut( $system, $msgs, ZANA_Data_Fit::fit_bytes( $role, $max_out, is_numeric( $line ) ? (float) $line : null ) );
+			if ( null !== $cut ) {
+				ZANA_Allowance::add_milli( $this->uid, (int) ( ( (array) $r->get_error_data() )['usd_milli'] ?? 0 ) );
+				$this->data_cut += (int) $cut[2];
+				if ( null !== $this->sent_plain ) {
+					$this->sent_plain = $cut[0] . "\n" . self::plain_of( $cut[1] );
+				}
+				error_log( 'ZANA_LLM_Client: a call over its cost limit was asked once more with ' . (int) $cut[2] . ' characters of data cut from its end.' );
+				$this->cutting = true;
+				try {
+					return $this->ask( $role, $cut[0], $cut[1], $max_out, $deadline );
+				} finally {
+					$this->cutting = false;
+				}
+			}
+		}
+		// ── Over the per-call cap (END) ──
 		return $this->answered( $r );
 	}
 
@@ -203,6 +236,23 @@ class ZANA_LLM_Client {
 			return true;
 		}
 		return class_exists( 'ZDZ_User_Roles' ) && method_exists( 'ZDZ_User_Roles', 'is_shared_device' ) && ZDZ_User_Roles::is_shared_device( $uid );
+	}
+
+	/**
+	 * A line narrower than the router's own per-call cap for this person's next call, in dollars (filter
+	 * `zana_llm_call_cap_usd`: null when there is none). The router books no more than it for the call (its hold), so a
+	 * daily line is never crossed by a call; 0 or less means the line is used up and nothing is sent. A value that is
+	 * not a number counts as used up: a line that cannot be read is never ignored.
+	 */
+	public static function call_cap( int $uid ): ?float {
+		if ( ! function_exists( 'apply_filters' ) ) {
+			return null;
+		}
+		$cap = apply_filters( 'zana_llm_call_cap_usd', null, $uid );
+		if ( null === $cap ) {
+			return null;
+		}
+		return is_numeric( $cap ) ? (float) $cap : 0.0;
 	}
 
 	/** May a business pin the chat to its primary model (the router's rule 14)? Off unless it says so. */
@@ -252,6 +302,8 @@ class ZANA_LLM_Client {
 			case 'zdz_llm_budget':
 			case 'zdz_llm_month':
 				return self::fail( '' !== $msg ? $msg : __( 'The site\'s monthly Ai budget does not allow this call. An admin checks Zorderz → Ai usage.', 'zorderz' ), 'budget' );
+			case 'zdz_llm_money':   // over one call's cost limit, and cutting its data could not make it fit
+				return self::fail( __( 'That question needs more than one Ai answer may cost right now. Ask about a shorter period or a narrower question.', 'zorderz' ), 'money' );
 		}
 		// The router's own words are written for a person already; a code alone is not.
 		return self::fail( '' !== $msg ? $msg : __( 'The Ai couldn\'t answer that just now.', 'zorderz' ), 'other' );
@@ -503,8 +555,9 @@ class ZANA_LLM_Client {
 				break;
 			}
 		}
-		$q = self::brief_question( $q );
-		if ( '' === $q || $secs < 15 || null !== ZANA_Allowance::refusal( $this->uid ) ) {
+		$q   = self::brief_question( $q );
+		$cap = self::call_cap( $this->uid );
+		if ( '' === $q || $secs < 15 || null !== ZANA_Allowance::refusal( $this->uid ) || ( null !== $cap && $cap <= 0 ) ) {
 			return self::no_web_note();
 		}
 		try {
@@ -515,7 +568,7 @@ class ZANA_LLM_Client {
 				'caller'   => self::CALLER,
 				'user_id'  => $this->uid,
 				'deadline' => time() + $secs,
-			) );
+			) + ( null !== $cap ? array( 'cap_usd' => $cap ) : array() ) );
 		} catch ( \Throwable $e ) {
 			ZANA_Allowance::add_milli( $this->uid, self::CAP_MILLI );
 			error_log( 'ZANA_LLM_Client: the web brief threw (' . get_class( $e ) . ').' );

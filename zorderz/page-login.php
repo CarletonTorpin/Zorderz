@@ -7,9 +7,9 @@
  *   2. Normal login with PWA polling (generates request_id, polls for bridge token)
  *   3. Normal login without polling (non-PWA context, desktop, etc.)
  *
+ * When the app is opened cold from the home screen, a short code is the fallback way in.
+ *
  * @package Zorderz
- * @since   2.18.0
- * @updated 2.19.0 — Short-code fallback for cold-start PWA logins
  */
 
 // ── Bridge interstitial mode ────────────────────────────────────────────
@@ -46,8 +46,8 @@ if ( $is_bridge ) {
 
 	// Brand ramp top colour, for the browser-chrome tint and as the gradient's
 	// resolved default. The Business Profile ramp is authoritative; the platform
-	// default (--ref-brand-600, #1E3A5F) is the neutral fallback when unset.
-	$brand_top = '#1E3A5F';
+	// default (--ref-brand-600, #433FBD) is the neutral fallback when unset.
+	$brand_top = '#433FBD';
 	if ( class_exists( 'ZDZ_Business_Profile' ) ) {
 		$ramp = ZDZ_Business_Profile::get( 'brand.ramp', array() );
 		if ( is_array( $ramp ) && ! empty( $ramp['600'] ) && preg_match( '/^#([A-Fa-f0-9]{3}){1,2}$/', (string) $ramp['600'] ) ) {
@@ -63,11 +63,11 @@ if ( $is_bridge ) {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 	<meta name="theme-color" content="<?php echo esc_attr( $brand_top ); ?>">
 	<meta name="robots" content="noindex, nofollow">
-	<title><?php esc_html_e( 'Login Successful — Zorderz', 'zorderz' ); ?></title>
+	<title><?php esc_html_e( 'Login Successful · Zorderz', 'zorderz' ); ?></title>
 	<style>
 		/* Brand ramp base — this standalone view loads no theme CSS. The Business
 		   Profile :root overrides printed below, when present, re-skin it. */
-		:root{--ref-brand-600:#1E3A5F;--ref-brand-900:#091526;--ref-brand-950:#050D18}
+		:root{--ref-brand-600:#433FBD;--ref-brand-900:#1D1D56;--ref-brand-950:#11123A}
 		*{box-sizing:border-box;margin:0;padding:0}
 		body{
 			font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -164,7 +164,7 @@ if ( $is_bridge ) {
 		<?php if ( $login_logo_url ) : ?>
 			<img src="<?php echo esc_url( $login_logo_url ); ?>" alt="<?php echo esc_attr( get_bloginfo( 'name' ) ); ?>">
 		<?php else : ?>
-			<strong style="font-size:22px;">Zorderz</strong>
+			<strong style="font-size:22px;"><?php echo esc_html( class_exists( 'ZDZ_Business_Profile' ) ? ZDZ_Business_Profile::name() : get_bloginfo( 'name' ) ); ?></strong>
 		<?php endif; ?>
 	</div>
 
@@ -204,11 +204,11 @@ if ( $is_bridge ) {
 			</div>
 			<div class="bridge-step">
 				<span class="bridge-step-num">2</span>
-				<span>Tap the <strong>Zorderz</strong> app icon</span>
+				<span>Tap the <strong><?php echo esc_html( class_exists( 'ZDZ_Business_Profile' ) ? (string) ZDZ_Business_Profile::get( 'brand.pwa.short_name', ZDZ_Business_Profile::name() ) : get_bloginfo( 'name' ) ); ?></strong> app icon</span>
 			</div>
 			<div class="bridge-step">
 				<span class="bridge-step-num">3</span>
-				<span>Tap <strong>"Have a login code?"</strong> and enter the code above</span>
+				<span><?php echo wp_kses( __( 'Tap <strong>"Already have a code?"</strong>, then enter your email and the code above', 'zorderz' ), array( 'strong' => array() ) ); ?></span>
 			</div>
 		</div>
 
@@ -307,7 +307,7 @@ if ( '' !== $zdz_login_next ) {
 get_header(); ?>
 
 <style>
-	/* Full-screen takeover — hardcoded dark-blue gradient, never uses CSS vars */
+	/* Full-screen takeover: a gradient on the brand ramp (falls back to blue) */
 	.zdz-login-takeover {
 		position: fixed;
 		inset: 0;
@@ -715,13 +715,31 @@ get_header(); ?>
 			     send handler reveals the block directly). -->
 			<button type="button" class="zdz-have-code-link" id="zdz-have-code-link">Already have a code?</button>
 
-			<!-- Step 2 — enter the 6-digit code. Collapsed by default so only ONE
-			     input shows on load; revealed by the link above or by sending a code. -->
+			<!-- The way in when the sign-in email can't arrive: a backup address, or a one-time code a person
+			     gives. Its help stays closed until asked for, so the screen still opens with one input. -->
+			<button type="button" class="zdz-have-code-link" id="zdz-no-mail-link" style="margin-top:2px;"><?php esc_html_e( 'Email not arriving?', 'zorderz' ); ?></button>
+			<div id="zdz-no-mail-help" style="display:none;text-align:left;font-size:14px;line-height:1.5;color:#374151;background:#f3f4f6;border-radius:12px;padding:12px 14px;margin-top:8px;">
+				<strong><?php esc_html_e( 'If your work email is down:', 'zorderz' ); ?></strong>
+				<ol style="margin:6px 0 0 18px;padding:0;">
+					<li><?php echo wp_kses( __( 'Type your <strong>backup address</strong> in the box above and press Send me a code, if one has been set up for you.', 'zorderz' ), array( 'strong' => array() ) ); ?></li>
+					<li><?php echo wp_kses( __( 'Or ask the person who looks after sign-in for your team for a <strong>one-time sign-in code</strong> (8 digits), and enter it below with your email.', 'zorderz' ), array( 'strong' => array() ) ); ?></li>
+				</ol>
+			</div>
+
+			<!-- Step 2 — enter the code. Collapsed by default so only ONE
+			     input shows on load; revealed by the links above or by sending a code. -->
 			<div class="zdz-have-code-block" id="zdz-have-code-block" style="display:none;margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb;">
-				<div class="zdz-code-entry-label" id="zdz-have-code-label" style="font-size:18px;font-weight:600;margin-bottom:12px;">Enter your 6-digit code</div>
+				<div class="zdz-code-entry-label" id="zdz-have-code-label" style="font-size:18px;font-weight:600;margin-bottom:12px;"><?php esc_html_e( 'Enter your code', 'zorderz' ); ?></div>
+				<!-- A code is claimed with the email it is for. When the email is already known (typed above, or
+				     remembered for this tab) it is one line of text; otherwise it is a box. -->
+				<div id="zdz-code-for" style="display:none;font-size:14px;color:#6b7280;margin-bottom:10px;word-break:break-all;"><?php esc_html_e( 'Code for', 'zorderz' ); ?> <strong id="zdz-code-for-email"></strong>
+					<button type="button" id="zdz-code-for-change" style="background:none;border:none;padding:4px 6px;font-size:14px;color:var(--ref-brand-600, #2563eb);cursor:pointer;font-family:inherit;"><?php esc_html_e( 'change', 'zorderz' ); ?></button></div>
+				<input type="email" id="zdz-code-email" placeholder="<?php esc_attr_e( 'Your email', 'zorderz' ); ?>" autocomplete="email" autocapitalize="none" inputmode="email"
+					style="display:none;width:100%;padding:14px 16px;border:2px solid #d1d5db;border-radius:14px;font-size:17px;min-height:52px;box-sizing:border-box;margin:0 0 10px;background:#f9fafb;color:#111827;">
+				<!-- Six digits (an emailed code) or eight (a code a person gave), shown in two groups: nine characters. -->
 				<input type="text" class="zdz-code-input" id="zdz-code-input"
-					inputmode="numeric" pattern="[0-9]*" maxlength="7"
-					placeholder="000 000" autocomplete="one-time-code">
+					inputmode="numeric" pattern="[0-9 ]*" maxlength="9"
+					placeholder="<?php esc_attr_e( 'Code', 'zorderz' ); ?>" autocomplete="one-time-code">
 				<button type="button" class="zdz-code-submit" id="zdz-code-submit" disabled>Log In</button>
 				<div class="zdz-code-error" id="zdz-code-error"></div>
 			</div>
@@ -771,6 +789,61 @@ get_header(); ?>
 
 	var apiBase = <?php echo wp_json_encode( esc_url_raw( rest_url( ZDZ_REST_NS . '/' ) ) ); ?>;
 
+	// ── A code is claimed with the email it is for ──
+	// The email typed to ask for a code is remembered for this tab only (sessionStorage: a shared device does not
+	// keep it), so coming back from the mail app to a reloaded page does not ask for it twice.
+	var zdzLoginText = <?php
+		echo wp_json_encode( array(
+			'checkEmail' => __( 'Check your email, then enter the code', 'zorderz' ),
+			'needEmail'  => __( 'Enter your email with the code.', 'zorderz' ),
+			'sendCode'   => __( 'Send me a code', 'zorderz' ),
+		) );
+	?>;
+	function zdzLooksLikeEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v || ''); }
+	// Kept for 15 minutes at most, and dropped on sign-in or "Use email login instead", so the next person at a shared
+	// device is not shown the last one's address.
+	function zdzRememberEmail(v) { try { if (zdzLooksLikeEmail(v)) window.sessionStorage.setItem('zdz_login_email', JSON.stringify({ e: v, t: Date.now() })); } catch (e) {} }
+	function zdzForgetEmail() { try { window.sessionStorage.removeItem('zdz_login_email'); } catch (e) {} }
+	function zdzRememberedEmail() {
+		try {
+			var kept = JSON.parse(window.sessionStorage.getItem('zdz_login_email') || 'null');
+			if (kept && typeof kept.e === 'string' && Date.now() - kept.t < 15 * 60 * 1000) return kept.e;
+			zdzForgetEmail();
+		} catch (e) {}
+		return '';
+	}
+	function zdzKnownEmail() {
+		var el = document.getElementById('zdz-otp-email');
+		var v  = el ? el.value.trim() : '';
+		if (zdzLooksLikeEmail(v)) return v;
+		v = zdzRememberedEmail();
+		return zdzLooksLikeEmail(v) ? v : '';
+	}
+	// Show the email beside the code box: a line of text when it is known, a box when it is not (or after "change").
+	function zdzRefreshCodeEmail(forceBox) {
+		var line = document.getElementById('zdz-code-for');
+		var name = document.getElementById('zdz-code-for-email');
+		var box  = document.getElementById('zdz-code-email');
+		if (!line || !name || !box) return;
+		var known = zdzKnownEmail();
+		if (forceBox) box.setAttribute('data-open', '1');
+		if (known && box.getAttribute('data-open') !== '1') {
+			name.textContent = known;
+			line.style.display = '';
+			box.style.display = 'none';
+		} else {
+			line.style.display = 'none';
+			box.style.display = 'block';
+			if (!box.value && known) box.value = known;
+		}
+	}
+	// The email a claim sends: the box when it is showing, else the known one.
+	function zdzEmailForClaim() {
+		var box = document.getElementById('zdz-code-email');
+		if (box && box.style.display !== 'none') return box.value.trim();
+		return zdzKnownEmail();
+	}
+
 	// ── Unified login flow ──
 	// The OTP code is now injected into the Magic Login email via wp_mail filter.
 	// After the magic link form submits, we auto-transition to the code entry
@@ -799,6 +872,7 @@ get_header(); ?>
 		magicForms.forEach(function(form) {
 			form.addEventListener('submit', function() {
 				syncEmail();
+				zdzRememberEmail(otpEmail ? otpEmail.value.trim() : '');   // the claim sends it with the code
 				setTimeout(function() {
 					var entry     = document.getElementById('zdz-code-entry');
 					var formWrap  = document.getElementById('zdz-login-form-wrap');
@@ -817,7 +891,8 @@ get_header(); ?>
 						if (otpSection) otpSection.style.display = 'none';
 						if (haveLink) haveLink.style.display = 'none';
 						if (haveBlock) { haveBlock.style.display = 'block'; haveBlock.classList.add('active'); }
-						if (haveLabel) haveLabel.textContent = 'Check your email — enter the 6-digit code';
+						if (haveLabel) haveLabel.textContent = zdzLoginText.checkEmail;
+						zdzRefreshCodeEmail();
 						if (codeInput) codeInput.focus();
 					}
 				}, 1200);
@@ -860,7 +935,9 @@ get_header(); ?>
 					var haveLabel = document.getElementById('zdz-have-code-label');
 					if (haveLink) haveLink.style.display = 'none';
 					if (haveBlock) { haveBlock.style.display = 'block'; haveBlock.classList.add('active'); }
-					if (haveLabel) { haveLabel.textContent = 'Check your email — enter the 6-digit code'; }
+					if (haveLabel) { haveLabel.textContent = zdzLoginText.checkEmail; }
+					zdzRememberEmail(email);   // the claim sends it with the code
+					zdzRefreshCodeEmail();
 					var codeInput = document.getElementById('zdz-code-input');
 					if (codeInput) codeInput.focus();
 				} else {
@@ -963,7 +1040,35 @@ get_header(); ?>
 				haveBlock.style.display = 'block';
 				haveBlock.classList.add('active');
 				haveLink.style.display = 'none';
+				zdzRefreshCodeEmail();
 				codeInput.focus();
+			});
+		}
+
+		// "Email not arriving?" says what to do and opens the code box.
+		var noMailLink = document.getElementById('zdz-no-mail-link');
+		var noMailHelp = document.getElementById('zdz-no-mail-help');
+		if (noMailLink && noMailHelp && haveBlock) {
+			noMailLink.addEventListener('click', function() {
+				noMailHelp.style.display = 'block';
+				noMailLink.style.display = 'none';
+				haveBlock.style.display = 'block';
+				haveBlock.classList.add('active');
+				if (haveLink) haveLink.style.display = 'none';
+				// After "Send me a code" the request box is hidden: bring it back, so a backup address can be typed.
+				var otpSection = document.getElementById('zdz-otp-section');
+				var otpSend    = document.getElementById('zdz-otp-send');
+				if (otpSection) otpSection.style.display = '';
+				if (otpSend) { otpSend.disabled = false; otpSend.textContent = zdzLoginText.sendCode; }
+				zdzRefreshCodeEmail();
+			});
+		}
+		var codeForChange = document.getElementById('zdz-code-for-change');
+		if (codeForChange) {
+			codeForChange.addEventListener('click', function() {
+				zdzRefreshCodeEmail(true);
+				var box = document.getElementById('zdz-code-email');
+				if (box) box.focus();
 			});
 		}
 
@@ -990,38 +1095,54 @@ get_header(); ?>
 				// next return to this view starts clean (one input again).
 				if (haveBlock) { haveBlock.style.display = 'none'; haveBlock.classList.remove('active'); }
 				if (haveLink) haveLink.style.display = '';
+				// ... and put the help away and forget the email, so the next person at this device starts clean.
+				if (noMailHelp) noMailHelp.style.display = 'none';
+				if (noMailLink) noMailLink.style.display = '';
+				zdzForgetEmail();
+				var emailBox = document.getElementById('zdz-code-email');
+				if (emailBox) { emailBox.value = ''; emailBox.removeAttribute('data-open'); }
 			});
 		}
 
-		// Format code input: auto-insert space after 3 digits, strip non-digits
+		// Format the code as it is typed or pasted. Six digits (an emailed code) read "123 456"; eight digits (a code
+		// a person gave) read "1234 5678". Everything but digits is dropped.
+		function zdzShowCode(text, pasted) {
+			text = String(text || '');
+			// Pasted text may carry more than the code ("... 123 456. It expires in 5 minutes"): take the first group
+			// that reads as a code, eight digits before six.
+			var grp = pasted ? (text.match(/(?:^|\D)(\d{4})[ -]?(\d{4})(?!\d)/) || text.match(/(?:^|\D)(\d{3})[ -]?(\d{3})(?!\d)/)) : null;
+			var raw = grp ? grp[1] + grp[2] : text.replace(/\D/g, '').substring(0, 8);
+			var cut = raw.length > 6 ? 4 : 3;
+			codeInput.value = raw.length > cut ? raw.substring(0, cut) + ' ' + raw.substring(cut) : raw;
+			submitBtn.disabled = !(raw.length === 6 || raw.length === 8);
+		}
 		codeInput.addEventListener('input', function() {
-			var raw = this.value.replace(/\D/g, '').substring(0, 6);
-			if (raw.length > 3) {
-				this.value = raw.substring(0, 3) + ' ' + raw.substring(3);
-			} else {
-				this.value = raw;
-			}
-			submitBtn.disabled = raw.length !== 6;
+			zdzShowCode(this.value);
 			errorEl.style.display = 'none';
 		});
 
 		// Paste handler: clean up pasted codes
 		codeInput.addEventListener('paste', function(e) {
 			e.preventDefault();
-			var pasted = (e.clipboardData || window.clipboardData).getData('text');
-			var raw = pasted.replace(/\D/g, '').substring(0, 6);
-			if (raw.length > 3) {
-				codeInput.value = raw.substring(0, 3) + ' ' + raw.substring(3);
-			} else {
-				codeInput.value = raw;
-			}
-			submitBtn.disabled = raw.length !== 6;
+			zdzShowCode((e.clipboardData || window.clipboardData).getData('text'), true);
 		});
 
 		// Submit: call the code-claim endpoint
 		submitBtn.addEventListener('click', function() {
 			var raw = codeInput.value.replace(/\D/g, '');
-			if (raw.length !== 6) return;
+			if (raw.length !== 6 && raw.length !== 8) return;
+
+			// The email goes with the code. No email: ask for it, send nothing.
+			var claimEmail = zdzEmailForClaim();
+			if (!zdzLooksLikeEmail(claimEmail)) {
+				zdzRefreshCodeEmail(true);
+				errorEl.textContent = zdzLoginText.needEmail;
+				errorEl.style.display = 'block';
+				var emailBox = document.getElementById('zdz-code-email');
+				if (emailBox) emailBox.focus();
+				return;
+			}
+			zdzRememberEmail(claimEmail);
 
 			submitBtn.disabled = true;
 			submitBtn.textContent = 'Verifying…';
@@ -1031,11 +1152,12 @@ get_header(); ?>
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'same-origin',
-				body: JSON.stringify({ code: raw })
+				body: JSON.stringify({ code: raw, email: claimEmail })
 			})
 			.then(function(r) { return r.json(); })
 			.then(function(data) {
 				if (data && data.success) {
+					zdzForgetEmail();   // not left for the next person at this device
 					submitBtn.textContent = 'Success!';
 					setTimeout(function() {
 						window.location.href = data.redirect || '/';

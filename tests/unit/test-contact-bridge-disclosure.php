@@ -31,7 +31,7 @@ function full( string $q, string $r ): bool { return ZDZ_Contact_Bridge::full_di
 ok( method_exists( 'ZDZ_Contact_Bridge', 'full_disclosure_ok' ), 'full_disclosure_ok() exists' );
 
 /* ── MUST be name+city only (low confidence — no full PII) ── */
-ok( full( 'Robin Hale', 'Riley Haley' ) === false,   'divergent first name (Robin Hale -> Riley Haley) -> NO full PII' );
+ok( full( 'Robin Vale', 'Riley Valey' ) === false,   'divergent first name (Robin Vale -> Riley Valey) -> NO full PII' );
 ok( full( 'John Smith', 'John Anderson' ) === false, 'unrelated surname via first-name fallback -> NO full PII' );
 ok( full( 'Smith', 'John Anderson' ) === false,      'surname-only query, unrelated resolved -> NO full PII' );
 ok( full( 'Jones', 'Robert Jonas' ) === false,       'surname-only, near-but-different surname, no corroboration -> NO full PII' );
@@ -41,9 +41,9 @@ ok( full( '', 'John Smith' ) === false,              'empty query -> NO full PII
 /* ── SHOULD be full disclosure (confident same person / org) ── */
 ok( full( 'John Smith', 'John Smith' ) === true,     'exact match -> full' );
 ok( full( 'Jon Smith', 'John Smith' ) === true,      'nickname/soundalike first + exact surname -> full' );
-ok( full( 'Robin Hale', 'Robin Haile' ) === true,   'variant surname spelling + exact first (recall) -> full' );
-ok( full( 'Quinn Marsh', 'Quinn Marsch' ) === true,  'second variant spelling + exact first -> full' );
-ok( full( 'Robin Hale', 'Robin Haley' ) === true,   'near surname CORROBORATED by exact first name -> full' );
+ok( full( 'Robin Vale', 'Robin Vayle' ) === true,   'variant surname spelling + exact first (recall) -> full' );
+ok( full( 'Quinn Marsh', 'Quinn Marshe' ) === true,  'second variant spelling + exact first -> full' );
+ok( full( 'Robin Vale', 'Robin Valey' ) === true,   'near surname CORROBORATED by exact first name -> full' );
 ok( full( 'Smith', 'John Smith' ) === true,          'surname-only query contained in resolved name -> full' );
 ok( full( 'Marsh', 'Devin Marsh' ) === true,         'surname-only unique exact-surname match (scope-gated downstream) -> full' );
 ok( full( 'Examplewood', 'Examplewood Property Management' ) === true, 'organisation single token contained -> full' );

@@ -917,13 +917,13 @@ class ZDZ_Compensation {
 		$p = self::get_plan( (int) $user->ID );
 		?>
 		<h2><?php esc_html_e( 'Compensation plan', 'zorderz' ); ?></h2>
-		<p class="description"><?php esc_html_e( 'Compensation ships empty. Nothing here is set until you set it — an unconfigured plan earns nothing and is flagged for review, never paid at a default rate.', 'zorderz' ); ?></p>
+		<p class="description"><?php esc_html_e( 'Compensation ships empty. Nothing here is set until you set it: an unconfigured plan earns nothing and is flagged for review, never paid at a default rate.', 'zorderz' ); ?></p>
 		<table class="form-table">
 			<tr>
 				<th><label for="zdz_comp_structure"><?php esc_html_e( 'Structure', 'zorderz' ); ?></label></th>
 				<td>
 					<select name="zdz_comp_structure" id="zdz_comp_structure">
-						<option value=""><?php esc_html_e( '— not configured —', 'zorderz' ); ?></option>
+						<option value=""><?php esc_html_e( '(not configured)', 'zorderz' ); ?></option>
 						<?php foreach ( self::STRUCTURES as $val ) : ?>
 							<option value="<?php echo esc_attr( $val ); ?>" <?php selected( $p['structure'], $val ); ?>><?php echo esc_html( self::structure_label( $val ) ); ?></option>
 						<?php endforeach; ?>

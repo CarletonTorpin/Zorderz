@@ -13,6 +13,328 @@ there is a third, optional download: the reference Charts hub
 
 ---
 
+## [2.1.0] - 2026-11-20
+
+Deep research in the chat, an answer to one e-mail, the chat's records lookups, sign-in routes for when the sign-in
+e-mail can't arrive, Privacy View that reads every request whole, internal orders in Prep, follow-ups in Estimates,
+and Google reviews in Surveys. Load the sample company and the Home Screen offers a guided tour with one test job,
+from the estimate to the invoice; everyone else on the team gets a tour of their own, about the apps their role uses.
+Most new features are off until an administrator sets them up; "How you write" and
+answering an e-mail work wherever the chat's Ai (and, for e-mail, the mailbox) already is. Install the theme first,
+then the apps. The reference Charts hub has an update too (whole-word line search); it is optional.
+
+### Upgrade notes
+- **New tables** are made on first use: `zest_followups` (Estimates), `zana_research` and `zdz_step_jobs` (deep
+  research). Prep's remakes table gains columns and an index on the first request after the update; existing remakes
+  are unchanged.
+- **Off until set up:** deep research (Zorderz → Deep research; it also needs a monthly Ai budget, a model, and the
+  Anthropic workspace the Ai key comes from named under Zorderz → Credentials, so zero data retention can be checked),
+  the chat's records lookups (Charts → Settings → "Assistant: records"), replies in a Privacy View account's Messages
+  thread (a daily spending limit above 0, on Zorderz → Settings), Estimates for Privacy View accounts ("Look only"),
+  the follow-up line on billing estimates (written on test customers only until it is set to On), automatic recording
+  of Google reviews, the early Privacy View gate, and the app key.
+- **Sign-in:** a code asked for before the upgrade no longer works; ask for a new one. A sign-in screen left open
+  from before the upgrade asks to be reloaded. Existing login e-mail aliases become backup sign-in addresses,
+  unchanged. Until an administrator presses "I manage sign-in routes", nobody can give a one-time code and
+  administrators can still edit backup addresses on profiles. `zdz_magic_link_account_send_cap` is no longer read;
+  `zdz_magic_link_ip_attempt_ceiling` now defaults to 60 (was 10) and `zdz_magic_link_global_miss_ceiling` to 1800
+  (was 300), counting wrong six-digit codes only.
+- **Privacy View:** an app that adds a read for a Privacy View account also names that read's fields on
+  `zdz_privacy_view_ajax_keys` (none named, none allowed) and lists itself on `zdz_privacy_view_allowed_apps`. Chat
+  actions with no handler are no longer allowed for such accounts. The early gate is off until an administrator
+  installs it from Zorderz → Privacy View; where `wp-content/mu-plugins` cannot be written from wp-admin, copy the
+  theme's `mu-plugin/0-zdz-privacy-view-gate.php` there by hand, and update it from the same page after a theme update.
+- **E-mail replies:** on a site where Email and Ai are both set up, people can ask the chat to draft a reply. The one
+  e-mail they pick is sent to the Ai provider, with customer details coded and zero retention; never from the shared
+  device or a Privacy View account. Replying to HTML e-mail needs the PHP DOM extension; without it such e-mails are
+  refused for replies.
+- **Estimates:** an administrator account whose role the data permissions do not recognise now sees only its own
+  estimates until "see others' data" is allowed for it.
+- **Surveys:** notes that mention calling back or following up move from "follow up" to "needs attention". The
+  hourly Google review check does nothing until Google Business Profile is connected. The built-in note words are fewer
+  and more general; a business whose call notes rely on a word that is no longer built in adds it to its own note words
+  (`voice.yml surveys.status_vocabulary` and `surveys.note_reading`).
+- **Jobs:** until the kinds of work that are ordered from a supplier are named (settings, or `flows.yml`
+  `steps.order.kinds`), every Project shows its order forms as before.
+- **Hub:** whole-word line search needs the updated hub; an older hub keeps searching loosely and the chat is told to
+  check each line.
+- **Identity Packs** can now set: `profile.yml email.shared_outage_domains`; `rules.yml estimates.followup.billing_line`,
+  `prep.internal_orders`, `surveys.google_reviews` and `research`; `costs.yml prep.material_cost_per_sq_in`;
+  `document-conventions.yml estimate.followup`; `voice.yml surveys.status_vocabulary` and `surveys.note_reading`;
+  `knowledge.yml addresses.street_end_words`; `profile.yml locale.currency_sign` and `locale.date_format`;
+  `catalog.yml vocabulary.visit_words`; `rules.yml prep.side_convention`; `document-conventions.yml
+  estimate.import_rules`; `mappings.yml messaging.video_embed_classes`.
+- **Money and dates:** a business that names its currency but no sign now gets that currency's sign ("GBP" reads
+  "£"), and one that sets no date format gets its language's ("en_GB" writes 19/11/2026). A US site reads as before.
+- **Locale follows the country:** a business whose address (Contact → Address → Country) is outside the United
+  States now gets its country's words for postal code and region, units, clock, number grouping, dates and, when it
+  named no currency, currency. A business in the United States, or one that names no country on a site in US
+  English, sees no change. Each is set under Business Profile → Locale or in `profile.yml locale` (`units`,
+  `postcode_label`, `region_label`, `time_format`, `number_format`).
+- **Messaging:** a pasted training-video embed's chapter list is read from Zorderz' own class names
+  (`zdz-video-embed`, `zdz-video-chapter`, `zdz-video-heading`, `zdz-video-title`); a business whose video pages use
+  other class names names them in its Identity Pack (`mappings.yml messaging.video_embed_classes`) or with the
+  `zim_video_embed_classes` filter.
+- **Scripts:** the Media details panel reads its page data from `window.ZDZMediaExif`, and Receipts' lookup from
+  `window.zrcptLookupData`.
+- **Ask bar:** its built-in list of words that are never read as a person's name holds general words only. A business's
+  own words for things go in `catalog.yml vocabulary.plain_words`.
+- **Company Data:** a bundle that this version exports writes its logo addresses as `{uploads}/…`; restore it on
+  this version or later.
+- **From 2.0.0 or earlier:** update to 2.0.1 first, then to 2.1.0. 2.0.1 renames the older keys of bug reports'
+  fields and chat attachments once; 2.1.0 no longer carries that step.
+- **Colours:** a site that never set its own palette now shows Zorderz' indigo where the earlier default was navy; a
+  palette set in Business Profile → Appearance is kept. Custom styles that put a fixed white on `var(--sys-brand)`
+  should use `var(--sys-text-brand)`, which is the brand's darkest step in dark mode. The category colours (`--cat-*`)
+  now start as their dashboard group's colour; a business that relied on the earlier ones sets them under Appearance.
+
+### Added
+- **Deep research** in the chat, for administrator-level accounts with "Deep research queries". Ask for deep research,
+  or press Go deeper under an answer: a plan appears, and nothing more is spent until you press Start (with the web, or
+  your own data only). A card shows what it is doing and offers Stop; the answer then takes its place, with how it was
+  researched and Keep going when it stopped on its time or cost. Facts found on the web are marked confirmed only when
+  independent sites agree and the server has read them on each page. A web search never carries a coded customer, an
+  e-mail address or a phone number. Limits: a round's time and cost, a whole run's, Ai calls a day for the site (20 to
+  400; a run is not started with fewer than 20 left), runs and cost a day per person.
+- **Core:** a guarded reader for one public web page (https only, public addresses only and re-checked on every
+  redirect, size and time caps, no cookies or credentials, an allow and deny list that ships empty; it reads nothing on a
+  server where cURL cannot speak TLS), and a step runner for long work with Stop and a watchdog.
+- **Assistant: answer an e-mail from your own mailbox.** Under a list of your mail say "reply to #1", or "write a
+  response to the latest email from Alex". The chat drafts the reply as an e-mail card to the sender; nothing is sent.
+  Lists of received mail say how to answer one; their numbers belong to the chat that showed them, for two hours.
+- **Assistant: records.** Once an administrator turns it on, the chat searches invoice lines by whole words and
+  phrases and lists jobs, for people Charts lets see line items, then answers from those records. When the records do
+  not settle a question it says what it found, what that kind of record can and cannot show, and where to look next.
+  It notices a name written two ways in one message. Words that are too common to search on their own are set under
+  Charts → Settings. Other apps can use the same lookups through the `charts.records` read verb.
+- **Assistant: replies in Messages.** When the administrator chosen for Privacy View accounts writes in their thread
+  with such an account, the assistant answers there as that account: it looks things up and drafts, and never carries
+  anything out (an action comes back as a draft with a link to your own chat). One reply at a time per thread, at most
+  twenty an hour, within a daily spending limit you set.
+- **Assistant: "How you write".** Edit on the chat's draft cards (e-mail, direct message, channel post) for
+  administrators; the chat learns short style rules from those edits and typed corrections, by who will read the
+  draft. See, add, delete and clear them under "About you". Never on the shared device or for Privacy View.
+- **Assistant: three answer rules.** A document that states facts for someone who will rely on it is checked against
+  the records, never backdated, and ends with what to check before signing; claims say how they are known and are
+  cited; a draft is written for its audience and says which one it assumed. Two blank fact entries: legal entities,
+  registrations and licences; and who signs.
+- **Zorderz → Sign-in routes:** ways in when a person's sign-in e-mail can't reach them. One administrator manages
+  them; the manager sets backup sign-in addresses, sees who has none and whose was never used, and can give a person a
+  one-time code (eight digits, shown once, ten minutes, once, that account only). The manager may name one second
+  issuer. Codes given, used or cancelled and repeated wrong codes are listed and sent to the manager's bell. The sign-in
+  screen has "Email not arriving?". `ZDZ_SIGNIN_MANAGER` in wp-config.php names a manager when the one on the page can
+  no longer manage. Filter `zdz_signin_issued_ttl`.
+- **Zorderz → App key:** the site's own key, kept in `zdz-secrets.php` beside wp-config.php and apart from the WordPress
+  salts. The page shows key ids only. Nothing uses the key in this version: until the file exists the page says "Not
+  set up yet". Once set up, a notice and a Site Health item say when the key is missing, wrong, another site's, or the
+  database was copied from another site. `bin/make-app-keys.php` (in the source code, not in the zips) makes one site's
+  key on your own computer. For developers: `ZDZ_Keys::seal()`, `open()`, `mac()`, `verify_mac()`, and migration jobs.
+- **Privacy View:** an optional early gate, a must-use file shipped with the theme, that checks every request from a
+  Privacy View account before any plugin loads; Site Health reports on it. Apps declare look-only reads with
+  `zdz_privacy_view_allowed_ajax`, `zdz_privacy_view_ajax_keys`, `zdz_privacy_view_allowed_rest` and
+  `zdz_privacy_view_allowed_apps`; a site names its own sign-in routes, host headers and wp-login.php marker with
+  `zdz_privacy_view_signin_rest`, `zdz_privacy_view_trigger_headers` and `zdz_privacy_view_login_keys`.
+- **Estimates:** re-send an open estimate to its salesperson and record what they found out; "Recorded by mistake?" and
+  "Sent by mistake?" take the last follow-up step back, including its billing line and CRM note; declined estimates
+  fold into "Declined estimates" and can be reopened; Privacy View accounts can look at Estimates once an administrator
+  turns it on (never change anything; no names, contact details, prices or typed words); an administrator's "Estimate
+  customer link test".
+- **Prep: internal orders,** for work the shop cuts for itself, with no customer and no billing document: what it is
+  for, who it is for, the stock (sheets of a stated size, or a roll) and the pieces, with a reference code. Open orders
+  sit at the top of the cut list for the people who may cut them. "Mark as cut", "Not cut yet" and hours. A year-end
+  page with totals by purpose and a spreadsheet, for administrators. The cut planner can lay out a job on stock sheets.
+- **Surveys:** once Google Business Profile is connected, new Google reviews are listed and matched to recently surveyed
+  customers; nothing is recorded until a person presses Confirm or "Not them", unless an administrator turns on
+  automatic recording. "Review e-mails already sent", where an administrator can send a request again.
+- **Jobs:** an opened Project shows what its estimates say in words: the notes and what the salesperson wrote or said,
+  whole (up to 60,000 characters), with amounts taken out and access codes cut. On a job whose kinds of work are all
+  known and none is ordered from a supplier, the order panel is one line that opens the forms.
+
+- **Guided tour.** Once the sample company, TestCo, is loaded, the Home Screen offers a click-through of the app in
+  four parts: finding your way, one test job (an estimate, a job for one of TestCo's people, a time on the schedule,
+  then the receipt and the invoice), your team, and making it yours. Each step marks its part of the screen and opens
+  the app it talks about; Hide tucks the card into a corner while you work. Pause it and pick it up again from
+  Settings → Guided tour or by typing "guided tour" in the Ask bar. Each person sees only the steps for apps they can
+  open; kiosk screens, Demo Mode and Privacy View accounts never offer it. The "Load TestCo sample data" notice links
+  straight to it (`?zdz_tour=start`). Sites can add or change steps with `zdz_tour_steps` and turn the tour off with
+  `zdz_tour_available`.
+- **A tour for each role.** Administrators get the sample tour; everyone else gets their own, on any site, written for
+  them from the same rules their apps follow: their apps, what their role can do (a short list: whose estimates and
+  jobs they see, whether they write priced estimates or stubs, send work as jobs and set its times, lead a crew, see
+  the company's revenue or their own commission, what Chat answers for them), and that business settings, people,
+  apps and prices are looked after by an administrator. Each app they have gets a step about the way they use it: a
+  worker's On my way and Mark my part complete, a sender's Set time and close-out, a crew lead's crew, the shop's
+  every-job view, Leads, Commission, Hours, Projects, Schedule, Messages and Chat, and a list of their other apps. The
+  team tour only points and explains; nothing in it saves anything. Settings → Guided tour gives an administrator a
+  switch that stops offering the team tours, and a link per role that previews its tour (View As; a preview is never
+  saved and the switch does not hide it). A person's place is kept per tour, so a change of role starts the other one
+  fresh. Sites can change the team tour with `zdz_tour_team_steps` and what it knows about a person with
+  `zdz_tour_profile`; a step can ask for abilities with `needs` and `unless`, and show a short `list`.
+### Changed
+- **On-screen words:** the app's text no longer uses long dashes. Sentences take a full stop, colon, semicolon,
+  comma or brackets instead, labels a middle dot, and an empty value shows a short dash. A Jobs list with nothing in
+  it reads "Nothing here; you're all caught up". Messages' notification e-mails now use a line of hyphens as their
+  divider; a reply to an older e-mail is still read as before. The Prep plan labels follow the same punctuation (only
+  the words changed; no figure moved).
+- **Privacy View** reads every request whole: an allowed action carries only its own fields, by its own method, with
+  nothing more in its address or body and no file. The account keeps only its sign-in cookies. The keep-alive reply also
+  carries its nonce under `nonce`.
+- **Sign-in:** a code is entered with the e-mail it was asked for; the box takes six digits (e-mailed) or eight (given by
+  a person). Wrong codes use up that code's own tries; the account is never locked. "Login Email Aliases" is now "Backup
+  sign-in addresses", changed only by the manager once someone manages sign-in routes. The shared device and Privacy
+  View accounts get no backup address and no one-time code, and a backup address one of them was given earlier no longer
+  signs it in. After 50 wrong six-digit codes against one account's live codes in a day, no more codes are e-mailed to
+  it until the day is over and the manager is told; a code given by a person still works (`zdz_signin_day_misses`
+  tunes the number between 10 and 200). The server log names the account by number, never the address a code went to.
+  On a multisite network, only a network administrator manages sign-in routes.
+- **Assistant:** when an answer's data would cost more than one Ai call is allowed, it is asked once more with the
+  data cut to fit and says so; when that cannot work it says to ask about a shorter period or a narrower question. A
+  draft held by the chat can be edited before Send; what is sent is always the server's copy. Text put inside the data
+  fence reads every spelling of the fence's words (any case, with spaces, underscores or dashes) as a quoted mark.
+- **Estimates:** each estimate on a list is one box with its follow-up; the customer lookup shows at most two matches,
+  the rest behind "More matches"; text boxes no longer make a phone zoom; notices about follow-ups name the estimate by
+  number, never the customer.
+- **Prep:** holding a job assignment no longer narrows what a person with Prep sees; a manager keeps the cut list when
+  no CRM is set up; the "to cut" count includes open internal orders.
+- **Surveys:** a customer already e-mailed is not e-mailed again, from any page or device, unless an administrator asks;
+  leads closed as lost or cancelled are not e-mailed. A call note that says to send the review request is read in
+  context. Customers nobody has handled show their call notes; Check reviews sits beside the sync button and one press
+  runs to the end.
+- **Jobs:** the Projects list uses the theme's text sizes and follows Larger text.
+- **Route Planner:** the start-up read waits and asks again when the host turns it away for a moment (HTTP 429, 502 to
+  504 and other gateway errors, a request that never arrived, or one slower than 30 seconds), keeping a Retry-After of
+  up to 30 seconds. A start that still fails says why, offers Try again, and tries again when the app is opened, its
+  card is redrawn or the device comes back online.
+- **Name matching:** one name written inside another counts as a sound-alike only when it is a whole part of a
+  double-barrelled name, or has four or more letters and at least two-thirds of the longer name's letters.
+- **Dates:** the notes Surveys leaves in the CRM, the dates on its reviews panel and the Inbox audit table use the
+  site's date and time formats (Settings → General).
+- **Charts:** the chat's records lookups take addresses out of invoice lines for the street endings a region names in
+  its Identity Pack (`knowledge.yml addresses.street_end_words`), as well as the common ones.
+- **Charts:** a hub alert is e-mailed within the business's usual hours (`org.yml work_hours.default`; Monday to Friday,
+  9 to 17, when none are set) unless alert hours were already saved in Charts' settings.
+- The sample company no longer sets an Ai model; the site's own Ai settings decide. It now carries its logos (wide
+  and square, each for light and dark surfaces) and shows Zorderz' default palette.
+- **Company Data:** a bundle carries the Business Profile's logo addresses as `{uploads}/…`, so a bundle restored on
+  another site shows its logos from that site's own uploads instead of pointing back at the old site.
+- **Money and dates follow Business Profile → Locale** across the apps: the chat's answers, charts and assistant
+  examples, Commission, Leads' spend range, Stock's values, the Inbox's sums, the estimate paper and the document card
+  write the business's currency sign; the document card, the estimate paper, Estimates' stamps and follow-up lines, the
+  admin dashboard and Knowledge write dates the business's way. For other code: `ZDZ_Business_Profile::sign()`,
+  `::money()`, `::date_format()` and `::js_locale()`; `zdzData.currencySign` and `zdzData.locale` (on every admin
+  page too); the kit's `ZDZ.ui.money()`, `.num()`, `.ymd()`, `.locale()` and `.sign()` (kit 1.8.0); filters
+  `zdz_currency_sign` and `zdz_date_format_for`.
+- **Locale:** Business Profile → Locale gains Language, Units, Numbers, Time and the words for postal code and region;
+  each left blank follows the country, and the screen says what that gives. Dates written with the month's name come
+  day first outside month-first countries, with the business's clock (Agreements, Hours, Receipts, Knowledge, Inbox,
+  Jobs, Leads' notes and more). Sums everywhere are grouped the business's way, the chat's figure checks included.
+  Route Planner's rain and wind, and Doorhangers' temperatures, distances and spoken directions, are metric for a
+  metric business (their limits and readings are still kept in inches, mph and °F). The estimate import form and
+  Charts name postal codes and regions the business's way; Route Planner's voice input listens in the business's
+  language. Territories and Doorhangers' address tools still work with US ZIP codes, and Prep's cut lists measure in
+  inches. For code: `ZDZ_Business_Profile::country()`, `::units()`, `::metric()`, `::postcode_label()`,
+  `::region_label()`, `::time_format()`, `::number()`, `::date_text()`, `::temperature()` and `::rain()`;
+  `zdzData.l10n`; the kit's `ZDZ.ui.units()`, `.postcodeLabel()`, `.regionLabel()`, `.temp()` and `.rain()`.
+- **Invoices:** a new invoice's currency starts as the business's, and each invoice shows its own currency's sign,
+  on the payment page too.
+- **Privacy:** the customer-detail coder takes out streets with a region's own endings (`knowledge.yml
+  addresses.street_end_words`) and streets written street word first ("1450 Via Example"); a business adds the words
+  its visits go by after a customer's name ("the Example survey") in its Identity Pack (`catalog.yml
+  vocabulary.visit_words`) or with the `zdz_private_job_words` filter. "Ask chat about this"
+  reads the region's endings too.
+- **Estimates:** the import reader's paperwork conventions use the business's initials style and money sign and can be
+  replaced from the Identity Pack (`document-conventions.yml estimate.import_rules`) or with the
+  `zest_import_paperwork_rules` filter; the estimate writer names the business's industry (Business Profile →
+  Industry).
+- **Prep:** a business states how it numbers a building's sides: Prep → Settings → "How sides are numbered", the
+  Identity Pack's `rules.yml prep.side_convention`, or the `zprep_side_convention` filter.
+- **Stock:** a supplier invoice's lines may be in metric units.
+- **Scheduler:** more Windows time-zone names from a Microsoft calendar are understood.
+- **Leads:** the longest lookback is labelled "All history (~26 years)".
+- **Jobs:** with no catalog item to decide it, an estimate line is service work when it says repair, service or fix
+  (the business's catalog decides first, through the Item Engine; code can decide with `zdz_job_classify_component`).
+- **Colours:** Zorderz has its own default palette, an indigo brand ramp, checked for contrast in every display mode:
+  white on the brand reads at 6:1 or better in light mode, and in dark mode a button filled with the brand takes the
+  brand's darkest step for its text (5.7:1, and 10:1 on hover, where white read about 3:1 and 2:1). An app's colour
+  means its dashboard group everywhere: each app's own colour, the ask bar's rows, the home number tiles and the Leads
+  tile take their group's colour from the colour-blind-safe Okabe-Ito set, with a text colour chosen to read on it, and
+  "Needs a look" wears the reserved "needs you" colour. Jobs' calendar entries take the Field group's colour.
+  Receipts' generator page, its e-mail button, the Surveys e-mail button and the browser's toolbar colour follow the
+  business's brand. Prep, Receipts and Jobs no longer carry accent colours of their own.
+- **Home Screen:** the platform's own app icons (used until a business sets a square logo, and always for the
+  Android adaptive icon) show a white Z mark on the indigo; the iPhone Home Screen title and the sign-in hand-off page
+  use the business's name.
+
+### Fixed
+- **Roles:** a new Salesperson's default apps named Leads by an old id, and a new Operator's named Surveys by an old
+  id, so neither tile appeared; both now use the apps' ids, and View As shows them too.
+- **Guided tour:** in Settings, a paused tour's two buttons now wrap inside the row on a phone instead of running past
+  its edge.
+- **Jobs:** a job's schedule "Edit" button and its CRM lead link were drawn white on the white card.
+- **Sign-in:** two people who asked for a code at the same moment could be given the same six digits. Codes are now
+  kept per account and checked against the e-mail.
+- **Privacy View** now hides an e-mail, phone or name written %-encoded in a link, a billing customer id in a sentence,
+  a team member's initials in a sentence and a one-word display name; Messages' edit, delete, select and swipe controls
+  are not drawn for the account; a long-open page no longer loses its REST nonce.
+- **Prep:** the cut planner could leave a piece off its sheets without a warning; every piece is now laid out or named
+  "NOT ON ANY SHEET". A width or height of 0 stopped the plan, and a negative size dropped pieces silently; both are now
+  asked for as missing dimensions.
+- **Estimates:** an e-mail address dictated or pasted with punctuation around it is kept, and the billing system, the
+  CRM lead and the app's own record get the same address. An administrator limited to their own data now sees only
+  their own estimates.
+- **Surveys:** the widget was hard to read in dark mode; a review check counted customers the review site did not answer
+  for as checked.
+- **Jobs:** several Project labels were hard or impossible to read in the light and sunlight modes; opening a Project
+  no longer leaves the list on screen under it. On MySQL and MariaDB the Projects ranking table was never made (one of
+  its column names is a reserved word there), so the Queue came up empty; it is made on the first request after the
+  update.
+- **E-mail in the chat:** invisible characters are removed from a mail line before its links and markers are made
+  safe, and brackets written as `%5B` or `&#91;` are made safe too. A draft card that cannot be built no longer stops
+  the rest of an answer from drawing.
+- **Hub:** line search no longer fails when the filters or dates select no lines, or when a line has no text. Data that
+  contains the data fence's own words can no longer end the fence early.
+- **Assistant:** a checked answer writes money with the currency sign set in the Business Profile, not always "$".
+- **Prep:** the cut plan's margin label shows the margin the plan used (the page's own, or the Prep setting), not
+  always ½".
+- **Privacy View:** a number followed by a metric unit or "euros" ("1200 m2", "2500 kg") is read as a size or an amount,
+  not a customer id.
+- **Doorhangers:** clearing the area summaries now clears their expiry entries too.
+- **Jobs:** the estimate bridge in the browser never took "fix" for service work.
+- **Home:** the figures' "this month" and "today" checks no longer assume one time zone when an answer names none.
+- **Estimates:** the estimate writer's description of the business never included its industry.
+- **Fresh installs** (found installing on a managed host and opening every screen):
+  - **Leads:** on a site with no leads to give an owner, a one-time owner fill-in ran again on every request and wrote
+    a line to the PHP error log each time. It now finishes once.
+  - **Media:** the shared photo table was made in its first-release shape, without the photo date and location
+    columns, until the first photo was saved; the hourly Jobs location pass failed against it meanwhile. A new site
+    gets today's table, and a site left with the older one is brought up to date on the next admin page.
+  - **Scheduler:** its settings screen logged a PHP warning when WordPress's time zone is a UTC offset (a new site's
+    "UTC+0").
+  - **Commission:** the settings screen's built-in check wrote a made-up "no piece rate configured" line to the error
+    log on every visit. Real ones are still logged.
+  - **Tools → Zorderz Integration Health** names its checks in plain words.
+  - **Home:** a figure's "as of" time is written in the business's own clock and language, like the figure itself.
+- **Jobs:** an estimate never got its Project. Making one called a step that did not exist, so on a site with estimates
+  every run of the Projects sweep, and every estimate-accepted notice, stopped with a PHP fatal error. A new test checks
+  that every class calls only methods it has.
+- **Scheduler and Ask bar on plain links:** on a site whose permalinks are still WordPress's plain ones, the calendar
+  asked for its events and free times at an address with a second "?" and got nothing back, and the Ask bar's answers
+  did the same. Both now join their query with "&" there. The Scheduler's keep-alive for a page left open also uses
+  the site's own admin-ajax address.
+- **Hub zip:** a build made after the hub's own tests had run packed pytest's cache folder (test names only). The build
+  leaves it out.
+- **Scheduler:** a time set on a job in Jobs shows on the calendar as soon as Schedule opens. Before, an open calendar
+  could keep its earlier list for up to three minutes. Jobs tells other apps with a `zdz:schedule-changed` event.
+- **Messages:** opened from the Home Screen, its channels and direct messages show at once; they could take ten
+  seconds to appear.
+- **Invoices:** the Home Screen panel's title could not be read in dark mode. The panel and its button take the theme's
+  colours. Its stylesheet, and the Messages page's files, carry the file's time in their version, so an update is never
+  served from a browser's cache.
+- **Ask bar:** its rows fill the list's width and read from the left. A row's name sat in the middle above a longer
+  description.
+
+---
+
 ## [2.0.1] - 2026-11-07
 
 A tidy-up release. Older internal names and aliases that Zorderz no longer uses are gone, two stored names are

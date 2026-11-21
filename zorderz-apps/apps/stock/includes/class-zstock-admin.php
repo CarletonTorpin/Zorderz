@@ -69,7 +69,7 @@ class ZSTOCK_Admin {
 		settings_errors( 'zstock' );
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Stock — Settings', 'zorderz' ); ?></h1>
+			<h1><?php esc_html_e( 'Stock: Settings', 'zorderz' ); ?></h1>
 			<p class="description">v<?php echo esc_html( ZSTOCK_VERSION ); ?> · <?php esc_html_e( 'optional / beta', 'zorderz' ); ?></p>
 
 			<div style="background:#fff;padding:14px 18px;border:1px solid #ccd0d4;margin:16px 0;max-width:640px;">
@@ -82,7 +82,7 @@ class ZSTOCK_Admin {
 					<?php echo $fb_ok ? '<span style="color:green;">&#10003; ' . esc_html__( 'connected', 'zorderz' ) . '</span>' : '<span style="color:#b32d2e;">&#10007; ' . esc_html__( 'not connected', 'zorderz' ) . '</span>'; ?>
 				</p>
 				<p class="description">
-					<?php esc_html_e( 'Credentials are shared platform settings — set them in Zorderz → Settings, not here.', 'zorderz' ); ?>
+					<?php esc_html_e( 'Credentials are shared platform settings: set them in Zorderz → Settings, not here.', 'zorderz' ); ?>
 				</p>
 			</div>
 
@@ -240,7 +240,7 @@ class ZSTOCK_Admin {
 			} else {
 				$msg  = sprintf(
 					/* translators: 1: item count, 2: scheme count */
-					__( 'Sample catalog applied: %1$d items, %2$d pricing schemes. These are clearly-marked demo entries — edit or remove them in the Item Engine.', 'zorderz' ),
+					__( 'Sample catalog applied: %1$d items, %2$d pricing schemes. These are clearly-marked demo entries; edit or remove them in the Item Engine.', 'zorderz' ),
 					(int) ( $res['items'] ?? 0 ),
 					(int) ( $res['schemes'] ?? 0 )
 				);

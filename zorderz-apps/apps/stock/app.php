@@ -81,14 +81,10 @@ define( 'ZSTOCK_NONCE', 'zstock_nonce' );
 
 /**
  * The assistant's answer sentinel. Protocol/marker tokens live in ONE constant, referenced by the
- * engine — never typed twice. The legacy sentinel `YABADABA` is recorded as a
- * deprecated alias and stripped for backward compatibility.
+ * engine — never typed twice.
  */
 if ( ! defined( 'ZSTOCK_ASSISTANT_SENTINEL' ) ) {
 	define( 'ZSTOCK_ASSISTANT_SENTINEL', '[ZSTOCK_ANSWER]' );
-}
-if ( ! defined( 'ZSTOCK_ASSISTANT_SENTINEL_LEGACY' ) ) {
-	define( 'ZSTOCK_ASSISTANT_SENTINEL_LEGACY', 'YABADABA' );
 }
 
 // ── Small helpers ──────────────────────────────────────────────────
