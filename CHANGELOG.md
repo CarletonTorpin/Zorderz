@@ -13,6 +13,19 @@ there is a third, optional download: the reference Charts hub
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **WordPress 6.5 or newer** is now the stated minimum (it was 6.0), in the theme and apps headers and every install
+  document. Zorderz calls PHP's `array_is_list()`, which PHP 8.0 has only through WordPress 6.5's fallback, so on
+  WordPress 6.0 to 6.4 with PHP 8.0, saving the Business Profile or applying an Identity Pack would stop with a fatal
+  error. PHP 8.0 or newer is unchanged.
+
+### Fixed
+- **Install guide and AGENTS.md:** the checksum step passes `--ignore-missing`, so leaving out the optional hub zip, as
+  the guide says to, no longer fails the check. The release's checksums file is named `zorderz-<version>-checksums.txt`.
+  AGENTS.md mentions the guided tour the sample company offers.
+
 ## [2.1.0] - 2026-11-20
 
 Deep research in the chat, an answer to one e-mail, the chat's records lookups, sign-in routes for when the sign-in

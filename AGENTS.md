@@ -29,11 +29,11 @@ Plan for these hand-offs and ask for them at the moment you need them:
 
 ## 3. First install, in short
 
-1. **Get the latest release.** Read the version and the asset names from https://github.com/CarletonTorpin/Zorderz/releases/latest; never hardcode a version. You need `zorderz-theme-<version>.zip` (plus `zorderz-apps-<version>.zip` on the WP-CLI path). Skip `zorderz-hub-<version>.zip`: the optional Charts hub runs on a separate computer (see [`hub/README.md`](hub/README.md)), and the Charts app works without it. Check the downloads with the checksums file attached to the release.
+1. **Get the latest release.** Read the version and the asset names from https://github.com/CarletonTorpin/Zorderz/releases/latest; never hardcode a version. You need `zorderz-theme-<version>.zip` (plus `zorderz-apps-<version>.zip` on the WP-CLI path). Skip `zorderz-hub-<version>.zip`: the optional Charts hub runs on a separate computer (see [`hub/README.md`](hub/README.md)), and the Charts app works without it. Check the downloads with the release's checksums file: `shasum -a 256 -c --ignore-missing zorderz-<version>-checksums.txt` (the flag skips the hub zip you did not download).
 2. **Set permalinks to Post name** (Settings -> Permalinks).
 3. **Upload and activate the theme.** On most hosts that is the only upload: the active theme installs and activates the apps itself on the next admin page load.
 4. **On a test site** that is not a copy of a live one, add `define( 'ZDZ_STAGING_GUARD', 'on' );` to `wp-config.php` now, before any key is entered. The guard then holds outgoing e-mail and every outgoing write to another service (billing, customer relationship manager, Ai and hub calls) and pauses scheduled jobs, and the admin bar shows "STAGING GUARD ON". (A copy of a live site, or a site WordPress reports as `staging` or `development`, turns it on by itself.)
-5. **Give the install its data**: import a Company Data bundle, apply an Identity Pack or fill the Business Profile, or load the fictional sample company from Tools -> Zorderz Data to explore. Never invent business data.
+5. **Give the install its data**: import a Company Data bundle, apply an Identity Pack or fill the Business Profile, or load the fictional sample company from Tools -> Zorderz Data to explore. Loading the sample makes the Home Screen offer a guided tour; tell the person about it rather than taking it for them. Never invent business data.
 6. **Connect providers** through the hand-offs in section 2.
 
 ## 4. Done looks like this
@@ -59,7 +59,7 @@ The install guide's "Idempotency and failure handling" section has a symptom -> 
 - **"Cookie check failed" or a login screen mid-task.** The session expired. Ask the person to sign in again; never type a password.
 - **Stop and ask** rather than guess whenever a verification fails twice, a step needs a secret, or a screen asks for a confirmation.
 
-Requirements floor: WordPress 6.0+, PHP 8.0+, MySQL 5.7+ or MariaDB 10.3+, pretty permalinks set to Post name, HTTPS for any OAuth connection.
+Requirements floor: WordPress 6.5+, PHP 8.0+, MySQL 5.7+ or MariaDB 10.3+, pretty permalinks set to Post name, HTTPS for any OAuth connection.
 
 ## If you are here to CONTRIBUTE to Zorderz
 

@@ -12,7 +12,7 @@ A WordPress plugin that provides real-time-ish channels and 1:1 direct messages 
 ## Requirements
 
 - The Zorderz theme of the same release (the theme and the apps bundle move in lockstep; Messaging builds against the `\Zorderz\Widget_App_Interface` the theme exports).
-- WordPress **6.0+**
+- WordPress **6.5+**
 - PHP **8.0+** (matches the theme's floor; tested through 8.3). Requires `openssl` and `hash_hkdf` (both in PHP core).
 - MySQL **5.7+** or MariaDB **10.2+** (FULLTEXT search falls back to LIKE if the FT index can't be created).
 

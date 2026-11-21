@@ -45,7 +45,7 @@ Either way, connection **secrets are never carried** and must be reconnected on 
 
 | Requirement | Minimum |
 |---|---|
-| WordPress | 6.0 |
+| WordPress | 6.5 |
 | PHP | 8.0 |
 | Database | MySQL 5.7+ or MariaDB 10.3+ |
 | Access | shell + WP-CLI, **or** an admin account in a browser (an Application Password alone can verify and configure, not install) |
@@ -53,7 +53,7 @@ Either way, connection **secrets are never carried** and must be reconnected on 
 **Verify:**
 
 ```bash
-wp core version          # -> 6.0 or higher
+wp core version          # -> 6.5 or higher
 php -v                   # -> PHP 8.0.x or higher
 wp db check              # -> database reachable
 ```
@@ -79,10 +79,10 @@ If any check fails, stop: this environment cannot run Zorderz yet.
 # together in lockstep, so they always share one version.
 VER="$(curl -fsSL https://api.github.com/repos/CarletonTorpin/Zorderz/releases/latest \
   | grep -oE '"tag_name": *"v?[0-9]+\.[0-9]+\.[0-9]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
-echo "$VER"     # e.g. 1.7.1, whatever the current release is
+echo "$VER"     # three numbers: the latest release's version
 ```
 
-**Action:** Download the theme and apps zips from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed below. The release also carries `zorderz-hub-${VER}.zip`, the optional Charts hub, which runs on a separate computer the business controls (see `hub/README.md`); skip it on a normal install, the Charts app works in local mode without it. A checksums file is attached too: `shasum -a 256 -c zorderz-${VER}-checksums.txt` checks the downloads.
+**Action:** Download the theme and apps zips from that release. Browser path: open `https://github.com/CarletonTorpin/Zorderz/releases/latest` and download the two zips listed below. The release also carries `zorderz-hub-${VER}.zip`, the optional Charts hub, which runs on a separate computer the business controls (see `hub/README.md`); skip it on a normal install, the Charts app works in local mode without it. A checksums file is attached too, `zorderz-${VER}-checksums.txt`: `shasum -a 256 -c --ignore-missing zorderz-${VER}-checksums.txt` checks the zips you downloaded (`--ignore-missing` skips the hub zip when you left it out; `sha256sum -c --ignore-missing` works the same way).
 
 - `zorderz-theme-${VER}.zip`: the theme (platform kernel + Core services). **On the default one-upload path this is the only file you need**, because the theme carries the apps bundle inside it.
 - `zorderz-apps-${VER}.zip`: the apps bundle (30 apps) on its own. You need this for the two-artifact fallback (step 6) and for **every update of an existing site** (see "Idempotency and failure handling").
