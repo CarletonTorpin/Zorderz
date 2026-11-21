@@ -35,8 +35,10 @@
 		var btn = document.createElement('button');
 		btn.type = 'button';
 		btn.className = 'ni ni-jobs';
-		btn.setAttribute('aria-label', 'Jobs');
-		btn.innerHTML = '<i data-lucide="clipboard-list"></i><span class="ni-label">Jobs</span>';
+		var label = cfg.label || 'Jobs';
+		btn.setAttribute('aria-label', label);
+		btn.innerHTML = '<i data-lucide="clipboard-list"></i><span class="ni-label"></span>';
+		btn.querySelector('.ni-label').textContent = label;
 		btn.addEventListener('click', function (e) {
 			e.preventDefault();
 			// Don't let any generic .ni -> switchView handler also fire.

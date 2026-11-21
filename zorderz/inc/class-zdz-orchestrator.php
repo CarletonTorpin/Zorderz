@@ -175,12 +175,24 @@ class ZDZ_Orchestrator {
 		// ── 2. DOCUMENT lookup ── (estimate/invoice/quote for a named customer)
 		$doc_name = self::detect_doc_lookup( $raw );
 		if ( $doc_name !== '' ) {
-			if ( class_exists( 'ZEST_ZANA_Bridge' )
-				&& method_exists( 'ZEST_ZANA_Bridge', 'lookup_for_zana' )
-				&& ZEST_ZANA_Bridge::is_available() ) {
-				$res = self::run( 'estimate.lookup', array( 'customer' => $doc_name, 'window_days' => 90 ), $uid, function ( $a ) {
-					return ZEST_ZANA_Bridge::lookup_for_zana( $a );
+			if ( class_exists( 'ZEST_ZANA_Bridge' ) && method_exists( 'ZEST_ZANA_Bridge', 'lookup_for_chat' ) ) {
+				$res = self::run( 'estimate.lookup', array( 'customer' => $doc_name ), $uid, function ( $a ) {
+					return ZEST_ZANA_Bridge::lookup_for_chat( $a );
 				} );
+				// The lookup reads the billing system's documents (its estimates and the stored copy of its invoices),
+				// not the built-in invoices: "none found" is not an answer here, so the chat takes the question as before.
+				// A refusal (the shared device, someone else's customer) still answers in the card.
+				if ( empty( $res['documents'] ) && empty( $res['denied'] ) && empty( $res['not_yours'] ) && empty( $res['error'] ) ) {
+					return $fallback;
+				}
+				// The Estimates bridge names each document's kind; the filter below and the Home Screen card read doc_type.
+				if ( ! empty( $res['documents'] ) && is_array( $res['documents'] ) ) {
+					foreach ( $res['documents'] as $i => $d ) {
+						if ( is_array( $d ) && ! isset( $d['doc_type'] ) && isset( $d['kind'] ) ) {
+							$res['documents'][ $i ]['doc_type'] = (string) $d['kind'];
+						}
+					}
+				}
 				// honour an explicit doc-type in the query. If the user asked
 				// for "estimate(s)" or "invoice(s)" (but not both), filter the returned
 				// documents to that doc_type so "estimate for X" doesn't dump every doc.
@@ -609,7 +621,7 @@ class ZDZ_Orchestrator {
 	/**
 	 * Decide how the dashboard should render a document-lookup result.
 	 *
-	 * @param array $res ZEST_ZANA_Bridge::lookup_for_zana result.
+	 * @param array $res ZEST_ZANA_Bridge::lookup_for_chat result, each document with doc_type.
 	 * @return string
 	 */
 	private static function doc_render_hint( array $res ): string {

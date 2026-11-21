@@ -143,7 +143,7 @@ class ZEST_Billing_View {
 
 	/** The chat app's stored copy of the billing system, read with its own rules (guarded: nothing without it). */
 	private static function ledger_rows( int $uid, bool $admin, int $limit ): array {
-		if ( ! class_exists( 'ZANA_Ledger' ) || ! class_exists( 'ZANA_Ledger_Access' ) || ! method_exists( 'ZANA_Ledger', 'table' ) ) {
+		if ( ! class_exists( 'ZANA_Ledger_Store' ) || ! class_exists( 'ZANA_Ledger_Access' ) || ! method_exists( 'ZANA_Ledger_Store', 'table' ) ) {
 			return array();
 		}
 		try {
@@ -156,7 +156,7 @@ class ZEST_Billing_View {
 			global $wpdb;
 			$out = array();
 			foreach ( array( 'estimate' => array( 'estimates', 'estimate_id', 'estimate_number', 'est_date', 'status_label' ), 'invoice' => array( 'invoices', 'invoice_id', 'invoice_number', 'inv_date', 'pay_status' ) ) as $kind => $c ) {
-				$table = ZANA_Ledger::table( $c[0] );
+				$table = ZANA_Ledger_Store::table( $c[0] );
 				if ( '' === $table ) {
 					continue;
 				}

@@ -88,9 +88,12 @@ class ZDZ_View_As {
 			$role = sanitize_text_field( wp_unslash( $_GET['zdz_view_as'] ) );
 
 			if ( 'reset' === $role || '' === $role ) {
-				// Clear emulation
+				// Exit Preview ends both previews: the role, and a person previewed earlier.
 				setcookie( 'zdz_view_as', '', time() - 3600, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
-				self::$emulated_role = null;
+				setcookie( 'zdz_view_as_user', '', time() - 3600, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+				self::$emulated_role    = null;
+				self::$emulated_user_id = null;
+				return;
 			} elseif ( in_array( $role, self::$valid_roles, true ) ) {
 				// Activate emulation (session cookie — no expiry)
 				setcookie( 'zdz_view_as', $role, 0, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );

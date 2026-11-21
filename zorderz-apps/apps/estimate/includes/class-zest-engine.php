@@ -93,7 +93,7 @@ class ZEST_Estimate_Engine {
 			$data = $this->rejection_retry( $messages, $res['text'] );
 		}
 		if ( ! is_array( $data ) ) {
-			$out['error'] = 'Could not read a structured estimate from the AI response.';
+			$out['error'] = 'Could not read a structured estimate from the Ai response.';
 			return $out;
 		}
 
@@ -192,7 +192,7 @@ class ZEST_Estimate_Engine {
 			return $out;
 		}
 		if ( ! $this->ai->is_configured() ) {
-			$out['error'] = 'AI is not configured.';
+			$out['error'] = 'Ai is not configured.';
 			return $out;
 		}
 
@@ -294,7 +294,7 @@ class ZEST_Estimate_Engine {
 			return $out;
 		}
 		if ( ! $this->ai->is_configured() ) {
-			$out['error'] = 'AI unavailable.';
+			$out['error'] = 'Ai unavailable.';
 			return $out;
 		}
 
@@ -646,7 +646,7 @@ class ZEST_Estimate_Engine {
 			return $out;
 		}
 		if ( ! $this->ai->is_configured() ) {
-			$out['error'] = 'AI is not configured. Enter or edit the document manually in the review panel.';
+			$out['error'] = 'Ai is not configured. Enter or edit the document manually in the review panel.';
 			return $out;
 		}
 
@@ -666,7 +666,7 @@ class ZEST_Estimate_Engine {
 			$data = $this->rejection_retry( $messages, $res['text'] ); // one bounded retry
 		}
 		if ( ! is_array( $data ) ) {
-			$out['error'] = 'Could not read a structured document from the AI response.';
+			$out['error'] = 'Could not read a structured document from the Ai response.';
 			return $out;
 		}
 

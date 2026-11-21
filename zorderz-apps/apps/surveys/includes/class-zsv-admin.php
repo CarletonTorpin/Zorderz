@@ -346,10 +346,10 @@ class ZSV_Admin {
 						<td><input type="number" id="zsv_greviews_candidate_days" name="zsv_greviews_candidate_days" value="<?php echo esc_attr( (string) ZSV_Settings::greviews_candidate_days() ); ?>" min="1" max="730" />
 						<p class="description"><?php esc_html_e( 'Only a customer whose follow-up was opened at most this long before a review can be its writer. Default 120.', 'zorderz' ); ?></p></td></tr>
 
-					<tr><th colspan="2"><h2><?php esc_html_e( 'AI + copy', 'zorderz' ); ?></h2></th></tr>
-					<tr><th><label for="zsv_ai_model"><?php esc_html_e( 'AI model (optional)', 'zorderz' ); ?></label></th>
+					<tr><th colspan="2"><h2><?php esc_html_e( 'Ai + copy', 'zorderz' ); ?></h2></th></tr>
+					<tr><th><label for="zsv_ai_model"><?php esc_html_e( 'Ai model (optional)', 'zorderz' ); ?></label></th>
 						<td><input type="text" id="zsv_ai_model" name="zsv_ai_model" class="regular-text" value="<?php echo esc_attr( get_option( 'zsv_ai_model', '' ) ); ?>" />
-						<p class="description"><?php esc_html_e( 'Blank = use the platform default model from the Core AI service.', 'zorderz' ); ?></p></td></tr>
+						<p class="description"><?php esc_html_e( 'Blank = use the platform default model from the Core Ai service.', 'zorderz' ); ?></p></td></tr>
 					<tr><th><label for="zsv_generic_work_phrase"><?php esc_html_e( 'Generic work phrase', 'zorderz' ); ?></label></th>
 						<td><input type="text" id="zsv_generic_work_phrase" name="zsv_generic_work_phrase" class="regular-text" value="<?php echo esc_attr( get_option( 'zsv_generic_work_phrase', '' ) ); ?>" placeholder="<?php esc_attr_e( 'your recent service', 'zorderz' ); ?>" /></td></tr>
 				</table>

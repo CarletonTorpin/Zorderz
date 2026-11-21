@@ -70,13 +70,15 @@
 		var teamNi = document.createElement('button');
 		teamNi.className = 'ni';
 		teamNi.setAttribute('data-view', 'sv-team');
-		teamNi.setAttribute('aria-label', 'Team');
+		var teamLabel = (window.zimNavData && window.zimNavData.label) || 'Team';
+		teamNi.setAttribute('aria-label', teamLabel);
 		teamNi.id = 'ni-team';
 		// Use messages-square icon to differentiate from the analytics app's single-bubble Chat.
 		teamNi.innerHTML =
 			'<i data-lucide="messages-square"></i>' +
-			'<span class="ni-label">Team</span>' +
+			'<span class="ni-label"></span>' +
 			'<span class="ni-badge" id="ni-team-badge" hidden></span>';
+		teamNi.querySelector('.ni-label').textContent = teamLabel;
 
 		// Find the Chat button if Analytics injected it, otherwise use Apps.
 		var chatBtn = bnav.querySelector('[data-view="sv-chat"]');

@@ -799,7 +799,7 @@ class ZKV_Dashboard {
 			'document_id' => $doc_id,
 			'title'       => $title,
 			'status'      => 'pending',
-			'message'     => 'Document uploaded from chat. AI indexing scheduled.',
+			'message'     => 'Document uploaded from chat. Ai indexing scheduled.',
 		) );
 	}
 

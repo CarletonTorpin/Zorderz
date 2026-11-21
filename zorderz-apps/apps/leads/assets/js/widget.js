@@ -767,7 +767,7 @@
                 var summaryId = 'zl-ai-summary-' + escHtml(batchId);
                 html += '<div style="padding:0 12px 8px;">';
                 html += '<button class="zl-ai-toggle" data-target="' + summaryId + '">';
-                html += '<span class="zl-ai-toggle-arrow">▸</span> AI Summary</button>';
+                html += '<span class="zl-ai-toggle-arrow">▸</span> Ai Summary</button>';
                 html += '<div class="zl-ai-summary" id="' + summaryId + '">' + escHtml(aiSummary) + '</div>';
                 html += '</div>';
             }
@@ -1240,7 +1240,7 @@
         /* ─── SALESPERSON NOTES (AI summary) ──────────────────── */
         if (spNotes) {
             h += '<details class="zl-lc-sp-notes">';
-            h += '<summary>AI Notes</summary>';
+            h += '<summary>Ai Notes</summary>';
             h += '<div class="zl-lc-sp-body">' + escHtml(spNotes) + '</div>';
             h += '</details>';
         }
@@ -2208,8 +2208,8 @@
             return;
         }
 
-        showProgress('Step 2b/8: AI filter expansion...', 20);
-        logMsg('Step 2b: AI filter expansion ...');
+        showProgress('Step 2b/8: Ai filter expansion...', 20);
+        logMsg('Step 2b: Ai filter expansion ...');
 
         ajaxPost('zl_expand_filter', { batch_id: batchId })
             .then(function (resp) {
@@ -2348,25 +2348,25 @@
             return;
         }
 
-        showProgress('Step 4.5/8: AI validation...', 60);
-        logMsg('Step 4.5: AI strict validation ...');
+        showProgress('Step 4.5/8: Ai validation...', 60);
+        logMsg('Step 4.5: Ai strict validation ...');
 
         ajaxPost('zl_ai_validate', { batch_id: batchId })
             .then(function (resp) {
                 if (!resp || !resp.success) {
-                    logMsg('Warning: ' + (extractMsg(resp) || 'AI validation issue') +
+                    logMsg('Warning: ' + (extractMsg(resp) || 'Ai validation issue') +
                            ' (continuing)');
                 } else {
                     // v1.6.0 — Fixed: field names now match the PHP response exactly.
                     var d        = resp.data || {};
                     if (d.skipped) {
-                        logMsg('AI validation skipped: ' + (d.reason || 'N/A'));
+                        logMsg('Ai validation skipped: ' + (d.reason || 'N/A'));
                     } else {
                         var passed   = d.passed || 0;
                         var rejected = d.rejected || 0;
                         var trimmed  = d.trimmed || 0;
                         var final_ct = d.final_count || 0;
-                        logMsg('AI validation: ' + passed + ' passed, ' + rejected + ' rejected.' +
+                        logMsg('Ai validation: ' + passed + ' passed, ' + rejected + ' rejected.' +
                                (trimmed > 0 ? ' Trimmed ' + trimmed + ' excess.' : '') +
                                ' Final: ' + final_ct + ' leads.');
                     }
@@ -2374,7 +2374,7 @@
                 step5_aiRefine(batchId, 0);
             })
             .catch(function (err) {
-                logMsg('Warning: AI validation error (' + err.message + '), continuing ...');
+                logMsg('Warning: Ai validation error (' + err.message + '), continuing ...');
                 step5_aiRefine(batchId, 0);
             });
     }
@@ -2387,9 +2387,9 @@
             return;
         }
 
-        showProgress('Step 5/8: AI refinement...', 70);
+        showProgress('Step 5/8: Ai refinement...', 70);
         if (offset === 0) {
-            logMsg('Step 5: AI description refinement ...');
+            logMsg('Step 5: Ai description refinement ...');
         }
 
         // v1.6.0 — Fixed: send offset and handle chunking like dashboard.js.
@@ -2397,7 +2397,7 @@
         ajaxPost('zl_ai_refine', { batch_id: batchId, offset: offset })
             .then(function (resp) {
                 if (!resp || !resp.success) {
-                    logMsg('Warning: ' + (extractMsg(resp) || 'AI refinement issue') +
+                    logMsg('Warning: ' + (extractMsg(resp) || 'Ai refinement issue') +
                            ' (continuing)');
                     step6_createNutshell(batchId, 0);
                 } else {
@@ -2411,13 +2411,13 @@
                     if (!done && next > offset) {
                         step5_aiRefine(batchId, next);
                     } else {
-                        logMsg('AI refinement complete.');
+                        logMsg('Ai refinement complete.');
                         step6_createNutshell(batchId, 0);
                     }
                 }
             })
             .catch(function (err) {
-                logMsg('Warning: AI refinement error (' + err.message + '), continuing ...');
+                logMsg('Warning: Ai refinement error (' + err.message + '), continuing ...');
                 step6_createNutshell(batchId, 0);
             });
     }
@@ -2475,7 +2475,7 @@
         }
 
         showProgress('Step 7/8: Finalizing...', 95);
-        logMsg('Step 7: Finalizing batch with AI summary ...');
+        logMsg('Step 7: Finalizing batch with Ai summary ...');
 
         ajaxPost('zl_finalize', { batch_id: batchId })
             .then(function (resp) {
@@ -2484,7 +2484,7 @@
                 } else {
                     var d = resp.data || {};
                     if (d.lead_count) { logMsg('Final lead count: ' + d.lead_count); }
-                    if (d.summary) { logMsg('AI Summary: ' + d.summary); }
+                    if (d.summary) { logMsg('Ai Summary: ' + d.summary); }
                 }
                 generationComplete(batchId);
             })

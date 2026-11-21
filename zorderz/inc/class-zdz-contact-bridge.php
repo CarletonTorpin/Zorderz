@@ -8,7 +8,7 @@
  * alongside the ZDZ_Core_* data clients rather than in a plugin.
  *
  * CALLED BY: the Analytics engine, the
- *            [ZDZ_CONTACT] marker handler. Mirrors ZEST_ZANA_Bridge::lookup_for_zana().
+ *            [ZDZ_CONTACT] marker handler. Mirrors ZEST_ZANA_Bridge::lookup_for_chat().
  *
  * DATA SOURCES (Seam 1, shared clients only — no private API client):
  *   - ZDZ_Core_Nutshell::find_contacts()  — primary identity + phone/email

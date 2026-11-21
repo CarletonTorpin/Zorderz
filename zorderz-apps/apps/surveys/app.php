@@ -9,7 +9,7 @@
  *   review. Consumes the theme's Business Profile (senders + review dests), Party roster
  *   (operator + salesperson resolution), and the Core billing / CRM / AI / review-bridge
  *   services. No business data is shipped; every drop is a logged disposition.
- * Version:     2.14.0
+ * Version:     2.14.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -81,7 +81,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZSV_VERSION', '2.14.0' );
+define( 'ZSV_VERSION', '2.14.1' );
 define( 'ZSV_FILE', __FILE__ );
 define( 'ZSV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZSV_URL', plugin_dir_url( __FILE__ ) );

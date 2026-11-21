@@ -158,6 +158,12 @@ class ZANA_Referrals {
 		if ( ! self::has_verb( self::VERB_CASES ) ) {
 			return __( 'Territories is not active here, so there are no referral cases.', 'zorderz' );
 		}
+		// The cases are the admin tier's and each salesperson's (Territories refuses the rest), so no button and no
+		// count call for anyone else: a field tech's Chat used to ask on every load and get a refusal back.
+		if ( ! is_callable( self::$invoke ) && class_exists( 'ZDZ_Capabilities' ) && method_exists( 'ZDZ_Capabilities', 'tier_of' )
+			&& ! in_array( ZDZ_Capabilities::tier_of( $uid ), array( 'admin', 'staff' ), true ) ) {
+			return __( 'Referral cases are for the admin tier and each estimate\'s salesperson.', 'zorderz' );
+		}
 		return '';
 	}
 

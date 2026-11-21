@@ -35,7 +35,17 @@ class ZPREP_Admin {
 			58
 		);
 		add_submenu_page( self::PAGE, __( 'Leftover Inventory', 'zorderz' ), __( 'Leftover Inventory', 'zorderz' ), 'manage_options', 'zprep-leftovers', array( __CLASS__, 'render_leftovers_page' ) );
-		add_submenu_page( null, __( 'Prep', 'zorderz' ), __( 'Prep', 'zorderz' ), 'read', 'zprep-dashboard', array( __CLASS__, 'render_dashboard_page' ) );
+		$hook = add_submenu_page( '', __( 'Prep', 'zorderz' ), __( 'Prep', 'zorderz' ), 'read', 'zprep-dashboard', array( __CLASS__, 'render_dashboard_page' ) );
+		// A hidden page has no menu entry for WordPress to take its title from: give it one (PHP 8.1+ warns on none).
+		if ( $hook ) {
+			add_action(
+				'load-' . $hook,
+				function () {
+					global $title;
+					$title = __( 'Prep', 'zorderz' );
+				}
+			);
+		}
 	}
 
 	public static function register_settings(): void {
@@ -300,10 +310,10 @@ class ZPREP_Admin {
 					</tr>
 				</table>
 
-				<h2><?php esc_html_e( 'AI Parsing', 'zorderz' ); ?></h2>
+				<h2><?php esc_html_e( 'Ai Parsing', 'zorderz' ); ?></h2>
 				<table class="form-table">
 					<tr>
-						<th><label for="ai_model"><?php esc_html_e( 'AI Model', 'zorderz' ); ?></label></th>
+						<th><label for="ai_model"><?php esc_html_e( 'Ai Model', 'zorderz' ); ?></label></th>
 						<td><input type="text" id="ai_model" name="zprep_settings[ai_model]" value="<?php echo esc_attr( $s['ai_model'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( ZPREP_Settings::ai_model() ); ?>" /> <p class="description"><?php esc_html_e( 'Model name for measurement parsing. Blank uses the platform default.', 'zorderz' ); ?></p></td>
 					</tr>
 				</table>
@@ -313,11 +323,11 @@ class ZPREP_Admin {
 
 			<hr>
 			<h2><?php esc_html_e( 'Connections', 'zorderz' ); ?></h2>
-			<p><?php esc_html_e( 'Prep reads its CRM, AI and billing providers from the theme\'s Core Settings. It stores no credentials of its own.', 'zorderz' ); ?></p>
+			<p><?php esc_html_e( 'Prep reads its CRM, Ai and billing providers from the theme\'s Core Settings. It stores no credentials of its own.', 'zorderz' ); ?></p>
 			<p>
 				<button type="button" class="button" id="zprep-test-crm-btn"><?php esc_html_e( 'Test CRM', 'zorderz' ); ?></button>
 				<button type="button" class="button" id="zprep-test-billing-btn" style="margin-left:8px;"><?php esc_html_e( 'Test Billing', 'zorderz' ); ?></button>
-				<button type="button" class="button" id="zprep-test-ai-btn" style="margin-left:8px;"><?php esc_html_e( 'Test AI', 'zorderz' ); ?></button>
+				<button type="button" class="button" id="zprep-test-ai-btn" style="margin-left:8px;"><?php esc_html_e( 'Test Ai', 'zorderz' ); ?></button>
 			</p>
 			<div id="zprep-test-results" style="margin-top:1em;"></div>
 
@@ -333,7 +343,7 @@ class ZPREP_Admin {
 					}).catch(function(e){btn.disabled=false;btn.textContent=o;var el=document.createElement('p');el.textContent=label+': '+e;out.prepend(el);});}
 				document.getElementById('zprep-test-crm-btn').addEventListener('click',function(){run(this,'zprep_test_crm','CRM');});
 				document.getElementById('zprep-test-billing-btn').addEventListener('click',function(){run(this,'zprep_test_billing','Billing');});
-				document.getElementById('zprep-test-ai-btn').addEventListener('click',function(){run(this,'zprep_test_ai','AI');});
+				document.getElementById('zprep-test-ai-btn').addEventListener('click',function(){run(this,'zprep_test_ai','Ai');});
 			})();
 			</script>
 

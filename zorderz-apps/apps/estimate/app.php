@@ -11,7 +11,7 @@
  *   compiled into the model prompt. Reads identity from ZDZ_Business_Profile,
  *   ZDZ_Item_Engine, ZDZ_Party, ZDZ_Core_FreshBooks, ZDZ_Core_Nutshell, ZDZ_Core_Poe and
  *   ZDZ_Core_Settings.
- * Version:     1.28.0
+ * Version:     1.28.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -60,7 +60,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /* ── Identity ──────────────────────────────────────────────────────── */
-define( 'ZEST_VERSION', '1.28.0' );
+define( 'ZEST_VERSION', '1.28.1' );
 define( 'ZEST_FILE', __FILE__ );
 define( 'ZEST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZEST_URL', plugin_dir_url( __FILE__ ) );

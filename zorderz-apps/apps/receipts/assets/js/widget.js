@@ -206,8 +206,8 @@
    * ================================================================== */
 
   var STEPS = [
-    'Sending your data to the AI assistant\u2026',
-    'AI is reading the invoice and photos; this usually takes 1\u20132 minutes\u2026',
+    'Sending your data to the Ai assistant\u2026',
+    'Ai is reading the invoice and photos; this usually takes 1\u20132 minutes\u2026',
     'Still generating; complex invoices take longer\u2026',
     'Almost done, building the receipt page\u2026',
     'Wrapping up\u2026',

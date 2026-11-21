@@ -5087,7 +5087,7 @@ function renderInlineDocs(mount, res, route) {
   var esc = (typeof escapeHtml === 'function') ? escapeHtml : function (s) { return String(s == null ? '' : s); };
   var r = res.result || {};
   if (r.error || r.needs_clarify || res.render === 'message') {
-    var msg = r.message || r.error || 'No open estimates or invoices found.';
+    var msg = r.message || r.error || 'No estimates or invoices found.';
     mount.innerHTML =
       '<div class="zdz-inline-card">' +
         '<div class="zdz-inline-msg">' + esc(msg) + '</div>' +
@@ -5125,7 +5125,7 @@ function renderInlineDocs(mount, res, route) {
 
   mount.innerHTML =
     '<div class="zdz-inline-card">' +
-      '<div class="zdz-inline-name">' + esc(name) + ': open documents</div>' +
+      '<div class="zdz-inline-name">' + esc(name) + ': estimates and invoices</div>' +
       askedBanner +
       rows +
       '<button class="zdz-inline-chat" onclick="zdzInlineHandoff(window.__zdzPendingInline)">Open in chat →</button>' +

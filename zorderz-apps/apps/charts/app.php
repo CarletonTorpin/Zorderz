@@ -6,7 +6,7 @@
  *   service that speaks the same contract will do). This site keeps only saved chart settings,
  *   and, if the business turns it on, dated aggregate snapshots. With no hub connected the app
  *   runs in local mode and says so.
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -48,7 +48,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZCH_VERSION', '1.1.0' );
+define( 'ZCH_VERSION', '1.1.1' );
 define( 'ZCH_DB_VERSION', '1' );
 define( 'ZCH_FILE', __FILE__ );
 define( 'ZCH_DIR', plugin_dir_path( __FILE__ ) );

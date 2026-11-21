@@ -7,7 +7,7 @@
  *   scheduler knows when they are busy; an optional org-wide Microsoft 365 app
  *   ("Mode A") can additionally two-way sync every mailbox. Dashboard tile +
  *   dictation-friendly availability ("mark me open these dates").
- * Version:     1.9.0
+ * Version:     1.10.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -125,7 +125,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZSCH_VERSION', '1.10.0' );
+define( 'ZSCH_VERSION', '1.10.1' );
 define( 'ZSCH_PLUGIN_FILE', __FILE__ );
 define( 'ZSCH_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZSCH_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -790,6 +790,7 @@ function zsch_enqueue_nav_inject() {
 	);
 	wp_localize_script( 'zsch-nav-inject', 'zschNavData', array(
 		'pageUrl' => home_url( '/?zsch_page=1' ),
+		'label'   => __( 'Schedule', 'zorderz' ),   // the bottom bar's word, in the site's language
 	) );
 }
 

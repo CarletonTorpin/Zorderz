@@ -1003,7 +1003,7 @@ class ZDZ_Token_Service {
 
 		add_filter( 'cron_schedules', static function ( $s ) {
 			if ( ! isset( $s['zdz_tok_15min'] ) ) {
-				$s['zdz_tok_15min'] = array( 'interval' => 900, 'display' => __( 'Every 15 minutes (Zorderz Token Service)', 'zorderz' ) );
+				$s['zdz_tok_15min'] = array( 'interval' => 900, 'display' => did_action( 'init' ) ? __( 'Every 15 minutes (Zorderz Token Service)', 'zorderz' ) : 'Every 15 minutes (Zorderz Token Service)' );
 			}
 			return $s;
 		} );

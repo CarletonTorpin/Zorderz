@@ -69,6 +69,32 @@ final class ViewAsGuardsTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Exit Preview sets cookies, so it runs where no output has started yet.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_exit_preview_ends_a_person_preview_too(): void {
+		if ( ! defined( 'COOKIEPATH' ) ) {
+			define( 'COOKIEPATH', '/' );
+		}
+		if ( ! defined( 'COOKIE_DOMAIN' ) ) {
+			define( 'COOKIE_DOMAIN', '' );
+		}
+		if ( ! function_exists( 'is_ssl' ) ) {
+			function is_ssl() { return false; } // phpcs:ignore Universal.Files.SeparateFunctionsFromOO -- a test stub
+		}
+		// a person previewed earlier: both cookies are still there when Exit Preview is pressed
+		$_COOKIE['zdz_view_as']      = 'zdz_sales';
+		$_COOKIE['zdz_view_as_user'] = '5';
+		$_GET['zdz_view_as']         = 'reset';
+		ZDZ_View_As::handle_query_param();
+		$this->assertNull( ZDZ_View_As::get_emulated_role(), 'the role preview ends' );
+		$this->assertNull( ZDZ_View_As::get_emulated_user_id(), 'and the person preview with it, in this very request' );
+		$this->assertFalse( ZDZ_View_As::is_emulating() );
+	}
+
 	public function test_a_previewed_user_id_is_a_number(): void {
 		$_COOKIE['zdz_view_as_user'] = '7abc';
 		ZDZ_View_As::handle_query_param();

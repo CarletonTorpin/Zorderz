@@ -319,7 +319,7 @@
 
             // Show AI info
             if (data.ai_model) {
-                log('🧠 AI Model: ' + data.ai_model + ' (High Reasoning)');
+                log('🧠 Ai Model: ' + data.ai_model + ' (High Reasoning)');
             }
 
             setProgress(10);
@@ -347,13 +347,13 @@
      */
     function stepExpandFilter(customerCount) {
         log('');
-        log('── Step 1b: AI Product Filter Expansion ───────────');
-        log('🤖 Running AI product filter expansion...');
+        log('── Step 1b: Ai Product Filter Expansion ───────────');
+        log('🤖 Running Ai product filter expansion...');
         ajaxPost('zl_expand_filter', { batch_id: currentBatchId }, function (data) {
             if (data.skipped) {
                 log('⚠️ No product filter to expand, skipping');
             } else if (data.filter_expanded && data.filter_ai_used) {
-                log('✓ AI identified ' + data.filter_matches + ' matching product names' + elapsed());
+                log('✓ Ai identified ' + data.filter_matches + ' matching product names' + elapsed());
                 if (data.filter_matched_names) {
                     log('📋 Matched items: ' + data.filter_matched_names);
                 }
@@ -361,7 +361,7 @@
                     log('🔑 Search phrases: ' + data.filter_keywords);
                 }
             } else {
-                log('⚠️ AI filter expansion failed; using basic keyword matching');
+                log('⚠️ Ai filter expansion failed; using basic keyword matching');
                 if (data.filter_error) {
                     log('   Reason: ' + data.filter_error);
                 }
@@ -488,7 +488,7 @@
         ajaxPost('zl_select_leads', { batch_id: currentBatchId, is_test: currentIsTest ? 1 : 0 }, function (data) {
             log('✓ Selected ' + data.lead_count + ' leads from ' + data.total_candidates + ' candidates' + elapsed());
             if (currentProductFilter && data.lead_count > (currentIsTest ? 3 : 50)) {
-                log('   (Over-selected for AI validation; will trim after strict check)');
+                log('   (Over-selected for Ai validation; will trim after strict check)');
             }
             setProgress(55);
 
@@ -504,7 +504,7 @@
      */
     function stepAIValidate() {
         log('');
-        log('── Step 4: AI Strict Validation ───────────────────');
+        log('── Step 4: Ai Strict Validation ───────────────────');
         if (!currentProductFilter) {
             log('⏭ No product filter, skipping validation');
             setProgress(65);
@@ -512,14 +512,14 @@
             return;
         }
 
-        log('🤖 AI verifying each lead against filter: "' + currentProductFilter + '"');
+        log('🤖 Ai verifying each lead against filter: "' + currentProductFilter + '"');
         log('   Using high reasoning for maximum accuracy...');
 
         ajaxPost('zl_ai_validate', { batch_id: currentBatchId, is_test: currentIsTest ? 1 : 0 }, function (data) {
             if (data.skipped) {
                 log('⏭ Validation skipped' + (data.reason ? ': ' + data.reason : '') + elapsed());
             } else if (data.ai_used) {
-                log('✓ AI Validation complete' + elapsed());
+                log('✓ Ai Validation complete' + elapsed());
                 log('   ✅ ' + data.passed + ' leads PASSED strict validation');
 
                 if (data.rejected > 0) {
@@ -537,7 +537,7 @@
 
                 log('   📊 Final lead count: ' + data.final_count);
             } else {
-                log('⚠️ AI validation unavailable; keeping all leads' + elapsed());
+                log('⚠️ Ai validation unavailable; keeping all leads' + elapsed());
                 if (data.error) {
                     log('   Error: ' + data.error);
                 }
@@ -557,13 +557,13 @@
     function stepAIRefine(offset) {
         if (offset === 0) {
             log('');
-            log('── Step 5: AI Description Refinement ──────────────');
-            log('🤖 Refining purchase descriptions with AI...');
+            log('── Step 5: Ai Description Refinement ──────────────');
+            log('🤖 Refining purchase descriptions with Ai...');
         }
 
         ajaxPost('zl_ai_refine', { batch_id: currentBatchId, offset: offset }, function (data) {
             if (data.skipped) {
-                log('⏭ AI refinement skipped' + (data.reason ? ' (' + data.reason + ')' : '') + elapsed());
+                log('⏭ Ai refinement skipped' + (data.reason ? ' (' + data.reason + ')' : '') + elapsed());
             } else if (data.refined > 0) {
                 log('  ✨ Refined ' + data.refined + ' descriptions...');
             }
@@ -618,7 +618,7 @@
     function stepFinalize() {
         log('');
         log('── Step 7: Batch Summary ──────────────────────────');
-        log('🤖 Generating AI batch summary...');
+        log('🤖 Generating Ai batch summary...');
         ajaxPost('zl_finalize', { batch_id: currentBatchId }, function (data) {
             setProgress(100);
             log('');
@@ -627,7 +627,7 @@
             log('═══════════════════════════════════════════════════');
             if (data.summary) {
                 log('');
-                log('📊 AI Summary: ' + data.summary);
+                log('📊 Ai Summary: ' + data.summary);
             }
 
             isRunning = false;
@@ -844,7 +844,7 @@
 
             // AI Summary
             if (data.batch && data.batch.ai_summary) {
-                html += '<div class="zl-ai-summary"><strong>📊 AI Summary:</strong> ' + escapeHtml(data.batch.ai_summary) + '</div>';
+                html += '<div class="zl-ai-summary"><strong>📊 Ai Summary:</strong> ' + escapeHtml(data.batch.ai_summary) + '</div>';
             }
 
             // Leads as cards — salesperson-friendly format

@@ -433,11 +433,11 @@ class ZPREP_Dashboard {
 
 		$parser = new ZPREP_Parser();
 		if ( ! $parser->is_ready() ) {
-			wp_send_json_error( array( 'message' => __( 'The AI service is not configured.', 'zorderz' ) ) );
+			wp_send_json_error( array( 'message' => __( 'The Ai service is not configured.', 'zorderz' ) ) );
 		}
 		$parsed = $parser->parse_measurements( $parse_input );
 		if ( ! is_array( $parsed ) ) {
-			wp_send_json_error( array( 'message' => __( 'AI parser returned no usable data.', 'zorderz' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Ai parser returned no usable data.', 'zorderz' ) ) );
 		}
 
 		wp_send_json_success(
@@ -1264,7 +1264,7 @@ class ZPREP_Dashboard {
 	public static function ajax_test_ai(): void {
 		self::admin_guard();
 		$ai = new ZPREP_Parser();
-		wp_send_json_success( array( 'result' => array( 'ok' => $ai->is_ready(), 'message' => $ai->is_ready() ? __( 'AI service configured.', 'zorderz' ) : __( 'AI service not configured.', 'zorderz' ) ) ) );
+		wp_send_json_success( array( 'result' => array( 'ok' => $ai->is_ready(), 'message' => $ai->is_ready() ? __( 'Ai service configured.', 'zorderz' ) : __( 'Ai service not configured.', 'zorderz' ) ) ) );
 	}
 
 	/* ================================================================

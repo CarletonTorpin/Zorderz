@@ -64,7 +64,7 @@ class ZEST_Poe_Client implements ZEST_AI_Provider {
 		$out = array( 'ok' => false, 'text' => '', 'error' => '', 'raw' => array() );
 		$core = $this->core();
 		if ( ! $core ) {
-			$out['error'] = 'AI gateway not available (theme Poe connection missing).';
+			$out['error'] = 'Ai gateway not available (theme Poe connection missing).';
 			return $out;
 		}
 
@@ -82,7 +82,7 @@ class ZEST_Poe_Client implements ZEST_AI_Provider {
 		try {
 			$text = $core->query( $messages, $temperature, $extra, $model );
 		} catch ( \Throwable $e ) {
-			$out['error'] = 'AI request failed: ' . $e->getMessage();
+			$out['error'] = 'Ai request failed: ' . $e->getMessage();
 			return $out;
 		}
 

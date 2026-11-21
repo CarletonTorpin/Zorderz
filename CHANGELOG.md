@@ -13,18 +13,68 @@ there is a third, optional download: the reference Charts hub
 
 ---
 
-## [Unreleased]
+## [2.1.1] - 2026-11-21
 
-### Changed
-- **WordPress 6.5 or newer** is now the stated minimum (it was 6.0), in the theme and apps headers and every install
-  document. Zorderz calls PHP's `array_is_list()`, which PHP 8.0 has only through WordPress 6.5's fallback, so on
-  WordPress 6.0 to 6.4 with PHP 8.0, saving the Business Profile or applying an Identity Pack would stop with a fatal
-  error. PHP 8.0 or newer is unchanged.
+A repair release. Three features that never switched on now work: the Home Screen answers "estimates for" a customer
+with a card, and Estimates' billing view and the chat's document lookup include the billing system's stored invoices.
+Charts in local mode stops answering with a server error, Exit Preview ends a person preview too, the bottom bar's
+labels follow the site's language, the sample company loses its test leftovers, and on-screen text says "Ai".
+WordPress 6.5 is now the minimum. Install the theme first, then the apps.
+
+### Upgrade notes
+- **WordPress 6.5 or newer** is now required (it was 6.0), in the theme and apps headers and every install document.
+  Zorderz calls PHP's `array_is_list()`, which PHP 8.0 has only through WordPress 6.5's fallback, so on WordPress 6.0
+  to 6.4 with PHP 8.0, saving the Business Profile or applying an Identity Pack stopped with a fatal error. Update
+  WordPress before this release. PHP 8.0 or newer is unchanged.
+- **The sample company** no longer carries the leftovers of an old data-portability test. A new load brings 6
+  estimates, 7 invoices, 5 payments, 12 chats, 1 knowledge document, 7 images and no receipts (167 rows). The loader
+  updates rows it already wrote but never deletes, so a site that loaded TestCo before keeps the old test rows; load
+  the sample on a fresh test site to see the tidy one.
+- **Release downloads:** the checksums file is `zorderz-<version>-checksums.txt` (2.1.0's was renamed to match).
 
 ### Fixed
-- **Install guide and AGENTS.md:** the checksum step passes `--ignore-missing`, so leaving out the optional hub zip, as
-  the guide says to, no longer fails the check. The release's checksums file is named `zorderz-<version>-checksums.txt`.
-  AGENTS.md mentions the guided tour the sample company offers.
+- **Home Screen:** "estimates for" or "invoices for" a customer shows that customer's billing-system estimates and
+  invoices in a card, through Estimates' own lookup and its rules on who sees what (the shared device gets names,
+  numbers and statuses only). When the lookup finds none, the chat takes the question, as it always did: the check
+  asked for a method Estimates never had, so the card never showed.
+- **Estimates:** the billing view and the chat's document lookup include invoices (and estimates made elsewhere)
+  from the chat's stored copy of the billing system, by that copy's own rules. They asked for the ledger table under
+  the wrong class, so the stored copy was never read. Needs the billing system connected.
+- **Chat:** a colleague's shared mailbox is searched through the inbox's consented, logged read, as before; a
+  shortcut to a method the inbox never had is gone.
+- **Charts:** with no hub set up (local mode), its calls answer 200 with `local: true` instead of 503, so hosts that
+  alert on server errors stay quiet on every Home Screen load. A hub that is set up but unreachable still answers 503.
+- **Exit Preview** ends a person preview as well as a role preview. Before, a person previewed earlier stayed in a
+  cookie until the next preview link.
+- **Bottom bar:** Jobs, Team, Schedule and Notices come from the site's translations (Chat already did), so on a
+  translated site the bar and the guided tour use the same words.
+- **Receipts:** the menu says "Receipts" (was "Installation Receipts") and its labels are translatable. A new
+  receipt is titled "Receipt · " and the address, and the link line it adds to an invoice is "Receipt - Link" (a
+  document convention a pack can change); lines written as "Installation Receipt - Link" are still recognised. The
+  note sent to the customer relationship manager with a receipt says "Receipt sent" over a clean divider line (the
+  line was garbled characters).
+- **Referral cases:** Chat offers its referrals button only to the admin tier and salespeople, the people Territories
+  answers, so a field tech's Chat no longer asks on every load and gets a refusal.
+- **PHP 8.1 and newer:** the hidden pages Receipts and Prep open in the app (and the Leads sign-in callback) register
+  without a null parent, which logged deprecation notices on every admin page, and the two that render carry a
+  title. A fresh install no longer logs "translation loading was triggered too early": the cron labels are translated
+  only from `init` on, and the Leads write-back drain is scheduled on `init`.
+- **"Ai" on screen:** about 125 labels, notices and progress lines in Leads, Knowledge, Prep, Estimates, Receipts,
+  Stock, Surveys, Doorhangers and the Core settings say "Ai" instead of "AI". Server log lines are unchanged.
+- **Sample company:** three "Stress Test" estimates (two of them reused EST-0004 and EST-0006), three "Stress Test
+  Order" invoices, a $1.00 "test payment", three "Stress Test" chats, three "Stress Test" knowledge documents, three
+  "Stress Test" receipts and a "1.5.0 roundtrip test" image are gone. The North Example High School order, saved
+  before the catalog had prices, is priced from the catalog ($359.90), and the three job photos are titled "TestCo job
+  photo 1" to "3".
+- **Install guide and AGENTS.md:** the checksum step passes `--ignore-missing`, so leaving out the optional hub zip,
+  as the guide says to, no longer fails the check. AGENTS.md mentions the guided tour the sample company offers.
+
+### Versions
+Theme and apps bundle 2.1.1. Apps changed: Chat 1.4.1, Charts 1.1.1, Doorhangers 1.0.1, Estimates 1.28.1, Hours
+1.0.1, Jobs 1.20.1, Knowledge 1.8.1, Leads 2.11.1, Messaging 1.10.1, Prep 2.7.1, Receipts 3.13.1, Scheduler 1.10.1,
+Stock 1.3.1-beta, Surveys 2.14.1.
+
+---
 
 ## [2.1.0] - 2026-11-20
 

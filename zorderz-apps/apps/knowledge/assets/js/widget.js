@@ -202,7 +202,7 @@
 				if(d.status==='pending'||d.status==='processing') badge='<span class="zkv-badge zkv-badge-pending">Processing</span>';
 				if(d.status==='encrypting') badge='<span class="zkv-badge zkv-badge-pending">Encrypting</span>';
 				if(d.status==='failed') badge='<span class="zkv-badge zkv-badge-failed">Failed</span>';
-				if(String(d.is_private)==='1') badge+=' <span class="zkv-badge zkv-badge-private" title="Never sent to AI; stored encrypted">Private</span>';
+				if(String(d.is_private)==='1') badge+=' <span class="zkv-badge zkv-badge-private" title="Never sent to Ai; stored encrypted">Private</span>';
 				html+='<div class="zkv-doc-card" data-id="'+id+'">'
 					+'<div class="zkv-doc-icon"><i data-lucide="'+mimeIcon(d.mime_type)+'"></i></div>'
 					+'<div class="zkv-doc-info">'
@@ -365,13 +365,13 @@
 		function renderPrivateAndShare(d) {
 			var priv = String(d.is_private) === '1', html = '';
 			if (priv) {
-				html += '<div class="zkv-detail-section zkv-private-note"><strong>Private.</strong> Never sent to any AI service; stored encrypted. Found by its title and Context only.'
+				html += '<div class="zkv-detail-section zkv-private-note"><strong>Private.</strong> Never sent to any Ai service; stored encrypted. Found by its title and Context only.'
 					+ (d.key_state === 'locked' ? ' <em>Locked: an administrator must enter the recovery code in Knowledge settings before it opens.</em>' : '') + '</div>';
 			}
 			if (String(d.can_set_private) === '1') {
 				html += '<div class="zkv-detail-row" id="zkv-priv-row"><button class="zkv-btn-text" id="zkv-priv-ask">' + (priv ? 'Stop keeping private' : 'Keep private') + '</button></div>'
 					+ '<div id="zkv-priv-confirm" class="zkv-inline-confirm" style="display:none;"><p>' + (priv
-						? 'Stop keeping it private? It will be sent to the AI service to be indexed, and stored as an ordinary file.'
+						? 'Stop keeping it private? It will be sent to the Ai service to be indexed, and stored as an ordinary file.'
 						: 'Keep it private? Its file is encrypted, its summary and searchable text are deleted, and the chat no longer sees it. It is found by its title and Context only.')
 					+ '</p><button class="zkv-btn zkv-btn-primary" id="zkv-priv-yes">' + (priv ? 'Stop keeping private' : 'Keep private') + '</button> '
 					+ '<button class="zkv-btn-text" id="zkv-priv-no">Cancel</button> <span class="zkv-hint" id="zkv-priv-msg"></span></div>';
@@ -549,7 +549,7 @@
 					if (res.success) {
 						var status = document.getElementById('zkv-key-status');
 						if (res.data.test_result && res.data.test_result.indexOf('Error') === -1) {
-							status.textContent = 'Saved & verified: AI is working.'; status.style.color = '#059669';
+							status.textContent = 'Saved & verified: Ai is working.'; status.style.color = '#059669';
 						} else {
 							status.textContent = 'Saved, but test failed: ' + (res.data.test_result || 'No response'); status.style.color = '#DC2626';
 						}
@@ -726,7 +726,7 @@
 				return;
 			}
 			processingEl.style.display='';
-			processingMsg.textContent = 'Reading document with AI...';
+			processingMsg.textContent = 'Reading document with Ai...';
 			submitBtn.disabled=true;
 
 			var fd=new FormData();
@@ -753,7 +753,7 @@
 					}
 				} else {
 					var errMsg = (res.data && typeof res.data === 'string') ? res.data : 'Unknown error';
-					processingMsg.textContent='AI pre-fill failed: '+errMsg;
+					processingMsg.textContent='Ai pre-fill failed: '+errMsg;
 					processingEl.style.display=''; setTimeout(function(){processingEl.style.display='none';},4000);
 					var n=f.name.replace(/\.[^.]+$/,'').replace(/[-_.]/g,' ');
 					titleInput.value=n.charAt(0).toUpperCase()+n.slice(1); state.tempKey='';
@@ -763,7 +763,7 @@
 			})
 			.catch(function(e){
 				processingEl.style.display='';
-				processingMsg.textContent='AI pre-fill failed: '+e.message;
+				processingMsg.textContent='Ai pre-fill failed: '+e.message;
 				processingEl.style.display=''; setTimeout(function(){processingEl.style.display='none';},4000);
 				var n=f.name.replace(/\.[^.]+$/,'').replace(/[-_.]/g,' ');
 				titleInput.value=n.charAt(0).toUpperCase()+n.slice(1); state.tempKey='';
@@ -887,7 +887,7 @@
 			var text = pasteInput ? pasteInput.value.trim() : '';
 			if(text.length < 10){ alert('Please paste some text first.'); return; }
 			submitBtn.disabled=true;
-			processingEl.style.display=''; processingMsg.textContent= isPriv() ? 'Saving privately...' : 'Analyzing text with AI...';
+			processingEl.style.display=''; processingMsg.textContent= isPriv() ? 'Saving privately...' : 'Analyzing text with Ai...';
 
 			var fd=new FormData();
 			fd.append('action','zkv_paste_text');
@@ -1174,7 +1174,7 @@
 				var userOpts = '<option value="">Bind to…</option>' + users.map(function(u){
 					return '<option value="'+u.id+'">'+esc(u.name)+'</option>';
 				}).join('');
-				var html = '<p class="zkv-hint" style="display:block;margin-bottom:10px;">Suggested = the AI thinks this is a transcript; it stays a normal visible document until you confirm. Latent = private, but no speakers matched a staff account: bind the confirmed person to give them (and only them) access. You never see the transcript body here.</p>';
+				var html = '<p class="zkv-hint" style="display:block;margin-bottom:10px;">Suggested = the Ai thinks this is a transcript; it stays a normal visible document until you confirm. Latent = private, but no speakers matched a staff account: bind the confirmed person to give them (and only them) access. You never see the transcript body here.</p>';
 				items.forEach(function(it){
 					var name = it.is_private ? it.original_name : (it.title || it.original_name);
 					var chip = it.status==='suggested'

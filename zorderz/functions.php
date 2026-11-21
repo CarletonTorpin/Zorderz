@@ -16,7 +16,7 @@
  * toast. One constant now feeds all of them.
  */
 if ( ! defined( 'ZDZ_THEME_VER_FLOOR' ) ) {
-	define( 'ZDZ_THEME_VER_FLOOR', '2.1.0' );
+	define( 'ZDZ_THEME_VER_FLOOR', '2.1.1' );
 }
 /**
  * The REST namespace, in exactly one place.
@@ -478,6 +478,12 @@ add_action( 'wp_enqueue_scripts', function() {
 	// The bell: ZDZ_Alert_Router's in-app alerts, on the home screen and the bottom navigation.
 	wp_enqueue_style( 'zdz-bell-css', get_template_directory_uri() . '/assets/css/bell.css', [ 'zdz-kit-css' ], $asset_ver( '/assets/css/bell.css' ) );
 	wp_enqueue_script( 'zdz-bell-js', get_template_directory_uri() . '/assets/js/zdz-bell.js', [ 'zdz-kit-js', 'zdz-push-js' ], $asset_ver( '/assets/js/zdz-bell.js' ), true );
+	// The bell's words on the bottom bar, in the site's language.
+	wp_localize_script( 'zdz-bell-js', 'zdzBellText', [
+		'notices' => __( 'Notices', 'zorderz' ),
+		/* translators: %d: how many notices are unread */
+		'unread'  => __( 'Notices, %d unread', 'zorderz' ),
+	] );
 	// Contacts made from the page: marked Call / Text / E-mail taps, and "How did the call go?".
 	wp_enqueue_script( 'zdz-contacts-js', get_template_directory_uri() . '/assets/js/zdz-contacts.js', [ 'zdz-kit-js' ], $asset_ver( '/assets/js/zdz-contacts.js' ), true );
 	// Settings → Your app use: this person's own last 30 days (draws nothing for the shared device or in Demo Mode).

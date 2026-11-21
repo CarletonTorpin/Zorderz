@@ -57,7 +57,7 @@ class ZCH_Admin {
 	}
 
 	public static function schedules( $s ) {
-		$s['zch_5min'] = array( 'interval' => 300, 'display' => __( 'Every 5 minutes', 'zorderz' ) );
+		$s['zch_5min'] = array( 'interval' => 300, 'display' => did_action( 'init' ) ? __( 'Every 5 minutes', 'zorderz' ) : 'Every 5 minutes' );
 		return $s;
 	}
 

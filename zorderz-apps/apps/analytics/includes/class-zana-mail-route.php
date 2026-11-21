@@ -21,7 +21,7 @@
  *   6. "yes / widen it" right after a mailbox answer (ZANA_Mail_Continuation).
  *
  * The inbox's API (zorderz-apps/apps/inbox): ZIB_ZANA_Bridge::is_available(), handle_marker() (search, "what did I
- * tell", "what did they send"), followups(), search(), search_subject() when the inbox has it, else
+ * tell", "what did they send"), followups(), search(), and for a colleague's mailbox
  * ZIB_Gatekeeper::resolve_reader_subject() + admin_search() (the consented, logged colleague read). Identity is always
  * the turn's signed-in person, never anything from the words.
  *
@@ -170,17 +170,13 @@ class ZANA_Mail_Route {
 		return '' === $text ? null : $text;
 	}
 
-	/** A colleague's shared mailbox: the inbox's own route when it has one, else its gatekeeper and a summary list. */
+	/** A colleague's shared mailbox: the inbox's gatekeeper (the consented, logged read) and a summary list. */
 	private static function colleague( int $uid, string $person, string $query, string $message ): ?array {
 		if ( class_exists( 'ZIB_ZANA_Bridge' ) && method_exists( 'ZIB_ZANA_Bridge', 'forget_shown' ) ) {
 			ZIB_ZANA_Bridge::forget_shown( $uid );   // a colleague's list numbers nothing for "reply to #1"
 		}
 		if ( is_callable( self::$inbox ) ) {
 			return self::call( 'search_subject', array( $person, $uid, $query ) );
-		}
-		if ( method_exists( 'ZIB_ZANA_Bridge', 'search_subject' ) ) {
-			$dir = method_exists( 'ZIB_ZANA_Bridge', 'detect_direction' ) ? (string) ZIB_ZANA_Bridge::detect_direction( $message ) : 'any';
-			return (array) ZIB_ZANA_Bridge::search_subject( $person, $uid, $query, 'list', $dir );
 		}
 		if ( ! class_exists( 'ZIB_Gatekeeper' ) || ! method_exists( 'ZIB_Gatekeeper', 'resolve_reader_subject' ) || ! method_exists( 'ZIB_Gatekeeper', 'admin_search' ) ) {
 			return null;

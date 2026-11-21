@@ -9,7 +9,7 @@
  *   subtype/tag. What counts as a cut piece, the piece vocabulary, default sizes and the
  *   roll/material model all come from the Item Engine and the business's settings; supplier
  *   costs SHIP EMPTY.
- * Version:     2.7.0
+ * Version:     2.7.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -53,7 +53,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZPREP_VERSION', '2.7.0' );
+define( 'ZPREP_VERSION', '2.7.1' );
 define( 'ZPREP_FILE', __FILE__ );
 define( 'ZPREP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZPREP_URL', plugin_dir_url( __FILE__ ) );
@@ -216,12 +216,13 @@ function zprep_deactivate() {
 	wp_clear_scheduled_hook( 'zprep_billing_sync' );
 }
 
-// A 5-minute recurrence for the optional billing-approval sync.
+// A 5-minute recurrence for the optional billing-approval sync. Its label is translated only from init on: another
+// app may ask for the schedules earlier, and WordPress 6.7+ notes translations loaded that soon.
 add_filter(
 	'cron_schedules',
 	function ( $s ) {
 		if ( ! isset( $s['zprep_5min'] ) ) {
-			$s['zprep_5min'] = array( 'interval' => 300, 'display' => __( 'Every 5 minutes (Zorderz Prep)', 'zorderz' ) );
+			$s['zprep_5min'] = array( 'interval' => 300, 'display' => did_action( 'init' ) ? __( 'Every 5 minutes (Zorderz Prep)', 'zorderz' ) : 'Every 5 minutes (Zorderz Prep)' );
 		}
 		return $s;
 	}

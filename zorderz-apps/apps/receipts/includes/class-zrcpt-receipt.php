@@ -601,21 +601,21 @@ final class ZRCPT_Receipt {
     public function register_post_type() {
         register_post_type( self::POST_TYPE, [
             'labels' => [
-                'name'               => 'Installation Receipts',
-                'singular_name'      => 'Installation Receipt',
-                'add_new_item'       => 'Add New Receipt',
-                'edit_item'          => 'Edit Receipt',
-                'view_item'          => 'View Receipt',
-                'all_items'          => 'All Receipts',
-                'search_items'       => 'Search Receipts',
-                'not_found'          => 'No receipts found.',
-                'not_found_in_trash' => 'No receipts found in Trash.',
+                'name'               => __( 'Receipts', 'zorderz' ),
+                'singular_name'      => __( 'Receipt', 'zorderz' ),
+                'add_new_item'       => __( 'Add New Receipt', 'zorderz' ),
+                'edit_item'          => __( 'Edit Receipt', 'zorderz' ),
+                'view_item'          => __( 'View Receipt', 'zorderz' ),
+                'all_items'          => __( 'All Receipts', 'zorderz' ),
+                'search_items'       => __( 'Search Receipts', 'zorderz' ),
+                'not_found'          => __( 'No receipts found.', 'zorderz' ),
+                'not_found_in_trash' => __( 'No receipts found in Trash.', 'zorderz' ),
             ],
             'public'              => false, // v3.6.9 (C1): was true — killed enumeration
             // v3.9.1 — REQUIRED for the wp-admin menu to exist at all. show_ui
             // DEFAULTS to the value of `public`, so the C1 lockdown silently
             // flipped it false — WordPress only builds menus for show_ui=true
-            // post types, so "Installation Receipts" (and Settings, and the
+            // post types, so "Receipts" (and Settings, and the
             // v3.7.0 Regenerate-link list, and v3.9.0 Manage Receipts) never
             // rendered. show_ui=true restores the ADMIN UI ONLY: the front
             // stays locked (public=false, publicly_queryable=false, rewrite=
@@ -669,15 +669,23 @@ final class ZRCPT_Receipt {
 
         // Dashboard page for Zorderz iframe bridge
         // Uses 'read' capability so non-admin app roles (zdz_sales, zdz_operator) can access it.
-        // Hidden from the admin menu (null parent) — accessed via direct URL or SPA bridge.
-        add_submenu_page(
-            null,
-            'Generate Receipt',
-            'Generate Receipt',
+        // Hidden from the admin menu (an empty parent; a null one makes PHP 8.1+ log deprecation notices on every
+        // admin page) and accessed via direct URL or SPA bridge.
+        $hook = add_submenu_page(
+            '',
+            __( 'Generate Receipt', 'zorderz' ),
+            __( 'Generate Receipt', 'zorderz' ),
             'read',
             'zrcpt-dashboard',
             [ $this, 'render_dashboard_page' ]
         );
+        // A hidden page has no menu entry for WordPress to take its title from: give it one.
+        if ( $hook ) {
+            add_action( 'load-' . $hook, function () {
+                global $title;
+                $title = __( 'Generate Receipt', 'zorderz' );
+            } );
+        }
     }
 
     public function receipt_columns( $columns ) {
@@ -750,7 +758,7 @@ final class ZRCPT_Receipt {
         $new    = self::regenerate_share_token( $post_id );
         $status = ( $new !== '' ) ? 'zrcpt_link_ok' : 'zrcpt_link_err';
         // v3.9.3 — a revoked token = a NEW receipt URL. The invoice's
-        // "Installation Receipt - Link" line must follow immediately, or it
+        // receipt-link line ("Receipt - Link") must follow immediately, or it
         // keeps pointing at the dead old link. Best-effort; never blocks.
         if ( $new !== '' ) {
             try { $this->fb_sync_receipt_link( $post_id ); } catch ( \Throwable $e ) {
@@ -1329,7 +1337,7 @@ final class ZRCPT_Receipt {
         <!-- PROGRESS -->
         <div class="zrcpt-progress" id="zrcpt-progress">
             <div class="spin"></div>
-            <div class="st" id="zrcpt-status">Sending to AI&hellip;</div>
+            <div class="st" id="zrcpt-status">Sending to Ai&hellip;</div>
             <div class="sub" id="zrcpt-substatus">This usually takes 30&ndash;90 seconds</div>
         </div>
 
@@ -1515,7 +1523,7 @@ final class ZRCPT_Receipt {
 
     /* --- progress steps --- */
     var steps = [
-        ['Sending invoice to AI\u2026',     'The assistant is reading your invoice'],
+        ['Sending invoice to Ai\u2026',     'The assistant is reading your invoice'],
         ['Analyzing line items\u2026',       'Extracting quantities and details'],
         ['Verifying invoice data\u2026',     'Double-checking counts and address'],
         ['Building receipt page\u2026',      'Generating HTML with your photos'],
@@ -2582,7 +2590,8 @@ final class ZRCPT_Receipt {
 
         /* --- Create / UPDATE WordPress page --- */
         $slug  = sanitize_title( $receipt['vanity_slug'] );
-        $title = 'Installation Receipt · ' . $receipt['address_short'];
+        /* translators: %s: the short address of the job */
+        $title = sprintf( __( 'Receipt · %s', 'zorderz' ), $receipt['address_short'] );
 
         // v3.3.6: regenerating the same invoice UPDATES its existing receipt in
         // place (same URL) instead of spawning a new post each time. Pass the
@@ -3884,7 +3893,7 @@ final class ZRCPT_Receipt {
     }
 
     /**
-     * Ensure the "Installation Receipt - Link" line on a FreshBooks invoice or
+     * Ensure the receipt-link line ("Receipt - Link") on a FreshBooks invoice or
      * estimate points at $receipt_url.
      *
      * v3.9.3 — VERIFY-AND-REFRESH, not merely add-if-absent. The old
@@ -3916,13 +3925,13 @@ final class ZRCPT_Receipt {
      * no product or brand word.
      */
     private function receipt_link_label(): string {
-        $label = (string) zrcpt_document_convention( 'receipt_link_label', 'Installation Receipt - Link' );
-        return $label !== '' ? $label : 'Installation Receipt - Link';
+        $label = (string) zrcpt_document_convention( 'receipt_link_label', 'Receipt - Link' );
+        return $label !== '' ? $label : 'Receipt - Link';
     }
 
     /**
      * Does a billing line name identify the receipt-link line? Matches the configured label AND
-     * the legacy label, so lines written before a convention change still resolve.
+     * the label written before 2.1.1 ("Installation Receipt - Link"), so those lines still resolve.
      */
     private function is_receipt_link_line( string $name ): bool {
         $name = trim( $name );
@@ -3963,7 +3972,7 @@ final class ZRCPT_Receipt {
 
         // v3.9.3 — inspect every existing receipt-link line and decide.
         $lines       = $doc['lines'] ?? [];
-        $have_line   = false;   // any 'Installation Receipt - Link' line exists
+        $have_line   = false;   // any receipt-link line exists (either label)
         $needs_write = false;   // at least one such line carries a different URL
         foreach ( $lines as $line ) {
             if ( ! $this->is_receipt_link_line( (string) ( $line['name'] ?? '' ) ) ) { continue; }
@@ -4081,7 +4090,7 @@ final class ZRCPT_Receipt {
      * Orchestrates the full FreshBooks integration:
      *   1. Extract document number from uploaded filename.
      *   2. Search FreshBooks for matching invoice or estimate.
-     *   3. Add "Installation Receipt - Link" line item.
+     *   3. Add the receipt-link line item.
      *   4. Store the FreshBooks document reference in post meta.
      *
      * Non-blocking: failures are logged but never prevent receipt creation.
@@ -4230,7 +4239,7 @@ final class ZRCPT_Receipt {
        v3.9.3 — INVOICE-LINK SYNC (the "link on the invoice is 100% openable"
        guarantee). One rule: whatever changes a receipt's URL — or which
        receipt an invoice should point at — immediately re-syncs the
-       invoice's "Installation Receipt - Link" line. Sync points:
+       invoice's receipt-link line. Sync points:
          • every generate (fb_link_receipt, now verify-and-refresh)
          • "Regenerate link" token revoke  → fb_sync_receipt_link()
          • Restore from Trash (guarded)    → fb_sync_receipt_link()
@@ -6325,8 +6334,8 @@ View your receipt
             $approved_at = (string) get_post_meta( $post_id, '_approved_at', true );
             $url         = get_permalink( $post_id );
 
-            $note  = "[Receipt] Installation receipt sent\n";
-            $note .= "ââââââââââââ\n";
+            $note  = "[Receipt] Receipt sent\n";
+            $note .= "────────────\n";
             $note .= "To: {$to}\n";
             $note .= "Subject: {$subject}\n";
             $note .= "Sent: {$now}" . ( $is_auto ? " (auto)" : "" ) . "\n";

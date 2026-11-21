@@ -6,7 +6,7 @@
  *   billing provider + CRM, attach the install photos from the shared media store, render a
  *   NEUTRAL letterhead template, and publish a token-gated public receipt page behind a
  *   reviewer Approve-&-Send gate. Ships with NO business data.
- * Version:     3.13.0
+ * Version:     3.13.1
  * Author:      Zorderz
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,7 +55,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // ── Constants ──────────────────────────────────────────────────────
-define( 'ZRCPT_VERSION', '3.13.0' );
+define( 'ZRCPT_VERSION', '3.13.1' );
 define( 'ZRCPT_FILE', __FILE__ );
 define( 'ZRCPT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ZRCPT_URL', plugin_dir_url( __FILE__ ) );
@@ -257,7 +257,7 @@ add_action( 'after_setup_theme', function() {
                     'icon'        => 'receipt',
                     'cat'         => 'Admin',
                     'cc'          => '#009E73',
-                    'desc'        => 'AI-assisted installation & service receipt generator.',
+                    'desc'        => 'Ai-assisted installation & service receipt generator.',
                     'roles'       => (array) apply_filters( 'zrcpt_app_roles', [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales' ] ),
                     'bridge_type' => 'inline_widget',
                     'admin_url'   => admin_url( 'admin.php?page=zrcpt-dashboard' ),
@@ -636,7 +636,7 @@ add_action( 'after_setup_theme', function() {
                     'icon'        => 'receipt',
                     'cat'         => 'Admin',
                     'cc'          => '#009E73',
-                    'desc'        => 'AI-assisted installation & service receipt generator.',
+                    'desc'        => 'Ai-assisted installation & service receipt generator.',
                     'roles'       => (array) apply_filters( 'zrcpt_app_roles', [ 'administrator', 'zdz_owner', 'zdz_admin', 'zdz_sales' ] ),
                     'bridge_type' => 'iframe',
                     'admin_url'   => admin_url( 'admin.php?page=zrcpt-dashboard' ),
